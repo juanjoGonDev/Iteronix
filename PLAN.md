@@ -102,6 +102,69 @@ Acceptance:
 
 - Desktop runs and uses the same web UI without duplicating UI code.
 
+## Milestone 4.5 — Dev/Prod commands
+
+Goal:
+
+- Provide consistent commands to run everything in dev/watch and production.
+
+### Root scripts (required)
+
+- [ ] Add root `package.json` scripts for:
+  - [ ] `pnpm dev` (runs server + web-ui in watch mode)
+  - [ ] `pnpm dev:server` (watch mode)
+  - [ ] `pnpm dev:web` (watch mode)
+  - [ ] `pnpm dev:desktop` (Electron main + loads web-ui dev server)
+  - [ ] `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` (workspace-wide)
+  - [ ] `pnpm clean` (workspace-wide)
+  - [ ] `pnpm start` (production server)
+  - [ ] `pnpm preview:web` (serve built web-ui locally)
+- [ ] Ensure all scripts work on macOS/Linux/Windows where possible.
+
+Suggested behavior:
+
+- `pnpm dev`:
+  - starts `apps/server-api` in watch mode (SSE enabled)
+  - starts `apps/web-ui` via Vite dev server
+- `pnpm dev:desktop`:
+  - starts Electron main and points to the web-ui dev server URL
+- `pnpm build`:
+  - builds packages (domain/shared/adapters)
+  - builds server
+  - builds web-ui (PWA)
+  - optionally packages desktop (separate step if preferred)
+
+Acceptance:
+
+- `pnpm dev` starts server + web-ui with hot reload.
+- `pnpm dev:desktop` runs the Electron wrapper using the same web UI.
+- `pnpm build` produces production artifacts.
+- `pnpm start` runs the production server using built output.
+
+### Server-api commands (apps/server-api)
+
+- [ ] Provide scripts:
+  - [ ] `pnpm dev` (watch mode)
+  - [ ] `pnpm build`
+  - [ ] `pnpm start` (prod run)
+        Implementation hint:
+- Use a watch runner suitable for TS (e.g., tsx watch) and ensure typecheck is separate.
+
+### Web-ui commands (apps/web-ui)
+
+- [ ] Provide scripts:
+  - [ ] `pnpm dev` (Vite)
+  - [ ] `pnpm build`
+  - [ ] `pnpm preview`
+- [ ] PWA build must be part of `pnpm build` (root).
+
+### Desktop wrapper commands (apps/desktop-main)
+
+- [ ] Provide scripts:
+  - [ ] `pnpm dev` (runs Electron main in watch mode; loads web-ui dev URL)
+  - [ ] `pnpm build` (build main process)
+  - [ ] Optional later: `pnpm package` (installer/binary)
+
 ## Milestone 5 — Auto-loop with strict JSON schema (provider-agnostic)
 
 - [ ] Define strict agent step JSON schema (Ajv)
@@ -143,6 +206,78 @@ Acceptance:
 Acceptance:
 
 - Install a plugin and emit an event.
+
+## Final setup & deployment automation (post-development)
+
+Goal:
+Provide reproducible commands and automation to bootstrap infrastructure, run the system in production, and support self-hosting (e.g. Raspberry Pi, Docker, reverse proxy).
+
+This section MUST NOT be started until all core milestones are completed.
+
+### Unified commands (required)
+
+- [ ] Ensure all services can be run using documented commands:
+  - [ ] Development / watch mode
+  - [ ] Production build
+  - [ ] Production run
+
+Root-level commands (final state):
+
+- `pnpm dev` → run server + web UI in watch mode
+- `pnpm dev:server`
+- `pnpm dev:web`
+- `pnpm dev:desktop`
+- `pnpm build` → build all artifacts
+- `pnpm start` → run production server
+- `pnpm preview:web` → serve built web UI locally
+
+Acceptance:
+
+- All commands work consistently across environments.
+- No undocumented startup paths exist.
+
+### Setup automation (final stage)
+
+- [ ] Provide a single setup entrypoint:
+  - [ ] `pnpm setup` (preferred for cross-platform)
+- [ ] Setup must:
+  - [ ] Pull required Docker images
+  - [ ] Start infrastructure services (e.g. MySQL)
+  - [ ] Create required volumes/networks
+  - [ ] Print connection details and next steps
+
+### Docker & infrastructure
+
+- [ ] Add `docker-compose.yml` (or `compose.yaml`) for local/self-hosted infra:
+  - [ ] MySQL service with persistent volume
+  - [ ] Explicit environment configuration
+- [ ] Add `Dockerfile` for server API
+- [ ] Add commands:
+  - [ ] `pnpm docker:build:server`
+  - [ ] `pnpm docker:run:server`
+- [ ] Containers must be suitable for Raspberry Pi (ARM64).
+
+### Optional publishing (explicitly optional)
+
+- [ ] Image tagging and pushing:
+  - [ ] `pnpm docker:tag`
+  - [ ] `pnpm docker:push`
+- [ ] These steps MUST require explicit configuration and confirmation.
+
+### Documentation (required)
+
+- [ ] Add `docs/DEPLOYMENT.md` covering:
+  - [ ] Local dev
+  - [ ] Production run
+  - [ ] Docker setup
+  - [ ] Raspberry Pi notes
+  - [ ] Nginx reverse proxy example
+  - [ ] Required environment variables (AUTH_TOKEN, ports, workspace root)
+
+Acceptance:
+
+- A new machine can be fully set up using only documented commands.
+- No manual steps beyond environment variables are required.
 
 ## Deferred (explicitly out of scope)
 
