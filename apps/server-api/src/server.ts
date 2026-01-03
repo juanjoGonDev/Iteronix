@@ -3,17 +3,25 @@ import {
   BearerPrefix,
   BearerScheme,
   ErrorMessage,
+  FileField,
   HeaderName,
   HttpMethod,
   HttpStatus,
   MimeType,
   ProjectField,
-  RoutePath
+  RoutePath,
+  TextEncoding
 } from "./constants";
 import { loadConfig, type ServerConfig } from "./config";
 import {
+  listFileTree,
+  readFileContent,
+  writeFileContent
+} from "./files";
+import {
   createProjectStore,
   ProjectStoreErrorCode,
+  type Project,
   type ProjectCreateInput,
   type ProjectOpenInput,
   type ProjectStore
@@ -70,6 +78,36 @@ const handleRequest = async (
     }
 
     await handleOpenProject(req, res, store);
+    return;
+  }
+
+  if (path === RoutePath.FilesTree) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileTree(req, res, store);
+    return;
+  }
+
+  if (path === RoutePath.FilesRead) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileRead(req, res, store);
+    return;
+  }
+
+  if (path === RoutePath.FilesWrite) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileWrite(req, res, store);
     return;
   }
 
@@ -135,6 +173,118 @@ const handleOpenProject = async (
   });
 };
 
+const handleFileTree = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileTreeRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const treeResult = await listFileTree(
+    projectResult.value.rootPath,
+    parsed.value.path
+  );
+  if (treeResult.type === ResultType.Err) {
+    respondError(res, treeResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    entries: treeResult.value
+  });
+};
+
+const handleFileRead = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileReadRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const readResult = await readFileContent(
+    projectResult.value.rootPath,
+    parsed.value.path
+  );
+  if (readResult.type === ResultType.Err) {
+    respondError(res, readResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    content: readResult.value.content
+  });
+};
+
+const handleFileWrite = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileWriteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const writeResult = await writeFileContent(
+    projectResult.value.rootPath,
+    parsed.value.path,
+    parsed.value.content
+  );
+  if (writeResult.type === ResultType.Err) {
+    respondError(res, writeResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    bytesWritten: writeResult.value.bytesWritten
+  });
+};
+
 type ApiError = {
   status: number;
   message: string;
@@ -191,12 +341,20 @@ const parseCreateProject = (
     });
   }
 
-  const rootPath = readRequiredString(value, ProjectField.RootPath);
+  const rootPath = readRequiredString(
+    value,
+    ProjectField.RootPath,
+    ErrorMessage.MissingRootPath
+  );
   if (rootPath.type === ResultType.Err) {
     return rootPath;
   }
 
-  const name = readRequiredString(value, ProjectField.Name);
+  const name = readRequiredString(
+    value,
+    ProjectField.Name,
+    ErrorMessage.MissingName
+  );
   if (name.type === ResultType.Err) {
     return name;
   }
@@ -217,7 +375,11 @@ const parseOpenProject = (
     });
   }
 
-  const rootPath = readRequiredString(value, ProjectField.RootPath);
+  const rootPath = readRequiredString(
+    value,
+    ProjectField.RootPath,
+    ErrorMessage.MissingRootPath
+  );
   if (rootPath.type === ResultType.Err) {
     return rootPath;
   }
@@ -236,6 +398,129 @@ const parseOpenProject = (
   });
 };
 
+const parseFileTreeRequest = (
+  value: unknown
+): Result<{ projectId: string; path?: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readOptionalString(value, FileField.Path);
+
+  if (path) {
+    return ok({
+      projectId: projectId.value,
+      path
+    });
+  }
+
+  return ok({
+    projectId: projectId.value
+  });
+};
+
+const parseFileReadRequest = (
+  value: unknown
+): Result<{ projectId: string; path: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value
+  });
+};
+
+const parseFileWriteRequest = (
+  value: unknown
+): Result<{ projectId: string; path: string; content: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  const content = readRequiredStringAllowEmpty(
+    value,
+    FileField.Content,
+    ErrorMessage.MissingContent
+  );
+  if (content.type === ResultType.Err) {
+    return content;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value,
+    content: content.value
+  });
+};
+
+const getProjectById = (
+  store: ProjectStore,
+  id: string
+): Result<Project, ApiError> => {
+  const result = store.getById(id);
+  if (result.type === ResultType.Err) {
+    return err(mapProjectStoreError(result.error));
+  }
+
+  return ok(result.value);
+};
+
 const mapProjectStoreError = (error: {
   code: ProjectStoreErrorCode;
   message: string;
@@ -243,6 +528,13 @@ const mapProjectStoreError = (error: {
   if (error.code === ProjectStoreErrorCode.Conflict) {
     return {
       status: HttpStatus.Conflict,
+      message: error.message
+    };
+  }
+
+  if (error.code === ProjectStoreErrorCode.NotFound) {
+    return {
+      status: HttpStatus.NotFound,
       message: error.message
     };
   }
@@ -314,15 +606,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const readRequiredString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
+  missingMessage: string
 ): Result<string, ApiError> => {
   const value = record[key];
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message: key === ProjectField.RootPath
-        ? ErrorMessage.MissingRootPath
-        : ErrorMessage.MissingName
+      message: missingMessage
     });
   }
 
@@ -330,13 +621,27 @@ const readRequiredString = (
   if (trimmed.length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message: key === ProjectField.RootPath
-        ? ErrorMessage.MissingRootPath
-        : ErrorMessage.MissingName
+      message: missingMessage
     });
   }
 
   return ok(trimmed);
+};
+
+const readRequiredStringAllowEmpty = (
+  record: Record<string, unknown>,
+  key: string,
+  missingMessage: string
+): Result<string, ApiError> => {
+  const value = record[key];
+  if (typeof value !== "string") {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: missingMessage
+    });
+  }
+
+  return ok(value);
 };
 
 const readOptionalString = (
@@ -365,4 +670,4 @@ const parseJson = (raw: string): Result<unknown, ApiError> => {
 };
 
 const chunkToString = (chunk: Buffer | string): string =>
-  typeof chunk === "string" ? chunk : chunk.toString("utf8");
+  typeof chunk === "string" ? chunk : chunk.toString(TextEncoding);

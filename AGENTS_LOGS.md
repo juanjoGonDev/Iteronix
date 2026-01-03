@@ -104,3 +104,25 @@
   - None
 - Next:
   - Add file tree/read/write endpoints with workspace sandbox checks.
+### 2026-01-03 15:44 (Europe/Madrid) - Server API
+
+- Summary: Added file tree/read/write endpoints with sandboxed path resolution and tests for workspace path checks.
+- Decisions:
+  - Resolve all file targets relative to the project root and reject escapes.
+  - Keep file operations in a dedicated module to reuse in HTTP handlers.
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/files.ts
+  - apps/server-api/src/files.test.ts
+  - apps/server-api/src/projects.ts
+  - apps/server-api/src/server.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add sessions start/stop with SSE streaming endpoints.

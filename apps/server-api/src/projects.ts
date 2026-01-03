@@ -23,7 +23,8 @@ export type ProjectOpenInput = {
 
 export const ProjectStoreErrorCode = {
   Conflict: "conflict",
-  InvalidInput: "invalid_input"
+  InvalidInput: "invalid_input",
+  NotFound: "not_found"
 } as const;
 
 export type ProjectStoreErrorCode =
@@ -37,6 +38,7 @@ export type ProjectStoreError = {
 export type ProjectStore = {
   create: (input: ProjectCreateInput) => Result<Project, ProjectStoreError>;
   open: (input: ProjectOpenInput) => Result<Project, ProjectStoreError>;
+  getById: (id: string) => Result<Project, ProjectStoreError>;
 };
 
 export const createProjectStore = (): ProjectStore => {
@@ -49,9 +51,13 @@ export const createProjectStore = (): ProjectStore => {
   const open = (input: ProjectOpenInput): Result<Project, ProjectStoreError> =>
     openProject(projectsById, projectsByRoot, input);
 
+  const getById = (id: string): Result<Project, ProjectStoreError> =>
+    getProjectById(projectsById, id);
+
   return {
     create,
-    open
+    open,
+    getById
   };
 };
 
@@ -123,6 +129,21 @@ const openProject = (
 
   projectsById.set(project.id, project);
   projectsByRoot.set(project.rootPath, project.id);
+
+  return ok(project);
+};
+
+const getProjectById = (
+  projectsById: Map<string, Project>,
+  id: string
+): Result<Project, ProjectStoreError> => {
+  const project = projectsById.get(id);
+  if (!project) {
+    return err({
+      code: ProjectStoreErrorCode.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
 
   return ok(project);
 };

@@ -56,7 +56,7 @@ Acceptance:
 
 - [ ] Implement `apps/server-api` HTTP API for:
   - [x] Projects: create/open (workspace root)
-  - [ ] Files: tree + read/write (restricted to project root)
+  - [x] Files: tree + read/write (restricted to project root)
   - [ ] Sessions: start/stop + streaming events (SSE)
   - [ ] History/logs retrieval
   - [ ] Providers: list/select + settings update
