@@ -60,3 +60,24 @@
   - None
 - Next:
   - Implement codex-cli provider adapter in packages/adapters.
+### 2026-01-03 14:54 (Europe/Madrid) - Adapters
+
+- Summary: Added codex-cli provider adapter with settings schema, descriptor metadata, and async event streaming.
+- Decisions:
+  - Return an AsyncIterable of LLM events backed by a lightweight in-memory queue.
+  - Extend root tsconfig files with Node types to support adapter compilation.
+- Changes:
+  - packages/adapters/src/codex-cli/*
+  - packages/adapters/src/index.ts
+  - tsconfig.json
+  - tsconfig.eslint.json
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Start Milestone 2 with server API scaffolding and auth policy.
