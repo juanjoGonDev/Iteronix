@@ -548,3 +548,26 @@
   - None
 - Next:
   - Start Milestone 4 by scaffolding apps/desktop-main.
+### 2026-01-03 21:35 (Europe/Madrid) - Desktop Main
+
+- Summary: Added desktop mode configuration for local vs remote server selection with local server spawn wiring, plus unit tests for config parsing.
+- Decisions:
+  - Use environment-driven configuration for desktop mode and server settings.
+  - Require local mode to supply auth token and workspace roots before starting the server.
+- Changes:
+  - apps/desktop-main/src/config.ts
+  - apps/desktop-main/src/config.test.ts
+  - apps/desktop-main/src/constants.ts
+  - apps/desktop-main/src/index.ts
+  - apps/desktop-main/src/result.ts
+  - apps/desktop-main/src/server.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement desktop dev/prod web UI loading in apps/desktop-main.
