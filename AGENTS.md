@@ -160,6 +160,50 @@ Never proceed if gates fail.
 - Prefer small, reviewable commits with Conventional Commits:
   - `feat: ...`, `fix: ...`, `chore: ...`, `refactor: ...`, `test: ...`
 
+## Agent output & next prompt contract (mandatory)
+
+Each agent iteration MUST end with a structured output that follows these rules.
+
+### Summary
+
+- MUST be written in Spanish.
+- MUST be concise (1–3 paragraphs).
+- MUST describe what was done and why, not what will be done next.
+- At the END of the summary, include a fenced code block containing the next prompt in English.
+
+### Next prompt (`nextPrompt`)
+
+The next prompt is an execution instruction, not a note.
+
+Rules:
+
+- MUST be written in English.
+- MUST be specific, scoped, and actionable.
+- MUST reference:
+  - the exact app or package to modify (e.g. `apps/server-api`)
+  - the responsibility (API, domain, adapter, UI, etc.)
+- MUST include clear acceptance criteria.
+- MUST respect the current scope defined in PLAN.md.
+- MUST NOT be vague or generic.
+
+Forbidden examples:
+
+- "Implement provider endpoints"
+- "Continue with server API"
+- "Add provider settings"
+
+Good examples:
+
+- "Implement provider listing and selection endpoints in apps/server-api, backed by the provider registry in packages/domain, with input validation and tests."
+
+If a precise next step cannot be defined:
+
+- Set the next prompt to `null`
+- Mark the iteration as requiring user input
+- Log the ambiguity in `AGENTS_LOGS.md`
+
+This contract is non-optional.
+
 ## Test-Driven Development (mandatory for core)
 
 TDD is REQUIRED for all core logic:
