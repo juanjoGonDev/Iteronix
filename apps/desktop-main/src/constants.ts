@@ -51,6 +51,22 @@ export const DefaultUi = {
   ProdAssets: "apps/web-ui/dist"
 } as const;
 
+export const SecretService = "iteronix.desktop";
+
+export const SecretKey = {
+  AuthToken: "auth_token"
+} as const;
+
+export type SecretKey = typeof SecretKey[keyof typeof SecretKey];
+
+export const SecretProviderType = {
+  Keychain: "keychain",
+  Memory: "memory"
+} as const;
+
+export type SecretProviderType =
+  typeof SecretProviderType[keyof typeof SecretProviderType];
+
 export const ConfigErrorCode = {
   InvalidMode: "invalid_mode",
   MissingRemoteUrl: "missing_remote_url",
@@ -73,6 +89,21 @@ export const ConfigErrorMessage = {
   InvalidServerPort: "Invalid desktop server port",
   InvalidUiMode: "Invalid UI mode",
   InvalidUiDevUrl: "Invalid UI dev server URL"
+} as const;
+
+export const SecretErrorCode = {
+  Unavailable: "secret_unavailable",
+  OperationFailed: "secret_operation_failed",
+  InvalidToken: "invalid_token"
+} as const;
+
+export type SecretErrorCode =
+  typeof SecretErrorCode[keyof typeof SecretErrorCode];
+
+export const SecretErrorMessage = {
+  Unavailable: "Secret provider unavailable",
+  OperationFailed: "Secret operation failed",
+  InvalidToken: "Invalid token"
 } as const;
 
 export const ServerStartErrorCode = {

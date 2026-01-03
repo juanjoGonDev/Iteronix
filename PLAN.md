@@ -95,7 +95,7 @@ Acceptance:
 - [ ] Implement `apps/desktop-main` to:
   - [x] Run local server OR connect remote
   - [x] Dev: load web UI dev URL; Prod: load built assets
-  - [ ] Store secrets via OS keychain adapter (optional token)
+  - [x] Store secrets via OS keychain adapter (optional token)
 - [ ] Desktop UX: connect/disconnect server URL; remember endpoints
 
 Acceptance:

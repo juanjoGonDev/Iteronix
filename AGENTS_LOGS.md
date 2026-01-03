@@ -592,3 +592,26 @@
   - None
 - Next:
   - Implement OS keychain secrets adapter for desktop token storage.
+### 2026-01-03 21:58 (Europe/Madrid) - Desktop Main
+
+- Summary: Added a secrets store for desktop auth tokens that prefers an OS keychain adapter and falls back to in-memory storage, wiring it into local mode startup with tests.
+- Decisions:
+  - Use an optional keychain adapter loader with a memory fallback to avoid hard dependency failures.
+  - Store env-provided auth tokens into the secrets store and retrieve when absent.
+- Changes:
+  - apps/desktop-main/src/constants.ts
+  - apps/desktop-main/src/config.ts
+  - apps/desktop-main/src/index.ts
+  - apps/desktop-main/src/secrets.ts
+  - apps/desktop-main/src/secrets.test.ts
+  - apps/desktop-main/src/config.test.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add desktop UX for connect/disconnect server URL and remember endpoints.

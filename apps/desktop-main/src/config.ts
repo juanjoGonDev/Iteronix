@@ -17,13 +17,17 @@ export type ConfigError = {
   message: string;
 };
 
-export type LocalServerConfig = {
+export type LocalServerConfigInput = {
   entryPath: string;
   host: string;
   port: number;
-  authToken: string;
+  authToken?: string;
   workspaceRoots: ReadonlyArray<string>;
   commandAllowlist: ReadonlyArray<string>;
+};
+
+export type LocalServerConfig = Omit<LocalServerConfigInput, "authToken"> & {
+  authToken: string;
 };
 
 export type UiSource =
@@ -38,7 +42,7 @@ export type UiSource =
 type LocalConfigBase = {
   mode: typeof DesktopMode.Local;
   serverUrl: string;
-  server: LocalServerConfig;
+  server: LocalServerConfigInput;
 };
 
 type RemoteConfigBase = {
@@ -197,11 +201,6 @@ const resolveLocalConfig = (
   env: NodeJS.ProcessEnv,
   cwd: string
 ): Result<LocalConfigBase, ConfigError> => {
-  const authToken = readRequiredAuthToken(env);
-  if (authToken.type === ResultType.Err) {
-    return authToken;
-  }
-
   const workspaceRoots = readRequiredWorkspaceRoots(env);
   if (workspaceRoots.type === ResultType.Err) {
     return workspaceRoots;
@@ -215,19 +214,25 @@ const resolveLocalConfig = (
   const host = readOptional(env[EnvKey.ServerHost]) ?? DefaultServer.Host;
   const commandAllowlist = parseAllowlist(env[EnvKey.CommandAllowlist]);
   const entryPath = resolveEntryPath(env[EnvKey.ServerEntry], cwd);
+  const authToken = readOptional(env[EnvKey.AuthToken]);
   const serverUrl = buildServerUrl(host, port.value);
+
+  const server: LocalServerConfigInput = {
+    entryPath,
+    host,
+    port: port.value,
+    workspaceRoots: workspaceRoots.value,
+    commandAllowlist
+  };
+
+  if (authToken) {
+    server.authToken = authToken;
+  }
 
   return ok({
     mode: DesktopMode.Local,
     serverUrl,
-    server: {
-      entryPath,
-      host,
-      port: port.value,
-      authToken: authToken.value,
-      workspaceRoots: workspaceRoots.value,
-      commandAllowlist
-    }
+    server
   });
 };
 
@@ -246,17 +251,6 @@ const parsePort = (
     });
   }
   return ok(parsed);
-};
-
-const readRequiredAuthToken = (env: NodeJS.ProcessEnv): Result<string, ConfigError> => {
-  const token = readOptional(env[EnvKey.AuthToken]);
-  if (!token) {
-    return err({
-      code: ConfigErrorCode.MissingAuthToken,
-      message: ConfigErrorMessage.MissingAuthToken
-    });
-  }
-  return ok(token);
 };
 
 const readRequiredWorkspaceRoots = (
