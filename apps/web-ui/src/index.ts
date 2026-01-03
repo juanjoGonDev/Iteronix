@@ -5,6 +5,7 @@ import { initRepoScreen } from "./screens/repo.js";
 import { initRunsScreen } from "./screens/runs.js";
 import { initSettingsScreen } from "./screens/settings.js";
 import { storageKeys } from "./shared/constants.js";
+import { initShell } from "./shared/shell.js";
 import { registerServiceWorker } from "./shared/service-worker.js";
 import { getStoredValue } from "./shared/storage.js";
 import { createStore } from "./shared/store.js";
@@ -15,6 +16,7 @@ if (appRoot instanceof HTMLElement) {
   const baseUrlStore = createStore(getStoredValue(storageKeys.baseUrl, ""));
   const tokenStore = createStore(getStoredValue(storageKeys.token, ""));
 
+  initShell({ root: appRoot });
   initConnectionScreen({ root: appRoot, baseUrlStore, tokenStore });
   initProjectsScreen(appRoot);
   initRepoScreen(appRoot);
