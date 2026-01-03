@@ -9,7 +9,9 @@ import {
   HttpStatus,
   MimeType,
   ProjectField,
+  QueryParam,
   RoutePath,
+  SessionField,
   TextEncoding
 } from "./constants";
 import { loadConfig, type ServerConfig } from "./config";
@@ -26,13 +28,27 @@ import {
   type ProjectOpenInput,
   type ProjectStore
 } from "./projects";
+import {
+  createSessionEventHub,
+  createSessionStore,
+  createStatusEvent,
+  SessionEventType,
+  type Session,
+  SessionStoreErrorCode,
+  type SessionStoreError,
+  type SessionStore,
+  type SessionEventHub
+} from "./sessions";
+import { createSseStream } from "./sse";
 import { err, ok, ResultType, type Result } from "./result";
 
 export const startServer = (): void => {
   const config = loadConfig(process.env);
-  const store = createProjectStore();
+  const projectStore = createProjectStore();
+  const sessionStore = createSessionStore();
+  const sessionEvents = createSessionEventHub();
   const server = createServer((req, res) => {
-    void handleRequest(req, res, config, store);
+    void handleRequest(req, res, config, projectStore, sessionStore, sessionEvents);
   });
 
   server.listen(config.port, config.host);
@@ -42,7 +58,9 @@ const handleRequest = async (
   req: IncomingMessage,
   res: ServerResponse,
   config: ServerConfig,
-  store: ProjectStore
+  projectStore: ProjectStore,
+  sessionStore: SessionStore,
+  sessionEvents: SessionEventHub
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -67,7 +85,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleCreateProject(req, res, store);
+    await handleCreateProject(req, res, projectStore);
     return;
   }
 
@@ -77,7 +95,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleOpenProject(req, res, store);
+    await handleOpenProject(req, res, projectStore);
     return;
   }
 
@@ -87,7 +105,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleFileTree(req, res, store);
+    await handleFileTree(req, res, projectStore);
     return;
   }
 
@@ -97,7 +115,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleFileRead(req, res, store);
+    await handleFileRead(req, res, projectStore);
     return;
   }
 
@@ -107,7 +125,37 @@ const handleRequest = async (
       return;
     }
 
-    await handleFileWrite(req, res, store);
+    await handleFileWrite(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.SessionsStart) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleSessionStart(req, res, sessionStore, sessionEvents);
+    return;
+  }
+
+  if (path === RoutePath.SessionsStop) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleSessionStop(req, res, sessionStore, sessionEvents);
+    return;
+  }
+
+  if (path === RoutePath.SessionsStream) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    handleSessionStream(req, res, sessionStore, sessionEvents, url);
     return;
   }
 
@@ -282,6 +330,112 @@ const handleFileWrite = async (
 
   respondJson(res, HttpStatus.Ok, {
     bytesWritten: writeResult.value.bytesWritten
+  });
+};
+
+const handleSessionStart = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  sessionStore: SessionStore,
+  sessionEvents: SessionEventHub
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseSessionStartRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const started = sessionStore.start(parsed.value);
+  if (started.type === ResultType.Err) {
+    respondError(res, mapSessionStoreError(started.error));
+    return;
+  }
+
+  sessionEvents.publish(createStatusEvent(started.value));
+
+  respondJson(res, HttpStatus.Created, {
+    session: started.value
+  });
+};
+
+const handleSessionStop = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  sessionStore: SessionStore,
+  sessionEvents: SessionEventHub
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseSessionStopRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const stopped = sessionStore.stop(parsed.value.sessionId);
+  if (stopped.type === ResultType.Err) {
+    respondError(res, mapSessionStoreError(stopped.error));
+    return;
+  }
+
+  sessionEvents.publish(createStatusEvent(stopped.value));
+
+  respondJson(res, HttpStatus.Ok, {
+    session: stopped.value
+  });
+};
+
+const handleSessionStream = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  sessionStore: SessionStore,
+  sessionEvents: SessionEventHub,
+  url: URL
+): void => {
+  const sessionId = url.searchParams.get(QueryParam.SessionId) ?? undefined;
+  if (!sessionId || sessionId.trim().length === 0) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingSessionId
+    });
+    return;
+  }
+
+  const sessionResult = getSessionById(sessionStore, sessionId);
+  if (sessionResult.type === ResultType.Err) {
+    respondError(res, sessionResult.error);
+    return;
+  }
+
+  const stream = createSseStream(res);
+  const initialEvent = createStatusEvent(sessionResult.value);
+  stream.send({
+    event: SessionEventType.Status,
+    data: initialEvent,
+    id: initialEvent.id
+  });
+
+  const unsubscribe = sessionEvents.subscribe(sessionId, (event) => {
+    stream.send({
+      event: event.type,
+      data: event,
+      id: event.id
+    });
+  });
+
+  req.on("close", () => {
+    unsubscribe();
+    stream.close();
   });
 };
 
@@ -507,6 +661,80 @@ const parseFileWriteRequest = (
     path: path.value,
     content: content.value
   });
+};
+
+const parseSessionStartRequest = (
+  value: unknown
+): Result<{ projectId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    SessionField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  return ok({
+    projectId: projectId.value
+  });
+};
+
+const parseSessionStopRequest = (
+  value: unknown
+): Result<{ sessionId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  return ok({
+    sessionId: sessionId.value
+  });
+};
+
+const getSessionById = (
+  store: SessionStore,
+  id: string
+): Result<Session, ApiError> => {
+  const result = store.getById(id);
+  if (result.type === ResultType.Err) {
+    return err(mapSessionStoreError(result.error));
+  }
+
+  return ok(result.value);
+};
+
+const mapSessionStoreError = (error: SessionStoreError): ApiError => {
+  if (error.code === SessionStoreErrorCode.NotFound) {
+    return {
+      status: HttpStatus.NotFound,
+      message: error.message
+    };
+  }
+
+  return {
+    status: HttpStatus.BadRequest,
+    message: error.message
+  };
 };
 
 const getProjectById = (

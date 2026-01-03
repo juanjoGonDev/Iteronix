@@ -1,4 +1,5 @@
 export const HttpMethod = {
+  Get: "GET",
   Post: "POST"
 } as const;
 
@@ -9,7 +10,10 @@ export const RoutePath = {
   ProjectsOpen: "/projects/open",
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
-  FilesWrite: "/files/write"
+  FilesWrite: "/files/write",
+  SessionsStart: "/sessions/start",
+  SessionsStop: "/sessions/stop",
+  SessionsStream: "/sessions/stream"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -17,7 +21,9 @@ export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
 export const HeaderName = {
   Authorization: "authorization",
   WwwAuthenticate: "www-authenticate",
-  ContentType: "content-type"
+  ContentType: "content-type",
+  CacheControl: "cache-control",
+  Connection: "connection"
 } as const;
 
 export type HeaderName = typeof HeaderName[keyof typeof HeaderName];
@@ -48,6 +54,7 @@ export const ErrorMessage = {
   MissingProjectId: "Missing projectId",
   MissingPath: "Missing path",
   MissingContent: "Missing content",
+  MissingSessionId: "Missing sessionId",
   ProjectExists: "Project already exists",
   NotFound: "Not found",
   InvalidPath: "Invalid path",
@@ -58,7 +65,13 @@ export const ErrorMessage = {
 } as const;
 
 export const MimeType = {
-  Json: "application/json"
+  Json: "application/json",
+  EventStream: "text/event-stream"
+} as const;
+
+export const HeaderValue = {
+  NoCache: "no-cache",
+  KeepAlive: "keep-alive"
 } as const;
 
 export const TextEncoding = "utf8";
@@ -72,6 +85,15 @@ export const FileField = {
   ProjectId: "projectId",
   Path: "path",
   Content: "content"
+} as const;
+
+export const SessionField = {
+  SessionId: "sessionId",
+  ProjectId: "projectId"
+} as const;
+
+export const QueryParam = {
+  SessionId: "sessionId"
 } as const;
 
 export const FileEntryKind = {

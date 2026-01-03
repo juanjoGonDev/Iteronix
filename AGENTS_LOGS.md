@@ -126,3 +126,25 @@
   - None
 - Next:
   - Add sessions start/stop with SSE streaming endpoints.
+### 2026-01-03 16:10 (Europe/Madrid) - Server API
+
+- Summary: Added session start/stop and SSE streaming endpoints with in-memory session tracking and SSE helpers.
+- Decisions:
+  - Use an in-memory session store and event hub for initial SSE wiring.
+  - Add unit tests for session store behavior (non-TDD).
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/sessions.ts
+  - apps/server-api/src/sessions.test.ts
+  - apps/server-api/src/sse.ts
+  - apps/server-api/src/server.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add history/logs retrieval endpoints.
