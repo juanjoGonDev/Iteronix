@@ -1,0 +1,23 @@
+### 2026-01-03 14:24 (Europe/Madrid) — Bootstrap
+
+- Summary: Bootstrapped the monorepo with PNPM workspace, strict TS/ESLint, and Vitest harness.
+- Decisions:
+  - Use a single root tsconfig with strict settings and per-package overrides.
+  - Keep build script aligned with typecheck until real build pipelines exist.
+- Changes:
+  - .gitignore, package.json, pnpm-workspace.yaml
+  - tsconfig.base.json, tsconfig.json, tsconfig.eslint.json, eslint.config.cjs
+  - apps/* and packages/* scaffolding
+  - packages/domain LLM port, events, and run model
+  - PLAN.md
+- Commands:
+  - `git init`
+  - `pnpm install`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - pnpm install reported ignored build scripts (esbuild) pending approval.
+- Next:
+  - Define remaining domain ports and provider registry settings schema.
