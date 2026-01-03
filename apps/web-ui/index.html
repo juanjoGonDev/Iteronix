@@ -545,6 +545,89 @@
         color: var(--muted);
       }
 
+      .settings {
+        margin-top: 28px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .settings-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .settings-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .settings-row {
+        display: grid;
+        gap: 6px;
+      }
+
+      .settings-row label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+
+      .settings-select {
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-family: var(--font-body);
+        font-size: 14px;
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--ink);
+      }
+
+      .profile-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .profile-pill {
+        border: 1px solid var(--stroke);
+        background: #fff;
+        color: var(--ink);
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .profile-pill[data-active="true"] {
+        background: rgba(44, 140, 124, 0.15);
+        border-color: rgba(44, 140, 124, 0.45);
+        color: #1f6b60;
+      }
+
+      .settings-summary {
+        display: grid;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .settings-summary-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .settings-summary-line strong {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 600;
+        word-break: break-word;
+        text-align: right;
+      }
+
       .kanban {
         margin-top: 28px;
         display: grid;
@@ -642,6 +725,10 @@
 
         .runs-grid {
           grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr) minmax(0, 0.8fr);
+        }
+
+        .settings-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .kanban {
@@ -829,6 +916,51 @@
         </div>
       </section>
 
+      <section class="settings">
+        <div class="section-heading">
+          <h3>Settings</h3>
+          <p>Choose provider, model, and precision per project profile.</p>
+        </div>
+        <div class="settings-grid">
+          <article class="panel settings-card">
+            <h3>Project scope</h3>
+            <div class="settings-row">
+              <label for="settings-project">Project</label>
+              <select id="settings-project" class="settings-select" data-settings-project></select>
+            </div>
+            <div class="settings-row">
+              <label>Profile</label>
+              <div class="profile-list">
+                <button class="profile-pill" type="button" data-profile="Backend">Backend</button>
+                <button class="profile-pill" type="button" data-profile="Frontend">Frontend</button>
+                <button class="profile-pill" type="button" data-profile="DevOps">DevOps</button>
+                <button class="profile-pill" type="button" data-profile="Product Manager">Product Manager</button>
+              </div>
+            </div>
+          </article>
+          <article class="panel settings-card">
+            <h3>Provider</h3>
+            <div class="settings-row">
+              <label for="settings-provider">Provider</label>
+              <select id="settings-provider" class="settings-select" data-settings-provider></select>
+            </div>
+            <div class="settings-row">
+              <label for="settings-model">Model</label>
+              <select id="settings-model" class="settings-select" data-settings-model></select>
+            </div>
+            <div class="settings-row">
+              <label for="settings-precision">Precision</label>
+              <select id="settings-precision" class="settings-select" data-settings-precision></select>
+            </div>
+          </article>
+          <article class="panel settings-card">
+            <h3>Active selection</h3>
+            <div class="settings-summary" data-settings-summary></div>
+            <div class="hint">Applies to this project profile.</div>
+          </article>
+        </div>
+      </section>
+
       <section class="kanban">
         <div class="kanban-column motion">
           <div class="kanban-header">
@@ -935,6 +1067,12 @@
       const historyList = document.querySelector("[data-history-list]");
       const historyEmpty = document.querySelector("[data-history-empty]");
       const historyCount = document.querySelector("[data-history-count]");
+      const settingsProject = document.querySelector("[data-settings-project]");
+      const settingsProvider = document.querySelector("[data-settings-provider]");
+      const settingsModel = document.querySelector("[data-settings-model]");
+      const settingsPrecision = document.querySelector("[data-settings-precision]");
+      const settingsSummary = document.querySelector("[data-settings-summary]");
+      const profileButtons = Array.from(document.querySelectorAll("[data-profile]"));
       const projectState = {
         recents: []
       };
@@ -984,6 +1122,26 @@
       };
       let runTimer = 0;
       let logCursor = 0;
+      const settingsCatalog = {
+        projects: ["Iteronix Core", "FlowForge", "Sandbox"],
+        profiles: ["Backend", "Frontend", "DevOps", "Product Manager"],
+        providers: [
+          { id: "codex-cli", label: "Codex CLI", models: ["gpt-5-codex", "gpt-4.1-codex"] },
+          { id: "local-mock", label: "Local Mock", models: ["mock-small", "mock-large"] }
+        ],
+        precisions: [
+          { id: "fast", label: "Fast" },
+          { id: "balanced", label: "Balanced" },
+          { id: "precise", label: "Precise" }
+        ]
+      };
+      const settingsState = {
+        project: "Iteronix Core",
+        profile: "Backend",
+        provider: "codex-cli",
+        model: "gpt-5-codex",
+        precision: "balanced"
+      };
 
       startApp();
 
@@ -992,6 +1150,7 @@
         initProjects();
         initRepo();
         initRuns();
+        initSettings();
         registerServiceWorker();
       }
 
@@ -1548,6 +1707,256 @@
         const line = logTemplates[logCursor % logTemplates.length];
         logCursor += 1;
         return line;
+      }
+
+      function initSettings() {
+        ensureSettingsDefaults();
+        renderSettings();
+        registerSettingsHandlers();
+      }
+
+      function ensureSettingsDefaults() {
+        settingsState.project = resolveProject(settingsState.project);
+        settingsState.profile = resolveProfile(settingsState.profile);
+        settingsState.provider = resolveProvider(settingsState.provider);
+        settingsState.model = resolveModel(settingsState.provider, settingsState.model);
+        settingsState.precision = resolvePrecision(settingsState.precision);
+      }
+
+      function resolveProject(value) {
+        if (settingsCatalog.projects.includes(value)) {
+          return value;
+        }
+        return settingsCatalog.projects[0] ?? "";
+      }
+
+      function resolveProfile(value) {
+        if (settingsCatalog.profiles.includes(value)) {
+          return value;
+        }
+        return settingsCatalog.profiles[0] ?? "";
+      }
+
+      function resolveProvider(value) {
+        const provider = getProvider(value);
+        if (provider) {
+          return provider.id;
+        }
+        return settingsCatalog.providers[0]?.id ?? "";
+      }
+
+      function resolveModel(providerId, value) {
+        const provider = getProvider(providerId);
+        if (!provider) {
+          return "";
+        }
+        if (provider.models.includes(value)) {
+          return value;
+        }
+        return provider.models[0] ?? "";
+      }
+
+      function resolvePrecision(value) {
+        if (settingsCatalog.precisions.some((precision) => precision.id === value)) {
+          return value;
+        }
+        return settingsCatalog.precisions[0]?.id ?? "";
+      }
+
+      function renderSettings() {
+        renderProjectOptions();
+        renderProviderOptions();
+        renderModelOptions();
+        renderPrecisionOptions();
+        updateProfileButtons();
+        renderSettingsSummary();
+      }
+
+      function renderProjectOptions() {
+        if (!(settingsProject instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsProject.innerHTML = "";
+        settingsCatalog.projects.forEach((project) => {
+          const option = document.createElement("option");
+          option.value = project;
+          option.textContent = project;
+          settingsProject.appendChild(option);
+        });
+        settingsProject.value = settingsState.project;
+      }
+
+      function renderProviderOptions() {
+        if (!(settingsProvider instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsProvider.innerHTML = "";
+        settingsCatalog.providers.forEach((provider) => {
+          const option = document.createElement("option");
+          option.value = provider.id;
+          option.textContent = provider.label;
+          settingsProvider.appendChild(option);
+        });
+        settingsProvider.value = settingsState.provider;
+      }
+
+      function renderModelOptions() {
+        if (!(settingsModel instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsModel.innerHTML = "";
+        const provider = getProvider(settingsState.provider);
+        const models = provider ? provider.models : [];
+        models.forEach((model) => {
+          const option = document.createElement("option");
+          option.value = model;
+          option.textContent = model;
+          settingsModel.appendChild(option);
+        });
+        settingsModel.value = settingsState.model;
+      }
+
+      function renderPrecisionOptions() {
+        if (!(settingsPrecision instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsPrecision.innerHTML = "";
+        settingsCatalog.precisions.forEach((precision) => {
+          const option = document.createElement("option");
+          option.value = precision.id;
+          option.textContent = precision.label;
+          settingsPrecision.appendChild(option);
+        });
+        settingsPrecision.value = settingsState.precision;
+      }
+
+      function updateProfileButtons() {
+        profileButtons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) {
+            return;
+          }
+          button.dataset.active = button.dataset.profile === settingsState.profile ? "true" : "false";
+        });
+      }
+
+      function renderSettingsSummary() {
+        if (!(settingsSummary instanceof HTMLElement)) {
+          return;
+        }
+        settingsSummary.innerHTML = "";
+        const summaryLines = [
+          { label: "Project", value: settingsState.project || emptyLabel },
+          { label: "Profile", value: settingsState.profile || emptyLabel },
+          { label: "Provider", value: getProviderLabel(settingsState.provider) },
+          { label: "Model", value: settingsState.model || emptyLabel },
+          { label: "Precision", value: getPrecisionLabel(settingsState.precision) }
+        ];
+        summaryLines.forEach((line) => {
+          settingsSummary.appendChild(buildSummaryLine(line.label, line.value));
+        });
+      }
+
+      function buildSummaryLine(label, value) {
+        const line = document.createElement("div");
+        line.className = "settings-summary-line";
+        const name = document.createElement("span");
+        name.textContent = label;
+        const data = document.createElement("strong");
+        data.textContent = value;
+        line.appendChild(name);
+        line.appendChild(data);
+        return line;
+      }
+
+      function registerSettingsHandlers() {
+        if (settingsProject instanceof HTMLSelectElement) {
+          settingsProject.addEventListener("change", handleProjectChange);
+        }
+        if (settingsProvider instanceof HTMLSelectElement) {
+          settingsProvider.addEventListener("change", handleProviderChange);
+        }
+        if (settingsModel instanceof HTMLSelectElement) {
+          settingsModel.addEventListener("change", handleModelChange);
+        }
+        if (settingsPrecision instanceof HTMLSelectElement) {
+          settingsPrecision.addEventListener("change", handlePrecisionChange);
+        }
+        profileButtons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) {
+            return;
+          }
+          button.addEventListener("click", () => {
+            const profile = button.dataset.profile;
+            if (typeof profile === "string") {
+              setProfile(profile);
+            }
+          });
+        });
+      }
+
+      function handleProjectChange() {
+        if (!(settingsProject instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsState.project = resolveProject(settingsProject.value);
+        renderSettingsSummary();
+      }
+
+      function handleProviderChange() {
+        if (!(settingsProvider instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsState.provider = resolveProvider(settingsProvider.value);
+        settingsState.model = resolveModel(settingsState.provider, settingsState.model);
+        renderProviderOptions();
+        renderModelOptions();
+        renderSettingsSummary();
+      }
+
+      function handleModelChange() {
+        if (!(settingsModel instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsState.model = resolveModel(settingsState.provider, settingsModel.value);
+        renderModelOptions();
+        renderSettingsSummary();
+      }
+
+      function handlePrecisionChange() {
+        if (!(settingsPrecision instanceof HTMLSelectElement)) {
+          return;
+        }
+        settingsState.precision = resolvePrecision(settingsPrecision.value);
+        renderSettingsSummary();
+      }
+
+      function setProfile(profile) {
+        if (!settingsCatalog.profiles.includes(profile)) {
+          return;
+        }
+        settingsState.profile = profile;
+        updateProfileButtons();
+        renderSettingsSummary();
+      }
+
+      function getProvider(providerId) {
+        return settingsCatalog.providers.find((provider) => provider.id === providerId) ?? null;
+      }
+
+      function getProviderLabel(providerId) {
+        const provider = getProvider(providerId);
+        if (!provider) {
+          return emptyLabel;
+        }
+        return provider.label;
+      }
+
+      function getPrecisionLabel(precisionId) {
+        const precision = settingsCatalog.precisions.find((item) => item.id === precisionId);
+        if (!precision) {
+          return emptyLabel;
+        }
+        return precision.label;
       }
 
       function registerServiceWorker() {

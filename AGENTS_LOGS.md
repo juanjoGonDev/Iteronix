@@ -393,3 +393,22 @@
   - None
 - Next:
   - Implement the Settings screen (provider/model/precision, per project/profile) in apps/web-ui.
+
+### 2026-01-03 19:51 (Europe/Madrid) - Web UI
+
+- Summary: Added a Settings section with project/profile selection and provider/model/precision controls backed by client-side state.
+- Decisions:
+  - Use an in-memory settings catalog to render the selectable options.
+  - Render the active selection summary from the current settings state.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the Kanban board screen (create/move tasks; show task details) in apps/web-ui.

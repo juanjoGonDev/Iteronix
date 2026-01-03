@@ -78,7 +78,7 @@ Acceptance:
   - [x] Projects (create/open/recent)
   - [x] Repo explorer + Monaco editor
   - [x] Runs: start, live stream logs, history
-  - [ ] Settings: provider/model/precision, per project/profile
+  - [x] Settings: provider/model/precision, per project/profile
   - [ ] Kanban board: create/move tasks; show task details
 - [ ] No Electron-specific code in UI
 
