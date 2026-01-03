@@ -374,3 +374,22 @@
   - None
 - Next:
   - Implement the Runs screen (start, live stream logs, history) in apps/web-ui.
+
+### 2026-01-03 19:45 (Europe/Madrid) - Web UI
+
+- Summary: Added a Runs section with start/stop controls, live log placeholder, and history list backed by client-side state.
+- Decisions:
+  - Simulate streaming logs with a lightweight interval-driven placeholder.
+  - Seed run history with sample entries for UI scaffolding.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the Settings screen (provider/model/precision, per project/profile) in apps/web-ui.

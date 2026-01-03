@@ -432,6 +432,119 @@
         overflow: hidden;
       }
 
+      .runs {
+        margin-top: 28px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .runs-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .run-controls {
+        display: grid;
+        gap: 14px;
+      }
+
+      .run-status {
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .run-status strong {
+        font-size: 18px;
+        color: var(--ink);
+      }
+
+      .run-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .log-panel {
+        display: grid;
+        gap: 12px;
+      }
+
+      .log-output {
+        display: grid;
+        gap: 6px;
+        min-height: 220px;
+        max-height: 280px;
+        overflow: auto;
+        border-radius: 14px;
+        background: rgba(12, 20, 24, 0.92);
+        color: #f3f5f6;
+        padding: 14px;
+        font-family: "Fira Code", "Courier New", monospace;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .log-line {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+      }
+
+      .log-time {
+        color: rgba(243, 245, 246, 0.6);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .history-item {
+        border: 1px solid rgba(28, 42, 46, 0.08);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: grid;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.85);
+      }
+
+      .history-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .history-header strong {
+        font-size: 14px;
+      }
+
+      .status-pill {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(44, 140, 124, 0.15);
+        color: #1f6b60;
+      }
+
+      .status-pill[data-status="failed"] {
+        background: rgba(226, 104, 59, 0.2);
+        color: #a34222;
+      }
+
+      .history-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
       .kanban {
         margin-top: 28px;
         display: grid;
@@ -525,6 +638,10 @@
 
         .repo-grid {
           grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+        }
+
+        .runs-grid {
+          grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr) minmax(0, 0.8fr);
         }
 
         .kanban {
@@ -676,6 +793,42 @@
         </div>
       </section>
 
+      <section class="runs">
+        <div class="section-heading">
+          <h3>Runs</h3>
+          <p>Start a run, watch logs stream, and review history.</p>
+        </div>
+        <div class="runs-grid">
+          <article class="panel run-controls">
+            <div class="run-status">
+              <span>Status</span>
+              <strong data-run-status>Idle</strong>
+              <small data-run-meta>Last run: never</small>
+            </div>
+            <div class="run-actions">
+              <button class="btn primary" data-run-start>Start run</button>
+              <button class="btn" data-run-stop disabled>Stop run</button>
+            </div>
+            <div class="hint" data-run-target>Target: not connected</div>
+          </article>
+          <article class="panel log-panel">
+            <div class="repo-title">
+              <strong>Live log</strong>
+              <span class="chip" data-log-count>0 lines</span>
+            </div>
+            <div class="log-output" data-live-log></div>
+          </article>
+          <article class="panel">
+            <div class="repo-title">
+              <strong>History</strong>
+              <span class="chip" data-history-count>0</span>
+            </div>
+            <div class="history-list" data-history-list></div>
+            <div class="recent-empty" data-history-empty>No runs yet.</div>
+          </article>
+        </div>
+      </section>
+
       <section class="kanban">
         <div class="kanban-column motion">
           <div class="kanban-header">
@@ -743,6 +896,19 @@
         { name: "Iteronix", path: "/workspace/iteronix", updated: "Today" },
         { name: "FlowForge", path: "/workspace/flowforge", updated: "Yesterday" }
       ];
+      const defaultHistory = [
+        { id: 18, status: "success", finishedAt: "Today 09:12", duration: "1m 42s", lines: 38 },
+        { id: 17, status: "failed", finishedAt: "Yesterday 18:03", duration: "45s", lines: 12 }
+      ];
+      const logTemplates = [
+        "Queued provider codex-cli",
+        "Workspace root validated",
+        "Applied command policy checks",
+        "Dispatching prompt to provider",
+        "Streaming tokens",
+        "Quality gates scheduled",
+        "Run completed"
+      ];
       const baseUrlInput = document.querySelector("[data-base-url]");
       const tokenInput = document.querySelector("[data-auth-token]");
       const targetDisplay = document.querySelector("[data-current-target]");
@@ -759,6 +925,16 @@
       const editorLanguage = document.querySelector("[data-editor-language]");
       const editorContent = document.querySelector("[data-editor-content]");
       const editorLines = document.querySelector("[data-editor-lines]");
+      const runStartButton = document.querySelector("[data-run-start]");
+      const runStopButton = document.querySelector("[data-run-stop]");
+      const runStatus = document.querySelector("[data-run-status]");
+      const runMeta = document.querySelector("[data-run-meta]");
+      const runTarget = document.querySelector("[data-run-target]");
+      const liveLog = document.querySelector("[data-live-log]");
+      const logCount = document.querySelector("[data-log-count]");
+      const historyList = document.querySelector("[data-history-list]");
+      const historyEmpty = document.querySelector("[data-history-empty]");
+      const historyCount = document.querySelector("[data-history-count]");
       const projectState = {
         recents: []
       };
@@ -799,6 +975,15 @@
         },
         selectedPath: "apps/server-api/src/server.ts"
       };
+      const runState = {
+        running: false,
+        logs: [],
+        history: defaultHistory.slice(),
+        currentId: 0,
+        startedAt: null
+      };
+      let runTimer = 0;
+      let logCursor = 0;
 
       startApp();
 
@@ -806,6 +991,7 @@
         initConnectionSettings();
         initProjects();
         initRepo();
+        initRuns();
         registerServiceWorker();
       }
 
@@ -861,10 +1047,10 @@
       }
 
       function setDisplay(baseUrl) {
-        if (!(targetDisplay instanceof HTMLElement)) {
-          return;
+        if (targetDisplay instanceof HTMLElement) {
+          targetDisplay.textContent = baseUrl === "" ? emptyLabel : baseUrl;
         }
-        targetDisplay.textContent = baseUrl === "" ? emptyLabel : baseUrl;
+        updateRunTarget(baseUrl);
       }
 
       function getStoredValue(key, fallback) {
@@ -1132,6 +1318,236 @@
           return;
         }
         repoCount.textContent = `${count} files`;
+      }
+
+      function initRuns() {
+        runState.currentId = getMaxHistoryId(runState.history);
+        renderRunStatus();
+        renderLogs();
+        renderHistory();
+        registerRunHandlers();
+        updateRunTarget(getStoredValue(storageKeyBaseUrl, ""));
+      }
+
+      function registerRunHandlers() {
+        if (runStartButton instanceof HTMLButtonElement) {
+          runStartButton.addEventListener("click", handleRunStart);
+        }
+        if (runStopButton instanceof HTMLButtonElement) {
+          runStopButton.addEventListener("click", handleRunStop);
+        }
+      }
+
+      function handleRunStart() {
+        if (runState.running) {
+          return;
+        }
+        runState.running = true;
+        runState.currentId += 1;
+        runState.startedAt = new Date();
+        runState.logs = [];
+        appendLog(`Run #${runState.currentId} started`);
+        startLogStream();
+        renderRunStatus();
+      }
+
+      function handleRunStop() {
+        if (!runState.running) {
+          return;
+        }
+        runState.running = false;
+        stopLogStream();
+        appendLog(`Run #${runState.currentId} stopped`);
+        const finishedAt = new Date();
+        const duration = runState.startedAt instanceof Date ? finishedAt.getTime() - runState.startedAt.getTime() : 0;
+        runState.history = [
+          {
+            id: runState.currentId,
+            status: "success",
+            finishedAt: formatTime(finishedAt),
+            duration: formatDuration(duration),
+            lines: runState.logs.length
+          },
+          ...runState.history
+        ].slice(0, 5);
+        renderHistory();
+        renderRunStatus();
+      }
+
+      function startLogStream() {
+        stopLogStream();
+        runTimer = window.setInterval(() => {
+          appendLog(nextLogLine());
+        }, 1200);
+      }
+
+      function stopLogStream() {
+        if (runTimer === 0) {
+          return;
+        }
+        window.clearInterval(runTimer);
+        runTimer = 0;
+      }
+
+      function appendLog(message) {
+        const entry = {
+          time: formatTime(new Date()),
+          message
+        };
+        runState.logs.push(entry);
+        if (runState.logs.length > 120) {
+          runState.logs.shift();
+        }
+        renderLogs();
+      }
+
+      function renderLogs() {
+        if (!(liveLog instanceof HTMLElement)) {
+          return;
+        }
+        liveLog.innerHTML = "";
+        runState.logs.forEach((entry) => {
+          liveLog.appendChild(buildLogLine(entry));
+        });
+        updateLogCount(runState.logs.length);
+        liveLog.scrollTop = liveLog.scrollHeight;
+      }
+
+      function buildLogLine(entry) {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = entry.time;
+        const text = document.createElement("span");
+        text.textContent = entry.message;
+        line.appendChild(time);
+        line.appendChild(text);
+        return line;
+      }
+
+      function renderRunStatus() {
+        if (runStatus instanceof HTMLElement) {
+          runStatus.textContent = runState.running ? "Running" : "Idle";
+        }
+        if (runMeta instanceof HTMLElement) {
+          runMeta.textContent = buildRunMeta();
+        }
+        if (runStartButton instanceof HTMLButtonElement) {
+          runStartButton.disabled = runState.running;
+        }
+        if (runStopButton instanceof HTMLButtonElement) {
+          runStopButton.disabled = !runState.running;
+        }
+      }
+
+      function buildRunMeta() {
+        if (runState.running && runState.startedAt instanceof Date) {
+          return `Run #${runState.currentId} started ${formatTime(runState.startedAt)}`;
+        }
+        const latest = runState.history[0];
+        if (!latest) {
+          return "Last run: never";
+        }
+        return `Last run #${latest.id} ${latest.status} ${latest.finishedAt}`;
+      }
+
+      function renderHistory() {
+        if (!(historyList instanceof HTMLElement)) {
+          return;
+        }
+        if (!(historyEmpty instanceof HTMLElement)) {
+          return;
+        }
+        historyList.innerHTML = "";
+        const entries = runState.history;
+        if (entries.length === 0) {
+          historyEmpty.style.display = "block";
+        } else {
+          historyEmpty.style.display = "none";
+          entries.forEach((entry) => {
+            historyList.appendChild(buildHistoryItem(entry));
+          });
+        }
+        updateHistoryCount(entries.length);
+      }
+
+      function buildHistoryItem(entry) {
+        const item = document.createElement("div");
+        item.className = "history-item";
+        const header = document.createElement("div");
+        header.className = "history-header";
+        const title = document.createElement("strong");
+        title.textContent = `Run #${entry.id}`;
+        const status = document.createElement("span");
+        status.className = "status-pill";
+        status.dataset.status = entry.status;
+        status.textContent = entry.status;
+        header.appendChild(title);
+        header.appendChild(status);
+        const meta = document.createElement("div");
+        meta.className = "history-meta";
+        const finished = document.createElement("span");
+        finished.textContent = entry.finishedAt;
+        const duration = document.createElement("span");
+        duration.textContent = `Duration ${entry.duration}`;
+        const lines = document.createElement("span");
+        lines.textContent = `${entry.lines} lines`;
+        meta.appendChild(finished);
+        meta.appendChild(duration);
+        meta.appendChild(lines);
+        item.appendChild(header);
+        item.appendChild(meta);
+        return item;
+      }
+
+      function updateRunTarget(baseUrl) {
+        if (!(runTarget instanceof HTMLElement)) {
+          return;
+        }
+        runTarget.textContent = baseUrl === "" ? "Target: not connected" : `Target: ${baseUrl}`;
+      }
+
+      function updateLogCount(count) {
+        if (!(logCount instanceof HTMLElement)) {
+          return;
+        }
+        logCount.textContent = `${count} lines`;
+      }
+
+      function updateHistoryCount(count) {
+        if (!(historyCount instanceof HTMLElement)) {
+          return;
+        }
+        historyCount.textContent = String(count);
+      }
+
+      function getMaxHistoryId(entries) {
+        return entries.reduce((max, entry) => Math.max(max, entry.id), 0);
+      }
+
+      function formatTime(date) {
+        return `${padNumber(date.getHours())}:${padNumber(date.getMinutes())}:${padNumber(date.getSeconds())}`;
+      }
+
+      function formatDuration(milliseconds) {
+        const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        if (minutes === 0) {
+          return `${seconds}s`;
+        }
+        return `${minutes}m ${seconds}s`;
+      }
+
+      function padNumber(value) {
+        return String(value).padStart(2, "0");
+      }
+
+      function nextLogLine() {
+        const line = logTemplates[logCursor % logTemplates.length];
+        logCursor += 1;
+        return line;
       }
 
       function registerServiceWorker() {
