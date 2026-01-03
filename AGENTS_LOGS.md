@@ -237,6 +237,26 @@
   - None
 - Next:
   - Add Dockerfile and minimal run docs for the server API.
+### 2026-01-03 18:55 (Europe/Madrid) - Server API
+
+- Summary: Added a server API Dockerfile and minimal run documentation with required environment variables.
+- Decisions:
+  - Use a multi-stage Docker build to compile TypeScript output and run plain Node.js.
+  - Document runtime environment variables and Docker invocation in docs.
+- Changes:
+  - apps/server-api/Dockerfile
+  - tsconfig.build.json
+  - docs/server-api.md
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the responsive web UI scaffold in apps/web-ui.
 ### 2026-01-03 17:22 (Europe/Madrid) - Testing
 
 - Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.

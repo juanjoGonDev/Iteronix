@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "./dist",
+    "noEmit": false,
+    "types": ["node"],
+    "lib": ["ES2022"]
+  },
+  "include": [
+    "apps/server-api/src/**/*.ts",
+    "packages/adapters/src/**/*.ts",
+    "packages/domain/src/**/*.ts",
+    "packages/shared/src/**/*.ts"
+  ]
+}

@@ -63,7 +63,7 @@ Acceptance:
   - [x] Kanban: board/columns/tasks CRUD (minimal)
 - [x] Auth: static token via env var `AUTH_TOKEN` (Bearer header)
 - [x] Workspace sandbox: path allowlist + command policy checks
-- [ ] Dockerfile + minimal run docs
+- [x] Dockerfile + minimal run docs
 
 Acceptance:
 
