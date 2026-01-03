@@ -172,6 +172,28 @@
   - None
 - Next:
   - Implement provider list/select and settings update endpoints.
+### 2026-01-03 17:58 (Europe/Madrid) - Server API
+
+- Summary: Implemented provider list/select/settings endpoints with an in-memory provider store and tests.
+- Decisions:
+  - Seed the provider store with the codex-cli descriptor for initial listing.
+  - Include selection in list responses when project/profile are provided.
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/providers.ts
+  - apps/server-api/src/providers.test.ts
+  - apps/server-api/src/server.ts
+  - PLAN.md
+- Commands:
+  - `git status -sb`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement Kanban board CRUD endpoints in the server API.
 ### 2026-01-03 17:22 (Europe/Madrid) - Testing
 
 - Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.

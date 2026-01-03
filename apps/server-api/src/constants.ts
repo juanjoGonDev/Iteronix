@@ -16,7 +16,10 @@ export const RoutePath = {
   SessionsStream: "/sessions/stream",
   HistoryList: "/history/list",
   HistoryEvents: "/history/events",
-  LogsQuery: "/logs/query"
+  LogsQuery: "/logs/query",
+  ProvidersList: "/providers/list",
+  ProvidersSelect: "/providers/select",
+  ProvidersSettings: "/providers/settings"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -59,7 +62,11 @@ export const ErrorMessage = {
   MissingContent: "Missing content",
   MissingRunId: "Missing runId",
   MissingSessionId: "Missing sessionId",
+  MissingProviderId: "Missing providerId",
+  MissingProfileId: "Missing profileId",
+  MissingProviderConfig: "Missing provider config",
   ProjectExists: "Project already exists",
+  ProviderNotFound: "Provider not found",
   NotFound: "Not found",
   InvalidPath: "Invalid path",
   AuthTokenMissing: "AUTH_TOKEN is required",
@@ -110,6 +117,13 @@ export const LogsField = {
   Level: "level",
   Limit: "limit",
   RunId: "runId"
+} as const;
+
+export const ProviderField = {
+  ProjectId: "projectId",
+  ProfileId: "profileId",
+  ProviderId: "providerId",
+  Config: "config"
 } as const;
 
 export const FileEntryKind = {

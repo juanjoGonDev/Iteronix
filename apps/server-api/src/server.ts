@@ -9,6 +9,7 @@ import {
   HttpStatus,
   MimeType,
   LogsField,
+  ProviderField,
   ProjectField,
   QueryParam,
   RoutePath,
@@ -45,6 +46,13 @@ import {
   type LogsStore
 } from "./logs";
 import {
+  createProviderStore,
+  ProviderStoreErrorCode,
+  type ProviderSelection,
+  type ProviderStoreError,
+  type ProviderStore
+} from "./providers";
+import {
   createSessionEventHub,
   createSessionStore,
   createStatusEvent,
@@ -65,6 +73,7 @@ export const startServer = (): void => {
   const sessionEvents = createSessionEventHub();
   const historyStore = createHistoryStore();
   const logsStore = createLogsStore();
+  const providerStore = createProviderStore();
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -74,7 +83,8 @@ export const startServer = (): void => {
       sessionStore,
       sessionEvents,
       historyStore,
-      logsStore
+      logsStore,
+      providerStore
     );
   });
 
@@ -89,7 +99,8 @@ const handleRequest = async (
   sessionStore: SessionStore,
   sessionEvents: SessionEventHub,
   historyStore: HistoryStore,
-  logsStore: LogsStore
+  logsStore: LogsStore,
+  providerStore: ProviderStore
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -215,6 +226,36 @@ const handleRequest = async (
     }
 
     await handleLogsQuery(req, res, logsStore);
+    return;
+  }
+
+  if (path === RoutePath.ProvidersList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleProvidersList(req, res, projectStore, providerStore);
+    return;
+  }
+
+  if (path === RoutePath.ProvidersSelect) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleProvidersSelect(req, res, projectStore, providerStore);
+    return;
+  }
+
+  if (path === RoutePath.ProvidersSettings) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleProviderSettingsUpdate(req, res, projectStore, providerStore);
     return;
   }
 
@@ -579,6 +620,122 @@ const handleLogsQuery = async (
 
   respondJson(res, HttpStatus.Ok, {
     logs: logs.value
+  });
+};
+
+const handleProvidersList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  providerStore: ProviderStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseProvidersListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  let selection: ProviderSelection | undefined;
+
+  if (parsed.value.projectId && parsed.value.profileId) {
+    const projectResult = getProjectById(projectStore, parsed.value.projectId);
+    if (projectResult.type === ResultType.Err) {
+      respondError(res, projectResult.error);
+      return;
+    }
+
+    const selectionResult = providerStore.getSelection({
+      projectId: parsed.value.projectId,
+      profileId: parsed.value.profileId
+    });
+    if (selectionResult.type === ResultType.Err) {
+      respondError(res, mapProviderStoreError(selectionResult.error));
+      return;
+    }
+
+    selection = selectionResult.value;
+  }
+
+  const response = selection
+    ? { providers: providerStore.listProviders(), selection }
+    : { providers: providerStore.listProviders() };
+
+  respondJson(res, HttpStatus.Ok, response);
+};
+
+const handleProvidersSelect = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  providerStore: ProviderStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseProvidersSelectRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const selected = providerStore.selectProvider(parsed.value);
+  if (selected.type === ResultType.Err) {
+    respondError(res, mapProviderStoreError(selected.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    selection: selected.value
+  });
+};
+
+const handleProviderSettingsUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  providerStore: ProviderStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseProviderSettingsRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const updated = providerStore.updateSettings(parsed.value);
+  if (updated.type === ResultType.Err) {
+    respondError(res, mapProviderStoreError(updated.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    settings: updated.value
   });
 };
 
@@ -969,6 +1126,154 @@ const parseLogsQueryRequest = (
   return ok(input);
 };
 
+const parseProvidersListRequest = (
+  value: unknown
+): Result<{ projectId?: string; profileId?: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectIdValue = readOptionalStringField(value, ProviderField.ProjectId);
+  if (projectIdValue.type === ResultType.Err) {
+    return projectIdValue;
+  }
+
+  const profileIdValue = readOptionalStringField(value, ProviderField.ProfileId);
+  if (profileIdValue.type === ResultType.Err) {
+    return profileIdValue;
+  }
+
+  if (projectIdValue.value !== undefined && profileIdValue.value === undefined) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingProfileId
+    });
+  }
+
+  if (profileIdValue.value !== undefined && projectIdValue.value === undefined) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingProjectId
+    });
+  }
+
+  const input: { projectId?: string; profileId?: string } = {};
+
+  if (projectIdValue.value !== undefined) {
+    input.projectId = projectIdValue.value;
+  }
+
+  if (profileIdValue.value !== undefined) {
+    input.profileId = profileIdValue.value;
+  }
+
+  return ok(input);
+};
+
+const parseProvidersSelectRequest = (
+  value: unknown
+): Result<{ projectId: string; profileId: string; providerId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    ProviderField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const profileId = readRequiredString(
+    value,
+    ProviderField.ProfileId,
+    ErrorMessage.MissingProfileId
+  );
+  if (profileId.type === ResultType.Err) {
+    return profileId;
+  }
+
+  const providerId = readRequiredString(
+    value,
+    ProviderField.ProviderId,
+    ErrorMessage.MissingProviderId
+  );
+  if (providerId.type === ResultType.Err) {
+    return providerId;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    profileId: profileId.value,
+    providerId: providerId.value
+  });
+};
+
+const parseProviderSettingsRequest = (
+  value: unknown
+): Result<
+  { projectId: string; profileId: string; providerId: string; config: Record<string, unknown> },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    ProviderField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const profileId = readRequiredString(
+    value,
+    ProviderField.ProfileId,
+    ErrorMessage.MissingProfileId
+  );
+  if (profileId.type === ResultType.Err) {
+    return profileId;
+  }
+
+  const providerId = readRequiredString(
+    value,
+    ProviderField.ProviderId,
+    ErrorMessage.MissingProviderId
+  );
+  if (providerId.type === ResultType.Err) {
+    return providerId;
+  }
+
+  const config = readRequiredRecord(
+    value,
+    ProviderField.Config,
+    ErrorMessage.MissingProviderConfig
+  );
+  if (config.type === ResultType.Err) {
+    return config;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    profileId: profileId.value,
+    providerId: providerId.value,
+    config: config.value
+  });
+};
+
 const getSessionById = (
   store: SessionStore,
   id: string
@@ -1019,6 +1324,20 @@ const mapLogsStoreError = (error: LogsStoreError): ApiError => {
 
   return {
     status: HttpStatus.InternalServerError,
+    message: error.message
+  };
+};
+
+const mapProviderStoreError = (error: ProviderStoreError): ApiError => {
+  if (error.code === ProviderStoreErrorCode.NotFound) {
+    return {
+      status: HttpStatus.NotFound,
+      message: error.message
+    };
+  }
+
+  return {
+    status: HttpStatus.BadRequest,
     message: error.message
   };
 };
@@ -1152,6 +1471,29 @@ const readRequiredStringAllowEmpty = (
     return err({
       status: HttpStatus.BadRequest,
       message: missingMessage
+    });
+  }
+
+  return ok(value);
+};
+
+const readRequiredRecord = (
+  record: Record<string, unknown>,
+  key: string,
+  missingMessage: string
+): Result<Record<string, unknown>, ApiError> => {
+  if (!(key in record)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: missingMessage
+    });
+  }
+
+  const value = record[key];
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
     });
   }
 
