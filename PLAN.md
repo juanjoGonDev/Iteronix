@@ -81,6 +81,7 @@ Acceptance:
   - [x] Settings: provider/model/precision, per project/profile
   - [ ] Kanban board: create/move tasks; show task details
 - [ ] No Electron-specific code in UI
+- [ ] Separate each screen into its own component, dont repeat code, use shared components/utilitiesm but with a single responsibility (apply to all screens)
 
 Acceptance:
 
