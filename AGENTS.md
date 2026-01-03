@@ -160,6 +160,33 @@ Never proceed if gates fail.
 - Prefer small, reviewable commits with Conventional Commits:
   - `feat: ...`, `fix: ...`, `chore: ...`, `refactor: ...`, `test: ...`
 
+## Test-Driven Development (mandatory for core)
+
+TDD is REQUIRED for all core logic:
+
+- Domain layer (`packages/domain`)
+- Shared logic (`packages/shared`)
+- Orchestration, auto-loop, policies, and decision logic
+
+TDD rules:
+
+1. Write a failing test that describes the expected behavior.
+2. Implement the minimal code to make the test pass.
+3. Refactor while keeping tests green.
+
+Scope exceptions:
+
+- UI components
+- Electron main wiring
+- Thin adapters that mostly delegate to external tools (git, fs, process spawn)
+
+Even when TDD is not mandatory, tests MUST be added for non-trivial logic.
+
+The agent must:
+
+- Explicitly indicate in AGENTS_LOGS.md when TDD is applied.
+- Never remove or weaken tests to make code pass.
+
 ## 11) Chat reset & context recovery policy (mandatory)
 
 When a new chat/session starts:
