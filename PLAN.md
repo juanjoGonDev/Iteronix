@@ -133,6 +133,42 @@ Acceptance:
 
 - UI runs in browser/PWA and fully operates a remote server.
 
+### UI continuity & interaction completion (mandatory)
+
+Goal:
+Prevent inconsistent navigation/iconography and avoid partially working UI.
+
+- [ ] Establish global UI invariants (single source of truth):
+  - [ ] Sidebar menu: canonical items, order, labels, icons, grouping
+  - [ ] Header layout: canonical structure and global actions
+  - [ ] One icon set for the entire app (no mixing)
+  - [ ] Shared tokens: spacing/typography/colors/radius/shadows
+- [ ] Implement a single Layout Shell used by all screens:
+
+  - [ ] Header + Sidebar + Main + optional Right Panel
+  - [ ] No per-screen shell variants
+
+- [ ] Interaction completeness gate (per screen):
+
+  - [ ] Every clickable element must either:
+    - [ ] work end-to-end, OR
+    - [ ] be visibly disabled + explain "Not available yet"
+  - [ ] No broken menus, no dead buttons, no fake dropdowns, no placeholder navigation
+
+- [ ] Add a “UI consistency checklist” (docs/UI_CHECKLIST.md):
+  - [ ] menu order/icons unchanged across screens
+  - [ ] header consistent
+  - [ ] all navigation routes valid
+  - [ ] interactive controls open/close correctly
+  - [ ] disabled states have explanations
+  - [ ] no regressions after changes
+
+Acceptance:
+
+- All screens share identical navigation order and header layout.
+- All interactive elements are either functional or explicitly disabled with explanation.
+- No screen introduces a new icon style or ad-hoc layout.
+
 ### Kanban: REVIEW column UX (web-ui)
 
 - [ ] Add a `REVIEW` column view with:

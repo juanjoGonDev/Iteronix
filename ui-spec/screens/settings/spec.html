@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix Settings</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Material Icons -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- Tailwind Config -->
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#111418",
+              "surface-dark": "#283039",
+              "text-secondary": "#9dabb9",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom scrollbar for webkit */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #111418;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #283039;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #3b4754;
+      }
+
+      /* Toggle Switch Styles */
+      .toggle-checkbox:checked {
+        right: 0;
+        border-color: #137fec;
+      }
+      .toggle-checkbox:checked + .toggle-label {
+        background-color: #137fec;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark text-white font-display overflow-hidden selection:bg-primary/30"
+  >
+    <div class="flex h-screen w-full">
+      <!-- Sidebar -->
+      <aside
+        class="w-64 bg-[#111418] border-r border-[#283039] flex flex-col shrink-0 transition-all duration-300 hidden md:flex"
+      >
+        <div class="p-4 flex flex-col h-full justify-between">
+          <div class="flex flex-col gap-6">
+            <!-- Brand -->
+            <div class="flex items-center gap-3 px-2">
+              <div
+                class="bg-center bg-no-repeat bg-cover rounded-full size-10 shrink-0 border border-[#283039]"
+                data-alt="Iteronix Abstract Logo Gradient"
+                style="
+                  background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCmELD0ifIDs88bxTgTdfVbDqgh2XEN7tO10wKMwKrYulOkGKU5irJOPdRCINEf70gIDA5vbN5Py2o-yH_9oQJRHsKmcGnXROQ0vT6bDksMszdxFN-HWkPygaZVpVVRY9vhkqe5kOjhOQw30Daa3Br25jka75SasRXz11y2aEtfWR8aMkNkVgcHENqXJqAglR0nE8IFlsCqY3Q-lRKa5Am4vE1pQdB-QLYzwRnyA30azhm6lmyBEdaBstncrRlBrESAYzMgv3TZEZ_i');
+                "
+              ></div>
+              <div class="flex flex-col">
+                <h1
+                  class="text-white text-base font-bold leading-normal tracking-tight"
+                >
+                  Iteronix
+                </h1>
+                <p class="text-[#9dabb9] text-xs font-normal">v2.4.0</p>
+              </div>
+            </div>
+            <!-- Nav Items -->
+            <nav class="flex flex-col gap-2">
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+                href="#"
+              >
+                <span class="material-symbols-outlined text-[24px]"
+                  >dashboard</span
+                >
+                <p class="text-sm font-medium leading-normal">Dashboard</p>
+              </a>
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+                href="#"
+              >
+                <span class="material-symbols-outlined text-[24px]"
+                  >account_tree</span
+                >
+                <p class="text-sm font-medium leading-normal">Workflows</p>
+              </a>
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+                href="#"
+              >
+                <span class="material-symbols-outlined text-[24px]"
+                  >smart_toy</span
+                >
+                <p class="text-sm font-medium leading-normal">Agents</p>
+              </a>
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+                href="#"
+              >
+                <span class="material-symbols-outlined text-[24px]"
+                  >history</span
+                >
+                <p class="text-sm font-medium leading-normal">History</p>
+              </a>
+              <div class="h-px bg-[#283039] my-2 mx-3"></div>
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#283039] text-white"
+                href="#"
+              >
+                <span class="material-symbols-outlined text-[24px] fill-1"
+                  >settings</span
+                >
+                <p class="text-sm font-medium leading-normal">Settings</p>
+              </a>
+            </nav>
+          </div>
+          <!-- Bottom User -->
+          <div
+            class="flex items-center gap-3 px-3 py-3 mt-auto rounded-lg hover:bg-[#283039] cursor-pointer transition-colors"
+          >
+            <div
+              class="bg-center bg-no-repeat bg-cover rounded-full size-8 shrink-0"
+              data-alt="User Avatar"
+              style="
+                background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAzDZC9qqu9WBEl0Tmsb3-MT66gG9q9bPbc_JqjpkjCogyvO5d-51aSMbjGfpWlH7ns5YpN9mfnik6TbGBBJyc79vnHm5pbpyRcPdmHZ3aOwj2fQsmBpFPy-j7ZwhzFH2U8V6vGUERvjbutahromxDT59W0qRp3SrUYO4NQM9hnBv89Cqxjf9Pqy9DnLA_FH-xdESy4tGdu3nemqtRDZJj4Q8oozvvDo7glRbBkMyb4XwpmJK-MC4YmvmBdmd8G11mJBL2PE2GSEPCf');
+              "
+            ></div>
+            <div class="flex flex-col overflow-hidden">
+              <p class="text-white text-sm font-medium truncate">Alex Chen</p>
+              <p class="text-[#9dabb9] text-xs truncate">DevOps Lead</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <!-- Main Content Area -->
+      <div
+        class="flex flex-col flex-1 h-full overflow-hidden relative bg-[#111418]"
+      >
+        <!-- Top Header -->
+        <header
+          class="h-16 flex items-center justify-between border-b border-[#283039] px-6 bg-[#111418] shrink-0 z-20"
+        >
+          <div class="flex items-center gap-2">
+            <span
+              class="material-symbols-outlined text-[#9dabb9] md:hidden cursor-pointer"
+              >menu</span
+            >
+            <div class="flex items-center text-sm font-medium text-[#9dabb9]">
+              <span>Iteronix</span>
+              <span class="material-symbols-outlined text-base mx-1"
+                >chevron_right</span
+              >
+              <span class="text-white">Settings</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="relative group">
+              <div
+                class="absolute right-0.5 top-0.5 size-2 bg-red-500 rounded-full border border-[#111418]"
+              ></div>
+              <button
+                class="flex items-center justify-center rounded-lg size-9 bg-[#283039] text-white hover:bg-[#3b4754] transition-colors"
+              >
+                <span class="material-symbols-outlined text-[20px]"
+                  >notifications</span
+                >
+              </button>
+            </div>
+            <button
+              class="flex items-center justify-center rounded-lg size-9 bg-[#283039] text-white hover:bg-[#3b4754] transition-colors"
+            >
+              <span class="material-symbols-outlined text-[20px]">help</span>
+            </button>
+          </div>
+        </header>
+        <!-- Scrollable Page Content -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-8 lg:px-12">
+          <div class="max-w-[960px] mx-auto flex flex-col gap-8 pb-20">
+            <!-- Page Heading -->
+            <div class="flex flex-col gap-2">
+              <h1
+                class="text-3xl md:text-4xl font-bold text-white tracking-tight"
+              >
+                Settings
+              </h1>
+              <p class="text-[#9dabb9] text-base max-w-2xl">
+                Configure your autonomous coding environment, manage LLM
+                providers, and set critical safety limits for your agents.
+              </p>
+            </div>
+            <!-- Tabs -->
+            <div class="border-b border-[#283039]">
+              <div class="flex gap-8 overflow-x-auto no-scrollbar">
+                <button
+                  class="flex pb-3 border-b-2 border-transparent text-[#9dabb9] text-sm font-bold hover:text-white whitespace-nowrap"
+                >
+                  General
+                </button>
+                <button
+                  class="flex pb-3 border-b-2 border-white text-white text-sm font-bold whitespace-nowrap"
+                >
+                  LLM Provider
+                </button>
+                <button
+                  class="flex pb-3 border-b-2 border-transparent text-[#9dabb9] text-sm font-bold hover:text-white whitespace-nowrap"
+                >
+                  Workflow Limits
+                </button>
+                <button
+                  class="flex pb-3 border-b-2 border-transparent text-[#9dabb9] text-sm font-bold hover:text-white whitespace-nowrap"
+                >
+                  Notifications
+                </button>
+                <button
+                  class="flex pb-3 border-b-2 border-transparent text-[#9dabb9] text-sm font-bold hover:text-white whitespace-nowrap"
+                >
+                  API Access
+                </button>
+              </div>
+            </div>
+            <!-- Section: Provider Configuration -->
+            <section class="flex flex-col gap-6 animate-fade-in">
+              <div class="flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white">
+                  Provider Configuration
+                </h2>
+                <span
+                  class="text-xs font-mono text-[#9dabb9] bg-[#283039] px-2 py-1 rounded"
+                  >ENV: PRODUCTION</span
+                >
+              </div>
+              <!-- Provider Cards -->
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Card 1: OpenAI -->
+                <label
+                  class="relative flex flex-col gap-4 p-5 rounded-xl border-2 border-primary bg-[#137fec]/10 cursor-pointer transition-all hover:bg-[#137fec]/20"
+                >
+                  <input
+                    checked=""
+                    class="sr-only"
+                    name="provider"
+                    type="radio"
+                  />
+                  <div class="flex items-center justify-between">
+                    <div
+                      class="size-10 bg-white rounded-lg flex items-center justify-center p-1.5"
+                      data-alt="OpenAI Logo"
+                    >
+                      <!-- OpenAI Logo SVG placeholder -->
+                      <svg
+                        class="w-full h-full text-black"
+                        fill="none"
+                        viewbox="0 0 24 24"
+                      >
+                        <path
+                          d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0843 3.5398-2.0466.1877-.1096V14.9918l-3.8082 2.2045-2.7818 1.6138a4.5292 4.5292 0 0 1-.2994-5.2263l.1171-.064 3.7915-2.1966.1953-.1127v4.1561l3.5246 2.0375a4.4707 4.4707 0 0 1-1.732 4.0255zm7.2272-5.4623-2.8094 1.6247-.1133.0655-3.5246-2.0375-.1953-.1127V12.35l3.821-2.2017 2.7687-1.599a4.5077 4.5077 0 0 1 2.9102 1.1009 4.5363 4.5363 0 0 1-2.8572 7.1802zm-3.1537-8.7906a4.4693 4.4693 0 0 1 2.668 1.5546l-.1352.0789-3.5413 2.0476-.1846.1062v4.1481l3.8052-2.203 2.7818-1.6138a4.522 4.522 0 0 1 .301 5.231l-.1129.065-3.7997 2.1986-.1969.1142V11.233l-3.5186-2.0354a4.4693 4.4693 0 0 1 1.9333-3.8247zm-11.666 4.6062L8.47 11.1466l.1133-.0655 3.5247 2.0375.1953.1127v4.1624l-3.817 2.1986-2.7662 1.5943a4.5077 4.5077 0 0 1-2.9118-1.0962 4.5363 4.5363 0 0 1 2.8592-7.1648zm3.1422-3.7937a4.522 4.522 0 0 1 2.6288-1.0717l.1128-.065 3.8008-2.1991.1969-.1142v4.1566l-3.5212 2.037a4.4717 4.4717 0 0 1-1.745-4.025l2.8093-1.6238z"
+                          fill="currentColor"
+                        ></path>
+                      </svg>
+                    </div>
+                    <span class="material-symbols-outlined text-primary"
+                      >check_circle</span
+                    >
+                  </div>
+                  <div>
+                    <p class="font-bold text-white">OpenAI</p>
+                    <p class="text-xs text-[#9dabb9]">GPT-4o, GPT-3.5 Turbo</p>
+                  </div>
+                </label>
+                <!-- Card 2: Anthropic -->
+                <label
+                  class="relative flex flex-col gap-4 p-5 rounded-xl border border-[#3b4754] bg-[#283039] cursor-pointer transition-all hover:border-primary/50 hover:bg-[#3b4754]/50"
+                >
+                  <input class="sr-only" name="provider" type="radio" />
+                  <div class="flex items-center justify-between">
+                    <div
+                      class="size-10 bg-[#d97757] rounded-lg flex items-center justify-center p-1.5 text-white font-serif font-bold text-2xl"
+                      data-alt="Anthropic Logo"
+                    >
+                      C
+                    </div>
+                    <span class="material-symbols-outlined text-[#3b4754]"
+                      >radio_button_unchecked</span
+                    >
+                  </div>
+                  <div>
+                    <p class="font-bold text-white">Anthropic</p>
+                    <p class="text-xs text-[#9dabb9]">
+                      Claude 3.5 Sonnet, Opus
+                    </p>
+                  </div>
+                </label>
+                <!-- Card 3: Ollama -->
+                <label
+                  class="relative flex flex-col gap-4 p-5 rounded-xl border border-[#3b4754] bg-[#283039] cursor-pointer transition-all hover:border-primary/50 hover:bg-[#3b4754]/50"
+                >
+                  <input class="sr-only" name="provider" type="radio" />
+                  <div class="flex items-center justify-between">
+                    <div
+                      class="size-10 bg-white rounded-lg flex items-center justify-center p-1.5 text-black"
+                      data-alt="Ollama Logo"
+                    >
+                      <span class="material-symbols-outlined text-[32px]"
+                        >terminal</span
+                      >
+                    </div>
+                    <span class="material-symbols-outlined text-[#3b4754]"
+                      >radio_button_unchecked</span
+                    >
+                  </div>
+                  <div>
+                    <p class="font-bold text-white">Ollama (Local)</p>
+                    <p class="text-xs text-[#9dabb9]">Llama 3, Mixtral</p>
+                  </div>
+                </label>
+              </div>
+              <!-- Provider Settings Form -->
+              <div
+                class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 rounded-xl bg-[#1a2027] border border-[#283039]"
+              >
+                <!-- Model Selection -->
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium text-white">Model</label>
+                  <div class="relative">
+                    <select
+                      class="w-full h-10 bg-[#283039] border-none rounded-lg px-3 text-white focus:ring-1 focus:ring-primary cursor-pointer text-sm"
+                    >
+                      <option selected="" value="gpt-4o">
+                        gpt-4o (Recommended)
+                      </option>
+                      <option value="gpt-4-turbo">gpt-4-turbo</option>
+                      <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                    </select>
+                    <div
+                      class="absolute right-3 top-2.5 pointer-events-none text-[#9dabb9]"
+                    >
+                      <span class="material-symbols-outlined text-lg"
+                        >expand_more</span
+                      >
+                    </div>
+                  </div>
+                  <p class="text-xs text-[#9dabb9]">
+                    Estimated cost: ~$0.03 / 1k tokens
+                  </p>
+                </div>
+                <!-- Precision -->
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium text-white"
+                    >Precision &amp; Context</label
+                  >
+                  <div class="relative">
+                    <select
+                      class="w-full h-10 bg-[#283039] border-none rounded-lg px-3 text-white focus:ring-1 focus:ring-primary cursor-pointer text-sm"
+                    >
+                      <option value="fp32">FP32 (Standard)</option>
+                      <option value="fp16">FP16 (Half Precision)</option>
+                      <option value="bf16">BF16</option>
+                    </select>
+                    <div
+                      class="absolute right-3 top-2.5 pointer-events-none text-[#9dabb9]"
+                    >
+                      <span class="material-symbols-outlined text-lg"
+                        >expand_more</span
+                      >
+                    </div>
+                  </div>
+                </div>
+                <!-- API Key -->
+                <div class="flex flex-col gap-2 lg:col-span-2">
+                  <label class="text-sm font-medium text-white">API Key</label>
+                  <div class="relative flex items-center">
+                    <span
+                      class="absolute left-3 text-[#9dabb9] material-symbols-outlined text-[20px]"
+                      >key</span
+                    >
+                    <input
+                      class="w-full h-10 bg-[#283039] border-none rounded-lg pl-10 pr-3 text-white focus:ring-1 focus:ring-primary font-mono text-sm placeholder-[#556575]"
+                      placeholder="Enter API Key"
+                      type="password"
+                      value="sk-proj-************************"
+                    />
+                    <button
+                      class="absolute right-2 text-primary text-xs font-bold hover:underline px-2"
+                    >
+                      EDIT
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <!-- Section: Workflow Safety Limits -->
+            <section class="flex flex-col gap-6 pt-6 border-t border-[#283039]">
+              <div class="flex flex-col">
+                <h2 class="text-xl font-bold text-white">Workflow Limits</h2>
+                <p class="text-sm text-[#9dabb9]">
+                  Safety constraints for autonomous loops.
+                </p>
+              </div>
+              <!-- Dangerous Settings Panel -->
+              <div
+                class="flex flex-col gap-6 p-6 rounded-xl bg-[#1a2027] border border-[#283039]"
+              >
+                <!-- Max Loops Configuration -->
+                <div class="flex flex-col gap-4">
+                  <div class="flex items-center justify-between">
+                    <div class="flex flex-col">
+                      <p class="text-white font-medium">
+                        Maximum Loops per Agent
+                      </p>
+                      <p class="text-xs text-[#9dabb9]">
+                        Prevents runaway agents from consuming excessive tokens.
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <span
+                        class="text-xs font-bold text-[#9dabb9] uppercase tracking-wider"
+                        >Finite</span
+                      >
+                      <label
+                        class="relative inline-flex items-center cursor-pointer"
+                        for="infinite-toggle"
+                      >
+                        <input
+                          class="sr-only peer"
+                          id="infinite-toggle"
+                          type="checkbox"
+                        />
+                        <div
+                          class="w-11 h-6 bg-[#3b4754] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"
+                        ></div>
+                      </label>
+                      <span
+                        class="text-xs font-bold text-white uppercase tracking-wider"
+                        >Infinite</span
+                      >
+                    </div>
+                  </div>
+                  <!-- Input for finite loops (disabled state visual) -->
+                  <div class="flex items-center gap-2">
+                    <input
+                      class="w-32 h-10 bg-[#283039] border border-[#3b4754] text-white rounded-lg px-3 focus:ring-0 disabled:opacity-50"
+                      disabled=""
+                      type="number"
+                      value="50"
+                    />
+                    <span class="text-sm text-[#9dabb9]">iterations</span>
+                  </div>
+                  <!-- Warning Banner (Conditional) -->
+                  <div
+                    class="flex gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 items-start"
+                  >
+                    <span class="material-symbols-outlined text-[20px] mt-0.5"
+                      >warning</span
+                    >
+                    <div class="flex flex-col gap-1">
+                      <p class="text-sm font-bold">Infinite Loops Enabled</p>
+                      <p class="text-xs opacity-90">
+                        Agents will run continuously until manually stopped or
+                        an error occurs. This can lead to significant API costs.
+                        Ensure you have spending limits configured on your
+                        provider dashboard.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div class="h-px bg-[#283039]"></div>
+                <!-- External Calls -->
+                <div class="flex items-center justify-between">
+                  <div class="flex gap-3">
+                    <div
+                      class="flex items-center justify-center size-10 rounded-lg bg-[#283039] text-white shrink-0"
+                    >
+                      <span class="material-symbols-outlined">public</span>
+                    </div>
+                    <div class="flex flex-col">
+                      <p class="text-white font-medium">
+                        Allow External API Calls
+                      </p>
+                      <p class="text-xs text-[#9dabb9]">
+                        Agents can fetch data from the open internet via
+                        curl/wget.
+                      </p>
+                    </div>
+                  </div>
+                  <label
+                    class="relative inline-flex items-center cursor-pointer"
+                    for="external-toggle"
+                  >
+                    <input
+                      checked=""
+                      class="sr-only peer"
+                      id="external-toggle"
+                      type="checkbox"
+                    />
+                    <div
+                      class="w-11 h-6 bg-[#3b4754] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"
+                    ></div>
+                  </label>
+                </div>
+              </div>
+            </section>
+            <!-- Section: Notifications -->
+            <section class="flex flex-col gap-6 pt-6 border-t border-[#283039]">
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col">
+                  <h2 class="text-xl font-bold text-white">Notifications</h2>
+                  <p class="text-sm text-[#9dabb9]">
+                    Alerts for agent completion and errors.
+                  </p>
+                </div>
+              </div>
+              <div class="flex flex-col gap-4">
+                <!-- Sound Toggle -->
+                <div
+                  class="flex items-center justify-between p-4 rounded-lg bg-[#1a2027] border border-[#283039]"
+                >
+                  <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-[#9dabb9]"
+                      >volume_up</span
+                    >
+                    <span class="text-sm font-medium text-white"
+                      >Play sound on completion</span
+                    >
+                  </div>
+                  <input
+                    checked=""
+                    class="rounded bg-[#283039] border-[#3b4754] text-primary focus:ring-offset-0 focus:ring-0 size-5"
+                    type="checkbox"
+                  />
+                </div>
+                <!-- Webhook -->
+                <div
+                  class="flex flex-col gap-3 p-4 rounded-lg bg-[#1a2027] border border-[#283039]"
+                >
+                  <div class="flex justify-between items-center">
+                    <label
+                      class="text-sm font-medium text-white flex items-center gap-2"
+                    >
+                      <span
+                        class="material-symbols-outlined text-[#9dabb9] text-[18px]"
+                        >webhook</span
+                      >
+                      Webhook URL
+                    </label>
+                    <button
+                      class="text-xs font-bold text-primary hover:text-blue-400"
+                    >
+                      TEST PAYLOAD
+                    </button>
+                  </div>
+                  <input
+                    class="w-full h-10 bg-[#283039] border border-[#3b4754] rounded-lg px-3 text-white focus:ring-1 focus:ring-primary text-sm font-mono placeholder-[#556575]"
+                    placeholder="https://hooks.slack.com/services/..."
+                    type="text"
+                  />
+                  <p class="text-xs text-[#9dabb9]">
+                    We will send a POST request with JSON payload upon workflow
+                    events.
+                  </p>
+                </div>
+              </div>
+            </section>
+            <!-- Save Action Bar -->
+            <div
+              class="fixed bottom-0 right-0 left-0 md:left-64 p-4 bg-[#111418]/90 backdrop-blur-sm border-t border-[#283039] flex justify-end gap-3 z-30"
+            >
+              <button
+                class="h-10 px-6 rounded-lg bg-[#283039] text-white text-sm font-bold hover:bg-[#3b4754] transition-colors"
+              >
+                Reset Defaults
+              </button>
+              <button
+                class="h-10 px-6 rounded-lg bg-primary text-white text-sm font-bold hover:bg-blue-600 transition-colors shadow-lg shadow-blue-500/20 flex items-center gap-2"
+              >
+                <span class="material-symbols-outlined text-[18px]">save</span>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

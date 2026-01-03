@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix Workflow Editor</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "primary-hover": "#106cc9",
+              "background-light": "#f6f7f8",
+              "background-dark": "#0f1115" /* Deep charcoal as requested */,
+              "surface-dark": "#1a1d21" /* Slightly lighter for panels */,
+              "border-dark": "#2a2e35",
+              "node-bg": "#23262b",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              md: "0.375rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom Dot Grid Background */
+      .bg-grid-pattern {
+        background-size: 20px 20px;
+        background-image: radial-gradient(#333 1px, transparent 1px);
+      }
+      /* Custom Scrollbar for panels */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a1d21;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #3a3f45;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #4a5058;
+      }
+      /* Bezier Curve connector simulation */
+      .connector-path {
+        fill: none;
+        stroke: #4b5563;
+        stroke-width: 2px;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white overflow-hidden h-screen flex"
+  >
+    <!-- LEFT SIDEBAR -->
+    <aside
+      class="w-64 h-full bg-surface-dark border-r border-border-dark flex flex-col justify-between shrink-0 z-20"
+    >
+      <div class="flex flex-col gap-4 p-4">
+        <div class="flex flex-col mb-4">
+          <div class="flex items-center gap-2">
+            <div
+              class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white"
+            >
+              <span class="material-symbols-outlined text-[20px]"
+                >terminal</span
+              >
+            </div>
+            <h1
+              class="text-white text-lg font-bold leading-normal tracking-tight"
+            >
+              Iteronix
+            </h1>
+          </div>
+          <p
+            class="text-[#9dabb9] text-xs font-normal leading-normal mt-1 pl-10"
+          >
+            Senior Engineer
+          </p>
+        </div>
+        <nav class="flex flex-col gap-1">
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:bg-white/5 hover:text-white rounded-md transition-colors"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[20px]">dashboard</span>
+            <span class="text-sm font-medium">Dashboard</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 bg-primary/20 text-primary rounded-md"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[20px] font-fill"
+              >account_tree</span
+            >
+            <span class="text-sm font-medium">Workflows</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:bg-white/5 hover:text-white rounded-md transition-colors"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[20px]">vpn_key</span>
+            <span class="text-sm font-medium">Credentials</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:bg-white/5 hover:text-white rounded-md transition-colors"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[20px]">settings</span>
+            <span class="text-sm font-medium">Settings</span>
+          </a>
+        </nav>
+      </div>
+      <div class="p-4 border-t border-border-dark">
+        <div
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white cursor-pointer"
+        >
+          <span class="material-symbols-outlined text-[20px]">logout</span>
+          <span class="text-sm font-medium">Log Out</span>
+        </div>
+      </div>
+    </aside>
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 flex flex-col h-full relative min-w-0">
+      <!-- HEADER -->
+      <header
+        class="h-16 bg-surface-dark border-b border-border-dark flex items-center justify-between px-6 shrink-0 z-10"
+      >
+        <div class="flex items-center gap-4">
+          <!-- Breadcrumbs -->
+          <div class="flex items-center gap-2 text-sm">
+            <a
+              class="text-[#9dabb9] hover:text-white transition-colors"
+              href="#"
+              >Workflows</a
+            >
+            <span class="text-[#555b66]">/</span>
+            <div class="flex items-center gap-2 group cursor-pointer">
+              <span class="text-white font-semibold"
+                >Fix-Bug-Auto-Refactor</span
+              >
+              <span
+                class="material-symbols-outlined text-[#555b66] text-[16px] group-hover:text-white"
+                >edit</span
+              >
+            </div>
+          </div>
+          <span class="h-4 w-[1px] bg-[#3a3f45] mx-2"></span>
+          <div
+            class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-1.5"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Active
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <p class="text-[#9dabb9] text-xs font-mono mr-2">
+            Auto-save: <span class="text-white">Just now</span>
+          </p>
+          <button
+            class="flex items-center gap-2 h-9 px-3 bg-[#2a2e35] hover:bg-[#343940] text-white text-sm font-medium rounded-md border border-[#3a3f45] transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]"
+              >bug_report</span
+            >
+            Test
+          </button>
+          <button
+            class="flex items-center gap-2 h-9 px-3 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md shadow-lg shadow-primary/20 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]"
+              >rocket_launch</span
+            >
+            Deploy
+          </button>
+        </div>
+      </header>
+      <!-- CANVAS CONTAINER -->
+      <div
+        class="relative flex-1 bg-background-dark bg-grid-pattern overflow-hidden cursor-grab active:cursor-grabbing group/canvas"
+      >
+        <!-- FLOATING NODE LIBRARY (PALETTE) -->
+        <div
+          class="absolute top-4 left-4 z-10 bg-surface-dark/90 backdrop-blur-sm border border-border-dark rounded-lg shadow-xl p-1 flex flex-col gap-1 w-12 hover:w-48 transition-[width] duration-300 overflow-hidden group/palette"
+        >
+          <div
+            class="p-2 mb-1 border-b border-white/5 flex items-center gap-3 whitespace-nowrap"
+          >
+            <span class="material-symbols-outlined text-[#9dabb9]"
+              >add_circle</span
+            >
+            <span
+              class="text-xs font-bold uppercase tracking-wider text-[#9dabb9] opacity-0 group-hover/palette:opacity-100 transition-opacity duration-300 delay-75"
+              >Add Node</span
+            >
+          </div>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="Webhook Trigger"
+          >
+            <span class="material-symbols-outlined text-purple-400"
+              >webhook</span
+            >
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >Webhook</span
+            >
+            <span
+              class="absolute right-2 opacity-0 group-hover/palette:opacity-100 text-[10px] text-[#555] font-mono border border-[#333] px-1 rounded"
+              >T</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="AI Prompt"
+          >
+            <span class="material-symbols-outlined text-blue-400"
+              >psychology</span
+            >
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >AI Prompt</span
+            >
+            <span
+              class="absolute right-2 opacity-0 group-hover/palette:opacity-100 text-[10px] text-[#555] font-mono border border-[#333] px-1 rounded"
+              >P</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="Code Execution"
+          >
+            <span class="material-symbols-outlined text-yellow-400">code</span>
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >Run Code</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="Quality Gate"
+          >
+            <span class="material-symbols-outlined text-orange-400">gavel</span>
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >Quality Gate</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="Git Commit"
+          >
+            <span class="material-symbols-outlined text-red-400">commit</span>
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >Git Commit</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-3 p-2 rounded hover:bg-white/5 text-left group/btn relative"
+            title="Notification"
+          >
+            <span class="material-symbols-outlined text-green-400"
+              >notifications</span
+            >
+            <span
+              class="text-sm text-white whitespace-nowrap opacity-0 group-hover/palette:opacity-100 transition-opacity duration-200"
+              >Notify</span
+            >
+          </button>
+        </div>
+        <!-- CANVAS CONTROLS (ZOOM/MINIMAP) -->
+        <div class="absolute bottom-4 left-4 z-10 flex gap-2">
+          <div
+            class="bg-surface-dark border border-border-dark rounded-md flex items-center shadow-lg"
+          >
+            <button
+              class="p-2 hover:bg-white/5 text-[#9dabb9] hover:text-white"
+            >
+              <span class="material-symbols-outlined text-[18px]">remove</span>
+            </button>
+            <span
+              class="text-xs font-mono text-[#9dabb9] w-10 text-center select-none"
+              >100%</span
+            >
+            <button
+              class="p-2 hover:bg-white/5 text-[#9dabb9] hover:text-white"
+            >
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+          <button
+            class="p-2 bg-surface-dark border border-border-dark rounded-md hover:bg-white/5 text-[#9dabb9] hover:text-white shadow-lg"
+            title="Fit to screen"
+          >
+            <span class="material-symbols-outlined text-[18px]"
+              >center_focus_strong</span
+            >
+          </button>
+        </div>
+        <!-- MINIMAP PLACEHOLDER -->
+        <div
+          class="absolute bottom-4 right-80 z-10 w-40 h-24 bg-surface-dark/80 border border-border-dark rounded-md shadow-lg overflow-hidden backdrop-blur-sm"
+        >
+          <!-- Abstract representation of nodes -->
+          <div class="w-full h-full relative opacity-50">
+            <div
+              class="absolute top-1/4 left-2 w-4 h-3 bg-purple-500 rounded-sm"
+            ></div>
+            <div
+              class="absolute top-1/3 left-10 w-4 h-3 bg-blue-500 rounded-sm"
+            ></div>
+            <div
+              class="absolute top-1/3 left-20 w-4 h-3 bg-blue-500 rounded-sm"
+            ></div>
+            <div
+              class="absolute top-1/2 left-28 w-4 h-3 bg-orange-500 rounded-sm"
+            ></div>
+            <div
+              class="absolute top-1/4 left-36 w-4 h-3 bg-red-500 rounded-sm"
+            ></div>
+          </div>
+          <div
+            class="absolute inset-0 border-2 border-primary/30 pointer-events-none"
+          ></div>
+        </div>
+        <!-- SVG CONNECTIONS LAYER -->
+        <svg
+          class="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible"
+        >
+          <!-- Connection 1: Webhook to Prompt -->
+          <path
+            class="connector-path"
+            d="M 280 200 C 350 200, 350 250, 420 250"
+            stroke-dasharray="5 5"
+          ></path>
+          <circle
+            class="animate-pulse"
+            cx="350"
+            cy="225"
+            fill="#4b5563"
+            r="3"
+          ></circle>
+          <!-- Connection 2: Prompt to Run AI -->
+          <path
+            class="connector-path"
+            d="M 620 250 C 670 250, 670 250, 720 250"
+          ></path>
+          <!-- Connection 3: Run AI to Quality Gate -->
+          <path
+            class="connector-path"
+            d="M 920 250 C 970 250, 970 350, 1020 350"
+          ></path>
+          <!-- Connection 4: Quality Gate to Commit (True) -->
+          <path
+            class="connector-path"
+            d="M 1220 370 C 1270 370, 1270 300, 1320 300"
+            stroke="#22c55e"
+            stroke-opacity="0.5"
+          ></path>
+          <!-- Connection 5: Quality Gate to Notify (False) -->
+          <path
+            class="connector-path"
+            d="M 1220 370 C 1270 370, 1270 450, 1320 450"
+            stroke="#ef4444"
+            stroke-opacity="0.5"
+          ></path>
+        </svg>
+        <!-- NODES LAYER -->
+        <div class="relative w-full h-full z-1 pointer-events-none">
+          <!-- wrapper for positioning -->
+          <!-- NODE 1: Webhook -->
+          <div
+            class="absolute top-[160px] left-[80px] w-[200px] bg-node-bg border border-border-dark rounded-md shadow-lg pointer-events-auto cursor-pointer hover:border-purple-500/50 transition-colors group"
+          >
+            <div class="h-1 w-full bg-purple-500 rounded-t-md"></div>
+            <div class="p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  class="material-symbols-outlined text-purple-400 text-[20px]"
+                  >webhook</span
+                >
+                <span class="text-white text-sm font-semibold">GitHub PR</span>
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">
+                on: pull_request_opened
+              </p>
+            </div>
+            <!-- Output Port -->
+            <div
+              class="absolute top-1/2 -right-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+          </div>
+          <!-- NODE 2: Prompt (Analyze Code) -->
+          <div
+            class="absolute top-[210px] left-[420px] w-[200px] bg-node-bg border border-border-dark rounded-md shadow-lg pointer-events-auto cursor-pointer hover:border-blue-500/50 transition-colors"
+          >
+            <div class="h-1 w-full bg-blue-500 rounded-t-md"></div>
+            <div class="p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  class="material-symbols-outlined text-blue-400 text-[20px]"
+                  >psychology</span
+                >
+                <span class="text-white text-sm font-semibold"
+                  >Analyze Code</span
+                >
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">
+                Prompt: "Review diff..."
+              </p>
+            </div>
+            <!-- Input Port -->
+            <div
+              class="absolute top-1/2 -left-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+            <!-- Output Port -->
+            <div
+              class="absolute top-1/2 -right-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+          </div>
+          <!-- NODE 3: Run AI (Selected) -->
+          <div
+            class="absolute top-[210px] left-[720px] w-[200px] bg-node-bg border-2 border-primary rounded-md shadow-[0_0_15px_rgba(19,127,236,0.15)] pointer-events-auto cursor-pointer"
+          >
+            <div class="h-1 w-full bg-primary rounded-t-sm"></div>
+            <!-- slight rounded-sm because parent border is thicker -->
+            <div class="p-3">
+              <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="material-symbols-outlined text-primary text-[20px]"
+                    >smart_toy</span
+                  >
+                  <span class="text-white text-sm font-semibold"
+                    >LLM Generation</span
+                  >
+                </div>
+                <span class="flex h-2 w-2 relative">
+                  <span
+                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"
+                  ></span>
+                  <span
+                    class="relative inline-flex rounded-full h-2 w-2 bg-primary"
+                  ></span>
+                </span>
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">Model: GPT-4-Turbo</p>
+            </div>
+            <!-- Input Port -->
+            <div
+              class="absolute top-1/2 -left-2 w-3 h-3 bg-primary rounded-full border-2 border-background-dark hover:scale-125 transition-all cursor-crosshair"
+            ></div>
+            <!-- Output Port -->
+            <div
+              class="absolute top-1/2 -right-2 w-3 h-3 bg-primary rounded-full border-2 border-background-dark hover:scale-125 transition-all cursor-crosshair"
+            ></div>
+          </div>
+          <!-- NODE 4: Quality Gate -->
+          <div
+            class="absolute top-[310px] left-[1020px] w-[200px] bg-node-bg border border-border-dark rounded-md shadow-lg pointer-events-auto cursor-pointer hover:border-orange-500/50 transition-colors"
+          >
+            <div class="h-1 w-full bg-orange-500 rounded-t-md"></div>
+            <div class="p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  class="material-symbols-outlined text-orange-400 text-[20px]"
+                  >gavel</span
+                >
+                <span class="text-white text-sm font-semibold"
+                  >Linter Check</span
+                >
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">
+                Condition: errors == 0
+              </p>
+            </div>
+            <!-- Input Port -->
+            <div
+              class="absolute top-1/2 -left-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+            <!-- Output Port TRUE -->
+            <div
+              class="absolute top-1/3 -right-1.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background-dark hover:bg-green-400 transition-colors cursor-crosshair"
+              title="True"
+            ></div>
+            <!-- Output Port FALSE -->
+            <div
+              class="absolute bottom-1/3 -right-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-background-dark hover:bg-red-400 transition-colors cursor-crosshair"
+              title="False"
+            ></div>
+          </div>
+          <!-- NODE 5: Git Commit -->
+          <div
+            class="absolute top-[260px] left-[1320px] w-[200px] bg-node-bg border border-border-dark rounded-md shadow-lg pointer-events-auto cursor-pointer hover:border-red-500/50 transition-colors opacity-60"
+          >
+            <div class="h-1 w-full bg-red-500 rounded-t-md"></div>
+            <div class="p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="material-symbols-outlined text-red-400 text-[20px]"
+                  >commit</span
+                >
+                <span class="text-white text-sm font-semibold"
+                  >Commit Changes</span
+                >
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">
+                Branch: fix/auto-refactor
+              </p>
+            </div>
+            <!-- Input Port -->
+            <div
+              class="absolute top-1/2 -left-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+          </div>
+          <!-- NODE 6: Notify -->
+          <div
+            class="absolute top-[410px] left-[1320px] w-[200px] bg-node-bg border border-border-dark rounded-md shadow-lg pointer-events-auto cursor-pointer hover:border-green-500/50 transition-colors"
+          >
+            <div class="h-1 w-full bg-green-500 rounded-t-md"></div>
+            <div class="p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  class="material-symbols-outlined text-green-400 text-[20px]"
+                  >notifications</span
+                >
+                <span class="text-white text-sm font-semibold"
+                  >Slack Alert</span
+                >
+              </div>
+              <p class="text-[#9dabb9] text-xs truncate">
+                Channel: #dev-alerts
+              </p>
+            </div>
+            <!-- Input Port -->
+            <div
+              class="absolute top-1/2 -left-1.5 w-3 h-3 bg-[#4b5563] rounded-full border-2 border-background-dark hover:bg-primary transition-colors cursor-crosshair"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <!-- RIGHT PROPERTIES PANEL -->
+    <aside
+      class="w-[360px] h-full bg-surface-dark border-l border-border-dark flex flex-col shrink-0 shadow-2xl z-20"
+    >
+      <!-- Panel Header -->
+      <div
+        class="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-surface-dark"
+      >
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">smart_toy</span>
+          <h3 class="text-white text-sm font-bold">LLM Generation</h3>
+        </div>
+        <div class="flex gap-2">
+          <button class="text-[#9dabb9] hover:text-white">
+            <span class="material-symbols-outlined text-[20px]">code</span>
+          </button>
+          <button class="text-[#9dabb9] hover:text-white">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+      </div>
+      <!-- Panel Content -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <!-- Description -->
+        <div class="space-y-2">
+          <label
+            class="text-xs font-semibold text-[#9dabb9] uppercase tracking-wider"
+            >Node Name</label
+          >
+          <input
+            class="w-full bg-background-dark border border-border-dark rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+            type="text"
+            value="LLM Generation"
+          />
+        </div>
+        <!-- Configuration Group -->
+        <div class="space-y-4 pt-2 border-t border-border-dark">
+          <h4 class="text-white text-sm font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-[#9dabb9]"
+              >tune</span
+            >
+            Configuration
+          </h4>
+          <div class="space-y-2">
+            <label class="text-xs text-[#9dabb9]">Model</label>
+            <div class="relative">
+              <select
+                class="w-full bg-background-dark border border-border-dark rounded-md px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-primary"
+              >
+                <option>GPT-4 Turbo (128k)</option>
+                <option>GPT-4</option>
+                <option>Claude 3 Opus</option>
+                <option>Mistral Large</option>
+              </select>
+              <span
+                class="material-symbols-outlined absolute right-3 top-2.5 text-[#9dabb9] pointer-events-none text-[18px]"
+                >expand_more</span
+              >
+            </div>
+          </div>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <label class="text-xs text-[#9dabb9]">Temperature</label>
+              <span class="text-xs text-white font-mono">0.7</span>
+            </div>
+            <input
+              class="w-full h-1 bg-[#3a3f45] rounded-lg appearance-none cursor-pointer accent-primary"
+              max="1"
+              min="0"
+              step="0.1"
+              type="range"
+              value="0.7"
+            />
+          </div>
+        </div>
+        <!-- System Prompt -->
+        <div class="space-y-2 pt-2 border-t border-border-dark">
+          <div class="flex justify-between items-center">
+            <label class="text-xs text-[#9dabb9]">System Prompt</label>
+            <button class="text-primary text-xs hover:underline">Expand</button>
+          </div>
+          <div class="relative">
+            <textarea
+              class="w-full h-32 bg-background-dark border border-border-dark rounded-md px-3 py-2 text-xs font-mono text-gray-300 focus:outline-none focus:border-primary resize-none"
+              spellcheck="false"
+            >
+You are an expert Senior Software Engineer. Review the provided code diff and identify potential logical errors, security vulnerabilities, or performance bottlenecks. Be concise.</textarea
+            >
+          </div>
+        </div>
+        <!-- Output Schema -->
+        <div class="space-y-2 pt-2 border-t border-border-dark">
+          <label class="text-xs text-[#9dabb9]">Expected Output JSON</label>
+          <div
+            class="bg-background-dark border border-border-dark rounded-md p-3"
+          >
+            <code class="text-xs font-mono text-emerald-400">
+              {<br />
+                "review": "string",<br />
+                "approved": boolean,<br />
+                "suggestions": []<br />
+              }
+            </code>
+          </div>
+        </div>
+      </div>
+      <!-- Panel Footer -->
+      <div class="p-4 border-t border-border-dark bg-surface-dark flex gap-3">
+        <button
+          class="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md transition-colors"
+        >
+          Save
+        </button>
+        <button
+          class="h-9 w-9 flex items-center justify-center bg-[#2a2e35] hover:bg-red-500/20 hover:text-red-400 border border-[#3a3f45] hover:border-red-500/50 text-[#9dabb9] rounded-md transition-all"
+        >
+          <span class="material-symbols-outlined text-[20px]">delete</span>
+        </button>
+      </div>
+    </aside>
+  </body>
+</html>

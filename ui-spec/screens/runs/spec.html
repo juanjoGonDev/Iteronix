@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix - Run Execution</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#111418",
+              "surface-dark": "#1f2937",
+              "surface-dark-lighter": "#283039",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "Liberation Mono",
+                "Courier New",
+                "monospace",
+              ],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom scrollbar for better dark mode aesthetic */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #111418;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #283039;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #374151;
+      }
+      .code-block {
+        font-family: "ui-monospace", "SFMono-Regular", "Menlo", "Monaco",
+          "Consolas", "Liberation Mono", "Courier New", monospace;
+      }
+    </style>
+  </head>
+  <body
+    class="font-display bg-background-light dark:bg-background-dark text-gray-900 dark:text-white h-screen overflow-hidden flex"
+  >
+    <!-- Left Sidebar -->
+    <div
+      class="hidden lg:flex flex-col w-64 border-r border-[#283039] bg-[#111418] flex-shrink-0"
+    >
+      <div class="p-6 flex items-center gap-3">
+        <div
+          class="size-8 rounded bg-primary/20 flex items-center justify-center text-primary"
+        >
+          <span class="material-symbols-outlined">deployed_code</span>
+        </div>
+        <h1 class="text-white text-lg font-bold">Iteronix</h1>
+      </div>
+      <div class="flex flex-col flex-1 px-4 gap-2">
+        <div
+          class="text-[#9dabb9] text-xs font-semibold uppercase tracking-wider px-3 mb-2 mt-4"
+        >
+          Platform
+        </div>
+        <a
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white hover:bg-[#283039] rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined">dashboard</span>
+          <span class="text-sm font-medium">Dashboard</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 bg-[#283039] text-white rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined text-primary">folder</span>
+          <span class="text-sm font-medium">Projects</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white hover:bg-[#283039] rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined">smart_toy</span>
+          <span class="text-sm font-medium">Agents</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white hover:bg-[#283039] rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined">history</span>
+          <span class="text-sm font-medium">Activity</span>
+        </a>
+        <div
+          class="text-[#9dabb9] text-xs font-semibold uppercase tracking-wider px-3 mb-2 mt-6"
+        >
+          Configuration
+        </div>
+        <a
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white hover:bg-[#283039] rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined">api</span>
+          <span class="text-sm font-medium">Integrations</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 text-[#9dabb9] hover:text-white hover:bg-[#283039] rounded-lg transition-colors"
+          href="#"
+        >
+          <span class="material-symbols-outlined">settings</span>
+          <span class="text-sm font-medium">Settings</span>
+        </a>
+      </div>
+      <div class="p-4 border-t border-[#283039]">
+        <div class="flex items-center gap-3">
+          <div
+            class="size-8 rounded-full bg-center bg-cover"
+            data-alt="User avatar"
+            style="
+              background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAik-nCLvXMwaGVsLypkcSnzrybjoLD1mwdLNzzGHFE3B1oTs0dizFO9XULBit71K45P0SMqSh22_21OlvoL39QAYVJGj5GJ6g9KBLoq32jzL54T10LztP9PVmDzCPhXXcORAxmGQ0pHEf7RlcvTjIZfvuGjCWZ3bIhHlO_9NT4ydEe5iIDO1fIitfBQIzQHmofgR3-UzrSqBUCBmnUbZ2EMBHQmvLrPZVDFedYg0lkcAHCjzNqeYYquQR9RNrpEuGmlq1yzHB-ro9a');
+            "
+          ></div>
+          <div class="flex flex-col">
+            <span class="text-sm font-medium text-white">Alex Chen</span>
+            <span class="text-xs text-[#9dabb9]">Senior DevOps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Main Content -->
+    <div class="flex flex-col flex-1 min-w-0">
+      <!-- Top Nav -->
+      <header
+        class="flex items-center justify-between border-b border-[#283039] bg-[#111418] px-6 py-3 shrink-0 h-16"
+      >
+        <div class="flex items-center gap-4">
+          <button class="lg:hidden text-white">
+            <span class="material-symbols-outlined">menu</span>
+          </button>
+          <!-- Search -->
+          <div class="relative hidden sm:block">
+            <div
+              class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#9dabb9]"
+            >
+              <span class="material-symbols-outlined text-[20px]">search</span>
+            </div>
+            <input
+              class="bg-[#283039] border-none text-white text-sm rounded-lg focus:ring-1 focus:ring-primary block w-64 pl-10 p-2 placeholder-[#9dabb9]"
+              placeholder="Search runs, logs, or files..."
+              type="text"
+            />
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <button class="text-[#9dabb9] hover:text-white relative">
+            <span class="material-symbols-outlined">notifications</span>
+            <span
+              class="absolute top-0 right-0 size-2 bg-red-500 rounded-full border-2 border-[#111418]"
+            ></span>
+          </button>
+          <button class="text-[#9dabb9] hover:text-white">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+        </div>
+      </header>
+      <!-- Page Content Wrapper -->
+      <div class="flex flex-1 overflow-hidden">
+        <!-- Central Execution Stream -->
+        <main
+          class="flex-1 flex flex-col min-w-0 overflow-y-auto relative bg-[#111418]"
+        >
+          <!-- Sticky Sub-Header -->
+          <div
+            class="sticky top-0 z-20 bg-[#111418]/95 backdrop-blur-sm border-b border-[#283039] px-6 py-4"
+          >
+            <!-- Breadcrumbs -->
+            <div class="flex items-center gap-2 text-sm text-[#9dabb9] mb-3">
+              <a class="hover:text-white" href="#">Project X</a>
+              <span class="material-symbols-outlined text-[16px]"
+                >chevron_right</span
+              >
+              <a class="hover:text-white" href="#">Workflows</a>
+              <span class="material-symbols-outlined text-[16px]"
+                >chevron_right</span
+              >
+              <span class="text-white font-medium">Run #402</span>
+            </div>
+            <!-- Header & Actions -->
+            <div
+              class="flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              <div class="flex flex-col gap-1">
+                <h2
+                  class="text-xl md:text-2xl font-bold text-white flex items-center gap-3"
+                >
+                  Refactor Auth Middleware
+                  <span
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30 animate-pulse"
+                  >
+                    Running
+                  </span>
+                </h2>
+                <p
+                  class="text-[#9dabb9] text-sm flex items-center gap-3 font-mono"
+                >
+                  <span class="flex items-center gap-1"
+                    ><span class="material-symbols-outlined text-[14px]"
+                      >call_split</span
+                    >
+                    feature/auth-refactor</span
+                  >
+                  <span class="w-1 h-1 rounded-full bg-[#9dabb9]"></span>
+                  <span class="flex items-center gap-1"
+                    ><span class="material-symbols-outlined text-[14px]"
+                      >schedule</span
+                    >
+                    1m 42s</span
+                  >
+                  <span class="w-1 h-1 rounded-full bg-[#9dabb9]"></span>
+                  <span>$0.04 est. cost</span>
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <button
+                  class="px-4 py-2 bg-[#283039] hover:bg-[#374151] text-white text-sm font-medium rounded-lg flex items-center gap-2 border border-transparent transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[18px]"
+                    >bug_report</span
+                  >
+                  Debug
+                </button>
+                <button
+                  class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 border border-red-500/30 text-sm font-medium rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[18px]"
+                    >stop_circle</span
+                  >
+                  Stop
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- Timeline Container -->
+          <div
+            class="p-6 md:p-10 max-w-5xl mx-auto w-full flex flex-col gap-0 pb-32"
+          >
+            <!-- START Event -->
+            <div class="flex gap-4 relative group">
+              <!-- Line -->
+              <div
+                class="absolute top-8 left-[19px] w-0.5 h-full bg-[#283039] -z-10 group-last:h-0"
+              ></div>
+              <div class="relative">
+                <div
+                  class="size-10 rounded-full bg-[#283039] border border-[#374151] flex items-center justify-center z-10 text-white"
+                >
+                  <span class="material-symbols-outlined text-[20px]"
+                    >play_arrow</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1 pb-8 pt-2">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="text-white text-sm font-semibold">
+                      Workflow Started
+                    </p>
+                    <p class="text-[#9dabb9] text-xs mt-0.5">
+                      Triggered by Alex Chen via Web UI
+                    </p>
+                  </div>
+                  <span class="text-[#9dabb9] text-xs font-mono"
+                    >10:42:01 AM</span
+                  >
+                </div>
+              </div>
+            </div>
+            <!-- AI Thought -->
+            <div class="flex gap-4 relative group">
+              <div
+                class="absolute top-0 left-[19px] w-0.5 h-full bg-[#283039] -z-10"
+              ></div>
+              <div class="relative">
+                <div
+                  class="size-10 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center z-10 text-purple-400"
+                >
+                  <span class="material-symbols-outlined text-[20px]"
+                    >psychology</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1 pb-8">
+                <div
+                  class="bg-[#1f2937] border border-[#283039] rounded-xl p-4 shadow-sm"
+                >
+                  <div class="flex justify-between items-start mb-2">
+                    <p
+                      class="text-purple-400 text-xs font-bold uppercase tracking-wider"
+                    >
+                      Planning
+                    </p>
+                    <span class="text-[#9dabb9] text-xs font-mono"
+                      >10:42:05 AM</span
+                    >
+                  </div>
+                  <p class="text-gray-300 text-sm leading-relaxed">
+                    I need to investigate the current authentication middleware
+                    structure. I'll start by listing the files in
+                    <code
+                      class="bg-[#111418] px-1 py-0.5 rounded text-xs border border-[#374151]"
+                      >src/middleware</code
+                    >
+                    to identify the relevant files, then I'll read
+                    <code
+                      class="bg-[#111418] px-1 py-0.5 rounded text-xs border border-[#374151]"
+                      >auth.ts</code
+                    >.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <!-- Command Execution -->
+            <div class="flex gap-4 relative group">
+              <div
+                class="absolute top-0 left-[19px] w-0.5 h-full bg-[#283039] -z-10"
+              ></div>
+              <div class="relative">
+                <div
+                  class="size-10 rounded-full bg-[#283039] border border-[#374151] flex items-center justify-center z-10 text-[#9dabb9]"
+                >
+                  <span class="material-symbols-outlined text-[20px]"
+                    >terminal</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1 pb-8">
+                <div
+                  class="bg-[#111418] border border-[#283039] rounded-xl overflow-hidden"
+                >
+                  <div
+                    class="bg-[#1f2937] px-4 py-2 border-b border-[#283039] flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="material-symbols-outlined text-[#9dabb9] text-[16px]"
+                        >chevron_right</span
+                      >
+                      <span class="text-gray-300 text-xs font-mono"
+                        >ls -la src/middleware</span
+                      >
+                    </div>
+                    <span
+                      class="text-green-500 text-xs font-mono flex items-center gap-1"
+                    >
+                      <span class="material-symbols-outlined text-[14px]"
+                        >check</span
+                      >
+                      Success
+                    </span>
+                  </div>
+                  <div class="p-4 overflow-x-auto">
+                    <pre
+                      class="text-[#9dabb9] text-xs font-mono leading-relaxed"
+                    >
+total 16
+drwxr-xr-x  4 user  staff  128 Oct 24 10:42 .
+drwxr-xr-x  8 user  staff  256 Oct 20 09:15 ..
+-rw-r--r--  1 user  staff  2048 Oct 22 14:30 auth.ts
+-rw-r--r--  1 user  staff  1024 Oct 22 14:30 logger.ts</pre
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- File Read Action -->
+            <div class="flex gap-4 relative group">
+              <div
+                class="absolute top-0 left-[19px] w-0.5 h-full bg-[#283039] -z-10"
+              ></div>
+              <div class="relative">
+                <div
+                  class="size-10 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center z-10 text-blue-400"
+                >
+                  <span class="material-symbols-outlined text-[20px]"
+                    >description</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1 pb-8">
+                <div
+                  class="bg-[#1f2937] border border-[#283039] rounded-xl p-4 shadow-sm"
+                >
+                  <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-2">
+                      <p
+                        class="text-blue-400 text-xs font-bold uppercase tracking-wider"
+                      >
+                        Reading File
+                      </p>
+                      <span class="text-gray-400 text-sm"
+                        >src/middleware/auth.ts</span
+                      >
+                    </div>
+                    <span class="text-[#9dabb9] text-xs font-mono"
+                      >10:42:12 AM</span
+                    >
+                  </div>
+                  <div class="relative">
+                    <div
+                      class="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#1f2937] to-transparent z-10"
+                    ></div>
+                    <pre
+                      class="bg-[#111418] p-3 rounded-lg text-gray-400 text-xs font-mono overflow-hidden max-h-32 border border-[#283039]"
+                    >
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+
+export const authenticateJWT = (req: Request, res: Response, next: NextFunction) =&gt; {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader) {
+        const token = authHeader.split(' ')[1];
+        
+        jwt.verify(token, process.env.JWT_SECRET as string, (err, user) =&gt; {
+            if (err) {
+                return res.sendStatus(403);
+            }
+...</pre
+                    >
+                    <button
+                      class="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 bg-[#283039] hover:bg-[#374151] text-white text-xs px-3 py-1 rounded-full border border-[#374151] shadow-lg transition-colors"
+                    >
+                      Show full file
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Nested Loop Structure (Refactoring) -->
+            <div class="flex gap-4 relative group">
+              <div
+                class="absolute top-0 left-[19px] w-0.5 h-full bg-[#283039] -z-10"
+              ></div>
+              <div class="relative">
+                <div
+                  class="size-10 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center z-10 text-orange-400"
+                >
+                  <span class="material-symbols-outlined text-[20px]"
+                    >loop</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1 pb-8">
+                <div class="flex flex-col gap-4">
+                  <!-- Loop Header -->
+                  <div class="flex justify-between items-center">
+                    <p class="text-orange-400 text-sm font-semibold">
+                      Refactor Loop (Attempt 1)
+                    </p>
+                    <span class="text-[#9dabb9] text-xs font-mono"
+                      >10:42:15 AM</span
+                    >
+                  </div>
+                  <!-- Indented Loop Content -->
+                  <div
+                    class="pl-4 border-l-2 border-[#283039] flex flex-col gap-6 ml-2"
+                  >
+                    <!-- Inner Action: Edit File -->
+                    <div class="relative">
+                      <div
+                        class="absolute top-3 -left-[25px] w-4 h-0.5 bg-[#283039]"
+                      ></div>
+                      <div
+                        class="bg-[#1f2937] border border-[#283039] rounded-xl p-4"
+                      >
+                        <div class="flex items-center gap-2 mb-2">
+                          <span
+                            class="material-symbols-outlined text-yellow-500 text-[18px]"
+                            >edit_document</span
+                          >
+                          <span class="text-gray-200 text-sm font-medium"
+                            >Applied Changes</span
+                          >
+                        </div>
+                        <div
+                          class="bg-[#111418] rounded-lg border border-[#283039] overflow-hidden font-mono text-xs"
+                        >
+                          <div
+                            class="bg-red-500/10 text-red-400 px-3 py-1 border-b border-red-500/10"
+                          >
+                            - const token = authHeader.split(' ')[1];
+                          </div>
+                          <div class="bg-green-500/10 text-green-400 px-3 py-1">
+                            + const token = extractToken(authHeader);
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Inner Action: Run Tests (Failed) -->
+                    <div class="relative">
+                      <div
+                        class="absolute top-3 -left-[25px] w-4 h-0.5 bg-[#283039]"
+                      ></div>
+                      <div
+                        class="bg-[#111418] border border-red-500/30 rounded-xl overflow-hidden"
+                      >
+                        <div
+                          class="bg-red-500/10 px-4 py-2 border-b border-red-500/20 flex items-center justify-between"
+                        >
+                          <div class="flex items-center gap-2">
+                            <span
+                              class="material-symbols-outlined text-red-400 text-[16px]"
+                              >chevron_right</span
+                            >
+                            <span class="text-gray-300 text-xs font-mono"
+                              >npm test auth.test.ts</span
+                            >
+                          </div>
+                          <span
+                            class="text-red-400 text-xs font-mono flex items-center gap-1"
+                          >
+                            <span class="material-symbols-outlined text-[14px]"
+                              >error</span
+                            >
+                            Failed
+                          </span>
+                        </div>
+                        <div class="p-4">
+                          <p class="text-red-400 text-xs font-mono">
+                            ReferenceError: extractToken is not defined
+                          </p>
+                          <p class="text-[#9dabb9] text-xs font-mono mt-1 ml-4">
+                            at src/middleware/auth.ts:15:23
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- ACTIVE STEP: Error Correction -->
+            <div class="flex gap-4 relative group">
+              <div
+                class="absolute top-0 left-[19px] w-0.5 h-full bg-gradient-to-b from-[#283039] to-primary -z-10"
+              ></div>
+              <div class="relative">
+                <!-- Pulsing glow behind active step -->
+                <div
+                  class="absolute inset-0 bg-primary rounded-full animate-ping opacity-20"
+                ></div>
+                <div
+                  class="size-10 rounded-full bg-primary flex items-center justify-center z-10 text-white shadow-[0_0_15px_rgba(19,127,236,0.5)]"
+                >
+                  <span
+                    class="material-symbols-outlined text-[20px] animate-spin"
+                    >sync</span
+                  >
+                </div>
+              </div>
+              <div class="flex-1">
+                <div
+                  class="bg-[#1f2937] border border-primary/50 rounded-xl p-5 shadow-[0_0_20px_rgba(19,127,236,0.1)] relative overflow-hidden"
+                >
+                  <!-- Active Indicator Line -->
+                  <div
+                    class="absolute left-0 top-0 bottom-0 w-1 bg-primary"
+                  ></div>
+                  <div class="flex justify-between items-start mb-3">
+                    <div class="flex flex-col">
+                      <p
+                        class="text-white text-sm font-bold flex items-center gap-2"
+                      >
+                        Attempting Fix
+                        <span
+                          class="text-xs font-normal text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20"
+                          >Current Step</span
+                        >
+                      </p>
+                      <p class="text-[#9dabb9] text-xs mt-1">
+                        Analyzing failed test output and undefined reference.
+                      </p>
+                    </div>
+                    <span class="text-[#9dabb9] text-xs font-mono">Now</span>
+                  </div>
+                  <div class="flex items-center gap-3 mt-4">
+                    <div
+                      class="flex-1 h-1.5 bg-[#111418] rounded-full overflow-hidden"
+                    >
+                      <div
+                        class="h-full bg-primary w-2/3 rounded-full relative overflow-hidden"
+                      >
+                        <div
+                          class="absolute inset-0 bg-white/20 w-full h-full -translate-x-full animate-[shimmer_1.5s_infinite]"
+                        ></div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-primary font-medium"
+                      >Generating helper function...</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <!-- Right Sidebar: History -->
+        <aside
+          class="w-80 bg-[#111418] border-l border-[#283039] flex-shrink-0 hidden xl:flex flex-col"
+        >
+          <div
+            class="p-4 border-b border-[#283039] flex items-center justify-between"
+          >
+            <h3 class="text-white text-sm font-semibold">Run History</h3>
+            <button class="text-[#9dabb9] hover:text-white">
+              <span class="material-symbols-outlined text-[18px]"
+                >filter_list</span
+              >
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-2">
+            <div class="mb-4">
+              <p
+                class="px-3 py-2 text-xs font-bold text-[#9dabb9] uppercase tracking-wider"
+              >
+                Today
+              </p>
+              <!-- History Item: Active -->
+              <div
+                class="px-3 py-3 bg-[#1f2937] rounded-lg mb-1 border border-[#283039] shadow-sm cursor-pointer"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <span class="text-primary text-xs font-bold"
+                    >#402 (Current)</span
+                  >
+                  <span class="text-[#9dabb9] text-xs">10:42 AM</span>
+                </div>
+                <p class="text-white text-sm font-medium truncate">
+                  Refactor Auth Middleware
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span
+                    class="size-2 rounded-full bg-primary animate-pulse"
+                  ></span>
+                  <span class="text-xs text-[#9dabb9]">Running...</span>
+                </div>
+              </div>
+              <!-- History Item: Failed -->
+              <div
+                class="px-3 py-3 hover:bg-[#1f2937] rounded-lg mb-1 border border-transparent hover:border-[#283039] cursor-pointer transition-colors group"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <span
+                    class="text-[#9dabb9] group-hover:text-white text-xs font-medium"
+                    >#401</span
+                  >
+                  <span class="text-[#9dabb9] text-xs">09:15 AM</span>
+                </div>
+                <p
+                  class="text-[#9dabb9] group-hover:text-white text-sm font-medium truncate"
+                >
+                  Fix DB Migration Timeout
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="size-2 rounded-full bg-red-500"></span>
+                  <span class="text-xs text-[#9dabb9]">Failed (2m 10s)</span>
+                </div>
+              </div>
+              <!-- History Item: Success -->
+              <div
+                class="px-3 py-3 hover:bg-[#1f2937] rounded-lg mb-1 border border-transparent hover:border-[#283039] cursor-pointer transition-colors group"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <span
+                    class="text-[#9dabb9] group-hover:text-white text-xs font-medium"
+                    >#400</span
+                  >
+                  <span class="text-[#9dabb9] text-xs">08:30 AM</span>
+                </div>
+                <p
+                  class="text-[#9dabb9] group-hover:text-white text-sm font-medium truncate"
+                >
+                  Update Dependencies
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="size-2 rounded-full bg-green-500"></span>
+                  <span class="text-xs text-[#9dabb9]">Success (5m 45s)</span>
+                </div>
+              </div>
+            </div>
+            <div class="mb-4">
+              <p
+                class="px-3 py-2 text-xs font-bold text-[#9dabb9] uppercase tracking-wider"
+              >
+                Yesterday
+              </p>
+              <div
+                class="px-3 py-3 hover:bg-[#1f2937] rounded-lg mb-1 border border-transparent hover:border-[#283039] cursor-pointer transition-colors group"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <span
+                    class="text-[#9dabb9] group-hover:text-white text-xs font-medium"
+                    >#399</span
+                  >
+                  <span class="text-[#9dabb9] text-xs">4:20 PM</span>
+                </div>
+                <p
+                  class="text-[#9dabb9] group-hover:text-white text-sm font-medium truncate"
+                >
+                  API Route Refactor
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="size-2 rounded-full bg-green-500"></span>
+                  <span class="text-xs text-[#9dabb9]">Success (12m 04s)</span>
+                </div>
+              </div>
+              <div
+                class="px-3 py-3 hover:bg-[#1f2937] rounded-lg mb-1 border border-transparent hover:border-[#283039] cursor-pointer transition-colors group"
+              >
+                <div class="flex items-start justify-between mb-1">
+                  <span
+                    class="text-[#9dabb9] group-hover:text-white text-xs font-medium"
+                    >#398</span
+                  >
+                  <span class="text-[#9dabb9] text-xs">2:15 PM</span>
+                </div>
+                <p
+                  class="text-[#9dabb9] group-hover:text-white text-sm font-medium truncate"
+                >
+                  UI Component Update
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="size-2 rounded-full bg-yellow-500"></span>
+                  <span class="text-xs text-[#9dabb9]">Stopped by User</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <!-- Animation keyframes definition for the shimmer effect -->
+    <style>
+      @keyframes shimmer {
+        100% {
+          transform: translateX(100%);
+        }
+      }
+    </style>
+  </body>
+</html>

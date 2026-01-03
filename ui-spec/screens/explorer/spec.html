@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix Repository Explorer</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Material Symbols -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922",
+              "border-dark": "#2d353f",
+              "surface-dark": "#1c2127",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark text-[#111418] dark:text-white font-display overflow-hidden h-screen flex w-full"
+  >
+    <!-- 1. Main Navigation Sidebar (Far Left) -->
+    <aside
+      class="w-20 lg:w-64 flex-shrink-0 border-r border-border-dark bg-[#111418] flex flex-col justify-between p-4 z-20 transition-all duration-300"
+    >
+      <div class="flex flex-col gap-6">
+        <!-- Brand -->
+        <div class="flex items-center gap-3 px-2">
+          <div
+            class="bg-primary/20 aspect-square rounded-lg size-10 flex items-center justify-center text-primary"
+          >
+            <span class="material-symbols-outlined text-3xl">terminal</span>
+          </div>
+          <div class="hidden lg:flex flex-col">
+            <h1 class="text-white text-base font-bold leading-tight">
+              Iteronix
+            </h1>
+            <p class="text-[#9dabb9] text-xs font-normal">Enterprise v2.4</p>
+          </div>
+        </div>
+        <!-- Nav Links -->
+        <nav class="flex flex-col gap-2">
+          <a
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined group-hover:text-white"
+              >home</span
+            >
+            <span class="hidden lg:block text-sm font-medium">Dashboard</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20"
+            href="#"
+          >
+            <span class="material-symbols-outlined fill-1">folder_open</span>
+            <span class="hidden lg:block text-sm font-medium">Repos</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined group-hover:text-white"
+              >account_tree</span
+            >
+            <span class="hidden lg:block text-sm font-medium">Workflows</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined group-hover:text-white"
+              >history</span
+            >
+            <span class="hidden lg:block text-sm font-medium">History</span>
+          </a>
+        </nav>
+      </div>
+      <!-- Bottom Actions -->
+      <div class="flex flex-col gap-2">
+        <a
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#9dabb9] hover:bg-[#283039] hover:text-white transition-colors group"
+          href="#"
+        >
+          <span class="material-symbols-outlined group-hover:text-white"
+            >settings</span
+          >
+          <span class="hidden lg:block text-sm font-medium">Settings</span>
+        </a>
+        <div
+          class="flex items-center gap-3 px-3 py-3 border-t border-border-dark mt-2"
+        >
+          <div
+            class="size-8 rounded-full bg-cover bg-center"
+            data-alt="User avatar placeholder with abstract pattern"
+            style="
+              background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDQPD-CtyCHXt2aGLEWhSTOx2N8iimfumhFBTEEwzT7ClcgDKpWyLDy1uFsFDrJmhkGIWwzJBxtehkXwL-C64ymkwcj_EFcGA3CeGVjBscMleyKEtKLJaDxInwC0YVebjimeSEONUnp60wXOp0Wz-Qs5Dt0AeD5uCLmtY3GLhuSGrsKVShMsC_zypSLxYmL2wLQiNeNCeGz7_Uh7iSKw-MC_kQAm1UM_5jIxFDbisJXCVWqqobsWwaNqvn35pBHu3gucBVZkPkJtRKZ');
+            "
+          ></div>
+          <div class="hidden lg:flex flex-col">
+            <p class="text-white text-sm font-medium">Alex Chen</p>
+            <p class="text-[#9dabb9] text-xs">DevOps Lead</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <!-- 2. Repository Explorer Panel (Middle) -->
+    <aside
+      class="w-80 flex-shrink-0 border-r border-border-dark bg-surface-dark flex flex-col z-10"
+    >
+      <!-- Branch Selector -->
+      <div class="p-4 border-b border-border-dark">
+        <label class="flex flex-col gap-2">
+          <div class="flex justify-between items-center">
+            <span
+              class="text-[#9dabb9] text-xs font-semibold uppercase tracking-wider"
+              >Branch Context</span
+            >
+            <span class="text-green-500 text-xs flex items-center gap-1">
+              <span class="size-1.5 rounded-full bg-green-500"></span> Active
+            </span>
+          </div>
+          <div class="relative">
+            <select
+              class="w-full h-10 appearance-none rounded-lg bg-[#111418] border border-[#3b4754] text-white pl-9 pr-8 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+            >
+              <option>feature/auth-refactor</option>
+              <option>main</option>
+              <option>develop</option>
+            </select>
+            <span
+              class="material-symbols-outlined absolute left-2.5 top-2.5 text-[#9dabb9] text-lg pointer-events-none"
+              >call_split</span
+            >
+            <span
+              class="material-symbols-outlined absolute right-2.5 top-2.5 text-[#9dabb9] text-lg pointer-events-none"
+              >expand_more</span
+            >
+          </div>
+        </label>
+      </div>
+      <!-- File Tree -->
+      <div class="flex-1 overflow-y-auto py-2">
+        <div class="px-4 pb-2">
+          <p
+            class="text-[#9dabb9] text-xs font-bold uppercase tracking-wider mb-2"
+          >
+            Explorer
+          </p>
+        </div>
+        <!-- Root Folder -->
+        <div class="flex flex-col gap-0.5">
+          <div
+            class="flex items-center gap-2 px-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+          >
+            <span
+              class="material-symbols-outlined text-lg group-hover:text-white transition-colors"
+              >expand_more</span
+            >
+            <span
+              class="material-symbols-outlined text-lg text-primary group-hover:text-white transition-colors"
+              >folder_open</span
+            >
+            <span
+              class="text-sm font-medium group-hover:text-white transition-colors"
+              >src</span
+            >
+          </div>
+          <!-- Nested Folder: components -->
+          <div class="flex flex-col gap-0.5">
+            <div
+              class="flex items-center gap-2 pl-10 pr-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+            >
+              <span
+                class="material-symbols-outlined text-lg group-hover:text-white transition-colors"
+                >expand_more</span
+              >
+              <span
+                class="material-symbols-outlined text-lg text-primary group-hover:text-white transition-colors"
+                >folder</span
+              >
+              <span
+                class="text-sm font-medium group-hover:text-white transition-colors"
+                >components</span
+              >
+            </div>
+            <!-- File: Button.tsx (Modified) -->
+            <div
+              class="flex items-center gap-2 pl-16 pr-4 py-1.5 bg-primary/10 border-r-2 border-primary text-white cursor-pointer group"
+            >
+              <span class="material-symbols-outlined text-lg text-blue-400"
+                >code</span
+              >
+              <span class="text-sm font-medium flex-1">Button.tsx</span>
+              <span
+                class="text-[10px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded"
+                >M</span
+              >
+            </div>
+            <!-- File: Header.tsx -->
+            <div
+              class="flex items-center gap-2 pl-16 pr-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+            >
+              <span
+                class="material-symbols-outlined text-lg group-hover:text-white transition-colors"
+                >code</span
+              >
+              <span
+                class="text-sm font-medium group-hover:text-white transition-colors"
+                >Header.tsx</span
+              >
+            </div>
+          </div>
+          <!-- Nested Folder: utils -->
+          <div
+            class="flex items-center gap-2 pl-10 pr-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+          >
+            <span
+              class="material-symbols-outlined text-lg group-hover:text-white transition-colors"
+              >chevron_right</span
+            >
+            <span
+              class="material-symbols-outlined text-lg text-primary group-hover:text-white transition-colors"
+              >folder</span
+            >
+            <span
+              class="text-sm font-medium group-hover:text-white transition-colors"
+              >utils</span
+            >
+          </div>
+          <!-- Root File: App.tsx -->
+          <div
+            class="flex items-center gap-2 pl-10 pr-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+          >
+            <span
+              class="material-symbols-outlined text-lg group-hover:text-white transition-colors"
+              >code</span
+            >
+            <span
+              class="text-sm font-medium group-hover:text-white transition-colors"
+              >App.tsx</span
+            >
+          </div>
+        </div>
+        <!-- Root File: package.json -->
+        <div
+          class="flex items-center gap-2 px-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+        >
+          <span class="w-[18px]"></span>
+          <!-- Indent spacing -->
+          <span
+            class="material-symbols-outlined text-lg text-red-400 group-hover:text-white transition-colors"
+            >data_object</span
+          >
+          <span
+            class="text-sm font-medium group-hover:text-white transition-colors"
+            >package.json</span
+          >
+          <span
+            class="ml-auto text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded"
+            >A</span
+          >
+        </div>
+        <!-- Root File: README.md -->
+        <div
+          class="flex items-center gap-2 px-4 py-1.5 text-[#9dabb9] hover:bg-[#283039] cursor-pointer group"
+        >
+          <span class="w-[18px]"></span>
+          <!-- Indent spacing -->
+          <span
+            class="material-symbols-outlined text-lg text-[#9dabb9] group-hover:text-white transition-colors"
+            >description</span
+          >
+          <span
+            class="text-sm font-medium group-hover:text-white transition-colors"
+            >README.md</span
+          >
+        </div>
+      </div>
+      <!-- Workflow Status (Bottom of sidebar) -->
+      <div class="p-4 border-t border-border-dark bg-[#181b21]">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="relative flex items-center justify-center size-8">
+            <!-- Animated spinner ring -->
+            <svg
+              class="animate-spin absolute h-full w-full text-primary"
+              fill="none"
+              viewbox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                fill="currentColor"
+              ></path>
+            </svg>
+            <span
+              class="material-symbols-outlined text-white text-sm relative z-10"
+              >smart_toy</span
+            >
+          </div>
+          <div class="flex flex-col">
+            <span class="text-white text-sm font-medium">Agent Active</span>
+            <span class="text-[#9dabb9] text-xs">Analyzing imports...</span>
+          </div>
+        </div>
+        <div class="w-full bg-[#2d353f] h-1.5 rounded-full overflow-hidden">
+          <div class="bg-primary h-full w-[65%] rounded-full"></div>
+        </div>
+      </div>
+    </aside>
+    <!-- 3. Main Content Area (Right) -->
+    <main class="flex-1 flex flex-col min-w-0 bg-background-dark">
+      <!-- Header / Breadcrumbs -->
+      <header
+        class="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-[#111418]"
+      >
+        <div class="flex items-center gap-2 overflow-hidden">
+          <span class="material-symbols-outlined text-[#9dabb9]"
+            >grid_view</span
+          >
+          <nav class="flex items-center text-sm font-medium whitespace-nowrap">
+            <a
+              class="text-[#9dabb9] hover:text-white transition-colors"
+              href="#"
+              >Iteronix</a
+            >
+            <span class="text-[#4b5563] mx-2">/</span>
+            <a
+              class="text-[#9dabb9] hover:text-white transition-colors"
+              href="#"
+              >Project Alpha</a
+            >
+            <span class="text-[#4b5563] mx-2">/</span>
+            <a
+              class="text-[#9dabb9] hover:text-white transition-colors"
+              href="#"
+              >src</a
+            >
+            <span class="text-[#4b5563] mx-2">/</span>
+            <a
+              class="text-[#9dabb9] hover:text-white transition-colors"
+              href="#"
+              >components</a
+            >
+            <span class="text-[#4b5563] mx-2">/</span>
+            <span class="text-white">Button.tsx</span>
+          </nav>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded bg-surface-dark border border-border-dark text-[#9dabb9] text-sm hover:text-white hover:border-[#5c6b7f] transition-all"
+          >
+            <span class="material-symbols-outlined text-lg">history</span>
+            Blame
+          </button>
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded bg-primary text-white text-sm font-medium shadow-lg hover:bg-blue-600 transition-all"
+          >
+            <span class="material-symbols-outlined text-lg">check_circle</span>
+            Approve Changes
+          </button>
+        </div>
+      </header>
+      <!-- Editor Container -->
+      <div class="flex-1 flex flex-col min-h-0">
+        <!-- Tabs -->
+        <div
+          class="flex items-end bg-[#111418] border-b border-border-dark pt-2 px-2 gap-1 overflow-x-auto scrollbar-hide"
+        >
+          <div
+            class="flex items-center gap-2 px-4 py-2 bg-background-dark border-t border-x border-border-dark rounded-t-lg relative group min-w-[140px] max-w-[200px]"
+          >
+            <div
+              class="absolute top-0 left-0 w-full h-[2px] bg-primary rounded-t-full"
+            ></div>
+            <span class="material-symbols-outlined text-blue-400 text-lg"
+              >code</span
+            >
+            <span class="text-white text-sm font-medium truncate flex-1"
+              >Button.tsx</span
+            >
+            <span
+              class="material-symbols-outlined text-[#4b5563] text-sm cursor-pointer hover:text-white"
+              >close</span
+            >
+          </div>
+          <div
+            class="flex items-center gap-2 px-4 py-2 text-[#9dabb9] hover:bg-[#1c2127] rounded-t-lg cursor-pointer min-w-[140px] max-w-[200px] border border-transparent hover:border-border-dark border-b-0"
+          >
+            <span class="material-symbols-outlined text-red-400 text-lg"
+              >data_object</span
+            >
+            <span class="text-[#9dabb9] text-sm font-medium truncate flex-1"
+              >package.json</span
+            >
+            <span
+              class="material-symbols-outlined text-transparent group-hover:text-[#4b5563] text-sm cursor-pointer hover:text-white"
+              >close</span
+            >
+          </div>
+          <div
+            class="flex items-center gap-2 px-4 py-2 text-[#9dabb9] hover:bg-[#1c2127] rounded-t-lg cursor-pointer min-w-[140px] max-w-[200px] border border-transparent hover:border-border-dark border-b-0"
+          >
+            <span class="material-symbols-outlined text-[#9dabb9] text-lg"
+              >description</span
+            >
+            <span class="text-[#9dabb9] text-sm font-medium truncate flex-1"
+              >README.md</span
+            >
+            <span
+              class="material-symbols-outlined text-transparent group-hover:text-[#4b5563] text-sm cursor-pointer hover:text-white"
+              >close</span
+            >
+          </div>
+        </div>
+        <!-- Code Editor View -->
+        <div
+          class="flex-1 relative overflow-auto font-mono text-sm bg-background-dark"
+        >
+          <!-- Code Table for alignment -->
+          <table class="w-full border-collapse">
+            <tbody>
+              <!-- Line 1 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  1
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#c678dd]">import</span>
+                  <span class="text-[#e5c07b]">React</span>
+                  <span class="text-[#c678dd]">from</span>
+                  <span class="text-[#98c379]">'react'</span>;
+                </td>
+              </tr>
+              <!-- Line 2 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  2
+                </td>
+                <td class="px-4 whitespace-pre"></td>
+              </tr>
+              <!-- Line 3 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  3
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#c678dd]">interface</span>
+                  <span class="text-[#e5c07b]">ButtonProps</span> {
+                </td>
+              </tr>
+              <!-- Line 4 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  4
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">label</span>:
+                  <span class="text-[#e5c07b]">string</span>;
+                </td>
+              </tr>
+              <!-- Line 5 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  5
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">onClick</span>: ()
+                  <span class="text-[#56b6c2]">=</span>&gt;
+                  <span class="text-[#e5c07b]">void</span>;
+                </td>
+              </tr>
+              <!-- Line 6 (New Code) -->
+              <tr class="bg-green-500/10">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-green-500/30 bg-green-500/10 border-l-[3px] border-l-green-500"
+                >
+                  6
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">variant</span>?:
+                  <span class="text-[#98c379]">'primary'</span> |
+                  <span class="text-[#98c379]">'secondary'</span> |
+                  <span class="text-[#98c379]">'danger'</span>;
+                </td>
+              </tr>
+              <!-- Line 7 (New Code) -->
+              <tr class="bg-green-500/10">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-green-500/30 bg-green-500/10 border-l-[3px] border-l-green-500"
+                >
+                  7
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">isLoading</span>?:
+                  <span class="text-[#e5c07b]">boolean</span>;
+                </td>
+              </tr>
+              <!-- Line 8 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  8
+                </td>
+                <td class="px-4 whitespace-pre">}</td>
+              </tr>
+              <!-- Line 9 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  9
+                </td>
+                <td class="px-4 whitespace-pre"></td>
+              </tr>
+              <!-- Line 10 (Modified Signature) -->
+              <tr class="bg-yellow-500/10">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-yellow-500/30 bg-yellow-500/10 border-l-[3px] border-l-yellow-500"
+                >
+                  10
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#c678dd]">export const</span>
+                  <span class="text-[#61afef]">Button</span> = ({
+                  <span class="text-[#e06c75]">label</span>,
+                  <span class="text-[#e06c75]">onClick</span>,
+                  <span class="text-[#e06c75]">variant</span> =
+                  <span class="text-[#98c379]">'primary'</span>,
+                  <span class="text-[#e06c75]">isLoading</span> =
+                  <span class="text-[#d19a66]">false</span> }:
+                  <span class="text-[#e5c07b]">ButtonProps</span>)
+                  <span class="text-[#56b6c2]">=</span>&gt; {
+                </td>
+              </tr>
+              <!-- Line 11 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  11
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#c678dd]">return</span> (
+                </td>
+              </tr>
+              <!-- Line 12 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  12
+                </td>
+                <td class="px-4 whitespace-pre">
+                  &lt;<span class="text-[#e06c75]">button</span>
+                </td>
+              </tr>
+              <!-- Line 13 (Logic change) -->
+              <tr class="bg-yellow-500/10">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-yellow-500/30 bg-yellow-500/10 border-l-[3px] border-l-yellow-500"
+                >
+                  13
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">className</span>={<span
+                    class="text-[#98c379]"
+                    >`px-4 py-2 rounded-lg font-medium transition-colors
+                    \${variant === 'primary' ? 'bg-blue-600 text-white' :
+                    'bg-gray-200 text-gray-800'}`</span
+                  >}
+                </td>
+              </tr>
+              <!-- Line 14 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  14
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">onClick</span>={onClick}
+                </td>
+              </tr>
+              <!-- Line 15 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  15
+                </td>
+                <td class="px-4 whitespace-pre">
+                  <span class="text-[#e06c75]">disabled</span>={isLoading}
+                </td>
+              </tr>
+              <!-- Line 16 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  16
+                </td>
+                <td class="px-4 whitespace-pre">&gt;</td>
+              </tr>
+              <!-- Line 17 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  17
+                </td>
+                <td class="px-4 whitespace-pre">
+                  {isLoading ?
+                  <span class="text-[#98c379]">'Loading...'</span> : label}
+                </td>
+              </tr>
+              <!-- Line 18 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  18
+                </td>
+                <td class="px-4 whitespace-pre">
+                  &lt;/<span class="text-[#e06c75]">button</span>&gt;
+                </td>
+              </tr>
+              <!-- Line 19 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  19
+                </td>
+                <td class="px-4 whitespace-pre">);</td>
+              </tr>
+              <!-- Line 20 -->
+              <tr class="hover:bg-[#181b21]">
+                <td
+                  class="w-12 px-2 text-right text-[#4b5563] select-none border-r border-border-dark bg-[#111418]"
+                >
+                  20
+                </td>
+                <td class="px-4 whitespace-pre">};</td>
+              </tr>
+            </tbody>
+          </table>
+          <!-- Floating Info Badge (Simulating Code Lens) -->
+          <div
+            class="absolute top-24 right-4 bg-[#111418] border border-primary/30 rounded-lg p-3 shadow-xl max-w-xs animate-pulse"
+          >
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-primary text-xl"
+                >smart_toy</span
+              >
+              <div class="flex flex-col gap-1">
+                <p class="text-xs text-[#9dabb9]">AI Workflow #4402</p>
+                <p class="text-xs text-white">
+                  Added
+                  <code class="bg-[#283039] px-1 rounded text-primary"
+                    >variant</code
+                  >
+                  prop to support unified button styling across the repo.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Status Bar -->
+      <footer
+        class="h-8 bg-primary text-white flex items-center px-4 justify-between text-xs font-mono"
+      >
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm">account_tree</span>
+            <span>feature/auth-refactor</span>
+          </div>
+          <div class="flex items-center gap-1 opacity-80">
+            <span class="material-symbols-outlined text-sm">sync</span>
+            <span>Last synced 2m ago</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <span>Ln 10, Col 44</span>
+          <span>UTF-8</span>
+          <span>TypeScript React</span>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

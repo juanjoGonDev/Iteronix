@@ -267,12 +267,87 @@ Each entry MUST follow:
 
 Keep logs concise. Do not paste large outputs.
 
-## 13) Naming
-
-Working name: **Iteronix**  
-Alternatives: ForgeFlow, LoopForge, FlowSmith, RepoPilot, HexaFlow
-
 ## Repository hygiene
 
 - `.gitignore` must be created before the first commit.
 - No build artifacts, secrets, or local environment files may ever be committed.
+
+## UI spec (PNG + HTML) is the source of truth (mandatory)
+
+For each UI screen, store under `ui-spec/screens/<screen>/`:
+
+- `reference.png` (visual truth)
+- `spec.html` (structure/layout truth)
+
+Rules:
+
+- The implementation MUST match the PNG visually and the HTML structure conceptually.
+- The HTML MUST NOT be copied as a full-page blob into production code.
+- The agent MUST translate the spec into reusable components (Angular-style composition).
+- If the spec is ambiguous, do not guess: log and request clarification.
+
+## UI continuity & completion contract (mandatory)
+
+The UI must be consistent across screens and must never ship partially working interactions.
+
+### Continuity rules (global invariants)
+
+These must remain consistent across ALL screens unless explicitly changed by an approved UI spec update:
+
+- Navigation:
+
+  - Sidebar menu items, order, grouping, icons, and labels are global invariants.
+  - Header layout (left/center/right areas), global actions, and status indicators are global invariants.
+  - If a screen spec contradicts these invariants, the invariants win and the mismatch must be logged.
+
+- Visual system:
+
+  - Typography scale, spacing scale, colors/tokens, border radius, shadows, and icon style are global invariants.
+  - Do not introduce new icon styles or mixed icon sets. Pick ONE icon set and use it everywhere.
+  - No per-screen “creative” styling. Everything must come from shared primitives and tokens.
+
+- Layout structure:
+  - All screens must use the same shell: header + sidebar + main content + optional right panel.
+  - Do not reorder layout regions per screen.
+
+### Completion rules (no dead UI)
+
+The agent MUST NOT leave any of the following in a broken or misleading state:
+
+- Buttons that do nothing (unless explicitly disabled with a tooltip explaining why).
+- Menu items that look clickable but do not navigate.
+- Dropdowns/popovers that do not open or do not close properly.
+- Tabs that do not switch views.
+- Links that are placeholders with no behavior.
+
+If a feature is not implemented yet (out of scope or missing backend):
+
+- The UI MUST present it as disabled with:
+  - disabled styling
+  - tooltip or inline note: "Not available yet"
+- The action must NOT appear functional.
+
+### Spec reconciliation (when Stitch is inconsistent)
+
+The Stitch spec (PNG + HTML) is the per-screen visual reference, but global continuity must be maintained.
+
+When the spec is inconsistent across screens:
+
+1. Prefer global invariants (navigation order, icon set, shell layout).
+2. Match screen-specific content within that consistent shell.
+3. Log the discrepancy and the chosen resolution in AGENTS_LOGS.md.
+
+### Decision protocol (required)
+
+When choosing between alternatives (e.g., missing behavior, ambiguous component):
+
+- Decide once, document it, and reuse that decision everywhere.
+- Add or update a single shared primitive/component rather than per-screen hacks.
+
+### Done means done
+
+A UI change is considered complete only if:
+
+- The screen works end-to-end for its intended interactions (navigation, open/close, submit/cancel).
+- No new inconsistencies in menu/header/iconography are introduced.
+- All quality gates pass.

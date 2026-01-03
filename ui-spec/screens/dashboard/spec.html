@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix Dashboard</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- Theme Configuration -->
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922", // Main background
+              "surface-dark": "#161e27", // Cards/Panels
+              "surface-dark-hover": "#1c2631",
+              "border-dark": "#2b3644",
+              "text-secondary": "#9dabb9",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      .font-mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden selection:bg-primary selection:text-white"
+  >
+    <!-- Sidebar -->
+    <aside
+      class="w-64 bg-surface-dark border-r border-border-dark flex flex-col shrink-0 transition-all duration-300"
+    >
+      <!-- Logo -->
+      <div class="h-16 flex items-center px-6 border-b border-border-dark">
+        <div class="flex items-center gap-3">
+          <div
+            class="size-8 rounded bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20"
+          >
+            I
+          </div>
+          <div class="flex flex-col">
+            <span
+              class="font-bold text-lg tracking-tight leading-none text-white"
+              >Iteronix</span
+            >
+            <span class="text-xs text-text-secondary font-mono mt-0.5"
+              >v2.4.0 (Stable)</span
+            >
+          </div>
+        </div>
+      </div>
+      <!-- Navigation -->
+      <nav class="flex-1 overflow-y-auto py-6 px-3 flex flex-col gap-1">
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined text-text-secondary group-hover:text-white transition-colors"
+            >dashboard</span
+          >
+          <span class="text-sm font-medium">Dashboard</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-sm"
+          href="#"
+        >
+          <span class="material-symbols-outlined fill-1">folder</span>
+          <span class="text-sm font-medium">Projects</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined group-hover:text-white transition-colors"
+            >account_tree</span
+          >
+          <span class="text-sm font-medium">Workflows</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined group-hover:text-white transition-colors"
+            >terminal</span
+          >
+          <span class="text-sm font-medium">Runners</span>
+        </a>
+        <div class="my-4 border-t border-border-dark"></div>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined group-hover:text-white transition-colors"
+            >settings</span
+          >
+          <span class="text-sm font-medium">Settings</span>
+        </a>
+        <a
+          class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group"
+          href="#"
+        >
+          <span
+            class="material-symbols-outlined group-hover:text-white transition-colors"
+            >description</span
+          >
+          <span class="text-sm font-medium">Documentation</span>
+        </a>
+      </nav>
+      <!-- User Profile -->
+      <div class="p-4 border-t border-border-dark">
+        <div
+          class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-dark-hover cursor-pointer transition-colors"
+        >
+          <div
+            class="size-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white shadow-inner"
+            data-alt="User avatar gradient"
+          >
+            JD
+          </div>
+          <div class="flex flex-col overflow-hidden">
+            <span class="text-sm font-medium truncate text-white"
+              >John Doe</span
+            >
+            <span class="text-xs text-text-secondary truncate"
+              >DevOps Lead</span
+            >
+          </div>
+          <span
+            class="material-symbols-outlined text-text-secondary ml-auto text-[18px]"
+            >unfold_more</span
+          >
+        </div>
+      </div>
+    </aside>
+    <!-- Main Content -->
+    <main
+      class="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark"
+    >
+      <!-- Header -->
+      <header
+        class="h-16 flex items-center justify-between px-6 border-b border-border-dark bg-surface-dark/50 backdrop-blur-sm sticky top-0 z-20"
+      >
+        <!-- Breadcrumbs -->
+        <div class="flex items-center gap-2 text-text-secondary text-sm">
+          <span class="hover:text-white cursor-pointer transition-colors"
+            >Dashboard</span
+          >
+          <span class="material-symbols-outlined text-[16px]"
+            >chevron_right</span
+          >
+          <span
+            class="text-white font-medium bg-surface-dark px-2 py-0.5 rounded border border-border-dark"
+            >Projects</span
+          >
+        </div>
+        <!-- Header Actions -->
+        <div class="flex items-center gap-3">
+          <!-- Status Indicators -->
+          <div
+            class="flex items-center gap-4 mr-4 px-3 py-1.5 rounded-full bg-surface-dark border border-border-dark"
+          >
+            <div class="flex items-center gap-2" title="API Status: Online">
+              <div
+                class="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+              ></div>
+              <span class="text-xs font-medium text-emerald-500"
+                >API Online</span
+              >
+            </div>
+            <div class="w-px h-3 bg-border-dark"></div>
+            <div class="flex items-center gap-2" title="Runner Status">
+              <span class="text-xs font-medium text-text-secondary"
+                >Runners:</span
+              >
+              <span class="text-xs font-bold text-white">4/12 Active</span>
+            </div>
+          </div>
+          <div class="h-8 w-px bg-border-dark mx-1"></div>
+          <!-- Cost Badge -->
+          <button
+            class="flex items-center gap-2 h-9 px-3 bg-surface-dark hover:bg-surface-dark-hover border border-border-dark rounded-lg text-white text-xs font-medium transition-colors group"
+          >
+            <span class="material-symbols-outlined text-[18px] text-purple-400"
+              >smart_toy</span
+            >
+            <span>GPT-4o:</span>
+            <span
+              class="font-mono text-white group-hover:text-primary transition-colors"
+              >$2.30</span
+            >
+          </button>
+          <!-- Action Buttons -->
+          <button
+            class="size-9 flex items-center justify-center rounded-lg bg-surface-dark hover:bg-surface-dark-hover border border-border-dark text-text-secondary hover:text-white transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]"
+              >notifications</span
+            >
+          </button>
+          <button
+            class="h-9 px-4 bg-primary hover:bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-lg shadow-primary/25 transition-all flex items-center gap-2"
+          >
+            <span class="material-symbols-outlined text-[20px]">add</span>
+            New Project
+          </button>
+        </div>
+      </header>
+      <!-- Scrollable Content Area -->
+      <div class="flex-1 overflow-y-auto p-6 scrollbar-hide">
+        <div class="max-w-[1600px] mx-auto flex flex-col gap-6">
+          <!-- Page Heading & Stats -->
+          <div class="flex flex-col gap-6">
+            <div
+              class="flex flex-col sm:flex-row sm:items-end justify-between gap-4"
+            >
+              <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">
+                  Overview
+                </h1>
+                <p class="text-text-secondary mt-1">
+                  Manage your autonomous coding workflows and repositories.
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <!-- Time Range Selector placeholder if needed -->
+              </div>
+            </div>
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div
+                class="bg-surface-dark border border-border-dark rounded-xl p-5 hover:border-primary/30 transition-colors group"
+              >
+                <div class="flex justify-between items-start mb-4">
+                  <div
+                    class="p-2 bg-blue-500/10 rounded-lg text-blue-500 group-hover:text-blue-400 group-hover:bg-blue-500/20 transition-colors"
+                  >
+                    <span class="material-symbols-outlined">folder_open</span>
+                  </div>
+                  <span
+                    class="text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full"
+                    >+2 this week</span
+                  >
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-text-secondary text-sm font-medium"
+                    >Total Projects</span
+                  >
+                  <span class="text-2xl font-bold text-white">12</span>
+                </div>
+              </div>
+              <div
+                class="bg-surface-dark border border-border-dark rounded-xl p-5 hover:border-primary/30 transition-colors group"
+              >
+                <div class="flex justify-between items-start mb-4">
+                  <div
+                    class="p-2 bg-orange-500/10 rounded-lg text-orange-500 group-hover:text-orange-400 group-hover:bg-orange-500/20 transition-colors"
+                  >
+                    <span class="material-symbols-outlined">terminal</span>
+                  </div>
+                  <span
+                    class="text-xs font-medium text-text-secondary bg-surface-dark-hover px-2 py-0.5 rounded-full"
+                    >4 Idle</span
+                  >
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-text-secondary text-sm font-medium"
+                    >Active Runners</span
+                  >
+                  <span class="text-2xl font-bold text-white">8</span>
+                </div>
+              </div>
+              <div
+                class="bg-surface-dark border border-border-dark rounded-xl p-5 hover:border-primary/30 transition-colors group"
+              >
+                <div class="flex justify-between items-start mb-4">
+                  <div
+                    class="p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:text-purple-400 group-hover:bg-purple-500/20 transition-colors"
+                  >
+                    <span class="material-symbols-outlined">api</span>
+                  </div>
+                  <span class="text-xs font-medium text-emerald-500"
+                    >99.9% Uptime</span
+                  >
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-text-secondary text-sm font-medium"
+                    >API Requests</span
+                  >
+                  <span class="text-2xl font-bold text-white font-mono"
+                    >14,203</span
+                  >
+                </div>
+              </div>
+              <div
+                class="bg-surface-dark border border-border-dark rounded-xl p-5 hover:border-primary/30 transition-colors group"
+              >
+                <div class="flex justify-between items-start mb-4">
+                  <div
+                    class="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 group-hover:text-emerald-400 group-hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span class="material-symbols-outlined">payments</span>
+                  </div>
+                  <span class="text-xs font-medium text-text-secondary"
+                    >Current cycle</span
+                  >
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-text-secondary text-sm font-medium"
+                    >Monthly Cost</span
+                  >
+                  <span class="text-2xl font-bold text-white">$14.50</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Main Layout Grid -->
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <!-- Projects Column -->
+            <div class="xl:col-span-2 flex flex-col gap-4">
+              <!-- Search & Filters -->
+              <div class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                  <div
+                    class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+                  >
+                    <span class="material-symbols-outlined text-text-secondary"
+                      >search</span
+                    >
+                  </div>
+                  <input
+                    class="block w-full pl-10 pr-3 py-2.5 bg-surface-dark border border-border-dark rounded-lg text-white placeholder-text-secondary focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm font-medium transition-shadow"
+                    placeholder="Search projects, repositories, or tags..."
+                    type="text"
+                  />
+                </div>
+                <div class="flex gap-3">
+                  <select
+                    class="bg-surface-dark border border-border-dark text-white text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5 min-w-[140px] appearance-none cursor-pointer"
+                  >
+                    <option>All Statuses</option>
+                    <option>Running</option>
+                    <option>Completed</option>
+                    <option>Failed</option>
+                  </select>
+                  <button
+                    class="flex items-center justify-center px-4 py-2 bg-surface-dark border border-border-dark rounded-lg text-text-secondary hover:text-white hover:bg-surface-dark-hover transition-colors"
+                  >
+                    <span class="material-symbols-outlined">filter_list</span>
+                  </button>
+                </div>
+              </div>
+              <!-- Projects List -->
+              <div
+                class="bg-surface-dark border border-border-dark rounded-xl overflow-hidden shadow-sm"
+              >
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left border-collapse">
+                    <thead
+                      class="bg-surface-dark-hover/50 text-xs uppercase text-text-secondary font-semibold border-b border-border-dark"
+                    >
+                      <tr>
+                        <th class="px-6 py-4">Project / Repo</th>
+                        <th class="px-6 py-4">Stack</th>
+                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4 text-right">Last Updated</th>
+                        <th class="px-6 py-4"></th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border-dark">
+                      <!-- Item 1 -->
+                      <tr
+                        class="group hover:bg-surface-dark-hover/50 transition-colors"
+                      >
+                        <td class="px-6 py-4">
+                          <div class="flex items-center gap-4">
+                            <div
+                              class="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20"
+                            >
+                              <span class="material-symbols-outlined">dns</span>
+                            </div>
+                            <div>
+                              <div class="font-semibold text-white text-sm">
+                                Backend-Microservices
+                              </div>
+                              <a
+                                class="text-xs text-text-secondary hover:text-primary font-mono flex items-center gap-1 mt-0.5"
+                                href="#"
+                              >
+                                github.com/iteronix/backend
+                                <span
+                                  class="material-symbols-outlined text-[12px]"
+                                  >open_in_new</span
+                                >
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <div class="flex -space-x-2">
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="Python"
+                            >
+                              PY
+                            </div>
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="Docker"
+                            >
+                              DK
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                          >
+                            <span class="relative flex h-2 w-2">
+                              <span
+                                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"
+                              ></span>
+                              <span
+                                class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"
+                              ></span>
+                            </span>
+                            Running
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <div class="text-sm text-text-secondary">
+                            2 mins ago
+                          </div>
+                          <div class="text-xs text-text-secondary/60 font-mono">
+                            v2.1.0
+                          </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <button
+                            class="text-text-secondary hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                          >
+                            <span class="material-symbols-outlined"
+                              >more_vert</span
+                            >
+                          </button>
+                        </td>
+                      </tr>
+                      <!-- Item 2 -->
+                      <tr
+                        class="group hover:bg-surface-dark-hover/50 transition-colors"
+                      >
+                        <td class="px-6 py-4">
+                          <div class="flex items-center gap-4">
+                            <div
+                              class="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20"
+                            >
+                              <span class="material-symbols-outlined">web</span>
+                            </div>
+                            <div>
+                              <div class="font-semibold text-white text-sm">
+                                Frontend-Dashboard
+                              </div>
+                              <a
+                                class="text-xs text-text-secondary hover:text-primary font-mono flex items-center gap-1 mt-0.5"
+                                href="#"
+                              >
+                                github.com/iteronix/web-client
+                                <span
+                                  class="material-symbols-outlined text-[12px]"
+                                  >open_in_new</span
+                                >
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <div class="flex -space-x-2">
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="React"
+                            >
+                              TS
+                            </div>
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="Tailwind"
+                            >
+                              TW
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                          >
+                            <span class="material-symbols-outlined text-[14px]"
+                              >check_circle</span
+                            >
+                            Success
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <div class="text-sm text-text-secondary">
+                            4 hours ago
+                          </div>
+                          <div class="text-xs text-text-secondary/60 font-mono">
+                            release-4.2
+                          </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <button
+                            class="text-text-secondary hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                          >
+                            <span class="material-symbols-outlined"
+                              >more_vert</span
+                            >
+                          </button>
+                        </td>
+                      </tr>
+                      <!-- Item 3 -->
+                      <tr
+                        class="group hover:bg-surface-dark-hover/50 transition-colors"
+                      >
+                        <td class="px-6 py-4">
+                          <div class="flex items-center gap-4">
+                            <div
+                              class="size-10 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500 border border-rose-500/20"
+                            >
+                              <span class="material-symbols-outlined"
+                                >security</span
+                              >
+                            </div>
+                            <div>
+                              <div class="font-semibold text-white text-sm">
+                                Auth-Service
+                              </div>
+                              <a
+                                class="text-xs text-text-secondary hover:text-primary font-mono flex items-center gap-1 mt-0.5"
+                                href="#"
+                              >
+                                github.com/iteronix/auth
+                                <span
+                                  class="material-symbols-outlined text-[12px]"
+                                  >open_in_new</span
+                                >
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <div class="flex -space-x-2">
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="Go"
+                            >
+                              GO
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                          >
+                            <span class="material-symbols-outlined text-[14px]"
+                              >error</span
+                            >
+                            Failed
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <div class="text-sm text-text-secondary">
+                            1 day ago
+                          </div>
+                          <div class="text-xs text-text-secondary/60 font-mono">
+                            fix/login-bug
+                          </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <button
+                            class="text-text-secondary hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                          >
+                            <span class="material-symbols-outlined"
+                              >more_vert</span
+                            >
+                          </button>
+                        </td>
+                      </tr>
+                      <!-- Item 4 -->
+                      <tr
+                        class="group hover:bg-surface-dark-hover/50 transition-colors"
+                      >
+                        <td class="px-6 py-4">
+                          <div class="flex items-center gap-4">
+                            <div
+                              class="size-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20"
+                            >
+                              <span class="material-symbols-outlined"
+                                >dataset</span
+                              >
+                            </div>
+                            <div>
+                              <div class="font-semibold text-white text-sm">
+                                Data-Pipeline-V2
+                              </div>
+                              <a
+                                class="text-xs text-text-secondary hover:text-primary font-mono flex items-center gap-1 mt-0.5"
+                                href="#"
+                              >
+                                github.com/iteronix/data-pipe
+                                <span
+                                  class="material-symbols-outlined text-[12px]"
+                                  >open_in_new</span
+                                >
+                              </a>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <div class="flex -space-x-2">
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="Python"
+                            >
+                              PY
+                            </div>
+                            <div
+                              class="size-7 rounded-full bg-[#2b3644] border-2 border-surface-dark flex items-center justify-center text-[10px] text-white font-bold"
+                              title="SQL"
+                            >
+                              SQ
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-6 py-4">
+                          <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20"
+                          >
+                            <span class="material-symbols-outlined text-[14px]"
+                              >pause_circle</span
+                            >
+                            Paused
+                          </span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <div class="text-sm text-text-secondary">
+                            3 days ago
+                          </div>
+                          <div class="text-xs text-text-secondary/60 font-mono">
+                            feature/analytics
+                          </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                          <button
+                            class="text-text-secondary hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
+                          >
+                            <span class="material-symbols-outlined"
+                              >more_vert</span
+                            >
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div
+                  class="bg-surface-dark border-t border-border-dark px-6 py-3 flex items-center justify-between"
+                >
+                  <span class="text-xs text-text-secondary"
+                    >Showing 1-4 of 12 projects</span
+                  >
+                  <div class="flex gap-2">
+                    <button
+                      class="p-1 rounded hover:bg-white/5 text-text-secondary hover:text-white disabled:opacity-50"
+                    >
+                      <span class="material-symbols-outlined text-[18px]"
+                        >chevron_left</span
+                      >
+                    </button>
+                    <button
+                      class="p-1 rounded hover:bg-white/5 text-text-secondary hover:text-white"
+                    >
+                      <span class="material-symbols-outlined text-[18px]"
+                        >chevron_right</span
+                      >
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Right Column: Activity Feed / Terminal -->
+            <div class="xl:col-span-1 flex flex-col gap-4">
+              <div
+                class="bg-[#0d1117] border border-border-dark rounded-xl flex flex-col h-full min-h-[400px]"
+              >
+                <div
+                  class="px-4 py-3 border-b border-border-dark flex items-center justify-between bg-surface-dark rounded-t-xl"
+                >
+                  <div
+                    class="flex items-center gap-2 text-sm font-semibold text-white"
+                  >
+                    <span
+                      class="material-symbols-outlined text-text-secondary text-[18px]"
+                      >terminal</span
+                    >
+                    Live Logs
+                  </div>
+                  <div class="flex gap-1.5">
+                    <div
+                      class="size-2.5 rounded-full bg-red-500/20 border border-red-500/50"
+                    ></div>
+                    <div
+                      class="size-2.5 rounded-full bg-amber-500/20 border border-amber-500/50"
+                    ></div>
+                    <div
+                      class="size-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/50"
+                    ></div>
+                  </div>
+                </div>
+                <!-- Logs Content -->
+                <div
+                  class="p-4 font-mono text-xs flex-1 overflow-y-auto space-y-4 max-h-[500px]"
+                >
+                  <!-- Log Entry -->
+                  <div class="flex gap-3">
+                    <div class="flex flex-col items-center">
+                      <div
+                        class="size-2 rounded-full bg-blue-500 mt-1.5 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                      ></div>
+                      <div class="w-px h-full bg-border-dark my-1"></div>
+                    </div>
+                    <div class="flex flex-col gap-1 pb-2">
+                      <div class="text-text-secondary">10:42:15 AM</div>
+                      <div class="text-white">
+                        Started optimization task on
+                        <span class="text-blue-400">backend/db.py</span>
+                      </div>
+                      <div
+                        class="bg-surface-dark p-2 rounded border border-border-dark text-text-secondary mt-1"
+                      >
+                        &gt; Analyzing query performance...<br />
+                        &gt; Found 3 inefficient joins.
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Log Entry -->
+                  <div class="flex gap-3">
+                    <div class="flex flex-col items-center">
+                      <div
+                        class="size-2 rounded-full bg-emerald-500 mt-1.5"
+                      ></div>
+                      <div class="w-px h-full bg-border-dark my-1"></div>
+                    </div>
+                    <div class="flex flex-col gap-1 pb-2">
+                      <div class="text-text-secondary">10:38:22 AM</div>
+                      <div class="text-white">
+                        Pull Request merged:
+                        <span class="text-emerald-400">#42 Fix auth logic</span>
+                      </div>
+                      <div class="text-text-secondary">
+                        Triggered by
+                        <span class="text-white">Auto-Reviewer</span>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Log Entry -->
+                  <div class="flex gap-3">
+                    <div class="flex flex-col items-center">
+                      <div class="size-2 rounded-full bg-rose-500 mt-1.5"></div>
+                      <div class="w-px h-full bg-border-dark my-1"></div>
+                    </div>
+                    <div class="flex flex-col gap-1 pb-2">
+                      <div class="text-text-secondary">10:15:00 AM</div>
+                      <div class="text-white">
+                        Test suite failed on
+                        <span class="text-rose-400">Auth-Service</span>
+                      </div>
+                      <div
+                        class="bg-surface-dark p-2 rounded border border-border-dark text-rose-300 mt-1 bg-rose-950/20 border-rose-900/50"
+                      >
+                        Error: JWT signature invalid<br />
+                        at verifyToken (auth.go:154)
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Log Entry -->
+                  <div class="flex gap-3 opacity-60">
+                    <div class="flex flex-col items-center">
+                      <div
+                        class="size-2 rounded-full bg-text-secondary mt-1.5"
+                      ></div>
+                    </div>
+                    <div class="flex flex-col gap-1 pb-2">
+                      <div class="text-text-secondary">09:55:12 AM</div>
+                      <div class="text-text-secondary">
+                        System initialization complete
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Quick Actions / Tips -->
+              <div
+                class="bg-gradient-to-br from-surface-dark to-slate-900 border border-border-dark rounded-xl p-5"
+              >
+                <h3 class="text-sm font-semibold text-white mb-3">
+                  Quick Actions
+                </h3>
+                <div class="space-y-2">
+                  <button
+                    class="w-full flex items-center gap-3 p-2 rounded hover:bg-white/5 text-text-secondary hover:text-white transition-colors text-left text-sm group"
+                  >
+                    <span
+                      class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors"
+                      >add_circle</span
+                    >
+                    Import from GitHub
+                  </button>
+                  <button
+                    class="w-full flex items-center gap-3 p-2 rounded hover:bg-white/5 text-text-secondary hover:text-white transition-colors text-left text-sm group"
+                  >
+                    <span
+                      class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors"
+                      >key</span
+                    >
+                    Manage API Keys
+                  </button>
+                  <button
+                    class="w-full flex items-center gap-3 p-2 rounded hover:bg-white/5 text-text-secondary hover:text-white transition-colors text-left text-sm group"
+                  >
+                    <span
+                      class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors"
+                      >history</span
+                    >
+                    View Audit Logs
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

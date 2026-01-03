@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Iteronix Kanban Board</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+      }
+      .material-symbols-outlined.fill {
+        font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+      }
+      /* Hide scrollbar for cleaner UI but allow functionality */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      /* Custom scrollbar for the board */
+      .board-scroll::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      .board-scroll::-webkit-scrollbar-track {
+        background: #101922;
+      }
+      .board-scroll::-webkit-scrollbar-thumb {
+        background: #283039;
+        border-radius: 4px;
+      }
+      .board-scroll::-webkit-scrollbar-thumb:hover {
+        background: #374151;
+      }
+    </style>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922",
+              "surface-dark": "#1c252e",
+              "card-dark": "#242e38",
+              "border-dark": "#2f3b46",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden h-screen flex"
+  >
+    <!-- Left Sidebar -->
+    <aside
+      class="w-64 h-full flex flex-col border-r border-border-dark bg-background-dark shrink-0"
+    >
+      <div class="p-5 flex flex-col gap-1">
+        <div class="flex items-center gap-2 mb-6">
+          <div
+            class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white"
+          >
+            <span class="material-symbols-outlined text-[20px]">terminal</span>
+          </div>
+          <h1 class="text-white text-lg font-bold tracking-tight">Iteronix</h1>
+        </div>
+        <!-- Navigation Links -->
+        <nav class="flex flex-col gap-2">
+          <a
+            class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#9dabb9] hover:bg-surface-dark hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[24px]">dashboard</span>
+            <span class="text-sm font-medium">Dashboard</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#9dabb9] hover:bg-surface-dark hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[24px]">folder</span>
+            <span class="text-sm font-medium">Repositories</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20"
+            href="#"
+          >
+            <span class="material-symbols-outlined fill text-[24px]"
+              >view_kanban</span
+            >
+            <span class="text-sm font-bold">Kanban</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#9dabb9] hover:bg-surface-dark hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[24px]">settings</span>
+            <span class="text-sm font-medium">Settings</span>
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#9dabb9] hover:bg-surface-dark hover:text-white transition-colors group"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-[24px]"
+              >description</span
+            >
+            <span class="text-sm font-medium">Agent Logs</span>
+          </a>
+        </nav>
+      </div>
+      <div class="mt-auto p-5 border-t border-border-dark">
+        <div class="flex items-center gap-3 px-3 py-2">
+          <div
+            class="bg-center bg-no-repeat bg-cover rounded-full size-8 bg-gray-700"
+            data-alt="User avatar with gradient"
+            style="
+              background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDOmMtkOg_ccIzZbv881c0UPbxiX47lYAZS9DlIpYk5snlBqyjvHy6YOOT7bN9TbW8IHBd55Zq14YTOYw_wrsxim5qKGn7F8stfgPNRcndzDpFvLrHW1Spx7ICPzB-jxumOcFmwUEsDLPlB82yRj16X3CaT9olimZYiwg_3zs-Xa7WrsBp9_XYsHpjAMCJXrHmRxJcjteLWoGEhzsprqIVppe24Md92A9zUKHM2LUmcfR00YxyYXMOaZOBAIIRSTcJevjpRNfgM1wEY');
+            "
+          ></div>
+          <div class="flex flex-col">
+            <p class="text-white text-sm font-medium leading-none">Alex Dev</p>
+            <p class="text-[#9dabb9] text-xs font-normal mt-1">
+              Senior Engineer
+            </p>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 h-full relative">
+      <!-- Top Header -->
+      <header
+        class="h-16 border-b border-border-dark flex items-center justify-between px-6 bg-background-dark shrink-0 z-20"
+      >
+        <div class="flex items-center gap-4">
+          <!-- Breadcrumbs -->
+          <div class="flex items-center text-sm">
+            <span class="text-[#9dabb9] font-medium">Iteronix</span>
+            <span
+              class="material-symbols-outlined text-[#9dabb9] text-[16px] mx-2"
+              >chevron_right</span
+            >
+            <span class="text-white font-medium flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">dns</span>
+              repo/core-backend
+            </span>
+            <span
+              class="px-2 py-0.5 ml-3 rounded text-[10px] font-mono bg-blue-900/40 text-blue-300 border border-blue-800"
+              >main</span
+            >
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <!-- Search -->
+          <div class="relative group">
+            <div
+              class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+            >
+              <span class="material-symbols-outlined text-[#9dabb9] text-[20px]"
+                >search</span
+              >
+            </div>
+            <input
+              class="block w-64 bg-surface-dark border border-border-dark text-white text-sm rounded-lg focus:ring-primary focus:border-primary block pl-10 p-2 placeholder-[#5e6b7a]"
+              placeholder="Search tasks, commits..."
+              type="text"
+            />
+          </div>
+          <!-- Create Button -->
+          <button
+            class="flex items-center gap-2 bg-primary hover:bg-blue-600 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]">add</span>
+            Create Task
+          </button>
+        </div>
+      </header>
+      <!-- Filters & Toolbar -->
+      <div
+        class="h-14 border-b border-border-dark flex items-center px-6 bg-background-dark/95 backdrop-blur shrink-0 gap-4 overflow-x-auto no-scrollbar"
+      >
+        <div class="flex items-center gap-2">
+          <span
+            class="text-[#9dabb9] text-xs font-bold uppercase tracking-wider mr-2"
+            >Filters:</span
+          >
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-dark border border-border-dark hover:border-gray-500 transition-colors group"
+          >
+            <div
+              class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center"
+            >
+              <span class="material-symbols-outlined text-[14px]">person</span>
+            </div>
+            <span class="text-white text-sm">My Tasks</span>
+            <span class="material-symbols-outlined text-[#9dabb9] text-[16px]"
+              >close</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-dark border border-border-dark hover:border-gray-500 transition-colors"
+          >
+            <div
+              class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center"
+            >
+              <span class="material-symbols-outlined text-[14px]"
+                >smart_toy</span
+              >
+            </div>
+            <span class="text-white text-sm">Agent: DevOps</span>
+            <span class="material-symbols-outlined text-[#9dabb9] text-[16px]"
+              >close</span
+            >
+          </button>
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-dark border border-dashed border-gray-600 text-[#9dabb9] hover:text-white hover:border-gray-400 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span class="text-sm font-medium">Add Filter</span>
+          </button>
+        </div>
+        <div class="w-px h-6 bg-border-dark mx-2"></div>
+        <div class="flex items-center gap-4 ml-auto">
+          <div class="flex -space-x-2">
+            <div
+              class="bg-center bg-no-repeat bg-cover rounded-full size-8 border-2 border-background-dark"
+              data-alt="Team member 1"
+              style="
+                background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAxeYRmJBeQaFohqxTKeNLfuhFfFz7PfEQ5a-TdUiEPIkkz19a5eX6cZW_UJ319G3cOAiibaoiYiaVxR7_Kcbgvkh3d6CCTMVth4BSi84ESFNCVbXljcac9PW6iLRZUiPoU2SoEw5YVKkvwbi32w1PsE33brjARuOIPwJNb4NVRxKPJza57w3m8fyFieald3hrMZ3KLfuDm_YIYIiEuS-FtZmUpD6gRy3Qbun1ErGkOgw03BqztuJuMFE3zusJs5ZWjChCQITzablpX');
+              "
+            ></div>
+            <div
+              class="bg-center bg-no-repeat bg-cover rounded-full size-8 border-2 border-background-dark"
+              data-alt="Team member 2"
+              style="
+                background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBphhkkhd6qYVIqp_0ZlUB0fbbtyxTH37utwiPQgBCAGbsi9yI5cxOq0nvN27bKPLPjkwZOdMFezalOtPBOegVSur96acyL4_iafZGhYuTedlmqMIHV_o6VOVwPbCU0Wmw8bfE-_dzJGmNvTJYf5plre89sIULvl57h50u6x55T6CjkjxshSFQrrm8bw9_tsCCdRmrZT6Ia8leZ8-MmerrZx0ptgY4S6q90qXMGSVJTGGwg0vbf1gR92nnPw6AGqmTkzFyXZjzgC1rz');
+              "
+            ></div>
+            <div
+              class="flex items-center justify-center rounded-full size-8 border-2 border-background-dark bg-surface-dark text-xs text-white font-medium"
+            >
+              +3
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Kanban Board Canvas -->
+      <div
+        class="flex-1 overflow-x-auto overflow-y-hidden board-scroll p-6 bg-[#0d1218]"
+      >
+        <div class="flex h-full gap-6 min-w-max">
+          <!-- Column: IDEAS -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-[#9dabb9] font-bold text-sm tracking-wide"
+                  >IDEAS</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >3</span
+                >
+              </div>
+              <div class="flex gap-1">
+                <button class="text-[#9dabb9] hover:text-white">
+                  <span class="material-symbols-outlined text-[20px]">add</span>
+                </button>
+                <button class="text-[#9dabb9] hover:text-white">
+                  <span class="material-symbols-outlined text-[20px]"
+                    >more_horiz</span
+                  >
+                </button>
+              </div>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-border-dark shadow-sm hover:border-primary/50 transition-colors cursor-pointer group relative"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-401</span>
+                  <div
+                    class="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center"
+                    title="Agent: Product"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >lightbulb</span
+                    >
+                  </div>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Explore GraphQL migration for user service
+                </h3>
+                <div
+                  class="flex items-center justify-between mt-2 pt-2 border-t border-white/5"
+                >
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="material-symbols-outlined text-gray-500 text-[16px]"
+                      >chat_bubble</span
+                    >
+                    <span class="text-xs text-gray-500">2</span>
+                  </div>
+                  <div
+                    class="px-2 py-0.5 rounded bg-white/5 text-[10px] text-gray-400"
+                  >
+                    Research
+                  </div>
+                </div>
+              </div>
+              <!-- Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-border-dark shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-405</span>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Implement dark mode toggle in settings
+                </h3>
+              </div>
+            </div>
+          </div>
+          <!-- Column: REVIEW -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-yellow-500 font-bold text-sm tracking-wide"
+                  >REVIEW</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >1</span
+                >
+              </div>
+              <button class="text-[#9dabb9] hover:text-white">
+                <span class="material-symbols-outlined text-[20px]"
+                  >more_horiz</span
+                >
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Review Card with Actions -->
+              <div
+                class="bg-card-dark rounded-lg border border-yellow-500/30 shadow-lg shadow-yellow-900/10 cursor-pointer overflow-hidden"
+              >
+                <div class="p-4 pb-3">
+                  <div class="flex justify-between items-start mb-2">
+                    <span class="text-[#5e6b7a] font-mono text-xs"
+                      >#IT-392</span
+                    >
+                    <div
+                      class="flex items-center gap-1 bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded text-[10px] font-bold border border-yellow-500/20"
+                    >
+                      PR #102
+                    </div>
+                  </div>
+                  <h3 class="text-white text-sm font-medium leading-snug mb-2">
+                    Refactor Auth Middleware for JWT rotation
+                  </h3>
+                  <div class="flex items-center gap-2 mb-3">
+                    <div
+                      class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center"
+                    >
+                      <span class="material-symbols-outlined text-[14px]"
+                        >smart_toy</span
+                      >
+                    </div>
+                    <span class="text-xs text-gray-400">Agent: Backend</span>
+                  </div>
+                  <div
+                    class="bg-[#111418] rounded p-2 mb-2 border border-white/5"
+                  >
+                    <code class="text-[10px] text-gray-400 font-mono block"
+                      >+ src/auth/middleware.ts</code
+                    >
+                    <div class="flex gap-2 mt-1 text-[10px]">
+                      <span class="text-green-400">+124</span>
+                      <span class="text-red-400">-45</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Action Footer -->
+                <div
+                  class="bg-[#1c2229] p-2 flex gap-2 border-t border-white/5"
+                >
+                  <button
+                    class="flex-1 bg-primary hover:bg-blue-600 text-white text-xs font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >check</span
+                    >
+                    Approve
+                  </button>
+                  <button
+                    class="px-2 py-1.5 bg-surface-dark hover:bg-gray-700 text-gray-300 text-xs font-medium rounded border border-gray-700 transition-colors flex items-center justify-center"
+                    title="Request Changes"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >edit_note</span
+                    >
+                  </button>
+                  <button
+                    class="px-2 py-1.5 bg-surface-dark hover:bg-red-900/30 text-gray-400 hover:text-red-400 text-xs font-medium rounded border border-gray-700 hover:border-red-900 transition-colors flex items-center justify-center"
+                    title="Close/Delete"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >close</span
+                    >
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Column: TODO -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-[#9dabb9] font-bold text-sm tracking-wide"
+                  >TODO</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >4</span
+                >
+              </div>
+              <button class="text-[#9dabb9] hover:text-white">
+                <span class="material-symbols-outlined text-[20px]"
+                  >more_horiz</span
+                >
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-border-dark shadow-sm hover:border-primary/50 transition-colors cursor-pointer opacity-75 hover:opacity-100"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-410</span>
+                  <div
+                    class="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center"
+                    title="Agent: DevOps"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >cloud</span
+                    >
+                  </div>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Setup Docker Registry for staging environment
+                </h3>
+                <div class="flex gap-2">
+                  <span
+                    class="px-2 py-0.5 rounded bg-white/5 text-[10px] text-gray-400 border border-white/5"
+                    >Infrastructure</span
+                  >
+                </div>
+              </div>
+              <!-- Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-border-dark shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-412</span>
+                  <div
+                    class="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center"
+                    title="Agent: Backend"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >smart_toy</span
+                    >
+                  </div>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Create User Seeder data
+                </h3>
+              </div>
+            </div>
+          </div>
+          <!-- Column: IN_PROGRESS -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-primary font-bold text-sm tracking-wide"
+                  >IN PROGRESS</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >2</span
+                >
+              </div>
+              <button class="text-[#9dabb9] hover:text-white">
+                <span class="material-symbols-outlined text-[20px]"
+                  >more_horiz</span
+                >
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Running Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-primary/40 shadow-lg shadow-blue-900/10 cursor-pointer relative overflow-hidden"
+              >
+                <!-- Progress Bar -->
+                <div
+                  class="absolute top-0 left-0 right-0 h-0.5 bg-surface-dark"
+                >
+                  <div class="h-full bg-primary w-2/3 animate-pulse"></div>
+                </div>
+                <div class="flex justify-between items-start mb-2 mt-1">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-388</span>
+                  <div
+                    class="flex items-center gap-1.5 text-primary text-[10px] font-bold uppercase tracking-wide bg-primary/10 px-2 py-0.5 rounded-full"
+                  >
+                    <span
+                      class="material-symbols-outlined text-[14px] animate-spin"
+                      >sync</span
+                    >
+                    Running
+                  </div>
+                </div>
+                <h3 class="text-white text-sm font-medium leading-snug mb-3">
+                  Generating Swagger API Documentation
+                </h3>
+                <div
+                  class="flex items-center gap-2 text-xs text-gray-400 mt-2 bg-[#111418] p-2 rounded border border-white/5"
+                >
+                  <span
+                    class="material-symbols-outlined text-[14px] text-primary"
+                    >terminal</span
+                  >
+                  <span class="font-mono truncate"
+                    >Parsing routes/v1/users.ts...</span
+                  >
+                </div>
+                <div class="flex items-center justify-between mt-3">
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center"
+                    >
+                      <span class="material-symbols-outlined text-[14px]"
+                        >smart_toy</span
+                      >
+                    </div>
+                    <span class="text-xs text-gray-500">Agent: Backend</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Blocked Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-orange-500/30 cursor-pointer"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-409</span>
+                  <div
+                    class="flex items-center gap-1 text-orange-400 text-[10px] font-bold uppercase tracking-wide bg-orange-500/10 px-2 py-0.5 rounded-full border border-orange-500/20"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >do_not_disturb_on</span
+                    >
+                    Blocked
+                  </div>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Integrate Stripe Payment Gateway
+                </h3>
+                <div
+                  class="flex items-center gap-2 text-xs text-orange-300 mt-2 bg-orange-900/20 p-2 rounded border border-orange-500/20"
+                >
+                  <span class="material-symbols-outlined text-[14px]"
+                    >warning</span
+                  >
+                  <span>Missing API Keys in Env</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Column: QA -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-purple-400 font-bold text-sm tracking-wide"
+                  >QA</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >1</span
+                >
+              </div>
+              <button class="text-[#9dabb9] hover:text-white">
+                <span class="material-symbols-outlined text-[20px]"
+                  >more_horiz</span
+                >
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Failed Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-red-500/30 cursor-pointer"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs">#IT-385</span>
+                  <div
+                    class="flex items-center gap-1 text-red-400 text-[10px] font-bold uppercase tracking-wide bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >error</span
+                    >
+                    Failed
+                  </div>
+                </div>
+                <h3 class="text-gray-200 text-sm font-medium leading-snug mb-3">
+                  Run Integration Test Suite
+                </h3>
+                <div
+                  class="flex items-center gap-2 text-xs text-red-300 mt-2 bg-red-900/20 p-2 rounded border border-red-500/20"
+                >
+                  <span class="material-symbols-outlined text-[14px]"
+                    >bug_report</span
+                  >
+                  <span class="font-mono">AssertionError: 200 != 500</span>
+                </div>
+                <div class="flex items-center justify-between mt-3">
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center"
+                    >
+                      <span class="material-symbols-outlined text-[14px]"
+                        >cloud</span
+                      >
+                    </div>
+                    <span class="text-xs text-gray-500">Agent: DevOps</span>
+                  </div>
+                  <button
+                    class="text-xs text-white bg-red-600 hover:bg-red-500 px-2 py-1 rounded"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Column: DONE -->
+          <div class="flex flex-col w-[320px] h-full">
+            <div class="flex items-center justify-between mb-4 px-1">
+              <div class="flex items-center gap-2">
+                <span class="text-emerald-500 font-bold text-sm tracking-wide"
+                  >DONE</span
+                >
+                <span
+                  class="bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark"
+                  >12</span
+                >
+              </div>
+              <button class="text-[#9dabb9] hover:text-white">
+                <span class="material-symbols-outlined text-[20px]"
+                  >more_horiz</span
+                >
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-3 h-full overflow-y-auto pr-2 board-scroll pb-10"
+            >
+              <!-- Done Card -->
+              <div
+                class="bg-card-dark rounded-lg p-4 border border-border-dark opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[#5e6b7a] font-mono text-xs line-through"
+                    >#IT-350</span
+                  >
+                  <div class="text-emerald-500">
+                    <span class="material-symbols-outlined text-[20px]"
+                      >check_circle</span
+                    >
+                  </div>
+                </div>
+                <h3
+                  class="text-gray-400 text-sm font-medium leading-snug mb-3 line-through"
+                >
+                  Initialize Repository Structure
+                </h3>
+                <div class="flex items-center gap-2 mt-2">
+                  <div
+                    class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >smart_toy</span
+                    >
+                  </div>
+                  <span class="text-xs text-gray-600">Closed 2 days ago</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Add Column Placeholder -->
+          <div class="flex flex-col min-w-[50px] h-full pt-10">
+            <button
+              class="w-12 h-full rounded-lg border border-dashed border-gray-700 hover:border-gray-500 hover:bg-white/5 transition-all flex flex-col items-center justify-start py-4 text-gray-500 hover:text-gray-300"
+            >
+              <span class="material-symbols-outlined text-[24px]"
+                >add_column_right</span
+              >
+              <span
+                class="text-[10px] mt-2 font-medium vertical-rl writing-vertical"
+                style="writing-mode: vertical-rl"
+                >Add Column</span
+              >
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <!-- Modal for Task Details (Hidden by default, shown conceptually) -->
+    <!-- In a real app, this would be toggled. Just CSS for now -->
+  </body>
+</html>
