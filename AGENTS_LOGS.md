@@ -668,3 +668,22 @@
   - live-server pulls deprecated subdependencies flagged by pnpm.
 - Next:
   - Define the strict agent step JSON schema (Ajv) in packages/shared with tests.
+### 2026-01-04 00:42 (Europe/Madrid) — Web UI
+
+- Summary: Established shared navigation/header invariants, rebuilt the Projects overview layout to match the dashboard spec, and ensured header actions and disabled controls avoid dead UI.
+- Decisions:
+  - Kept the existing typography, light theme, and icon-less navigation as global invariants despite the dark/icon-heavy Stitch spec, logging the mismatch.
+  - Made global header actions scroll/focus their target sections instead of leaving them inert.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/src/index.ts
+  - apps/web-ui/src/screens/projects.ts
+  - apps/web-ui/src/shared/shell.ts
+  - apps/web-ui/src/shared/ui.ts
+  - PLAN.md
+- Commands:
+  - `TZ=Europe/Madrid date "+%Y-%m-%d %H:%M"`
+- Issues/Risks:
+  - Dashboard spec uses a dark palette and Material icons that conflict with current global UI invariants.
+- Next:
+  - Implement the layout shell consistency checklist doc and apply interaction completeness validation for another screen.

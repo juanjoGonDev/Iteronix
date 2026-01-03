@@ -161,6 +161,17 @@
         flex-wrap: wrap;
       }
 
+      .top-action {
+        display: grid;
+        gap: var(--space-2xs);
+        justify-items: start;
+      }
+
+      .disabled-note {
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+
       .layout {
         display: grid;
         gap: var(--space-4xl);
@@ -360,6 +371,20 @@
         gap: var(--space-xs);
       }
 
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-lg);
+        flex-wrap: wrap;
+      }
+
+      .section-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+      }
+
       .section-heading h3 {
         margin: 0;
         font-size: var(--text-xl);
@@ -394,6 +419,200 @@
       .project-card {
         display: grid;
         gap: var(--space-lg);
+      }
+
+      .dashboard-grid {
+        display: grid;
+        gap: var(--space-3xl);
+      }
+
+      .dashboard-main,
+      .dashboard-side {
+        display: grid;
+        gap: var(--space-3xl);
+      }
+
+      .stats-grid {
+        display: grid;
+        gap: var(--space-xl);
+      }
+
+      .stat-card {
+        display: grid;
+        gap: var(--space-md);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+
+      .stat-value {
+        font-size: var(--text-2xl);
+        font-weight: 700;
+      }
+
+      .projects-panel {
+        display: grid;
+        gap: var(--space-2xl);
+      }
+
+      .projects-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-lg);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .search-field {
+        flex: 1;
+        min-width: 220px;
+      }
+
+      .search-field input,
+      .toolbar-select {
+        width: 100%;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--stroke);
+        padding: var(--space-sm) var(--space-lg);
+        background: var(--surface-input);
+        font-size: var(--text-base);
+      }
+
+      .toolbar-select {
+        min-width: 160px;
+      }
+
+      .projects-table {
+        display: grid;
+        gap: var(--space-md);
+      }
+
+      .project-row {
+        display: grid;
+        gap: var(--space-md);
+        padding: var(--space-md) var(--space-lg);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--stroke-soft);
+        background: var(--surface-strong);
+      }
+
+      .project-row.header {
+        background: var(--surface-muted);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .project-main {
+        display: grid;
+        gap: var(--space-2xs);
+      }
+
+      .project-repo {
+        font-size: var(--text-sm);
+        color: var(--muted);
+      }
+
+      .stack-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+      }
+
+      .stack-chip {
+        padding: 2px var(--space-sm);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--stroke);
+        font-size: var(--text-xs);
+        color: var(--muted);
+        background: var(--surface);
+      }
+
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        padding: 2px var(--space-sm);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        border: 1px solid transparent;
+        width: fit-content;
+      }
+
+      .status-chip[data-status="running"] {
+        background: var(--accent-2-bg);
+        border-color: var(--accent-2-border);
+        color: var(--accent-2-ink);
+      }
+
+      .status-chip[data-status="success"] {
+        background: rgba(44, 140, 124, 0.12);
+        border-color: rgba(44, 140, 124, 0.35);
+        color: var(--accent-2-ink);
+      }
+
+      .status-chip[data-status="failed"] {
+        background: rgba(226, 104, 59, 0.16);
+        border-color: rgba(226, 104, 59, 0.4);
+        color: var(--accent-ink);
+      }
+
+      .status-chip[data-status="paused"] {
+        background: rgba(91, 106, 112, 0.12);
+        border-color: rgba(91, 106, 112, 0.3);
+        color: var(--muted);
+      }
+
+      .status-chip[data-status="idle"] {
+        background: rgba(91, 106, 112, 0.1);
+        border-color: rgba(91, 106, 112, 0.25);
+        color: var(--muted);
+      }
+
+      .projects-empty {
+        text-align: center;
+        color: var(--muted);
+        padding: var(--space-3xl);
+        border: 1px dashed var(--stroke-dashed);
+        border-radius: var(--radius-md);
+      }
+
+      .projects-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+
+      .log-list {
+        display: grid;
+        gap: var(--space-sm);
+      }
+
+      .log-item {
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-sm);
+        background: var(--surface-muted);
+        border: 1px solid var(--stroke-soft);
+      }
+
+      .log-item strong {
+        font-size: var(--text-xs);
+        color: var(--muted-strong);
+      }
+
+      .quick-actions {
+        display: grid;
+        gap: var(--space-xl);
+      }
+
+      .quick-actions .field {
+        margin-bottom: 0;
       }
 
       .project-actions,
@@ -490,6 +709,13 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--space-lg);
+        flex-wrap: wrap;
+      }
+
+      .editor-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
         flex-wrap: wrap;
       }
 
@@ -871,6 +1097,20 @@
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        .dashboard-grid {
+          grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+          align-items: start;
+        }
+
+        .stats-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .project-row {
+          grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
+          align-items: center;
+        }
+
         .repo-grid {
           grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
         }
@@ -911,42 +1151,14 @@
           <div class="brand-mark"></div>
           <h1 class="brand-title">Iteronix</h1>
         </div>
-        <div class="top-actions">
-          <button class="btn">Connect</button>
-          <button class="btn primary">New Run</button>
-        </div>
+        <div class="top-actions" data-top-actions></div>
       </header>
 
       <div class="layout">
         <aside class="sidebar">
           <nav class="panel sidebar-card">
             <h3>Navigate</h3>
-            <div class="nav-list">
-              <a class="nav-link" href="#overview">
-                <span>Overview</span>
-                <span class="chip">Shell</span>
-              </a>
-              <a class="nav-link" href="#projects">
-                <span>Projects</span>
-                <span class="chip">3</span>
-              </a>
-              <a class="nav-link" href="#repo">
-                <span>Repository</span>
-                <span class="chip">Tree</span>
-              </a>
-              <a class="nav-link" href="#runs">
-                <span>Runs</span>
-                <span class="chip">Live</span>
-              </a>
-              <a class="nav-link" href="#settings">
-                <span>Settings</span>
-                <span class="chip">Profiles</span>
-              </a>
-              <a class="nav-link" href="#kanban">
-                <span>Kanban</span>
-                <span class="chip">Flow</span>
-              </a>
-            </div>
+            <div class="nav-list" data-nav-list></div>
           </nav>
           <div class="panel sidebar-card">
             <h3>Workspace</h3>
@@ -1011,42 +1223,112 @@
       </section>
 
           <section class="projects screen" id="projects">
-        <div class="section-heading">
-          <h3>Projects</h3>
-          <p>Create, open, or revisit a workspace to orchestrate runs.</p>
+        <div class="section-header">
+          <div class="section-heading">
+            <h3>Overview</h3>
+            <p>Manage your autonomous coding workflows and repositories.</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn primary" type="button" data-project-new>New Project</button>
+          </div>
         </div>
-        <div class="projects-grid">
-          <article class="panel project-card motion delay-1">
-            <h3>Create project</h3>
-            <div class="field">
-              <label for="project-name">Project name</label>
-              <input id="project-name" type="text" placeholder="Iteronix Core" autocomplete="off" data-project-name>
+        <div class="dashboard-grid">
+          <div class="dashboard-main">
+            <div class="stats-grid">
+              <article class="panel stat-card motion delay-1">
+                <span class="stat-label">Total Projects</span>
+                <strong class="stat-value" data-stat-total>0</strong>
+                <span class="chip" data-stat-total-label>Tracked</span>
+              </article>
+              <article class="panel stat-card motion delay-2">
+                <span class="stat-label">Active Runners</span>
+                <strong class="stat-value" data-stat-runners>0</strong>
+                <span class="chip" data-stat-runners-label>Running</span>
+              </article>
+              <article class="panel stat-card motion delay-3">
+                <span class="stat-label">API Requests</span>
+                <strong class="stat-value" data-stat-requests>0</strong>
+                <span class="chip" data-stat-requests-label>Last 30d</span>
+              </article>
+              <article class="panel stat-card motion delay-3">
+                <span class="stat-label">Monthly Cost</span>
+                <strong class="stat-value" data-stat-cost>$0.00</strong>
+                <span class="chip" data-stat-cost-label>Current cycle</span>
+              </article>
             </div>
-            <div class="field">
-              <label for="project-path">Workspace root</label>
-              <input id="project-path" type="text" placeholder="D:\\workspace\\iteronix" autocomplete="off" data-project-path>
-            </div>
-            <small class="hint">Saved locally until the server is connected.</small>
-            <div class="project-actions">
-              <button class="btn primary" data-create-project>Create project</button>
-            </div>
-          </article>
-          <article class="panel project-card motion delay-2">
-            <h3>Open existing</h3>
-            <div class="field">
-              <label for="open-path">Workspace path</label>
-              <input id="open-path" type="text" placeholder="D:\\workspace\\another-repo" autocomplete="off" data-open-path>
-            </div>
-            <small class="hint">Connect to an existing root on the server.</small>
-            <div class="project-actions">
-              <button class="btn" data-open-project>Open project</button>
-            </div>
-          </article>
-          <article class="panel project-card motion delay-3">
-            <h3>Recent workspaces</h3>
-            <div class="recent-list" data-recent-list></div>
-            <div class="recent-empty" data-recent-empty>No recent projects yet.</div>
-          </article>
+            <article class="panel projects-panel">
+              <div class="projects-toolbar">
+                <div class="search-field">
+                  <input type="search" placeholder="Search projects, repositories, or tags" autocomplete="off" data-project-search>
+                </div>
+                <div>
+                  <select class="toolbar-select" data-project-status></select>
+                </div>
+              </div>
+              <div class="projects-table">
+                <div class="project-row header">
+                  <span>Project / Repo</span>
+                  <span>Stack</span>
+                  <span>Status</span>
+                  <span>Last Update</span>
+                </div>
+                <div class="project-table-body" data-project-table></div>
+                <div class="projects-empty" data-projects-empty>No matching projects found.</div>
+              </div>
+              <div class="projects-footer">
+                <span data-projects-footer>Showing 0 of 0 projects</span>
+                <span data-projects-status>All statuses</span>
+              </div>
+            </article>
+          </div>
+          <aside class="dashboard-side">
+            <article class="panel log-panel">
+              <div class="repo-title">
+                <strong>Live Logs</strong>
+                <span class="chip">Streaming</span>
+              </div>
+              <div class="log-list">
+                <div class="log-item">
+                  <strong>10:42:15</strong>
+                  <p>Started optimization task on backend/db.py</p>
+                </div>
+                <div class="log-item">
+                  <strong>10:38:22</strong>
+                  <p>Pull request merged: Fix auth logic</p>
+                </div>
+                <div class="log-item">
+                  <strong>10:15:00</strong>
+                  <p>JWT signature invalid at verifyToken (auth.go:154)</p>
+                </div>
+                <div class="log-item">
+                  <strong>09:55:12</strong>
+                  <p>System initialization complete</p>
+                </div>
+              </div>
+            </article>
+            <article class="panel quick-actions">
+              <h3>Quick Actions</h3>
+              <div class="field">
+                <label for="project-name">Project name</label>
+                <input id="project-name" type="text" placeholder="Iteronix Core" autocomplete="off" data-project-name>
+              </div>
+              <div class="field">
+                <label for="project-path">Workspace root</label>
+                <input id="project-path" type="text" placeholder="/workspace/iteronix" autocomplete="off" data-project-path>
+              </div>
+              <div class="project-actions">
+                <button class="btn primary" type="button" data-create-project>Create project</button>
+              </div>
+              <div class="field">
+                <label for="open-path">Workspace path</label>
+                <input id="open-path" type="text" placeholder="/workspace/another-repo" autocomplete="off" data-open-path>
+              </div>
+              <div class="project-actions">
+                <button class="btn" type="button" data-open-project>Open project</button>
+              </div>
+              <small class="hint">Saved locally until the server is connected.</small>
+            </article>
+          </aside>
         </div>
       </section>
 
@@ -1069,7 +1351,10 @@
                 <strong data-editor-file>Select a file</strong>
                 <span data-editor-language>Text</span>
               </div>
-              <button class="btn" type="button">Open in Monaco</button>
+              <div class="editor-actions">
+                <button class="btn" type="button" disabled>Open in Monaco</button>
+                <span class="disabled-note">Not available yet</span>
+              </div>
             </div>
             <div class="editor-body">
               <div class="editor-gutter" data-editor-lines></div>
