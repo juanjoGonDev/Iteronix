@@ -530,3 +530,21 @@
   - None
 - Next:
   - Verify apps/web-ui remains free of Electron-specific code and update PLAN.md.
+### 2026-01-03 21:25 (Europe/Madrid) - Web UI
+
+- Summary: Verified the web UI has no Electron-specific APIs or assumptions and marked the checklist item complete.
+- Decisions:
+  - Use a keyword search to confirm Electron-only APIs are absent from apps/web-ui.
+  - Close the Milestone 3 Electron-free checklist item.
+- Changes:
+  - PLAN.md
+- Commands:
+  - `rg -n "electron|ipcRenderer|ipcMain|contextBridge|preload|nodeIntegration|BrowserWindow" apps/web-ui`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Start Milestone 4 by scaffolding apps/desktop-main.

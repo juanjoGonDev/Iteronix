@@ -84,7 +84,7 @@ Acceptance:
 - [x] Emit browser-ready JS for web UI modules via tsc build output
 - [x] Shared styles, fonts, icons, etc. Use glogal variables and CSS custom properties. Dont repeat styles.
 - [x] Make sure all screens use always the same layout structure (header, sidebar, main content, footer, styles, etc.)
-- [ ] No Electron-specific code in UI
+- [x] No Electron-specific code in UI
 
 Acceptance:
 
