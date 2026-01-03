@@ -257,6 +257,24 @@
   - None
 - Next:
   - Implement the responsive web UI scaffold in apps/web-ui.
+### 2026-01-03 19:01 (Europe/Madrid) - Web UI
+
+- Summary: Added a minimal responsive web UI shell with layout styling and updated the milestone checkbox.
+- Decisions:
+  - Use a static HTML shell with inline styles for the initial responsive scaffold.
+  - Keep the layout mobile-first with a simple kanban preview and hero panel.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add PWA manifest and service worker in apps/web-ui.
 ### 2026-01-03 17:22 (Europe/Madrid) - Testing
 
 - Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.

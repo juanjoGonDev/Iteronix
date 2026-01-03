@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Iteronix</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+      :root {
+        color-scheme: light;
+        --bg: #f5f1e9;
+        --bg-2: #f0f7f2;
+        --ink: #1c2a2e;
+        --muted: #5b6a70;
+        --accent: #e2683b;
+        --accent-2: #2c8c7c;
+        --accent-3: #f2b85b;
+        --surface: rgba(255, 255, 255, 0.88);
+        --surface-strong: #ffffff;
+        --stroke: rgba(28, 42, 46, 0.12);
+        --shadow: 0 20px 50px rgba(26, 35, 39, 0.12);
+        --radius: 18px;
+        --font-display: "Fraunces", serif;
+        --font-body: "Space Grotesk", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--font-body);
+        color: var(--ink);
+        background: radial-gradient(1200px 600px at 20% -10%, #ffe7c7 0%, transparent 60%),
+          radial-gradient(900px 500px at 80% 10%, #d7efe6 0%, transparent 55%),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+        min-height: 100vh;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        inset: auto;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      body::before {
+        top: -120px;
+        right: -180px;
+        width: 420px;
+        height: 420px;
+        background: radial-gradient(circle, rgba(226, 104, 59, 0.25), transparent 65%);
+      }
+
+      body::after {
+        bottom: -140px;
+        left: -160px;
+        width: 480px;
+        height: 480px;
+        background: radial-gradient(circle, rgba(44, 140, 124, 0.2), transparent 70%);
+      }
+
+      .shell {
+        position: relative;
+        z-index: 1;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px 20px 48px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 0 20px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: conic-gradient(from 120deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+        box-shadow: var(--shadow);
+      }
+
+      .brand-title {
+        font-family: var(--font-display);
+        font-size: clamp(20px, 2.6vw, 28px);
+        margin: 0;
+      }
+
+      .top-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        border: 1px solid var(--stroke);
+        background: var(--surface-strong);
+        color: var(--ink);
+        padding: 10px 14px;
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        cursor: pointer;
+      }
+
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .hero {
+        background: var(--surface);
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius);
+        padding: 24px;
+        display: grid;
+        gap: 16px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero h2 {
+        font-family: var(--font-display);
+        font-size: clamp(26px, 4vw, 40px);
+        margin: 0;
+      }
+
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .hero-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        border: 1px dashed rgba(28, 42, 46, 0.2);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .panel-grid {
+        margin-top: 20px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius);
+        padding: 18px;
+        min-height: 120px;
+        box-shadow: 0 18px 40px rgba(18, 27, 32, 0.08);
+      }
+
+      .panel h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+
+      .panel p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .panel strong {
+        display: block;
+        font-size: 20px;
+        margin-top: 10px;
+      }
+
+      .kanban {
+        margin-top: 28px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .kanban-column {
+        background: var(--surface);
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius);
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .kanban-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      .chip {
+        background: rgba(28, 42, 46, 0.08);
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .task {
+        background: #fff;
+        border-radius: 12px;
+        padding: 12px;
+        border: 1px solid rgba(28, 42, 46, 0.08);
+        display: grid;
+        gap: 6px;
+      }
+
+      .task small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .accent-strip {
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      }
+
+      .motion {
+        animation: rise 0.7s ease both;
+      }
+
+      .delay-1 {
+        animation-delay: 0.1s;
+      }
+
+      .delay-2 {
+        animation-delay: 0.2s;
+      }
+
+      .delay-3 {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes rise {
+        from {
+          transform: translateY(12px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      @media (min-width: 900px) {
+        .hero {
+          grid-template-columns: 1.4fr 1fr;
+          align-items: center;
+        }
+
+        .panel-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .kanban {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .motion {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell" data-app>
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark"></div>
+          <h1 class="brand-title">Iteronix</h1>
+        </div>
+        <div class="top-actions">
+          <button class="btn">Connect</button>
+          <button class="btn primary">New Run</button>
+        </div>
+      </header>
+
+      <section class="hero motion">
+        <div>
+          <h2>One cockpit for agent workflows</h2>
+          <p>
+            Orchestrate providers, enforce quality gates, and keep every decision auditable.
+            This shell is the foundation for the PWA interface.
+          </p>
+          <div class="hero-tags">
+            <span class="tag">Provider ready</span>
+            <span class="tag">Workspace sandboxed</span>
+            <span class="tag">Streaming events</span>
+          </div>
+        </div>
+        <div>
+          <div class="panel">
+            <h3>Active Project</h3>
+            <p>Workspace policies are enforced per root.</p>
+            <strong>/workspace/iteronix</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel motion delay-1">
+          <h3>Providers</h3>
+          <p>Codex CLI online with schema-aware settings.</p>
+          <strong>1 online</strong>
+        </article>
+        <article class="panel motion delay-2">
+          <h3>Runs</h3>
+          <p>Streaming status and history keep gates transparent.</p>
+          <strong>4 recent</strong>
+        </article>
+        <article class="panel motion delay-3">
+          <h3>Quality Gates</h3>
+          <p>Lint, typecheck, test, and build tracked per run.</p>
+          <strong>All green</strong>
+        </article>
+      </section>
+
+      <section class="kanban">
+        <div class="kanban-column motion">
+          <div class="kanban-header">
+            <span>Ideas</span>
+            <span class="chip">2</span>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Define plugin manifest</strong>
+            <small>Unassigned</small>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Draft provider UX</strong>
+            <small>Product</small>
+          </div>
+        </div>
+        <div class="kanban-column motion delay-1">
+          <div class="kanban-header">
+            <span>Todo</span>
+            <span class="chip">3</span>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Design workflows</strong>
+            <small>Frontend</small>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Audit command policy</strong>
+            <small>Backend</small>
+          </div>
+        </div>
+        <div class="kanban-column motion delay-2">
+          <div class="kanban-header">
+            <span>In Progress</span>
+            <span class="chip">1</span>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Provider settings UI</strong>
+            <small>Frontend</small>
+          </div>
+        </div>
+        <div class="kanban-column motion delay-3">
+          <div class="kanban-header">
+            <span>QA</span>
+            <span class="chip">1</span>
+          </div>
+          <div class="task">
+            <div class="accent-strip"></div>
+            <strong>Server API smoke test</strong>
+            <small>DevOps</small>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

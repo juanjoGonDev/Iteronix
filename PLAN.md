@@ -69,9 +69,9 @@ Acceptance:
 
 - Server runs in Docker on Raspberry Pi and can execute sessions with SSE streaming.
 
-## Milestone 3 — Web UI (single responsive PWA)
+## Milestone 3 - Web UI (single responsive PWA)
 
-- [ ] Implement `apps/web-ui` as responsive, mobile-first
+- [x] Implement `apps/web-ui` as responsive, mobile-first
 - [ ] PWA: manifest + service worker
 - [ ] Server connection: configurable base URL + token
 - [ ] Screens (minimal):
