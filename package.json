@@ -4,16 +4,25 @@
   "private": true,
   "packageManager": "pnpm@10.18.3",
   "scripts": {
+    "dev": "pnpm -r --parallel --filter @iteronix/server-api --filter @iteronix/web-ui dev",
+    "dev:server": "pnpm -C apps/server-api dev",
+    "dev:web": "pnpm -C apps/web-ui dev",
+    "dev:desktop": "pnpm -w exec concurrently -k -n web,desktop \"pnpm -C apps/web-ui dev\" \"pnpm -C apps/desktop-main dev\"",
     "lint": "eslint \"{apps,packages}/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "build": "tsc -p tsconfig.build.json && tsc -p apps/web-ui/tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json && tsc -p apps/web-ui/tsconfig.build.json",
+    "start": "pnpm -C apps/server-api start",
+    "preview:web": "pnpm -C apps/web-ui preview",
+    "clean": "node -e \"const { rmSync } = require('node:fs'); rmSync('dist', { recursive: true, force: true }); rmSync('apps/web-ui/dist', { recursive: true, force: true });\""
   },
   "devDependencies": {
     "@types/node": "25.0.3",
     "@typescript-eslint/eslint-plugin": "8.51.0",
     "@typescript-eslint/parser": "8.51.0",
+    "concurrently": "^9.2.1",
     "eslint": "9.39.2",
+    "live-server": "^1.2.2",
     "typescript": "5.9.3",
     "vitest": "4.0.16"
   }

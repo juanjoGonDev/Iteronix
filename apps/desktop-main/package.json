@@ -1,5 +1,11 @@
 {
   "name": "@iteronix/desktop-main",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -w exec concurrently -k -n build,run \"pnpm -C apps/desktop-main run build:watch\" \"pnpm -C apps/desktop-main run start:watch\"",
+    "build": "pnpm -w exec tsc -p apps/desktop-main/tsconfig.build.json",
+    "build:watch": "pnpm -w exec tsc -p apps/desktop-main/tsconfig.build.json --watch",
+    "start:watch": "node scripts/start-dev.cjs"
+  }
 }

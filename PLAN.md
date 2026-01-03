@@ -110,16 +110,16 @@ Goal:
 
 ### Root scripts (required)
 
-- [ ] Add root `package.json` scripts for:
-  - [ ] `pnpm dev` (runs server + web-ui in watch mode)
-  - [ ] `pnpm dev:server` (watch mode)
-  - [ ] `pnpm dev:web` (watch mode)
-  - [ ] `pnpm dev:desktop` (Electron main + loads web-ui dev server)
-  - [ ] `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` (workspace-wide)
-  - [ ] `pnpm clean` (workspace-wide)
-  - [ ] `pnpm start` (production server)
-  - [ ] `pnpm preview:web` (serve built web-ui locally)
-- [ ] Ensure all scripts work on macOS/Linux/Windows where possible.
+- [x] Add root `package.json` scripts for:
+  - [x] `pnpm dev` (runs server + web-ui in watch mode)
+  - [x] `pnpm dev:server` (watch mode)
+  - [x] `pnpm dev:web` (watch mode)
+  - [x] `pnpm dev:desktop` (Electron main + loads web-ui dev server)
+  - [x] `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` (workspace-wide)
+  - [x] `pnpm clean` (workspace-wide)
+  - [x] `pnpm start` (production server)
+  - [x] `pnpm preview:web` (serve built web-ui locally)
+- [x] Ensure all scripts work on macOS/Linux/Windows where possible.
 
 Suggested behavior:
 
@@ -143,26 +143,26 @@ Acceptance:
 
 ### Server-api commands (apps/server-api)
 
-- [ ] Provide scripts:
-  - [ ] `pnpm dev` (watch mode)
-  - [ ] `pnpm build`
-  - [ ] `pnpm start` (prod run)
+- [x] Provide scripts:
+  - [x] `pnpm dev` (watch mode)
+  - [x] `pnpm build`
+  - [x] `pnpm start` (prod run)
         Implementation hint:
 - Use a watch runner suitable for TS (e.g., tsx watch) and ensure typecheck is separate.
 
 ### Web-ui commands (apps/web-ui)
 
-- [ ] Provide scripts:
-  - [ ] `pnpm dev` (Vite)
-  - [ ] `pnpm build`
-  - [ ] `pnpm preview`
-- [ ] PWA build must be part of `pnpm build` (root).
+- [x] Provide scripts:
+  - [x] `pnpm dev` (Vite)
+  - [x] `pnpm build`
+  - [x] `pnpm preview`
+- [x] PWA build must be part of `pnpm build` (root).
 
 ### Desktop wrapper commands (apps/desktop-main)
 
-- [ ] Provide scripts:
-  - [ ] `pnpm dev` (runs Electron main in watch mode; loads web-ui dev URL)
-  - [ ] `pnpm build` (build main process)
+- [x] Provide scripts:
+  - [x] `pnpm dev` (runs Electron main in watch mode; loads web-ui dev URL)
+  - [x] `pnpm build` (build main process)
   - [ ] Optional later: `pnpm package` (installer/binary)
 
 ## Milestone 5 — Auto-loop with strict JSON schema (provider-agnostic)

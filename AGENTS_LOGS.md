@@ -639,3 +639,32 @@
   - None
 - Next:
   - Start Milestone 5 by defining the strict agent step JSON schema in packages/shared or packages/domain.
+### 2026-01-03 22:54 (Europe/Madrid) - Dev Tooling
+
+- Summary: Added unified dev/build/start scripts across the workspace and apps, documented run commands, and aligned desktop/server builds with CommonJS output.
+- Decisions:
+  - Use `concurrently` to run watch processes cross-platform in package scripts.
+  - Use `live-server` to serve the web UI with reload without changing build outputs.
+  - Replace `import.meta` with `__filename` in desktop secrets to allow CommonJS builds.
+- Changes:
+  - package.json
+  - pnpm-lock.yaml
+  - apps/server-api/package.json
+  - apps/server-api/tsconfig.build.json
+  - apps/web-ui/package.json
+  - apps/desktop-main/package.json
+  - apps/desktop-main/tsconfig.build.json
+  - apps/desktop-main/scripts/start-dev.cjs
+  - apps/desktop-main/src/secrets.ts
+  - tsconfig.build.json
+  - docs/RUNNING.md
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - live-server pulls deprecated subdependencies flagged by pnpm.
+- Next:
+  - Define the strict agent step JSON schema (Ajv) in packages/shared with tests.

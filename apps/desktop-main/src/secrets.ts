@@ -43,7 +43,7 @@ export const createSecretStore = (
 
 const loadKeychainProvider = (): Result<KeychainProvider, SecretError> => {
   try {
-    const requireModule: (id: string) => unknown = createRequire(import.meta.url);
+    const requireModule: (id: string) => unknown = createRequire(__filename);
     const moduleValue = requireModule("keytar");
     return parseKeychainProvider(moduleValue);
   } catch {

@@ -1,5 +1,12 @@
 {
   "name": "@iteronix/web-ui",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -w exec concurrently -k -n build,serve \"pnpm -C apps/web-ui run build:watch\" \"pnpm -C apps/web-ui run serve\"",
+    "build": "pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json",
+    "build:watch": "pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json --watch",
+    "serve": "pnpm -w exec live-server apps/web-ui --port=5173 --no-browser",
+    "preview": "pnpm -w exec live-server apps/web-ui --port=4173 --no-browser"
+  }
 }
