@@ -75,7 +75,7 @@ Acceptance:
 - [x] PWA: manifest + service worker
 - [x] Server connection: configurable base URL + token
 - [ ] Screens (minimal):
-  - [ ] Projects (create/open/recent)
+  - [x] Projects (create/open/recent)
   - [ ] Repo explorer + Monaco editor
   - [ ] Runs: start, live stream logs, history
   - [ ] Settings: provider/model/precision, per project/profile

@@ -336,3 +336,22 @@
   - None
 - Next:
   - Implement the Projects screen (create/open/recent) in apps/web-ui.
+
+### 2026-01-03 19:16 (Europe/Madrid) - Web UI
+
+- Summary: Added a Projects section with create/open inputs, recent list rendering, and local placeholder state.
+- Decisions:
+  - Persist recent projects in localStorage with a small default seed.
+  - Keep project interactions client-side until server wiring exists.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the Repo explorer and Monaco editor screen in apps/web-ui.

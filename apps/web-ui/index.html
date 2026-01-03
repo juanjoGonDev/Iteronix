@@ -253,6 +253,84 @@
         margin-top: 10px;
       }
 
+      .section-heading {
+        display: grid;
+        gap: 6px;
+      }
+
+      .section-heading h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .section-heading p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .projects {
+        margin-top: 28px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .projects-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .project-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .project-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .recent-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .recent-item {
+        border: 1px solid rgba(28, 42, 46, 0.08);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: grid;
+        gap: 4px;
+        background: rgba(255, 255, 255, 0.8);
+      }
+
+      .recent-item strong {
+        font-size: 14px;
+      }
+
+      .recent-item span {
+        font-size: 12px;
+        color: var(--muted);
+        word-break: break-all;
+      }
+
+      .recent-item small {
+        font-size: 11px;
+        color: rgba(91, 106, 112, 0.8);
+      }
+
+      .recent-empty {
+        font-size: 13px;
+        color: var(--muted);
+        padding: 8px 0;
+      }
+
       .kanban {
         margin-top: 28px;
         display: grid;
@@ -340,6 +418,10 @@
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        .projects-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
         .kanban {
           grid-template-columns: repeat(4, minmax(0, 1fr));
         }
@@ -420,6 +502,46 @@
         </article>
       </section>
 
+      <section class="projects">
+        <div class="section-heading">
+          <h3>Projects</h3>
+          <p>Create, open, or revisit a workspace to orchestrate runs.</p>
+        </div>
+        <div class="projects-grid">
+          <article class="panel project-card motion delay-1">
+            <h3>Create project</h3>
+            <div class="field">
+              <label for="project-name">Project name</label>
+              <input id="project-name" type="text" placeholder="Iteronix Core" autocomplete="off" data-project-name>
+            </div>
+            <div class="field">
+              <label for="project-path">Workspace root</label>
+              <input id="project-path" type="text" placeholder="D:\\workspace\\iteronix" autocomplete="off" data-project-path>
+            </div>
+            <small class="hint">Saved locally until the server is connected.</small>
+            <div class="project-actions">
+              <button class="btn primary" data-create-project>Create project</button>
+            </div>
+          </article>
+          <article class="panel project-card motion delay-2">
+            <h3>Open existing</h3>
+            <div class="field">
+              <label for="open-path">Workspace path</label>
+              <input id="open-path" type="text" placeholder="D:\\workspace\\another-repo" autocomplete="off" data-open-path>
+            </div>
+            <small class="hint">Connect to an existing root on the server.</small>
+            <div class="project-actions">
+              <button class="btn" data-open-project>Open project</button>
+            </div>
+          </article>
+          <article class="panel project-card motion delay-3">
+            <h3>Recent workspaces</h3>
+            <div class="recent-list" data-recent-list></div>
+            <div class="recent-empty" data-recent-empty>No recent projects yet.</div>
+          </article>
+        </div>
+      </section>
+
       <section class="kanban">
         <div class="kanban-column motion">
           <div class="kanban-header">
@@ -480,15 +602,32 @@
     <script>
       const storageKeyBaseUrl = "iteronix.baseUrl";
       const storageKeyToken = "iteronix.authToken";
+      const storageKeyRecents = "iteronix.recentProjects";
       const emptyLabel = "Not set";
+      const maxRecentProjects = 5;
+      const defaultRecents = [
+        { name: "Iteronix", path: "/workspace/iteronix", updated: "Today" },
+        { name: "FlowForge", path: "/workspace/flowforge", updated: "Yesterday" }
+      ];
       const baseUrlInput = document.querySelector("[data-base-url]");
       const tokenInput = document.querySelector("[data-auth-token]");
       const targetDisplay = document.querySelector("[data-current-target]");
+      const projectNameInput = document.querySelector("[data-project-name]");
+      const projectPathInput = document.querySelector("[data-project-path]");
+      const openPathInput = document.querySelector("[data-open-path]");
+      const createProjectButton = document.querySelector("[data-create-project]");
+      const openProjectButton = document.querySelector("[data-open-project]");
+      const recentList = document.querySelector("[data-recent-list]");
+      const recentEmpty = document.querySelector("[data-recent-empty]");
+      const projectState = {
+        recents: []
+      };
 
       startApp();
 
       function startApp() {
         initConnectionSettings();
+        initProjects();
         registerServiceWorker();
       }
 
@@ -556,6 +695,173 @@
           return fallback;
         }
         return value;
+      }
+
+      function initProjects() {
+        projectState.recents = loadRecentProjects();
+        renderRecents();
+        registerProjectHandlers();
+      }
+
+      function registerProjectHandlers() {
+        if (createProjectButton instanceof HTMLButtonElement) {
+          createProjectButton.addEventListener("click", handleCreateProject);
+        }
+        if (openProjectButton instanceof HTMLButtonElement) {
+          openProjectButton.addEventListener("click", handleOpenProject);
+        }
+      }
+
+      function handleCreateProject() {
+        if (!(projectNameInput instanceof HTMLInputElement)) {
+          return;
+        }
+        if (!(projectPathInput instanceof HTMLInputElement)) {
+          return;
+        }
+        const name = projectNameInput.value.trim();
+        const path = projectPathInput.value.trim();
+        if (name === "" || path === "") {
+          return;
+        }
+        addRecentProject({
+          name,
+          path,
+          updated: "Just now"
+        });
+        projectNameInput.value = "";
+        projectPathInput.value = "";
+      }
+
+      function handleOpenProject() {
+        if (!(openPathInput instanceof HTMLInputElement)) {
+          return;
+        }
+        const path = openPathInput.value.trim();
+        if (path === "") {
+          return;
+        }
+        addRecentProject({
+          name: inferProjectName(path),
+          path,
+          updated: "Just now"
+        });
+        openPathInput.value = "";
+      }
+
+      function inferProjectName(path) {
+        const trimmed = normalizePath(path);
+        const parts = trimmed.split(/[/\\]/);
+        const last = parts[parts.length - 1];
+        if (last) {
+          return last;
+        }
+        return "Project";
+      }
+
+      function addRecentProject(entry) {
+        const normalizedPath = normalizePath(entry.path);
+        const normalizedName = entry.name.trim() === "" ? normalizedPath : entry.name.trim();
+        const normalizedUpdated = entry.updated.trim() === "" ? "Just now" : entry.updated.trim();
+        const filtered = projectState.recents.filter((item) => item.path !== normalizedPath);
+        const next = [
+          {
+            name: normalizedName,
+            path: normalizedPath,
+            updated: normalizedUpdated
+          },
+          ...filtered
+        ];
+        projectState.recents = next.slice(0, maxRecentProjects);
+        saveRecentProjects(projectState.recents);
+        renderRecents();
+      }
+
+      function renderRecents() {
+        if (!(recentList instanceof HTMLElement)) {
+          return;
+        }
+        if (!(recentEmpty instanceof HTMLElement)) {
+          return;
+        }
+        recentList.innerHTML = "";
+        const recents = projectState.recents;
+        if (recents.length === 0) {
+          recentEmpty.style.display = "block";
+          return;
+        }
+        recentEmpty.style.display = "none";
+        recents.forEach((item) => {
+          recentList.appendChild(buildRecentItem(item));
+        });
+      }
+
+      function buildRecentItem(item) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "recent-item";
+        const name = document.createElement("strong");
+        name.textContent = item.name;
+        const path = document.createElement("span");
+        path.textContent = item.path;
+        const updated = document.createElement("small");
+        updated.textContent = item.updated;
+        wrapper.appendChild(name);
+        wrapper.appendChild(path);
+        wrapper.appendChild(updated);
+        return wrapper;
+      }
+
+      function saveRecentProjects(recents) {
+        if (recents.length === 0) {
+          localStorage.removeItem(storageKeyRecents);
+          return;
+        }
+        localStorage.setItem(storageKeyRecents, JSON.stringify(recents));
+      }
+
+      function loadRecentProjects() {
+        const raw = localStorage.getItem(storageKeyRecents);
+        if (raw === null) {
+          return defaultRecents.slice();
+        }
+        const parsed = parseRecentProjects(raw);
+        if (parsed.length === 0) {
+          return [];
+        }
+        return parsed;
+      }
+
+      function parseRecentProjects(raw) {
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return [];
+        }
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+        return parsed.filter(isRecentProject).slice(0, maxRecentProjects);
+      }
+
+      function isRecentProject(value) {
+        if (value === null || typeof value !== "object") {
+          return false;
+        }
+        const candidate = value;
+        return (
+          isNonEmptyString(candidate.name) &&
+          isNonEmptyString(candidate.path) &&
+          isNonEmptyString(candidate.updated)
+        );
+      }
+
+      function isNonEmptyString(value) {
+        return typeof value === "string" && value.trim() !== "";
+      }
+
+      function normalizePath(value) {
+        return value.trim().replace(/[\\/]+$/, "");
       }
 
       function registerServiceWorker() {
