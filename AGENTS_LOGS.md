@@ -355,3 +355,22 @@
   - None
 - Next:
   - Implement the Repo explorer and Monaco editor screen in apps/web-ui.
+
+### 2026-01-03 19:20 (Europe/Madrid) - Web UI
+
+- Summary: Added a repo explorer section with a two-pane layout and a Monaco-style editor placeholder driven by client-side state.
+- Decisions:
+  - Render the repo tree and editor content from in-memory placeholder data.
+  - Keep repo interactions client-side until API wiring exists.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the Runs screen (start, live stream logs, history) in apps/web-ui.

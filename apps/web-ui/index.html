@@ -331,6 +331,107 @@
         padding: 8px 0;
       }
 
+      .repo {
+        margin-top: 28px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .repo-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .repo-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .repo-tree-list {
+        display: grid;
+        gap: 6px;
+      }
+
+      .repo-node {
+        text-align: left;
+        border: 1px solid transparent;
+        background: rgba(255, 255, 255, 0.85);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 13px;
+        color: var(--ink);
+        cursor: pointer;
+        transition: border 0.2s ease, background 0.2s ease;
+      }
+
+      .repo-node[data-active="true"] {
+        border-color: rgba(226, 104, 59, 0.5);
+        background: rgba(226, 104, 59, 0.08);
+        font-weight: 600;
+      }
+
+      .repo-path {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        word-break: break-all;
+      }
+
+      .editor {
+        display: grid;
+        gap: 12px;
+      }
+
+      .editor-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .editor-header strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .editor-header span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .editor-body {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+        border-radius: 14px;
+        background: rgba(12, 20, 24, 0.92);
+        color: #f3f5f6;
+        padding: 14px;
+        font-family: "Fira Code", "Courier New", monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        min-height: 220px;
+        overflow: hidden;
+      }
+
+      .editor-gutter {
+        text-align: right;
+        color: rgba(243, 245, 246, 0.45);
+        user-select: none;
+        padding-right: 8px;
+        border-right: 1px solid rgba(243, 245, 246, 0.12);
+      }
+
+      .editor-code {
+        margin: 0;
+        white-space: pre;
+        overflow: hidden;
+      }
+
       .kanban {
         margin-top: 28px;
         display: grid;
@@ -420,6 +521,10 @@
 
         .projects-grid {
           grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .repo-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
         }
 
         .kanban {
@@ -542,6 +647,35 @@
         </div>
       </section>
 
+      <section class="repo">
+        <div class="section-heading">
+          <h3>Repository</h3>
+          <p>Browse the workspace and inspect files in a Monaco-ready editor.</p>
+        </div>
+        <div class="repo-grid">
+          <article class="panel">
+            <div class="repo-title">
+              <strong>Workspace tree</strong>
+              <span class="chip" data-repo-count>0 files</span>
+            </div>
+            <div class="repo-tree-list" data-repo-tree></div>
+          </article>
+          <article class="panel editor">
+            <div class="editor-header">
+              <div>
+                <strong data-editor-file>Select a file</strong>
+                <span data-editor-language>Text</span>
+              </div>
+              <button class="btn" type="button">Open in Monaco</button>
+            </div>
+            <div class="editor-body">
+              <div class="editor-gutter" data-editor-lines></div>
+              <pre class="editor-code" data-editor-content></pre>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="kanban">
         <div class="kanban-column motion">
           <div class="kanban-header">
@@ -619,8 +753,51 @@
       const openProjectButton = document.querySelector("[data-open-project]");
       const recentList = document.querySelector("[data-recent-list]");
       const recentEmpty = document.querySelector("[data-recent-empty]");
+      const repoTree = document.querySelector("[data-repo-tree]");
+      const repoCount = document.querySelector("[data-repo-count]");
+      const editorFile = document.querySelector("[data-editor-file]");
+      const editorLanguage = document.querySelector("[data-editor-language]");
+      const editorContent = document.querySelector("[data-editor-content]");
+      const editorLines = document.querySelector("[data-editor-lines]");
       const projectState = {
         recents: []
+      };
+      const repoState = {
+        entries: [
+          { path: "apps/server-api/src/server.ts", type: "file" },
+          { path: "apps/server-api/src/projects.ts", type: "file" },
+          { path: "packages/domain/src/providers/registry.ts", type: "file" },
+          { path: "apps/web-ui/index.html", type: "file" },
+          { path: "docs/server-api.md", type: "file" }
+        ],
+        files: {
+          "apps/server-api/src/server.ts": {
+            language: "TypeScript",
+            content:
+              "import { createServer } from \"http\";\nimport { parseRequest } from \"./request\";\n\nexport const startServer = () => {\n  const server = createServer(handle);\n  server.listen(4000);\n};\n\nconst handle = (req, res) => {\n  const request = parseRequest(req);\n  res.writeHead(200);\n  res.end(JSON.stringify(request));\n};"
+          },
+          "apps/server-api/src/projects.ts": {
+            language: "TypeScript",
+            content:
+              "export const projects = new Map();\n\nexport const addProject = (project) => {\n  projects.set(project.id, project);\n};\n\nexport const listProjects = () => {\n  return Array.from(projects.values());\n};"
+          },
+          "packages/domain/src/providers/registry.ts": {
+            language: "TypeScript",
+            content:
+              "export const createRegistry = (providers) => {\n  const registry = new Map();\n  providers.forEach((provider) => {\n    registry.set(provider.id, provider);\n  });\n  return registry;\n};"
+          },
+          "apps/web-ui/index.html": {
+            language: "HTML",
+            content:
+              "<section class=\"repo\">\n  <div class=\"section-heading\">\n    <h3>Repository</h3>\n    <p>Browse the workspace and inspect files.</p>\n  </div>\n</section>"
+          },
+          "docs/server-api.md": {
+            language: "Markdown",
+            content:
+              "# Server API\n\nRun the server with AUTH_TOKEN and WORKSPACE_ROOTS configured.\n\n## Docker\n\nBuild and run a minimal image with the compiled output."
+          }
+        },
+        selectedPath: "apps/server-api/src/server.ts"
       };
 
       startApp();
@@ -628,6 +805,7 @@
       function startApp() {
         initConnectionSettings();
         initProjects();
+        initRepo();
         registerServiceWorker();
       }
 
@@ -862,6 +1040,98 @@
 
       function normalizePath(value) {
         return value.trim().replace(/[\\/]+$/, "");
+      }
+
+      function initRepo() {
+        renderRepoTree();
+        selectRepoFile(repoState.selectedPath);
+      }
+
+      function renderRepoTree() {
+        if (!(repoTree instanceof HTMLElement)) {
+          return;
+        }
+        repoTree.innerHTML = "";
+        const entries = repoState.entries;
+        entries.forEach((entry) => {
+          repoTree.appendChild(buildRepoNode(entry));
+        });
+        updateRepoCount(entries.length);
+      }
+
+      function buildRepoNode(entry) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "repo-node";
+        button.dataset.path = entry.path;
+        if (entry.path === repoState.selectedPath) {
+          button.dataset.active = "true";
+        }
+        const title = document.createElement("div");
+        title.textContent = entry.path.split(/[/\\]/).slice(-1)[0] ?? entry.path;
+        const path = document.createElement("span");
+        path.className = "repo-path";
+        path.textContent = entry.path;
+        button.appendChild(title);
+        button.appendChild(path);
+        button.addEventListener("click", () => {
+          selectRepoFile(entry.path);
+        });
+        return button;
+      }
+
+      function selectRepoFile(path) {
+        repoState.selectedPath = path;
+        renderRepoTree();
+        renderEditor();
+      }
+
+      function renderEditor() {
+        const file = getRepoFile(repoState.selectedPath);
+        if (editorFile instanceof HTMLElement) {
+          editorFile.textContent = file.pathLabel;
+        }
+        if (editorLanguage instanceof HTMLElement) {
+          editorLanguage.textContent = file.language;
+        }
+        if (editorContent instanceof HTMLElement) {
+          editorContent.textContent = file.content;
+        }
+        if (editorLines instanceof HTMLElement) {
+          editorLines.textContent = buildLineNumbers(file.content);
+        }
+      }
+
+      function buildLineNumbers(content) {
+        const count = content.split("\n").length;
+        const lines = [];
+        for (let i = 1; i <= count; i += 1) {
+          lines.push(String(i));
+        }
+        return lines.join("\n");
+      }
+
+      function getRepoFile(path) {
+        const entry = repoState.files[path];
+        if (!entry) {
+          return {
+            pathLabel: path,
+            language: "Text",
+            content: "Select a file from the workspace tree."
+          };
+        }
+        return {
+          pathLabel: path,
+          language: entry.language,
+          content: entry.content
+        };
+      }
+
+      function updateRepoCount(count) {
+        if (!(repoCount instanceof HTMLElement)) {
+          return;
+        }
+        repoCount.textContent = `${count} files`;
       }
 
       function registerServiceWorker() {
