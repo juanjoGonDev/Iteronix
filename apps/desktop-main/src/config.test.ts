@@ -65,6 +65,20 @@ describe("resolveDesktopConfig", () => {
     }
   });
 
+  it("accepts remote mode without url", () => {
+    const cwd = process.cwd();
+    const env: NodeJS.ProcessEnv = {
+      [EnvKey.Mode]: DesktopMode.Remote
+    };
+
+    const result = resolveDesktopConfig(env, cwd);
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type === ResultType.Ok && result.value.mode === DesktopMode.Remote) {
+      expect(result.value.serverUrl).toBeUndefined();
+    }
+  });
+
   it("uses dev UI source when configured", () => {
     const cwd = process.cwd();
     const env: NodeJS.ProcessEnv = {

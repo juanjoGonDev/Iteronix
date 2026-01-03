@@ -15,6 +15,7 @@ export type UiMode = typeof UiMode[keyof typeof UiMode];
 export const EnvKey = {
   Mode: "ITERONIX_DESKTOP_MODE",
   RemoteUrl: "ITERONIX_DESKTOP_REMOTE_URL",
+  RemoteDisconnect: "ITERONIX_DESKTOP_REMOTE_DISCONNECT",
   AuthToken: "ITERONIX_DESKTOP_AUTH_TOKEN",
   WorkspaceRoots: "ITERONIX_DESKTOP_WORKSPACE_ROOTS",
   CommandAllowlist: "ITERONIX_DESKTOP_COMMAND_ALLOWLIST",
@@ -24,7 +25,8 @@ export const EnvKey = {
   UiMode: "ITERONIX_DESKTOP_UI_MODE",
   UiDevUrl: "ITERONIX_DESKTOP_UI_DEV_URL",
   UiProdIndex: "ITERONIX_DESKTOP_UI_INDEX",
-  UiProdAssets: "ITERONIX_DESKTOP_UI_DIST"
+  UiProdAssets: "ITERONIX_DESKTOP_UI_DIST",
+  ConfigPath: "ITERONIX_DESKTOP_CONFIG_PATH"
 } as const;
 
 export const ServerEnvKey = {
@@ -41,7 +43,9 @@ export const DefaultServer = {
 } as const;
 
 export const DefaultPaths = {
-  ServerEntry: "dist/apps/server-api/src/index.js"
+  ServerEntry: "dist/apps/server-api/src/index.js",
+  ConfigDirName: ".iteronix",
+  ConfigFileName: "desktop.json"
 } as const;
 
 export const DefaultUi = {
@@ -104,6 +108,23 @@ export const SecretErrorMessage = {
   Unavailable: "Secret provider unavailable",
   OperationFailed: "Secret operation failed",
   InvalidToken: "Invalid token"
+} as const;
+
+export const PersistenceErrorCode = {
+  ReadFailed: "persistence_read_failed",
+  WriteFailed: "persistence_write_failed",
+  DeleteFailed: "persistence_delete_failed",
+  InvalidData: "persistence_invalid_data"
+} as const;
+
+export type PersistenceErrorCode =
+  typeof PersistenceErrorCode[keyof typeof PersistenceErrorCode];
+
+export const PersistenceErrorMessage = {
+  ReadFailed: "Failed to read desktop config",
+  WriteFailed: "Failed to write desktop config",
+  DeleteFailed: "Failed to delete desktop config",
+  InvalidData: "Invalid desktop config data"
 } as const;
 
 export const ServerStartErrorCode = {

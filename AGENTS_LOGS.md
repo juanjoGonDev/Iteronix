@@ -615,3 +615,27 @@
   - None
 - Next:
   - Add desktop UX for connect/disconnect server URL and remember endpoints.
+### 2026-01-03 22:11 (Europe/Madrid) - Desktop Main
+
+- Summary: Added persisted desktop config for remote endpoints with connect/disconnect handling, and updated desktop config parsing to allow disconnected remote mode with tests.
+- Decisions:
+  - Store persisted remote endpoints in a small JSON file under an OS config directory with an override path.
+  - Allow remote mode without a URL to represent a disconnected state.
+  - Applied TDD for persistence behavior.
+- Changes:
+  - apps/desktop-main/src/constants.ts
+  - apps/desktop-main/src/persistence.ts
+  - apps/desktop-main/src/persistence.test.ts
+  - apps/desktop-main/src/index.ts
+  - apps/desktop-main/src/config.ts
+  - apps/desktop-main/src/config.test.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Start Milestone 5 by defining the strict agent step JSON schema in packages/shared or packages/domain.

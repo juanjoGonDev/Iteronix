@@ -47,7 +47,7 @@ type LocalConfigBase = {
 
 type RemoteConfigBase = {
   mode: typeof DesktopMode.Remote;
-  serverUrl: string;
+  serverUrl?: string;
   authToken?: string;
 };
 
@@ -168,12 +168,21 @@ const resolveUiMode = (env: NodeJS.ProcessEnv): Result<UiMode, ConfigError> => {
 const resolveRemoteConfig = (
   env: NodeJS.ProcessEnv
 ): Result<RemoteConfigBase, ConfigError> => {
-  const urlValue = env[EnvKey.RemoteUrl];
-  if (!urlValue || urlValue.trim().length === 0) {
-    return err({
-      code: ConfigErrorCode.MissingRemoteUrl,
-      message: ConfigErrorMessage.MissingRemoteUrl
-    });
+  const urlValue = readOptional(env[EnvKey.RemoteUrl]);
+  const authToken = readOptional(env[EnvKey.AuthToken]);
+
+  const base: RemoteConfigBase = {
+    mode: DesktopMode.Remote
+  };
+
+  if (!urlValue) {
+    if (authToken) {
+      return ok({
+        ...base,
+        authToken
+      });
+    }
+    return ok(base);
   }
 
   const normalizedUrl = normalizeUrl(urlValue);
@@ -181,20 +190,19 @@ const resolveRemoteConfig = (
     return normalizedUrl;
   }
 
-  const authToken = readOptional(env[EnvKey.AuthToken]);
-  const base: RemoteConfigBase = {
-    mode: DesktopMode.Remote,
+  const withUrl: RemoteConfigBase = {
+    ...base,
     serverUrl: normalizedUrl.value
   };
 
   if (authToken) {
     return ok({
-      ...base,
+      ...withUrl,
       authToken
     });
   }
 
-  return ok(base);
+  return ok(withUrl);
 };
 
 const resolveLocalConfig = (
