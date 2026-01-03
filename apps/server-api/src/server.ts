@@ -8,9 +8,11 @@ import {
   HttpMethod,
   HttpStatus,
   MimeType,
+  LogsField,
   ProjectField,
   QueryParam,
   RoutePath,
+  HistoryField,
   SessionField,
   TextEncoding
 } from "./constants";
@@ -28,6 +30,20 @@ import {
   type ProjectOpenInput,
   type ProjectStore
 } from "./projects";
+import {
+  createHistoryStore,
+  HistoryRunStatus,
+  HistoryStoreErrorCode,
+  type HistoryStoreError,
+  type HistoryStore
+} from "./history";
+import {
+  createLogsStore,
+  LogLevel,
+  LogsStoreErrorCode,
+  type LogsStoreError,
+  type LogsStore
+} from "./logs";
 import {
   createSessionEventHub,
   createSessionStore,
@@ -47,8 +63,19 @@ export const startServer = (): void => {
   const projectStore = createProjectStore();
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
+  const historyStore = createHistoryStore();
+  const logsStore = createLogsStore();
   const server = createServer((req, res) => {
-    void handleRequest(req, res, config, projectStore, sessionStore, sessionEvents);
+    void handleRequest(
+      req,
+      res,
+      config,
+      projectStore,
+      sessionStore,
+      sessionEvents,
+      historyStore,
+      logsStore
+    );
   });
 
   server.listen(config.port, config.host);
@@ -60,7 +87,9 @@ const handleRequest = async (
   config: ServerConfig,
   projectStore: ProjectStore,
   sessionStore: SessionStore,
-  sessionEvents: SessionEventHub
+  sessionEvents: SessionEventHub,
+  historyStore: HistoryStore,
+  logsStore: LogsStore
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -156,6 +185,36 @@ const handleRequest = async (
     }
 
     handleSessionStream(req, res, sessionStore, sessionEvents, url);
+    return;
+  }
+
+  if (path === RoutePath.HistoryList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleHistoryList(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.HistoryEvents) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleHistoryEvents(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.LogsQuery) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleLogsQuery(req, res, logsStore);
     return;
   }
 
@@ -439,6 +498,90 @@ const handleSessionStream = (
   });
 };
 
+const handleHistoryList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseHistoryListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const listed = historyStore.listRuns(parsed.value);
+  if (listed.type === ResultType.Err) {
+    respondError(res, mapHistoryStoreError(listed.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    runs: listed.value
+  });
+};
+
+const handleHistoryEvents = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseHistoryEventsRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const events = historyStore.listEvents(parsed.value.runId);
+  if (events.type === ResultType.Err) {
+    respondError(res, mapHistoryStoreError(events.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    events: events.value
+  });
+};
+
+const handleLogsQuery = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  logsStore: LogsStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseLogsQueryRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const logs = logsStore.query(parsed.value);
+  if (logs.type === ResultType.Err) {
+    respondError(res, mapLogsStoreError(logs.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    logs: logs.value
+  });
+};
+
 type ApiError = {
   status: number;
   message: string;
@@ -711,6 +854,121 @@ const parseSessionStopRequest = (
   });
 };
 
+const parseHistoryListRequest = (
+  value: unknown
+): Result<{ status?: HistoryRunStatus; limit?: number }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const statusValue = readOptionalStringField(value, HistoryField.Status);
+  if (statusValue.type === ResultType.Err) {
+    return statusValue;
+  }
+
+  const limitValue = readOptionalNumberField(value, HistoryField.Limit);
+  if (limitValue.type === ResultType.Err) {
+    return limitValue;
+  }
+
+  let status: HistoryRunStatus | undefined;
+  if (statusValue.value !== undefined) {
+    const parsedStatus = parseHistoryRunStatus(statusValue.value);
+    if (parsedStatus.type === ResultType.Err) {
+      return parsedStatus;
+    }
+
+    status = parsedStatus.value;
+  }
+
+  const input: { status?: HistoryRunStatus; limit?: number } = {};
+
+  if (status !== undefined) {
+    input.status = status;
+  }
+
+  if (limitValue.value !== undefined) {
+    input.limit = limitValue.value;
+  }
+
+  return ok(input);
+};
+
+const parseHistoryEventsRequest = (
+  value: unknown
+): Result<{ runId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const runId = readRequiredString(value, HistoryField.RunId, ErrorMessage.MissingRunId);
+  if (runId.type === ResultType.Err) {
+    return runId;
+  }
+
+  return ok({
+    runId: runId.value
+  });
+};
+
+const parseLogsQueryRequest = (
+  value: unknown
+): Result<{ level?: LogLevel; runId?: string; limit?: number }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const levelValue = readOptionalStringField(value, LogsField.Level);
+  if (levelValue.type === ResultType.Err) {
+    return levelValue;
+  }
+
+  const runIdValue = readOptionalStringField(value, LogsField.RunId);
+  if (runIdValue.type === ResultType.Err) {
+    return runIdValue;
+  }
+
+  const limitValue = readOptionalNumberField(value, LogsField.Limit);
+  if (limitValue.type === ResultType.Err) {
+    return limitValue;
+  }
+
+  let level: LogLevel | undefined;
+  if (levelValue.value !== undefined) {
+    const parsedLevel = parseLogLevel(levelValue.value);
+    if (parsedLevel.type === ResultType.Err) {
+      return parsedLevel;
+    }
+
+    level = parsedLevel.value;
+  }
+
+  const input: { level?: LogLevel; runId?: string; limit?: number } = {};
+
+  if (level !== undefined) {
+    input.level = level;
+  }
+
+  if (runIdValue.value !== undefined) {
+    input.runId = runIdValue.value;
+  }
+
+  if (limitValue.value !== undefined) {
+    input.limit = limitValue.value;
+  }
+
+  return ok(input);
+};
+
 const getSessionById = (
   store: SessionStore,
   id: string
@@ -733,6 +991,34 @@ const mapSessionStoreError = (error: SessionStoreError): ApiError => {
 
   return {
     status: HttpStatus.BadRequest,
+    message: error.message
+  };
+};
+
+const mapHistoryStoreError = (error: HistoryStoreError): ApiError => {
+  if (error.code === HistoryStoreErrorCode.NotFound) {
+    return {
+      status: HttpStatus.NotFound,
+      message: error.message
+    };
+  }
+
+  return {
+    status: HttpStatus.BadRequest,
+    message: error.message
+  };
+};
+
+const mapLogsStoreError = (error: LogsStoreError): ApiError => {
+  if (error.code === LogsStoreErrorCode.InvalidInput) {
+    return {
+      status: HttpStatus.BadRequest,
+      message: error.message
+    };
+  }
+
+  return {
+    status: HttpStatus.InternalServerError,
     message: error.message
   };
 };
@@ -884,6 +1170,84 @@ const readOptionalString = (
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
+
+const readOptionalStringField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<string | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (typeof value !== "string") {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const trimmed = value.trim();
+  return ok(trimmed.length > 0 ? trimmed : undefined);
+};
+
+const readOptionalNumberField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<number | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(value);
+};
+
+const parseHistoryRunStatus = (
+  value: string
+): Result<HistoryRunStatus, ApiError> => {
+  if (isHistoryRunStatus(value)) {
+    return ok(value);
+  }
+
+  return err({
+    status: HttpStatus.BadRequest,
+    message: ErrorMessage.InvalidBody
+  });
+};
+
+const parseLogLevel = (value: string): Result<LogLevel, ApiError> => {
+  if (isLogLevel(value)) {
+    return ok(value);
+  }
+
+  return err({
+    status: HttpStatus.BadRequest,
+    message: ErrorMessage.InvalidBody
+  });
+};
+
+const isHistoryRunStatus = (value: string): value is HistoryRunStatus =>
+  value === HistoryRunStatus.Pending ||
+  value === HistoryRunStatus.Running ||
+  value === HistoryRunStatus.Completed ||
+  value === HistoryRunStatus.Failed ||
+  value === HistoryRunStatus.Canceled;
+
+const isLogLevel = (value: string): value is LogLevel =>
+  value === LogLevel.Trace ||
+  value === LogLevel.Debug ||
+  value === LogLevel.Info ||
+  value === LogLevel.Warn ||
+  value === LogLevel.Error ||
+  value === LogLevel.Fatal;
 
 const parseJson = (raw: string): Result<unknown, ApiError> => {
   try {

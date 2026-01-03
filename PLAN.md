@@ -58,7 +58,7 @@ Acceptance:
   - [x] Projects: create/open (workspace root)
   - [x] Files: tree + read/write (restricted to project root)
   - [x] Sessions: start/stop + streaming events (SSE)
-  - [ ] History/logs retrieval
+  - [x] History/logs retrieval
   - [ ] Providers: list/select + settings update
   - [ ] Kanban: board/columns/tasks CRUD (minimal)
 - [x] Auth: static token via env var `AUTH_TOKEN` (Bearer header)

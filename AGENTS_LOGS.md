@@ -148,3 +148,27 @@
   - None
 - Next:
   - Add history/logs retrieval endpoints.
+### 2026-01-03 16:23 (Europe/Madrid) - Server API
+
+- Summary: Added history/logs store tests and refined request parsing for optional fields.
+- Decisions:
+  - Add history/logs store tests after implementation (non-TDD).
+  - Omit undefined optional fields to align with exact optional property types.
+- Changes:
+  - apps/server-api/src/server.ts
+  - apps/server-api/src/history.ts
+  - apps/server-api/src/logs.ts
+  - apps/server-api/src/history.test.ts
+  - apps/server-api/src/logs.test.ts
+  - apps/server-api/src/constants.ts
+  - PLAN.md
+- Commands:
+  - `git status -sb`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement provider list/select and settings update endpoints.

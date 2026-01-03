@@ -13,7 +13,10 @@ export const RoutePath = {
   FilesWrite: "/files/write",
   SessionsStart: "/sessions/start",
   SessionsStop: "/sessions/stop",
-  SessionsStream: "/sessions/stream"
+  SessionsStream: "/sessions/stream",
+  HistoryList: "/history/list",
+  HistoryEvents: "/history/events",
+  LogsQuery: "/logs/query"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -54,6 +57,7 @@ export const ErrorMessage = {
   MissingProjectId: "Missing projectId",
   MissingPath: "Missing path",
   MissingContent: "Missing content",
+  MissingRunId: "Missing runId",
   MissingSessionId: "Missing sessionId",
   ProjectExists: "Project already exists",
   NotFound: "Not found",
@@ -94,6 +98,18 @@ export const SessionField = {
 
 export const QueryParam = {
   SessionId: "sessionId"
+} as const;
+
+export const HistoryField = {
+  Status: "status",
+  Limit: "limit",
+  RunId: "runId"
+} as const;
+
+export const LogsField = {
+  Level: "level",
+  Limit: "limit",
+  RunId: "runId"
 } as const;
 
 export const FileEntryKind = {
