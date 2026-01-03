@@ -412,3 +412,22 @@
   - None
 - Next:
   - Implement the Kanban board screen (create/move tasks; show task details) in apps/web-ui.
+
+### 2026-01-03 20:03 (Europe/Madrid) - Web UI
+
+- Summary: Added a Kanban screen with task creation, move controls, and a detail panel driven by client-side state.
+- Decisions:
+  - Keep Kanban data in-memory with seeded tasks for the UI scaffold.
+  - Use inline move controls plus detail actions for task navigation across columns.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Confirm remaining Milestone 3 UI work and update PLAN.md if needed.

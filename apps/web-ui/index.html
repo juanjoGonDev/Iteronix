@@ -185,7 +185,23 @@
         color: var(--ink);
       }
 
+      .field textarea {
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-family: var(--font-body);
+        font-size: 14px;
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--ink);
+        min-height: 86px;
+        resize: vertical;
+      }
+
       .field input::placeholder {
+        color: rgba(91, 106, 112, 0.7);
+      }
+
+      .field textarea::placeholder {
         color: rgba(91, 106, 112, 0.7);
       }
 
@@ -631,6 +647,31 @@
       .kanban {
         margin-top: 28px;
         display: grid;
+        gap: 16px;
+      }
+
+      .kanban-controls {
+        display: grid;
+        gap: 12px;
+      }
+
+      .kanban-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .kanban-form-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .kanban-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .kanban-board {
+        display: grid;
         gap: 14px;
       }
 
@@ -651,6 +692,11 @@
         font-size: 14px;
       }
 
+      .kanban-list {
+        display: grid;
+        gap: 10px;
+      }
+
       .chip {
         background: rgba(28, 42, 46, 0.08);
         padding: 4px 10px;
@@ -658,18 +704,112 @@
         font-size: 12px;
       }
 
-      .task {
+      .kanban-task {
         background: #fff;
         border-radius: 12px;
         padding: 12px;
         border: 1px solid rgba(28, 42, 46, 0.08);
         display: grid;
         gap: 6px;
+        cursor: pointer;
       }
 
-      .task small {
+      .kanban-task[data-active="true"] {
+        border-color: rgba(226, 104, 59, 0.5);
+        background: rgba(226, 104, 59, 0.08);
+      }
+
+      .kanban-task small {
         color: var(--muted);
         font-size: 12px;
+      }
+
+      .kanban-task-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .kanban-task-title {
+        font-size: 14px;
+      }
+
+      .kanban-task-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .kanban-task-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .kanban-move {
+        border: 1px solid var(--stroke);
+        background: #fff;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .kanban-move:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .kanban-detail {
+        display: grid;
+        gap: 12px;
+      }
+
+      .kanban-detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .kanban-detail-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .kanban-detail-empty {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .kanban-detail-meta {
+        display: grid;
+        gap: 8px;
+      }
+
+      .kanban-detail-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .kanban-detail-line strong {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 600;
+        text-align: right;
+      }
+
+      .kanban-detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
 
       .accent-strip {
@@ -731,8 +871,17 @@
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
-        .kanban {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+        .kanban-form-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .kanban-grid {
+          grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+          align-items: start;
+        }
+
+        .kanban-board {
+          grid-template-columns: repeat(5, minmax(0, 1fr));
         }
       }
 
@@ -962,59 +1111,66 @@
       </section>
 
       <section class="kanban">
-        <div class="kanban-column motion">
-          <div class="kanban-header">
-            <span>Ideas</span>
-            <span class="chip">2</span>
-          </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Define plugin manifest</strong>
-            <small>Unassigned</small>
-          </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Draft provider UX</strong>
-            <small>Product</small>
-          </div>
+        <div class="section-heading">
+          <h3>Kanban</h3>
+          <p>Track tasks across the workflow and surface details.</p>
         </div>
-        <div class="kanban-column motion delay-1">
-          <div class="kanban-header">
-            <span>Todo</span>
-            <span class="chip">3</span>
+        <article class="panel kanban-form">
+          <h3>Create task</h3>
+          <div class="kanban-form-grid">
+            <div class="field">
+              <label for="kanban-title">Title</label>
+              <input id="kanban-title" type="text" placeholder="Audit command policy" autocomplete="off" data-kanban-title>
+            </div>
+            <div class="field">
+              <label for="kanban-assignee">Assignee</label>
+              <input id="kanban-assignee" type="text" placeholder="Backend" autocomplete="off" data-kanban-assignee>
+            </div>
+            <div class="field">
+              <label for="kanban-column">Column</label>
+              <select id="kanban-column" class="settings-select" data-kanban-column></select>
+            </div>
+            <div class="field">
+              <label for="kanban-description">Details</label>
+              <textarea id="kanban-description" placeholder="Describe acceptance criteria" data-kanban-description></textarea>
+            </div>
           </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Design workflows</strong>
-            <small>Frontend</small>
+          <div class="project-actions">
+            <button class="btn primary" type="button" data-kanban-create>Create task</button>
           </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Audit command policy</strong>
-            <small>Backend</small>
-          </div>
-        </div>
-        <div class="kanban-column motion delay-2">
-          <div class="kanban-header">
-            <span>In Progress</span>
-            <span class="chip">1</span>
-          </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Provider settings UI</strong>
-            <small>Frontend</small>
-          </div>
-        </div>
-        <div class="kanban-column motion delay-3">
-          <div class="kanban-header">
-            <span>QA</span>
-            <span class="chip">1</span>
-          </div>
-          <div class="task">
-            <div class="accent-strip"></div>
-            <strong>Server API smoke test</strong>
-            <small>DevOps</small>
-          </div>
+          <small class="hint">Tasks are stored locally until the server is connected.</small>
+        </article>
+        <div class="kanban-grid">
+          <div class="kanban-board" data-kanban-board></div>
+          <aside class="panel kanban-detail">
+            <div class="kanban-detail-header">
+              <h3>Task details</h3>
+              <span class="chip" data-kanban-detail-status>None</span>
+            </div>
+            <div class="kanban-detail-empty" data-kanban-detail-empty>Select a task to view details.</div>
+            <div class="kanban-detail-card" data-kanban-detail-card>
+              <strong data-kanban-detail-title></strong>
+              <p data-kanban-detail-description></p>
+              <div class="kanban-detail-meta">
+                <div class="kanban-detail-line">
+                  <span>Column</span>
+                  <strong data-kanban-detail-column></strong>
+                </div>
+                <div class="kanban-detail-line">
+                  <span>Assignee</span>
+                  <strong data-kanban-detail-assignee></strong>
+                </div>
+                <div class="kanban-detail-line">
+                  <span>Updated</span>
+                  <strong data-kanban-detail-updated></strong>
+                </div>
+              </div>
+              <div class="kanban-detail-actions">
+                <button class="btn" type="button" data-kanban-detail-prev>Move back</button>
+                <button class="btn primary" type="button" data-kanban-detail-next>Move forward</button>
+              </div>
+            </div>
+          </aside>
         </div>
       </section>
     </div>
@@ -1073,6 +1229,22 @@
       const settingsPrecision = document.querySelector("[data-settings-precision]");
       const settingsSummary = document.querySelector("[data-settings-summary]");
       const profileButtons = Array.from(document.querySelectorAll("[data-profile]"));
+      const kanbanBoard = document.querySelector("[data-kanban-board]");
+      const kanbanTitleInput = document.querySelector("[data-kanban-title]");
+      const kanbanAssigneeInput = document.querySelector("[data-kanban-assignee]");
+      const kanbanColumnSelect = document.querySelector("[data-kanban-column]");
+      const kanbanDescriptionInput = document.querySelector("[data-kanban-description]");
+      const kanbanCreateButton = document.querySelector("[data-kanban-create]");
+      const kanbanDetailStatus = document.querySelector("[data-kanban-detail-status]");
+      const kanbanDetailEmpty = document.querySelector("[data-kanban-detail-empty]");
+      const kanbanDetailCard = document.querySelector("[data-kanban-detail-card]");
+      const kanbanDetailTitle = document.querySelector("[data-kanban-detail-title]");
+      const kanbanDetailDescription = document.querySelector("[data-kanban-detail-description]");
+      const kanbanDetailColumn = document.querySelector("[data-kanban-detail-column]");
+      const kanbanDetailAssignee = document.querySelector("[data-kanban-detail-assignee]");
+      const kanbanDetailUpdated = document.querySelector("[data-kanban-detail-updated]");
+      const kanbanDetailPrev = document.querySelector("[data-kanban-detail-prev]");
+      const kanbanDetailNext = document.querySelector("[data-kanban-detail-next]");
       const projectState = {
         recents: []
       };
@@ -1142,6 +1314,60 @@
         model: "gpt-5-codex",
         precision: "balanced"
       };
+      const kanbanColumns = [
+        { id: "IDEAS", label: "Ideas" },
+        { id: "TODO", label: "Todo" },
+        { id: "IN_PROGRESS", label: "In Progress" },
+        { id: "QA", label: "QA" },
+        { id: "DONE", label: "Done" }
+      ];
+      const kanbanState = {
+        columns: kanbanColumns,
+        tasks: [
+          {
+            id: 12,
+            title: "Define plugin manifest",
+            description: "Draft the manifest schema for server plugins.",
+            assignee: "Backend",
+            columnId: "IDEAS",
+            updatedAt: "Today 10:12"
+          },
+          {
+            id: 11,
+            title: "Draft provider UX",
+            description: "Outline provider selection and settings flow.",
+            assignee: "Product Manager",
+            columnId: "TODO",
+            updatedAt: "Today 09:02"
+          },
+          {
+            id: 10,
+            title: "Provider settings UI",
+            description: "Design the settings screen layout.",
+            assignee: "Frontend",
+            columnId: "IN_PROGRESS",
+            updatedAt: "Yesterday 18:40"
+          },
+          {
+            id: 9,
+            title: "Server API smoke test",
+            description: "Run through core endpoints and SSE streaming.",
+            assignee: "DevOps",
+            columnId: "QA",
+            updatedAt: "Yesterday 16:20"
+          },
+          {
+            id: 8,
+            title: "Bootstrap monorepo",
+            description: "PNPM workspace, lint, and strict TS ready.",
+            assignee: "Backend",
+            columnId: "DONE",
+            updatedAt: "Earlier"
+          }
+        ],
+        selectedId: 10,
+        nextId: 13
+      };
 
       startApp();
 
@@ -1151,6 +1377,7 @@
         initRepo();
         initRuns();
         initSettings();
+        initKanban();
         registerServiceWorker();
       }
 
@@ -1957,6 +2184,327 @@
           return emptyLabel;
         }
         return precision.label;
+      }
+
+      function initKanban() {
+        renderKanbanForm();
+        renderKanbanBoard();
+        renderKanbanDetail();
+        registerKanbanHandlers();
+      }
+
+      function renderKanbanForm() {
+        if (!(kanbanColumnSelect instanceof HTMLSelectElement)) {
+          return;
+        }
+        kanbanColumnSelect.innerHTML = "";
+        kanbanState.columns.forEach((column) => {
+          const option = document.createElement("option");
+          option.value = column.id;
+          option.textContent = column.label;
+          kanbanColumnSelect.appendChild(option);
+        });
+        kanbanColumnSelect.value = getDefaultKanbanColumn();
+      }
+
+      function registerKanbanHandlers() {
+        if (kanbanCreateButton instanceof HTMLButtonElement) {
+          kanbanCreateButton.addEventListener("click", handleKanbanCreate);
+        }
+        if (kanbanDetailPrev instanceof HTMLButtonElement) {
+          kanbanDetailPrev.addEventListener("click", handleKanbanMovePrev);
+        }
+        if (kanbanDetailNext instanceof HTMLButtonElement) {
+          kanbanDetailNext.addEventListener("click", handleKanbanMoveNext);
+        }
+      }
+
+      function handleKanbanCreate() {
+        if (!(kanbanTitleInput instanceof HTMLInputElement)) {
+          return;
+        }
+        if (!(kanbanAssigneeInput instanceof HTMLInputElement)) {
+          return;
+        }
+        if (!(kanbanColumnSelect instanceof HTMLSelectElement)) {
+          return;
+        }
+        const title = kanbanTitleInput.value.trim();
+        if (title === "") {
+          return;
+        }
+        const description = getKanbanDescription();
+        const assignee = getKanbanAssignee();
+        const columnId = resolveKanbanColumn(kanbanColumnSelect.value);
+        const task = createKanbanTask(title, description, assignee, columnId);
+        kanbanState.tasks = [task, ...kanbanState.tasks];
+        kanbanState.selectedId = task.id;
+        kanbanTitleInput.value = "";
+        if (kanbanDescriptionInput instanceof HTMLTextAreaElement) {
+          kanbanDescriptionInput.value = "";
+        }
+        kanbanAssigneeInput.value = "";
+        renderKanbanBoard();
+        renderKanbanDetail();
+      }
+
+      function handleKanbanMovePrev() {
+        moveSelectedKanbanTask("prev");
+      }
+
+      function handleKanbanMoveNext() {
+        moveSelectedKanbanTask("next");
+      }
+
+      function moveSelectedKanbanTask(direction) {
+        const task = getKanbanTask(kanbanState.selectedId);
+        if (!task) {
+          return;
+        }
+        moveKanbanTask(task.id, direction);
+      }
+
+      function moveKanbanTask(taskId, direction) {
+        const task = getKanbanTask(taskId);
+        if (!task) {
+          return;
+        }
+        const nextColumn = getAdjacentKanbanColumn(task.columnId, direction);
+        if (!nextColumn) {
+          return;
+        }
+        task.columnId = nextColumn.id;
+        task.updatedAt = formatKanbanTimestamp(new Date());
+        renderKanbanBoard();
+        renderKanbanDetail();
+      }
+
+      function selectKanbanTask(taskId) {
+        kanbanState.selectedId = taskId;
+        renderKanbanBoard();
+        renderKanbanDetail();
+      }
+
+      function renderKanbanBoard() {
+        if (!(kanbanBoard instanceof HTMLElement)) {
+          return;
+        }
+        kanbanBoard.innerHTML = "";
+        kanbanState.columns.forEach((column) => {
+          kanbanBoard.appendChild(buildKanbanColumn(column));
+        });
+      }
+
+      function buildKanbanColumn(column) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "kanban-column";
+        const header = document.createElement("div");
+        header.className = "kanban-header";
+        const title = document.createElement("span");
+        title.textContent = column.label;
+        const count = document.createElement("span");
+        count.className = "chip";
+        const columnTasks = getKanbanColumnTasks(column.id);
+        count.textContent = String(columnTasks.length);
+        header.appendChild(title);
+        header.appendChild(count);
+        const list = document.createElement("div");
+        list.className = "kanban-list";
+        columnTasks.forEach((task) => {
+          list.appendChild(buildKanbanTask(task));
+        });
+        wrapper.appendChild(header);
+        wrapper.appendChild(list);
+        return wrapper;
+      }
+
+      function buildKanbanTask(task) {
+        const card = document.createElement("div");
+        card.className = "kanban-task";
+        card.dataset.taskId = String(task.id);
+        if (task.id === kanbanState.selectedId) {
+          card.dataset.active = "true";
+        }
+        const strip = document.createElement("div");
+        strip.className = "accent-strip";
+        const header = document.createElement("div");
+        header.className = "kanban-task-header";
+        const title = document.createElement("strong");
+        title.className = "kanban-task-title";
+        title.textContent = task.title;
+        const actions = document.createElement("div");
+        actions.className = "kanban-task-actions";
+        actions.appendChild(buildKanbanMoveButton(task, "prev", "Back"));
+        actions.appendChild(buildKanbanMoveButton(task, "next", "Next"));
+        header.appendChild(title);
+        header.appendChild(actions);
+        const description = document.createElement("small");
+        description.textContent = task.description;
+        const meta = document.createElement("div");
+        meta.className = "kanban-task-meta";
+        const assignee = document.createElement("span");
+        assignee.textContent = task.assignee;
+        const updated = document.createElement("span");
+        updated.textContent = task.updatedAt;
+        meta.appendChild(assignee);
+        meta.appendChild(updated);
+        card.appendChild(strip);
+        card.appendChild(header);
+        card.appendChild(description);
+        card.appendChild(meta);
+        card.addEventListener("click", () => {
+          selectKanbanTask(task.id);
+        });
+        return card;
+      }
+
+      function buildKanbanMoveButton(task, direction, label) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "kanban-move";
+        button.textContent = label;
+        button.disabled = !canMoveKanbanTask(task.columnId, direction);
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          moveKanbanTask(task.id, direction);
+        });
+        return button;
+      }
+
+      function renderKanbanDetail() {
+        if (!(kanbanDetailEmpty instanceof HTMLElement)) {
+          return;
+        }
+        if (!(kanbanDetailCard instanceof HTMLElement)) {
+          return;
+        }
+        const task = getKanbanTask(kanbanState.selectedId);
+        if (!task) {
+          kanbanDetailEmpty.style.display = "block";
+          kanbanDetailCard.style.display = "none";
+          setKanbanDetailStatus(emptyLabel);
+          return;
+        }
+        kanbanDetailEmpty.style.display = "none";
+        kanbanDetailCard.style.display = "grid";
+        if (kanbanDetailTitle instanceof HTMLElement) {
+          kanbanDetailTitle.textContent = task.title;
+        }
+        if (kanbanDetailDescription instanceof HTMLElement) {
+          kanbanDetailDescription.textContent = task.description;
+        }
+        if (kanbanDetailColumn instanceof HTMLElement) {
+          kanbanDetailColumn.textContent = getKanbanColumnLabel(task.columnId);
+        }
+        if (kanbanDetailAssignee instanceof HTMLElement) {
+          kanbanDetailAssignee.textContent = task.assignee;
+        }
+        if (kanbanDetailUpdated instanceof HTMLElement) {
+          kanbanDetailUpdated.textContent = task.updatedAt;
+        }
+        setKanbanDetailStatus(getKanbanColumnLabel(task.columnId));
+        updateKanbanDetailActions(task);
+      }
+
+      function updateKanbanDetailActions(task) {
+        if (kanbanDetailPrev instanceof HTMLButtonElement) {
+          kanbanDetailPrev.disabled = !canMoveKanbanTask(task.columnId, "prev");
+        }
+        if (kanbanDetailNext instanceof HTMLButtonElement) {
+          kanbanDetailNext.disabled = !canMoveKanbanTask(task.columnId, "next");
+        }
+      }
+
+      function setKanbanDetailStatus(value) {
+        if (!(kanbanDetailStatus instanceof HTMLElement)) {
+          return;
+        }
+        kanbanDetailStatus.textContent = value;
+      }
+
+      function createKanbanTask(title, description, assignee, columnId) {
+        const id = kanbanState.nextId;
+        kanbanState.nextId += 1;
+        return {
+          id,
+          title,
+          description,
+          assignee,
+          columnId,
+          updatedAt: formatKanbanTimestamp(new Date())
+        };
+      }
+
+      function getKanbanDescription() {
+        if (!(kanbanDescriptionInput instanceof HTMLTextAreaElement)) {
+          return "No details yet.";
+        }
+        const value = kanbanDescriptionInput.value.trim();
+        if (value === "") {
+          return "No details yet.";
+        }
+        return value;
+      }
+
+      function getKanbanAssignee() {
+        if (!(kanbanAssigneeInput instanceof HTMLInputElement)) {
+          return "Unassigned";
+        }
+        const value = kanbanAssigneeInput.value.trim();
+        if (value === "") {
+          return "Unassigned";
+        }
+        return value;
+      }
+
+      function getKanbanColumnTasks(columnId) {
+        return kanbanState.tasks.filter((task) => task.columnId === columnId);
+      }
+
+      function getKanbanTask(taskId) {
+        return kanbanState.tasks.find((task) => task.id === taskId) ?? null;
+      }
+
+      function resolveKanbanColumn(columnId) {
+        if (kanbanState.columns.some((column) => column.id === columnId)) {
+          return columnId;
+        }
+        return getDefaultKanbanColumn();
+      }
+
+      function getDefaultKanbanColumn() {
+        const preferred = kanbanState.columns.find((column) => column.id === "TODO");
+        return preferred?.id ?? kanbanState.columns[0]?.id ?? "";
+      }
+
+      function getKanbanColumnLabel(columnId) {
+        const column = kanbanState.columns.find((item) => item.id === columnId);
+        if (!column) {
+          return emptyLabel;
+        }
+        return column.label;
+      }
+
+      function canMoveKanbanTask(columnId, direction) {
+        const nextColumn = getAdjacentKanbanColumn(columnId, direction);
+        return nextColumn !== null;
+      }
+
+      function getAdjacentKanbanColumn(columnId, direction) {
+        const index = getKanbanColumnIndex(columnId);
+        if (index === -1) {
+          return null;
+        }
+        const nextIndex = direction === "prev" ? index - 1 : index + 1;
+        return kanbanState.columns[nextIndex] ?? null;
+      }
+
+      function getKanbanColumnIndex(columnId) {
+        return kanbanState.columns.findIndex((column) => column.id === columnId);
+      }
+
+      function formatKanbanTimestamp(date) {
+        return `Today ${formatTime(date)}`;
       }
 
       function registerServiceWorker() {
