@@ -492,3 +492,23 @@
   - None
 - Next:
   - Complete the shared styles/CSS variables task in apps/web-ui.
+### 2026-01-03 21:12 (Europe/Madrid) - Web UI
+
+- Summary: Consolidated web UI styling with shared CSS variables and grouped selectors, and adjusted build configs to keep test artifacts out of dist outputs.
+- Decisions:
+  - Centralize spacing, typography, and surface tokens in root CSS variables to avoid repeated literals.
+  - Exclude test files from build tsconfigs to prevent vitest from executing dist artifacts.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/tsconfig.build.json
+  - tsconfig.build.json
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Verify apps/web-ui remains free of Electron-specific code and update PLAN.md.

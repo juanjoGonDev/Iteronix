@@ -82,7 +82,7 @@ Acceptance:
 - [x] Kanban board: create/move tasks; show task details
 - [x] Separate each screen into its own component, dont repeat code, use shared components/utilitiesm but with a single responsibility (apply to all screens)
 - [x] Emit browser-ready JS for web UI modules via tsc build output
-- [ ] Shared styles, fonts, icons, etc. Use glogal variables and CSS custom properties. Dont repeat styles.
+- [x] Shared styles, fonts, icons, etc. Use glogal variables and CSS custom properties. Dont repeat styles.
 - [ ] Make sure all screens use always the same layout structure (header, sidebar, main content, footer, styles, etc.)
 - [ ] No Electron-specific code in UI
 

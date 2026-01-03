@@ -17,16 +17,66 @@
         --bg-2: #f0f7f2;
         --ink: #1c2a2e;
         --muted: #5b6a70;
+        --muted-soft: rgba(91, 106, 112, 0.7);
+        --muted-strong: rgba(91, 106, 112, 0.8);
         --accent: #e2683b;
         --accent-2: #2c8c7c;
         --accent-3: #f2b85b;
         --surface: rgba(255, 255, 255, 0.88);
         --surface-strong: #ffffff;
+        --surface-input: rgba(255, 255, 255, 0.95);
+        --surface-muted: rgba(255, 255, 255, 0.85);
+        --surface-ghost: rgba(255, 255, 255, 0.8);
         --stroke: rgba(28, 42, 46, 0.12);
-        --shadow: 0 20px 50px rgba(26, 35, 39, 0.12);
-        --radius: 18px;
+        --stroke-soft: rgba(28, 42, 46, 0.08);
+        --stroke-dashed: rgba(28, 42, 46, 0.2);
+        --shadow-soft: 0 18px 40px rgba(18, 27, 32, 0.08);
+        --shadow-strong: 0 20px 50px rgba(26, 35, 39, 0.12);
+        --radius-xs: 10px;
+        --radius-sm: 12px;
+        --radius-md: 14px;
+        --radius-lg: 18px;
+        --radius-pill: 999px;
         --font-display: "Fraunces", serif;
         --font-body: "Space Grotesk", sans-serif;
+        --font-mono: "Fira Code", "Courier New", monospace;
+        --text-xs: 11px;
+        --text-sm: 12px;
+        --text-base: 13px;
+        --text-md: 14px;
+        --text-lg: 16px;
+        --text-xl: 18px;
+        --text-2xl: 20px;
+        --space-2xs: 4px;
+        --space-xs: 6px;
+        --space-sm: 8px;
+        --space-md: 10px;
+        --space-lg: 12px;
+        --space-xl: 14px;
+        --space-2xl: 16px;
+        --space-3xl: 18px;
+        --space-4xl: 20px;
+        --space-5xl: 24px;
+        --space-6xl: 28px;
+        --space-7xl: 32px;
+        --space-8xl: 40px;
+        --space-9xl: 48px;
+        --code-bg: rgba(12, 20, 24, 0.92);
+        --code-ink: #f3f5f6;
+        --code-ink-muted: rgba(243, 245, 246, 0.6);
+        --code-ink-soft: rgba(243, 245, 246, 0.45);
+        --code-stroke: rgba(243, 245, 246, 0.12);
+        --accent-soft: rgba(226, 104, 59, 0.08);
+        --accent-border: rgba(226, 104, 59, 0.5);
+        --accent-strong: rgba(226, 104, 59, 0.2);
+        --accent-ink: #a34222;
+        --accent-2-soft: rgba(44, 140, 124, 0.08);
+        --accent-2-bg: rgba(44, 140, 124, 0.15);
+        --accent-2-border: rgba(44, 140, 124, 0.45);
+        --accent-2-outline: rgba(44, 140, 124, 0.2);
+        --accent-2-ink: #1f6b60;
+        --accent-gradient: linear-gradient(90deg, var(--accent), var(--accent-2));
+        --transition-fast: 0.2s ease;
       }
 
       * {
@@ -73,29 +123,29 @@
         z-index: 1;
         max-width: 1200px;
         margin: 0 auto;
-        padding: 20px 20px 48px;
+        padding: var(--space-4xl) var(--space-4xl) var(--space-9xl);
       }
 
       .topbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        padding: 8px 0 20px;
+        gap: var(--space-2xl);
+        padding: var(--space-sm) 0 var(--space-4xl);
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
       .brand-mark {
         width: 42px;
         height: 42px;
-        border-radius: 14px;
+        border-radius: var(--radius-md);
         background: conic-gradient(from 120deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow-strong);
       }
 
       .brand-title {
@@ -106,21 +156,26 @@
 
       .top-actions {
         display: flex;
-        gap: 10px;
+        gap: var(--space-md);
         align-items: center;
         flex-wrap: wrap;
       }
 
-      .btn {
+      .btn,
+      .profile-pill,
+      .kanban-move {
         border: 1px solid var(--stroke);
         background: var(--surface-strong);
         color: var(--ink);
-        padding: 10px 14px;
-        border-radius: 999px;
-        font-size: 14px;
+        border-radius: var(--radius-pill);
         font-weight: 600;
-        letter-spacing: 0.2px;
         cursor: pointer;
+      }
+
+      .btn {
+        padding: var(--space-md) var(--space-xl);
+        font-size: var(--text-md);
+        letter-spacing: 0.2px;
       }
 
       .btn.primary {
@@ -129,14 +184,19 @@
         color: #fff;
       }
 
-      .hero {
+      .hero,
+      .panel,
+      .kanban-column {
         background: var(--surface);
         border: 1px solid var(--stroke);
-        border-radius: var(--radius);
-        padding: 24px;
+        border-radius: var(--radius-lg);
+      }
+
+      .hero {
+        padding: var(--space-5xl);
         display: grid;
-        gap: 16px;
-        box-shadow: var(--shadow);
+        gap: var(--space-2xl);
+        box-shadow: var(--shadow-strong);
         backdrop-filter: blur(18px);
       }
 
@@ -149,75 +209,67 @@
       .hero p {
         margin: 0;
         color: var(--muted);
-        font-size: 16px;
+        font-size: var(--text-lg);
         line-height: 1.6;
       }
 
       .hero-side {
         display: grid;
-        gap: 16px;
+        gap: var(--space-2xl);
       }
 
       .panel.stack {
         display: grid;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
       .field {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
       }
 
       .field label {
-        font-size: 11px;
+        font-size: var(--text-xs);
         text-transform: uppercase;
         letter-spacing: 0.12em;
         color: var(--muted);
       }
 
-      .field input {
+      .field input,
+      .field textarea,
+      .settings-select {
         border: 1px solid var(--stroke);
-        border-radius: 12px;
-        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-md) var(--space-lg);
         font-family: var(--font-body);
-        font-size: 14px;
-        background: rgba(255, 255, 255, 0.95);
+        font-size: var(--text-md);
+        background: var(--surface-input);
         color: var(--ink);
       }
 
       .field textarea {
-        border: 1px solid var(--stroke);
-        border-radius: 12px;
-        padding: 10px 12px;
-        font-family: var(--font-body);
-        font-size: 14px;
-        background: rgba(255, 255, 255, 0.95);
-        color: var(--ink);
         min-height: 86px;
         resize: vertical;
       }
 
-      .field input::placeholder {
-        color: rgba(91, 106, 112, 0.7);
-      }
-
+      .field input::placeholder,
       .field textarea::placeholder {
-        color: rgba(91, 106, 112, 0.7);
+        color: var(--muted-soft);
       }
 
       .target {
         display: grid;
-        gap: 6px;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: rgba(44, 140, 124, 0.08);
-        border: 1px solid rgba(44, 140, 124, 0.2);
-        font-size: 12px;
+        gap: var(--space-xs);
+        padding: var(--space-md) var(--space-lg);
+        border-radius: var(--radius-sm);
+        background: var(--accent-2-soft);
+        border: 1px solid var(--accent-2-outline);
+        font-size: var(--text-sm);
         color: var(--muted);
       }
 
       .target strong {
-        font-size: 14px;
+        font-size: var(--text-md);
         color: var(--ink);
         word-break: break-all;
       }
@@ -225,221 +277,218 @@
       .hero-tags {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .tag {
-        border: 1px dashed rgba(28, 42, 46, 0.2);
+        border: 1px dashed var(--stroke-dashed);
         color: var(--muted);
-        border-radius: 999px;
-        padding: 6px 12px;
-        font-size: 12px;
+        border-radius: var(--radius-pill);
+        padding: var(--space-xs) var(--space-lg);
+        font-size: var(--text-sm);
       }
 
       .panel-grid {
-        margin-top: 20px;
-        display: grid;
-        gap: 16px;
+        margin-top: var(--space-4xl);
       }
 
       .panel {
-        background: var(--surface);
-        border: 1px solid var(--stroke);
-        border-radius: var(--radius);
-        padding: 18px;
+        padding: var(--space-3xl);
         min-height: 120px;
-        box-shadow: 0 18px 40px rgba(18, 27, 32, 0.08);
+        box-shadow: var(--shadow-soft);
       }
 
       .panel h3 {
-        margin: 0 0 10px;
-        font-size: 16px;
+        margin: 0 0 var(--space-md);
+        font-size: var(--text-lg);
       }
 
       .panel p {
         margin: 0;
         color: var(--muted);
-        font-size: 14px;
+        font-size: var(--text-md);
         line-height: 1.5;
       }
 
       .panel strong {
         display: block;
-        font-size: 20px;
-        margin-top: 10px;
+        font-size: var(--text-2xl);
+        margin-top: var(--space-md);
       }
 
       .section-heading {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
       }
 
       .section-heading h3 {
         margin: 0;
-        font-size: 18px;
+        font-size: var(--text-xl);
       }
 
       .section-heading p {
         margin: 0;
         color: var(--muted);
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
-      .projects {
-        margin-top: 28px;
+      .panel-grid,
+      .projects-grid,
+      .repo-grid,
+      .runs-grid,
+      .settings-grid,
+      .kanban-grid {
         display: grid;
-        gap: 16px;
+        gap: var(--space-2xl);
       }
 
-      .projects-grid {
+      .projects,
+      .repo,
+      .runs,
+      .settings,
+      .kanban {
+        margin-top: var(--space-6xl);
         display: grid;
-        gap: 16px;
+        gap: var(--space-2xl);
       }
 
       .project-card {
         display: grid;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
-      .project-actions {
+      .project-actions,
+      .run-actions,
+      .kanban-detail-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .hint {
         color: var(--muted);
-        font-size: 12px;
+        font-size: var(--text-sm);
       }
 
       .recent-list {
         display: grid;
-        gap: 10px;
-      }
-
-      .recent-item {
-        border: 1px solid rgba(28, 42, 46, 0.08);
-        border-radius: 12px;
-        padding: 10px 12px;
-        display: grid;
-        gap: 4px;
-        background: rgba(255, 255, 255, 0.8);
+        gap: var(--space-md);
       }
 
       .recent-item strong {
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .recent-item span {
-        font-size: 12px;
+        font-size: var(--text-sm);
         color: var(--muted);
         word-break: break-all;
       }
 
       .recent-item small {
-        font-size: 11px;
-        color: rgba(91, 106, 112, 0.8);
+        font-size: var(--text-xs);
+        color: var(--muted-strong);
       }
 
       .recent-empty {
-        font-size: 13px;
+        font-size: var(--text-base);
         color: var(--muted);
-        padding: 8px 0;
-      }
-
-      .repo {
-        margin-top: 28px;
-        display: grid;
-        gap: 16px;
-      }
-
-      .repo-grid {
-        display: grid;
-        gap: 16px;
+        padding: var(--space-sm) 0;
       }
 
       .repo-title {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: var(--space-lg);
+        margin-bottom: var(--space-lg);
       }
 
       .repo-tree-list {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
       }
 
       .repo-node {
         text-align: left;
         border: 1px solid transparent;
-        background: rgba(255, 255, 255, 0.85);
-        border-radius: 10px;
-        padding: 8px 10px;
-        font-size: 13px;
+        background: var(--surface-muted);
+        border-radius: var(--radius-xs);
+        padding: var(--space-sm) var(--space-md);
+        font-size: var(--text-base);
         color: var(--ink);
         cursor: pointer;
-        transition: border 0.2s ease, background 0.2s ease;
+        transition: border var(--transition-fast), background var(--transition-fast);
       }
 
       .repo-node[data-active="true"] {
-        border-color: rgba(226, 104, 59, 0.5);
-        background: rgba(226, 104, 59, 0.08);
+        border-color: var(--accent-border);
+        background: var(--accent-soft);
         font-weight: 600;
       }
 
       .repo-path {
         display: block;
-        font-size: 11px;
+        font-size: var(--text-xs);
         color: var(--muted);
         word-break: break-all;
       }
 
-      .editor {
+      .editor,
+      .log-panel,
+      .settings-card,
+      .kanban-controls,
+      .kanban-form,
+      .kanban-form-grid,
+      .kanban-detail,
+      .kanban-detail-card {
         display: grid;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
       .editor-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--space-lg);
         flex-wrap: wrap;
       }
 
       .editor-header strong {
         display: block;
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .editor-header span {
-        font-size: 12px;
+        font-size: var(--text-sm);
         color: var(--muted);
+      }
+
+      .editor-body,
+      .log-output {
+        border-radius: var(--radius-md);
+        background: var(--code-bg);
+        color: var(--code-ink);
+        padding: var(--space-xl);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: 1.6;
       }
 
       .editor-body {
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 12px;
-        border-radius: 14px;
-        background: rgba(12, 20, 24, 0.92);
-        color: #f3f5f6;
-        padding: 14px;
-        font-family: "Fira Code", "Courier New", monospace;
-        font-size: 12px;
-        line-height: 1.6;
+        gap: var(--space-lg);
         min-height: 220px;
         overflow: hidden;
       }
 
       .editor-gutter {
         text-align: right;
-        color: rgba(243, 245, 246, 0.45);
+        color: var(--code-ink-soft);
         user-select: none;
-        padding-right: 8px;
-        border-right: 1px solid rgba(243, 245, 246, 0.12);
+        padding-right: var(--space-sm);
+        border-right: 1px solid var(--code-stroke);
       }
 
       .editor-code {
@@ -448,184 +497,132 @@
         overflow: hidden;
       }
 
-      .runs {
-        margin-top: 28px;
-        display: grid;
-        gap: 16px;
-      }
-
-      .runs-grid {
-        display: grid;
-        gap: 16px;
-      }
-
       .run-controls {
         display: grid;
-        gap: 14px;
+        gap: var(--space-xl);
       }
 
       .run-status {
         display: grid;
-        gap: 6px;
-        font-size: 12px;
+        gap: var(--space-xs);
+        font-size: var(--text-sm);
         color: var(--muted);
       }
 
       .run-status strong {
-        font-size: 18px;
+        font-size: var(--text-xl);
         color: var(--ink);
-      }
-
-      .run-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .log-panel {
-        display: grid;
-        gap: 12px;
       }
 
       .log-output {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
         min-height: 220px;
         max-height: 280px;
         overflow: auto;
-        border-radius: 14px;
-        background: rgba(12, 20, 24, 0.92);
-        color: #f3f5f6;
-        padding: 14px;
-        font-family: "Fira Code", "Courier New", monospace;
-        font-size: 12px;
-        line-height: 1.6;
       }
 
       .log-line {
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 10px;
+        gap: var(--space-md);
       }
 
       .log-time {
-        color: rgba(243, 245, 246, 0.6);
+        color: var(--code-ink-muted);
         font-variant-numeric: tabular-nums;
       }
 
       .history-list {
         display: grid;
-        gap: 10px;
+        gap: var(--space-md);
+      }
+
+      .history-item,
+      .recent-item {
+        border: 1px solid var(--stroke-soft);
+        border-radius: var(--radius-sm);
+        padding: var(--space-md) var(--space-lg);
+        display: grid;
       }
 
       .history-item {
-        border: 1px solid rgba(28, 42, 46, 0.08);
-        border-radius: 12px;
-        padding: 10px 12px;
-        display: grid;
-        gap: 6px;
-        background: rgba(255, 255, 255, 0.85);
+        gap: var(--space-xs);
+        background: var(--surface-muted);
+      }
+
+      .recent-item {
+        gap: var(--space-2xs);
+        background: var(--surface-ghost);
       }
 
       .history-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .history-header strong {
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .status-pill {
-        font-size: 11px;
+        font-size: var(--text-xs);
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        padding: 4px 8px;
-        border-radius: 999px;
-        background: rgba(44, 140, 124, 0.15);
-        color: #1f6b60;
+        padding: var(--space-2xs) var(--space-sm);
+        border-radius: var(--radius-pill);
+        background: var(--accent-2-bg);
+        color: var(--accent-2-ink);
       }
 
       .status-pill[data-status="failed"] {
-        background: rgba(226, 104, 59, 0.2);
-        color: #a34222;
+        background: var(--accent-strong);
+        color: var(--accent-ink);
       }
 
       .history-meta {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        font-size: 11px;
+        gap: var(--space-sm);
+        font-size: var(--text-xs);
         color: var(--muted);
-      }
-
-      .settings {
-        margin-top: 28px;
-        display: grid;
-        gap: 16px;
-      }
-
-      .settings-grid {
-        display: grid;
-        gap: 16px;
-      }
-
-      .settings-card {
-        display: grid;
-        gap: 12px;
       }
 
       .settings-row {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
       }
 
       .settings-row label {
-        font-size: 11px;
+        font-size: var(--text-xs);
         text-transform: uppercase;
         letter-spacing: 0.12em;
         color: var(--muted);
       }
 
-      .settings-select {
-        border: 1px solid var(--stroke);
-        border-radius: 12px;
-        padding: 10px 12px;
-        font-family: var(--font-body);
-        font-size: 14px;
-        background: rgba(255, 255, 255, 0.95);
-        color: var(--ink);
-      }
-
       .profile-list {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .profile-pill {
-        border: 1px solid var(--stroke);
-        background: #fff;
-        color: var(--ink);
-        padding: 6px 12px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
+        padding: var(--space-xs) var(--space-lg);
+        font-size: var(--text-sm);
       }
 
       .profile-pill[data-active="true"] {
-        background: rgba(44, 140, 124, 0.15);
-        border-color: rgba(44, 140, 124, 0.45);
-        color: #1f6b60;
+        background: var(--accent-2-bg);
+        border-color: var(--accent-2-border);
+        color: var(--accent-2-ink);
       }
 
       .settings-summary {
         display: grid;
-        gap: 8px;
-        font-size: 12px;
+        gap: var(--space-sm);
+        font-size: var(--text-sm);
         color: var(--muted);
       }
 
@@ -633,55 +630,26 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
       .settings-summary-line strong {
         color: var(--ink);
-        font-size: 13px;
+        font-size: var(--text-base);
         font-weight: 600;
         word-break: break-word;
         text-align: right;
       }
 
-      .kanban {
-        margin-top: 28px;
-        display: grid;
-        gap: 16px;
-      }
-
-      .kanban-controls {
-        display: grid;
-        gap: 12px;
-      }
-
-      .kanban-form {
-        display: grid;
-        gap: 12px;
-      }
-
-      .kanban-form-grid {
-        display: grid;
-        gap: 12px;
-      }
-
-      .kanban-grid {
-        display: grid;
-        gap: 16px;
-      }
-
       .kanban-board {
         display: grid;
-        gap: 14px;
+        gap: var(--space-xl);
       }
 
       .kanban-column {
-        background: var(--surface);
-        border: 1px solid var(--stroke);
-        border-radius: var(--radius);
-        padding: 14px;
+        padding: var(--space-xl);
         display: grid;
-        gap: 10px;
+        gap: var(--space-md);
       }
 
       .kanban-header {
@@ -689,73 +657,69 @@
         align-items: center;
         justify-content: space-between;
         font-weight: 600;
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .kanban-list {
         display: grid;
-        gap: 10px;
+        gap: var(--space-md);
       }
 
       .chip {
-        background: rgba(28, 42, 46, 0.08);
-        padding: 4px 10px;
-        border-radius: 999px;
-        font-size: 12px;
+        background: var(--stroke-soft);
+        padding: var(--space-2xs) var(--space-md);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
       }
 
       .kanban-task {
-        background: #fff;
-        border-radius: 12px;
-        padding: 12px;
-        border: 1px solid rgba(28, 42, 46, 0.08);
+        background: var(--surface-strong);
+        border-radius: var(--radius-sm);
+        padding: var(--space-lg);
+        border: 1px solid var(--stroke-soft);
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
         cursor: pointer;
       }
 
       .kanban-task[data-active="true"] {
-        border-color: rgba(226, 104, 59, 0.5);
-        background: rgba(226, 104, 59, 0.08);
+        border-color: var(--accent-border);
+        background: var(--accent-soft);
       }
 
       .kanban-task small {
         color: var(--muted);
-        font-size: 12px;
+        font-size: var(--text-sm);
       }
 
       .kanban-task-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .kanban-task-title {
-        font-size: 14px;
+        font-size: var(--text-md);
       }
 
       .kanban-task-meta {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        font-size: 11px;
+        gap: var(--space-sm);
+        font-size: var(--text-xs);
         color: var(--muted);
       }
 
       .kanban-task-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: var(--space-xs);
       }
 
       .kanban-move {
-        border: 1px solid var(--stroke);
-        background: #fff;
-        padding: 4px 8px;
-        border-radius: 999px;
-        font-size: 11px;
-        cursor: pointer;
+        padding: var(--space-2xs) var(--space-sm);
+        font-size: var(--text-xs);
       }
 
       .kanban-move:disabled {
@@ -763,59 +727,43 @@
         cursor: not-allowed;
       }
 
-      .kanban-detail {
-        display: grid;
-        gap: 12px;
-      }
-
       .kanban-detail-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-      }
-
-      .kanban-detail-card {
-        display: grid;
-        gap: 12px;
+        gap: var(--space-lg);
       }
 
       .kanban-detail-empty {
-        font-size: 13px;
+        font-size: var(--text-base);
         color: var(--muted);
       }
 
       .kanban-detail-meta {
         display: grid;
-        gap: 8px;
+        gap: var(--space-sm);
       }
 
       .kanban-detail-line {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        font-size: 12px;
+        gap: var(--space-lg);
+        font-size: var(--text-sm);
         color: var(--muted);
       }
 
       .kanban-detail-line strong {
         color: var(--ink);
-        font-size: 13px;
+        font-size: var(--text-base);
         font-weight: 600;
         text-align: right;
       }
 
-      .kanban-detail-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
       .accent-strip {
-        height: 4px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        height: var(--space-2xs);
+        border-radius: var(--radius-pill);
+        background: var(--accent-gradient);
       }
 
       .motion {
@@ -836,7 +784,7 @@
 
       @keyframes rise {
         from {
-          transform: translateY(12px);
+          transform: translateY(var(--space-lg));
           opacity: 0;
         }
         to {

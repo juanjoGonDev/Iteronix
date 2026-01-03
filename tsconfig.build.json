@@ -13,5 +13,9 @@
     "packages/adapters/src/**/*.ts",
     "packages/domain/src/**/*.ts",
     "packages/shared/src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }
