@@ -172,3 +172,23 @@
   - None
 - Next:
   - Implement provider list/select and settings update endpoints.
+### 2026-01-03 17:22 (Europe/Madrid) - Testing
+
+- Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.
+- Decisions:
+  - Add provider registry tests after existing implementation (non-TDD).
+  - Add a shared package smoke test to anchor the test structure.
+- Changes:
+  - packages/domain/src/providers/registry.test.ts
+  - packages/shared/src/index.test.ts
+  - PLAN.md
+- Commands:
+  - `git status -sb`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement provider list/select and settings update endpoints.

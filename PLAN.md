@@ -34,7 +34,7 @@
   - [x] docs
 - [x] Root scripts: lint, typecheck, test, build
 - [x] Add AGENTS.md and AGENTS_LOGS.md
-- [ ] Establish test structure for domain and shared packages (TDD-ready)
+- [x] Establish test structure for domain and shared packages (TDD-ready)
 
 Acceptance:
 
