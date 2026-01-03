@@ -449,3 +449,46 @@
   - None
 - Next:
   - Separate each screen into its own component with shared utilities in apps/web-ui.
+
+### 2026-01-03 20:46 (Europe/Madrid) - Web UI
+
+- Summary: Split the web UI into screen modules with shared utilities and moved the runtime script into TypeScript modules, adding unit tests for shared helpers.
+- Decisions:
+  - Keep the HTML as the static shell while screen modules own rendering and state updates.
+  - Add small shared utility tests for formatting and store behavior.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/src/index.ts
+  - apps/web-ui/src/screens/*
+  - apps/web-ui/src/shared/*
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Confirm no Electron-specific code remains in apps/web-ui and update PLAN.md.
+### 2026-01-03 20:53 (Europe/Madrid) - Web UI
+
+- Summary: Ensured the module-based web UI emits browser-ready JS and updated the shell to load the built output while keeping screens split by module.
+- Decisions:
+  - Add a dedicated web UI build tsconfig and wire it into the root build script.
+  - Keep the HTML shell static while referencing the compiled module entrypoint.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/tsconfig.build.json
+  - apps/web-ui/src/screens/kanban.ts
+  - package.json
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Complete the shared styles/CSS variables task in apps/web-ui.
