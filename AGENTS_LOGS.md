@@ -41,3 +41,22 @@
   - None
 - Next:
   - Implement provider registry and provider settings schema in domain.
+### 2026-01-03 14:39 (Europe/Madrid) - Domain
+
+- Summary: Added provider registry metadata, settings schema types, and JSON schema validation port with typed settings validation.
+- Decisions:
+  - Keep provider registry as pure metadata with immutable registration.
+  - Delegate JSON schema validation to a validator port returning typed results.
+- Changes:
+  - packages/domain/src/providers/*
+  - packages/domain/src/index.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement codex-cli provider adapter in packages/adapters.
