@@ -60,7 +60,7 @@ Acceptance:
   - [x] Sessions: start/stop + streaming events (SSE)
   - [x] History/logs retrieval
   - [x] Providers: list/select + settings update
-  - [ ] Kanban: board/columns/tasks CRUD (minimal)
+  - [x] Kanban: board/columns/tasks CRUD (minimal)
 - [x] Auth: static token via env var `AUTH_TOKEN` (Bearer header)
 - [ ] Workspace sandbox: path allowlist + command policy checks
 - [ ] Dockerfile + minimal run docs

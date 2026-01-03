@@ -194,6 +194,27 @@
   - None
 - Next:
   - Implement Kanban board CRUD endpoints in the server API.
+### 2026-01-03 18:22 (Europe/Madrid) - Server API
+
+- Summary: Added in-memory Kanban store and CRUD endpoints for boards, columns, and tasks with validation and tests.
+- Decisions:
+  - Keep Kanban data in-memory for MVP API wiring.
+  - Add Kanban store tests after implementation (non-TDD).
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/kanban.ts
+  - apps/server-api/src/kanban.test.ts
+  - apps/server-api/src/server.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Enforce workspace sandbox path allowlist and command policy checks in the server API.
 ### 2026-01-03 17:22 (Europe/Madrid) - Testing
 
 - Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.

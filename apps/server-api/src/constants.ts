@@ -19,7 +19,19 @@ export const RoutePath = {
   LogsQuery: "/logs/query",
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
-  ProvidersSettings: "/providers/settings"
+  ProvidersSettings: "/providers/settings",
+  KanbanBoardsCreate: "/kanban/boards/create",
+  KanbanBoardsList: "/kanban/boards/list",
+  KanbanBoardsUpdate: "/kanban/boards/update",
+  KanbanBoardsDelete: "/kanban/boards/delete",
+  KanbanColumnsCreate: "/kanban/columns/create",
+  KanbanColumnsList: "/kanban/columns/list",
+  KanbanColumnsUpdate: "/kanban/columns/update",
+  KanbanColumnsDelete: "/kanban/columns/delete",
+  KanbanTasksCreate: "/kanban/tasks/create",
+  KanbanTasksList: "/kanban/tasks/list",
+  KanbanTasksUpdate: "/kanban/tasks/update",
+  KanbanTasksDelete: "/kanban/tasks/delete"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -65,6 +77,12 @@ export const ErrorMessage = {
   MissingProviderId: "Missing providerId",
   MissingProfileId: "Missing profileId",
   MissingProviderConfig: "Missing provider config",
+  MissingBoardId: "Missing boardId",
+  MissingBoardName: "Missing board name",
+  MissingColumnId: "Missing columnId",
+  MissingColumnName: "Missing column name",
+  MissingTaskId: "Missing taskId",
+  MissingTaskTitle: "Missing task title",
   ProjectExists: "Project already exists",
   ProviderNotFound: "Provider not found",
   NotFound: "Not found",
@@ -124,6 +142,30 @@ export const ProviderField = {
   ProfileId: "profileId",
   ProviderId: "providerId",
   Config: "config"
+} as const;
+
+export const KanbanBoardField = {
+  ProjectId: "projectId",
+  BoardId: "boardId",
+  Name: "name"
+} as const;
+
+export const KanbanColumnField = {
+  ProjectId: "projectId",
+  BoardId: "boardId",
+  ColumnId: "columnId",
+  Name: "name",
+  Position: "position"
+} as const;
+
+export const KanbanTaskField = {
+  ProjectId: "projectId",
+  BoardId: "boardId",
+  ColumnId: "columnId",
+  TaskId: "taskId",
+  Title: "title",
+  Description: "description",
+  Position: "position"
 } as const;
 
 export const FileEntryKind = {

@@ -7,6 +7,9 @@ import {
   HeaderName,
   HttpMethod,
   HttpStatus,
+  KanbanBoardField,
+  KanbanColumnField,
+  KanbanTaskField,
   MimeType,
   LogsField,
   ProviderField,
@@ -53,6 +56,12 @@ import {
   type ProviderStore
 } from "./providers";
 import {
+  createKanbanStore,
+  KanbanStoreErrorCode,
+  type KanbanStoreError,
+  type KanbanStore
+} from "./kanban";
+import {
   createSessionEventHub,
   createSessionStore,
   createStatusEvent,
@@ -74,6 +83,7 @@ export const startServer = (): void => {
   const historyStore = createHistoryStore();
   const logsStore = createLogsStore();
   const providerStore = createProviderStore();
+  const kanbanStore = createKanbanStore();
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -84,7 +94,8 @@ export const startServer = (): void => {
       sessionEvents,
       historyStore,
       logsStore,
-      providerStore
+      providerStore,
+      kanbanStore
     );
   });
 
@@ -100,7 +111,8 @@ const handleRequest = async (
   sessionEvents: SessionEventHub,
   historyStore: HistoryStore,
   logsStore: LogsStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
+  kanbanStore: KanbanStore
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -256,6 +268,126 @@ const handleRequest = async (
     }
 
     await handleProviderSettingsUpdate(req, res, projectStore, providerStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanBoardsCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanBoardsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanBoardList(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanBoardsUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanBoardsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanColumnsCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanColumnsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanColumnList(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanColumnsUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanColumnsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanTasksCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanTasksList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanTaskList(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanTasksUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.KanbanTasksDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore);
     return;
   }
 
@@ -736,6 +868,426 @@ const handleProviderSettingsUpdate = async (
 
   respondJson(res, HttpStatus.Ok, {
     settings: updated.value
+  });
+};
+
+const handleKanbanBoardCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanBoardCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const created = kanbanStore.createBoard(parsed.value);
+  if (created.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(created.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    board: created.value
+  });
+};
+
+const handleKanbanBoardList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanBoardListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const listed = kanbanStore.listBoards(parsed.value);
+  if (listed.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(listed.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    boards: listed.value
+  });
+};
+
+const handleKanbanBoardUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanBoardUpdateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const updated = kanbanStore.updateBoard(parsed.value);
+  if (updated.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(updated.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    board: updated.value
+  });
+};
+
+const handleKanbanBoardDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanBoardDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const deleted = kanbanStore.deleteBoard(parsed.value);
+  if (deleted.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(deleted.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    board: deleted.value
+  });
+};
+
+const handleKanbanColumnCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanColumnCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const created = kanbanStore.createColumn(parsed.value);
+  if (created.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(created.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    column: created.value
+  });
+};
+
+const handleKanbanColumnList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanColumnListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const listed = kanbanStore.listColumns(parsed.value);
+  if (listed.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(listed.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    columns: listed.value
+  });
+};
+
+const handleKanbanColumnUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanColumnUpdateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const updated = kanbanStore.updateColumn(parsed.value);
+  if (updated.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(updated.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    column: updated.value
+  });
+};
+
+const handleKanbanColumnDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanColumnDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const deleted = kanbanStore.deleteColumn(parsed.value);
+  if (deleted.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(deleted.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    column: deleted.value
+  });
+};
+
+const handleKanbanTaskCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanTaskCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const created = kanbanStore.createTask(parsed.value);
+  if (created.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(created.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    task: created.value
+  });
+};
+
+const handleKanbanTaskList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanTaskListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const listed = kanbanStore.listTasks(parsed.value);
+  if (listed.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(listed.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    tasks: listed.value
+  });
+};
+
+const handleKanbanTaskUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanTaskUpdateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const updated = kanbanStore.updateTask(parsed.value);
+  if (updated.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(updated.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    task: updated.value
+  });
+};
+
+const handleKanbanTaskDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  kanbanStore: KanbanStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseKanbanTaskDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(projectStore, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const deleted = kanbanStore.deleteTask(parsed.value);
+  if (deleted.type === ResultType.Err) {
+    respondError(res, mapKanbanStoreError(deleted.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    task: deleted.value
   });
 };
 
@@ -1274,6 +1826,665 @@ const parseProviderSettingsRequest = (
   });
 };
 
+const parseKanbanBoardCreateRequest = (
+  value: unknown
+): Result<{ projectId: string; name: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanBoardField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const name = readRequiredString(
+    value,
+    KanbanBoardField.Name,
+    ErrorMessage.MissingBoardName
+  );
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    name: name.value
+  });
+};
+
+const parseKanbanBoardListRequest = (
+  value: unknown
+): Result<{ projectId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanBoardField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  return ok({
+    projectId: projectId.value
+  });
+};
+
+const parseKanbanBoardUpdateRequest = (
+  value: unknown
+): Result<{ projectId: string; boardId: string; name: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanBoardField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanBoardField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const name = readRequiredString(
+    value,
+    KanbanBoardField.Name,
+    ErrorMessage.MissingBoardName
+  );
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    boardId: boardId.value,
+    name: name.value
+  });
+};
+
+const parseKanbanBoardDeleteRequest = (
+  value: unknown
+): Result<{ projectId: string; boardId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanBoardField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanBoardField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    boardId: boardId.value
+  });
+};
+
+const parseKanbanColumnCreateRequest = (
+  value: unknown
+): Result<
+  { projectId: string; boardId: string; name: string; position?: number },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanColumnField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanColumnField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const name = readRequiredString(
+    value,
+    KanbanColumnField.Name,
+    ErrorMessage.MissingColumnName
+  );
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+
+  const position = readOptionalNumberField(value, KanbanColumnField.Position);
+  if (position.type === ResultType.Err) {
+    return position;
+  }
+
+  const input: {
+    projectId: string;
+    boardId: string;
+    name: string;
+    position?: number;
+  } = {
+    projectId: projectId.value,
+    boardId: boardId.value,
+    name: name.value
+  };
+
+  if (position.value !== undefined) {
+    input.position = position.value;
+  }
+
+  return ok(input);
+};
+
+const parseKanbanColumnListRequest = (
+  value: unknown
+): Result<{ projectId: string; boardId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanColumnField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanColumnField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    boardId: boardId.value
+  });
+};
+
+const parseKanbanColumnUpdateRequest = (
+  value: unknown
+): Result<
+  { projectId: string; boardId: string; columnId: string; name?: string; position?: number },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanColumnField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanColumnField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const columnId = readRequiredString(
+    value,
+    KanbanColumnField.ColumnId,
+    ErrorMessage.MissingColumnId
+  );
+  if (columnId.type === ResultType.Err) {
+    return columnId;
+  }
+
+  const name = readOptionalStringField(value, KanbanColumnField.Name);
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+
+  const position = readOptionalNumberField(value, KanbanColumnField.Position);
+  if (position.type === ResultType.Err) {
+    return position;
+  }
+
+  const input: {
+    projectId: string;
+    boardId: string;
+    columnId: string;
+    name?: string;
+    position?: number;
+  } = {
+    projectId: projectId.value,
+    boardId: boardId.value,
+    columnId: columnId.value
+  };
+
+  if (name.value !== undefined) {
+    input.name = name.value;
+  }
+
+  if (position.value !== undefined) {
+    input.position = position.value;
+  }
+
+  if (input.name === undefined && input.position === undefined) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(input);
+};
+
+const parseKanbanColumnDeleteRequest = (
+  value: unknown
+): Result<{ projectId: string; boardId: string; columnId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanColumnField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanColumnField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const columnId = readRequiredString(
+    value,
+    KanbanColumnField.ColumnId,
+    ErrorMessage.MissingColumnId
+  );
+  if (columnId.type === ResultType.Err) {
+    return columnId;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    boardId: boardId.value,
+    columnId: columnId.value
+  });
+};
+
+const parseKanbanTaskCreateRequest = (
+  value: unknown
+): Result<
+  {
+    projectId: string;
+    boardId: string;
+    columnId: string;
+    title: string;
+    description?: string;
+    position?: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanTaskField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanTaskField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const columnId = readRequiredString(
+    value,
+    KanbanTaskField.ColumnId,
+    ErrorMessage.MissingColumnId
+  );
+  if (columnId.type === ResultType.Err) {
+    return columnId;
+  }
+
+  const title = readRequiredString(
+    value,
+    KanbanTaskField.Title,
+    ErrorMessage.MissingTaskTitle
+  );
+  if (title.type === ResultType.Err) {
+    return title;
+  }
+
+  const description = readOptionalStringField(
+    value,
+    KanbanTaskField.Description
+  );
+  if (description.type === ResultType.Err) {
+    return description;
+  }
+
+  const position = readOptionalNumberField(value, KanbanTaskField.Position);
+  if (position.type === ResultType.Err) {
+    return position;
+  }
+
+  const input: {
+    projectId: string;
+    boardId: string;
+    columnId: string;
+    title: string;
+    description?: string;
+    position?: number;
+  } = {
+    projectId: projectId.value,
+    boardId: boardId.value,
+    columnId: columnId.value,
+    title: title.value
+  };
+
+  if (description.value !== undefined) {
+    input.description = description.value;
+  }
+
+  if (position.value !== undefined) {
+    input.position = position.value;
+  }
+
+  return ok(input);
+};
+
+const parseKanbanTaskListRequest = (
+  value: unknown
+): Result<
+  { projectId: string; boardId: string; columnId?: string },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanTaskField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanTaskField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const columnId = readOptionalStringField(value, KanbanTaskField.ColumnId);
+  if (columnId.type === ResultType.Err) {
+    return columnId;
+  }
+
+  const input: { projectId: string; boardId: string; columnId?: string } = {
+    projectId: projectId.value,
+    boardId: boardId.value
+  };
+
+  if (columnId.value !== undefined) {
+    input.columnId = columnId.value;
+  }
+
+  return ok(input);
+};
+
+const parseKanbanTaskUpdateRequest = (
+  value: unknown
+): Result<
+  {
+    projectId: string;
+    boardId: string;
+    taskId: string;
+    columnId?: string;
+    title?: string;
+    description?: string;
+    position?: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanTaskField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanTaskField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const taskId = readRequiredString(
+    value,
+    KanbanTaskField.TaskId,
+    ErrorMessage.MissingTaskId
+  );
+  if (taskId.type === ResultType.Err) {
+    return taskId;
+  }
+
+  const title = readOptionalStringField(value, KanbanTaskField.Title);
+  if (title.type === ResultType.Err) {
+    return title;
+  }
+
+  const description = readOptionalStringField(
+    value,
+    KanbanTaskField.Description
+  );
+  if (description.type === ResultType.Err) {
+    return description;
+  }
+
+  const columnId = readOptionalStringField(value, KanbanTaskField.ColumnId);
+  if (columnId.type === ResultType.Err) {
+    return columnId;
+  }
+
+  const position = readOptionalNumberField(value, KanbanTaskField.Position);
+  if (position.type === ResultType.Err) {
+    return position;
+  }
+
+  const input: {
+    projectId: string;
+    boardId: string;
+    taskId: string;
+    columnId?: string;
+    title?: string;
+    description?: string;
+    position?: number;
+  } = {
+    projectId: projectId.value,
+    boardId: boardId.value,
+    taskId: taskId.value
+  };
+
+  if (title.value !== undefined) {
+    input.title = title.value;
+  }
+
+  if (description.value !== undefined) {
+    input.description = description.value;
+  }
+
+  if (columnId.value !== undefined) {
+    input.columnId = columnId.value;
+  }
+
+  if (position.value !== undefined) {
+    input.position = position.value;
+  }
+
+  if (
+    input.title === undefined &&
+    input.description === undefined &&
+    input.columnId === undefined &&
+    input.position === undefined
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(input);
+};
+
+const parseKanbanTaskDeleteRequest = (
+  value: unknown
+): Result<{ projectId: string; boardId: string; taskId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    KanbanTaskField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const boardId = readRequiredString(
+    value,
+    KanbanTaskField.BoardId,
+    ErrorMessage.MissingBoardId
+  );
+  if (boardId.type === ResultType.Err) {
+    return boardId;
+  }
+
+  const taskId = readRequiredString(
+    value,
+    KanbanTaskField.TaskId,
+    ErrorMessage.MissingTaskId
+  );
+  if (taskId.type === ResultType.Err) {
+    return taskId;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    boardId: boardId.value,
+    taskId: taskId.value
+  });
+};
+
 const getSessionById = (
   store: SessionStore,
   id: string
@@ -1330,6 +2541,20 @@ const mapLogsStoreError = (error: LogsStoreError): ApiError => {
 
 const mapProviderStoreError = (error: ProviderStoreError): ApiError => {
   if (error.code === ProviderStoreErrorCode.NotFound) {
+    return {
+      status: HttpStatus.NotFound,
+      message: error.message
+    };
+  }
+
+  return {
+    status: HttpStatus.BadRequest,
+    message: error.message
+  };
+};
+
+const mapKanbanStoreError = (error: KanbanStoreError): ApiError => {
+  if (error.code === KanbanStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
       message: error.message
