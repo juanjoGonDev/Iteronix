@@ -1,11 +1,14 @@
 import { resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   ConfigErrorCode,
   ConfigErrorMessage,
   DefaultPaths,
   DefaultServer,
   DesktopMode,
-  EnvKey
+  EnvKey,
+  DefaultUi,
+  UiMode
 } from "./constants";
 import { err, ok, ResultType, type Result } from "./result";
 
@@ -23,17 +26,30 @@ export type LocalServerConfig = {
   commandAllowlist: ReadonlyArray<string>;
 };
 
-export type LocalDesktopConfig = {
+export type UiSource =
+  | { mode: typeof UiMode.Dev; url: string }
+  | {
+      mode: typeof UiMode.Prod;
+      entryPath: string;
+      entryUrl: string;
+      assetsPath: string;
+    };
+
+type LocalConfigBase = {
   mode: typeof DesktopMode.Local;
   serverUrl: string;
   server: LocalServerConfig;
 };
 
-export type RemoteDesktopConfig = {
+type RemoteConfigBase = {
   mode: typeof DesktopMode.Remote;
   serverUrl: string;
   authToken?: string;
 };
+
+export type LocalDesktopConfig = LocalConfigBase & { ui: UiSource };
+
+export type RemoteDesktopConfig = RemoteConfigBase & { ui: UiSource };
 
 export type DesktopConfig = LocalDesktopConfig | RemoteDesktopConfig;
 
@@ -46,11 +62,30 @@ export const resolveDesktopConfig = (
     return mode;
   }
 
-  if (mode.value === DesktopMode.Remote) {
-    return resolveRemoteConfig(env);
+  const uiSource = resolveUiSource(env, cwd);
+  if (uiSource.type === ResultType.Err) {
+    return uiSource;
   }
 
-  return resolveLocalConfig(env, cwd);
+  if (mode.value === DesktopMode.Remote) {
+    const remote = resolveRemoteConfig(env);
+    if (remote.type === ResultType.Err) {
+      return remote;
+    }
+    return ok({
+      ...remote.value,
+      ui: uiSource.value
+    });
+  }
+
+  const local = resolveLocalConfig(env, cwd);
+  if (local.type === ResultType.Err) {
+    return local;
+  }
+  return ok({
+    ...local.value,
+    ui: uiSource.value
+  });
 };
 
 const parseMode = (value: string | undefined): Result<DesktopMode, ConfigError> => {
@@ -67,9 +102,68 @@ const parseMode = (value: string | undefined): Result<DesktopMode, ConfigError> 
   });
 };
 
+const resolveUiSource = (
+  env: NodeJS.ProcessEnv,
+  cwd: string
+): Result<UiSource, ConfigError> => {
+  const mode = resolveUiMode(env);
+  if (mode.type === ResultType.Err) {
+    return mode;
+  }
+
+  if (mode.value === UiMode.Dev) {
+    const urlValue = readOptional(env[EnvKey.UiDevUrl]) ?? DefaultUi.DevUrl;
+    const normalized = normalizeUiUrl(urlValue);
+    if (normalized.type === ResultType.Err) {
+      return normalized;
+    }
+    return ok({
+      mode: UiMode.Dev,
+      url: normalized.value
+    });
+  }
+
+  const entryPath = resolvePath(
+    cwd,
+    readOptional(env[EnvKey.UiProdIndex]) ?? DefaultUi.ProdIndex
+  );
+  const assetsPath = resolvePath(
+    cwd,
+    readOptional(env[EnvKey.UiProdAssets]) ?? DefaultUi.ProdAssets
+  );
+  const entryUrl = pathToFileURL(entryPath).toString();
+  return ok({
+    mode: UiMode.Prod,
+    entryPath,
+    entryUrl,
+    assetsPath
+  });
+};
+
+const resolveUiMode = (env: NodeJS.ProcessEnv): Result<UiMode, ConfigError> => {
+  const explicit = readOptional(env[EnvKey.UiMode]);
+  if (explicit) {
+    const normalized = explicit.toLowerCase();
+    if (normalized === UiMode.Dev || normalized === UiMode.Prod) {
+      return ok(normalized);
+    }
+    return err({
+      code: ConfigErrorCode.InvalidUiMode,
+      message: `${ConfigErrorMessage.InvalidUiMode}: ${explicit}`
+    });
+  }
+
+  const nodeEnv = readOptional(env["NODE_ENV"]);
+  if (nodeEnv && nodeEnv.toLowerCase() === "development") {
+    return ok(UiMode.Dev);
+  }
+
+  return ok(DefaultUi.Mode);
+};
+
 const resolveRemoteConfig = (
   env: NodeJS.ProcessEnv
-): Result<RemoteDesktopConfig, ConfigError> => {
+): Result<RemoteConfigBase, ConfigError> => {
   const urlValue = env[EnvKey.RemoteUrl];
   if (!urlValue || urlValue.trim().length === 0) {
     return err({
@@ -84,7 +178,7 @@ const resolveRemoteConfig = (
   }
 
   const authToken = readOptional(env[EnvKey.AuthToken]);
-  const base: RemoteDesktopConfig = {
+  const base: RemoteConfigBase = {
     mode: DesktopMode.Remote,
     serverUrl: normalizedUrl.value
   };
@@ -102,7 +196,7 @@ const resolveRemoteConfig = (
 const resolveLocalConfig = (
   env: NodeJS.ProcessEnv,
   cwd: string
-): Result<LocalDesktopConfig, ConfigError> => {
+): Result<LocalConfigBase, ConfigError> => {
   const authToken = readRequiredAuthToken(env);
   if (authToken.type === ResultType.Err) {
     return authToken;
@@ -226,6 +320,24 @@ const normalizeUrl = (value: string): Result<string, ConfigError> => {
     return err({
       code: ConfigErrorCode.InvalidRemoteUrl,
       message: ConfigErrorMessage.InvalidRemoteUrl
+    });
+  }
+};
+
+const normalizeUiUrl = (value: string): Result<string, ConfigError> => {
+  try {
+    const parsed = new URL(value.trim());
+    if (!isAllowedProtocol(parsed.protocol)) {
+      return err({
+        code: ConfigErrorCode.InvalidUiDevUrl,
+        message: ConfigErrorMessage.InvalidUiDevUrl
+      });
+    }
+    return ok(trimTrailingSlash(parsed.toString()));
+  } catch {
+    return err({
+      code: ConfigErrorCode.InvalidUiDevUrl,
+      message: ConfigErrorMessage.InvalidUiDevUrl
     });
   }
 };

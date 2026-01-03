@@ -5,8 +5,10 @@ import {
   ConfigErrorCode,
   DefaultPaths,
   DefaultServer,
+  DefaultUi,
   DesktopMode,
-  EnvKey
+  EnvKey,
+  UiMode
 } from "./constants";
 import { ResultType } from "./result";
 
@@ -27,6 +29,10 @@ describe("resolveDesktopConfig", () => {
         resolvePath(cwd, DefaultPaths.ServerEntry)
       );
       expect(result.value.server.workspaceRoots).toEqual(["C:\\repo", "D:\\work"]);
+      if (result.value.ui.mode === UiMode.Prod) {
+        expect(result.value.ui.entryPath).toBe(resolvePath(cwd, DefaultUi.ProdIndex));
+        expect(result.value.ui.assetsPath).toBe(resolvePath(cwd, DefaultUi.ProdAssets));
+      }
     }
   });
 
@@ -56,6 +62,23 @@ describe("resolveDesktopConfig", () => {
     expect(result.type).toBe(ResultType.Ok);
     if (result.type === ResultType.Ok && result.value.mode === DesktopMode.Remote) {
       expect(result.value.serverUrl).toBe("https://api.example.com");
+    }
+  });
+
+  it("uses dev UI source when configured", () => {
+    const cwd = process.cwd();
+    const env: NodeJS.ProcessEnv = {
+      [EnvKey.Mode]: DesktopMode.Remote,
+      [EnvKey.RemoteUrl]: "http://localhost:4000",
+      [EnvKey.UiMode]: UiMode.Dev,
+      [EnvKey.UiDevUrl]: "http://localhost:5173/"
+    };
+
+    const result = resolveDesktopConfig(env, cwd);
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type === ResultType.Ok && result.value.ui.mode === UiMode.Dev) {
+      expect(result.value.ui.url).toBe("http://localhost:5173");
     }
   });
 });

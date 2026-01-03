@@ -571,3 +571,24 @@
   - None
 - Next:
   - Implement desktop dev/prod web UI loading in apps/desktop-main.
+### 2026-01-03 21:43 (Europe/Madrid) - Desktop Main
+
+- Summary: Added UI source selection for dev vs prod in the desktop wrapper config and wired output selection, with tests covering UI mode resolution.
+- Decisions:
+  - Resolve UI source alongside server mode using environment-driven defaults.
+  - Represent prod UI as a file URL with an assets directory for the built web UI.
+- Changes:
+  - apps/desktop-main/src/config.ts
+  - apps/desktop-main/src/config.test.ts
+  - apps/desktop-main/src/constants.ts
+  - apps/desktop-main/src/index.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement OS keychain secrets adapter for desktop token storage.
