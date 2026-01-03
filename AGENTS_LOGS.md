@@ -512,3 +512,21 @@
   - None
 - Next:
   - Verify apps/web-ui remains free of Electron-specific code and update PLAN.md.
+### 2026-01-03 21:21 (Europe/Madrid) - Web UI
+
+- Summary: Added a shared layout shell (sidebar, main content, footer) and normalized screen sections with a common structure and navigation links.
+- Decisions:
+  - Use a single layout grid with sidebar navigation to keep screen structure consistent.
+  - Apply a shared screen wrapper class for consistent spacing across sections.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Verify apps/web-ui remains free of Electron-specific code and update PLAN.md.

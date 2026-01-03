@@ -161,6 +161,45 @@
         flex-wrap: wrap;
       }
 
+      .layout {
+        display: grid;
+        gap: var(--space-4xl);
+      }
+
+      .sidebar {
+        display: grid;
+        gap: var(--space-2xl);
+      }
+
+      .panel.sidebar-card {
+        min-height: auto;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: var(--space-sm);
+      }
+
+      .nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-sm);
+        text-decoration: none;
+        color: var(--ink);
+        border: 1px solid transparent;
+        background: var(--surface-ghost);
+        transition: border var(--transition-fast), background var(--transition-fast);
+      }
+
+      .nav-link:hover,
+      .nav-link:focus-visible {
+        border-color: var(--stroke);
+        background: var(--surface-strong);
+      }
+
       .btn,
       .profile-pill,
       .kanban-move {
@@ -289,7 +328,7 @@
       }
 
       .panel-grid {
-        margin-top: var(--space-4xl);
+        margin-top: 0;
       }
 
       .panel {
@@ -342,12 +381,12 @@
         gap: var(--space-2xl);
       }
 
-      .projects,
-      .repo,
-      .runs,
-      .settings,
-      .kanban {
-        margin-top: var(--space-6xl);
+      .content {
+        display: grid;
+        gap: var(--space-6xl);
+      }
+
+      .screen {
         display: grid;
         gap: var(--space-2xl);
       }
@@ -760,6 +799,26 @@
         text-align: right;
       }
 
+      .footer {
+        margin-top: var(--space-8xl);
+        padding-top: var(--space-3xl);
+        border-top: 1px solid var(--stroke);
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+
+      .footer-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-lg);
+        flex-wrap: wrap;
+      }
+
+      .footer-meta {
+        color: var(--muted-strong);
+      }
+
       .accent-strip {
         height: var(--space-2xs);
         border-radius: var(--radius-pill);
@@ -794,6 +853,11 @@
       }
 
       @media (min-width: 900px) {
+        .layout {
+          grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+          align-items: start;
+        }
+
         .hero {
           grid-template-columns: 1.4fr 1fr;
           align-items: center;
@@ -853,7 +917,45 @@
         </div>
       </header>
 
-      <section class="hero motion">
+      <div class="layout">
+        <aside class="sidebar">
+          <nav class="panel sidebar-card">
+            <h3>Navigate</h3>
+            <div class="nav-list">
+              <a class="nav-link" href="#overview">
+                <span>Overview</span>
+                <span class="chip">Shell</span>
+              </a>
+              <a class="nav-link" href="#projects">
+                <span>Projects</span>
+                <span class="chip">3</span>
+              </a>
+              <a class="nav-link" href="#repo">
+                <span>Repository</span>
+                <span class="chip">Tree</span>
+              </a>
+              <a class="nav-link" href="#runs">
+                <span>Runs</span>
+                <span class="chip">Live</span>
+              </a>
+              <a class="nav-link" href="#settings">
+                <span>Settings</span>
+                <span class="chip">Profiles</span>
+              </a>
+              <a class="nav-link" href="#kanban">
+                <span>Kanban</span>
+                <span class="chip">Flow</span>
+              </a>
+            </div>
+          </nav>
+          <div class="panel sidebar-card">
+            <h3>Workspace</h3>
+            <p>Server connection is required for live runs.</p>
+            <strong>Not connected</strong>
+          </div>
+        </aside>
+        <main class="content">
+          <section class="hero motion" id="overview">
         <div>
           <h2>One cockpit for agent workflows</h2>
           <p>
@@ -890,7 +992,7 @@
         </div>
       </section>
 
-      <section class="panel-grid">
+          <section class="panel-grid">
         <article class="panel motion delay-1">
           <h3>Providers</h3>
           <p>Codex CLI online with schema-aware settings.</p>
@@ -908,7 +1010,7 @@
         </article>
       </section>
 
-      <section class="projects">
+          <section class="projects screen" id="projects">
         <div class="section-heading">
           <h3>Projects</h3>
           <p>Create, open, or revisit a workspace to orchestrate runs.</p>
@@ -948,7 +1050,7 @@
         </div>
       </section>
 
-      <section class="repo">
+          <section class="repo screen" id="repo">
         <div class="section-heading">
           <h3>Repository</h3>
           <p>Browse the workspace and inspect files in a Monaco-ready editor.</p>
@@ -977,7 +1079,7 @@
         </div>
       </section>
 
-      <section class="runs">
+          <section class="runs screen" id="runs">
         <div class="section-heading">
           <h3>Runs</h3>
           <p>Start a run, watch logs stream, and review history.</p>
@@ -1013,7 +1115,7 @@
         </div>
       </section>
 
-      <section class="settings">
+          <section class="settings screen" id="settings">
         <div class="section-heading">
           <h3>Settings</h3>
           <p>Choose provider, model, and precision per project profile.</p>
@@ -1056,9 +1158,9 @@
             <div class="hint">Applies to this project profile.</div>
           </article>
         </div>
-      </section>
+          </section>
 
-      <section class="kanban">
+          <section class="kanban screen" id="kanban">
         <div class="section-heading">
           <h3>Kanban</h3>
           <p>Track tasks across the workflow and surface details.</p>
@@ -1120,7 +1222,15 @@
             </div>
           </aside>
         </div>
-      </section>
+          </section>
+        </main>
+      </div>
+      <footer class="footer">
+        <div class="footer-content">
+          <span>Iteronix UI shell</span>
+          <span class="footer-meta">PWA-first | Provider-agnostic</span>
+        </div>
+      </footer>
     </div>
     <script type="module" src="./dist/index.js"></script>
   </body>
