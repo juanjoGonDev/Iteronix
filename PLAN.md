@@ -72,7 +72,7 @@ Acceptance:
 ## Milestone 3 - Web UI (single responsive PWA)
 
 - [x] Implement `apps/web-ui` as responsive, mobile-first
-- [ ] PWA: manifest + service worker
+- [x] PWA: manifest + service worker
 - [ ] Server connection: configurable base URL + token
 - [ ] Screens (minimal):
   - [ ] Projects (create/open/recent)

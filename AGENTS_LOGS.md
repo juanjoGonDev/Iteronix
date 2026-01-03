@@ -295,3 +295,25 @@
   - None
 - Next:
   - Implement provider list/select and settings update endpoints.
+
+### 2026-01-03 19:04 (Europe/Madrid) - Web UI
+
+- Summary: Added the PWA manifest, service worker, and icon assets with registration in the UI shell.
+- Decisions:
+  - Use a minimal service worker that only installs and claims clients.
+  - Ship a single SVG icon referenced by the manifest.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/manifest.webmanifest
+  - apps/web-ui/sw.js
+  - apps/web-ui/icons/icon.svg
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement server connection configuration UI (base URL + token).
