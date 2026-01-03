@@ -1,1 +1,3 @@
-export {};
+import { startServer } from "./server";
+
+startServer();

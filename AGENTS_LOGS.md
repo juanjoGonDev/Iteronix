@@ -81,3 +81,26 @@
   - None
 - Next:
   - Start Milestone 2 with server API scaffolding and auth policy.
+### 2026-01-03 15:10 (Europe/Madrid) - Server API
+
+- Summary: Scaffolded a minimal HTTP server with auth guard and project create/open endpoints.
+- Decisions:
+  - Require AUTH_TOKEN at startup and validate Bearer tokens on every request.
+  - Keep an in-memory project store for initial API scaffolding.
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/config.ts
+  - apps/server-api/src/result.ts
+  - apps/server-api/src/projects.ts
+  - apps/server-api/src/server.ts
+  - apps/server-api/src/index.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add file tree/read/write endpoints with workspace sandbox checks.

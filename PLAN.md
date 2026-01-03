@@ -54,13 +54,13 @@ Acceptance:
 ## Milestone 2 — Headless server API (Docker-ready, server-first)
 
 - [ ] Implement `apps/server-api` HTTP API for:
-  - [ ] Projects: create/open (workspace root)
+  - [x] Projects: create/open (workspace root)
   - [ ] Files: tree + read/write (restricted to project root)
   - [ ] Sessions: start/stop + streaming events (SSE)
   - [ ] History/logs retrieval
   - [ ] Providers: list/select + settings update
   - [ ] Kanban: board/columns/tasks CRUD (minimal)
-- [ ] Auth: static token via env var `AUTH_TOKEN` (Bearer header)
+- [x] Auth: static token via env var `AUTH_TOKEN` (Bearer header)
 - [ ] Workspace sandbox: path allowlist + command policy checks
 - [ ] Dockerfile + minimal run docs
 
