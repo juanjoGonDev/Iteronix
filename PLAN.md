@@ -52,6 +52,18 @@ Acceptance:
 
 - Core can run a prompt via `codex-cli` provider and emit events.
 
+### Provider usage & balance (best-effort)
+
+- [ ] Extend provider capabilities to optionally support:
+  - [ ] token usage reporting (per request/response)
+  - [ ] cost estimation (optional)
+  - [ ] balance/credits retrieval (optional; provider-dependent)
+- [ ] Define `UsageReport` and `BalanceInfo` types where fields are optional and validated.
+
+Acceptance:
+
+- Providers that support usage can report it; others return "not available" without breaking flows.
+
 ## Milestone 2 — Headless server API (Docker-ready, server-first)
 
 - [ ] Implement `apps/server-api` HTTP API for:
@@ -68,6 +80,37 @@ Acceptance:
 Acceptance:
 
 - Server runs in Docker on Raspberry Pi and can execute sessions with SSE streaming.
+
+### Kanban: REVIEW workflow (server)
+
+- [ ] Add support for a `REVIEW` column in the Kanban domain model (between IDEAS and TODO, or configurable)
+- [ ] Add task lifecycle actions via API:
+  - [ ] submit-to-review (AI can create tasks directly in REVIEW)
+  - [ ] approve (moves REVIEW → TODO)
+  - [ ] request-changes (stores reviewer comment and moves back to IN_PROGRESS or stays in REVIEW)
+  - [ ] close / reopen
+  - [ ] delete (soft-delete preferred; keep audit trail)
+- [ ] Persist reviewer comments/history per task (audit-friendly)
+- [ ] Ensure permissions/policy checks for destructive actions (delete/close)
+
+Acceptance:
+
+- Tasks can be created in REVIEW, approved into TODO, or returned with comments.
+- Close/reopen/delete actions work and are persisted.
+
+### Per-project configuration (server)
+
+- [ ] Add per-project config storage and API:
+  - [ ] `maxLoops` (number | null). null = infinite loops allowed (must be explicitly enabled).
+  - [ ] `onRunComplete` hooks (optional):
+    - [ ] play sound (boolean, shell-dependent)
+    - [ ] call webhook/API (url + method + headers + template payload)
+- [ ] Validate config with JSON schema; reject unsafe configs.
+- [ ] Ensure webhook calls are policy-checked (allowlist domains optional; at minimum: explicit opt-in per project).
+
+Acceptance:
+
+- Config is persisted per project and can be updated via API with validation.
 
 ## Milestone 3 - Web UI (single responsive PWA)
 
@@ -89,6 +132,56 @@ Acceptance:
 Acceptance:
 
 - UI runs in browser/PWA and fully operates a remote server.
+
+### Kanban: REVIEW column UX (web-ui)
+
+- [ ] Add a `REVIEW` column view with:
+  - [ ] Approve button (moves to TODO)
+  - [ ] Request changes: comment input + action (moves back accordingly)
+  - [ ] Close / Reopen actions
+  - [ ] Delete action (with confirmation)
+- [ ] Task detail panel shows:
+  - [ ] reviewer comments (chronological)
+  - [ ] status transitions history (timestamps)
+
+Acceptance:
+
+- User can fully manage REVIEW tasks from the UI similar to Jira.
+
+### Per-project settings UX (web-ui)
+
+- [ ] Add project settings section with:
+  - [ ] Loop limit: infinite toggle + numeric max loops
+  - [ ] On complete: sound toggle (if supported by current shell) (optional)
+  - [ ] Optional webhook config (URL + payload preview + test button)
+- [ ] Clear warnings for infinite loops and external webhooks.
+
+Acceptance:
+
+- User can configure project behavior safely and it persists.
+
+### Conversation UX (web-ui)
+
+- [ ] Show conversation list per run session:
+  - [ ] createdAt / closedAt
+  - [ ] preview of summary
+- [ ] Allow user to open a specific conversation and view events/messages.
+
+Acceptance:
+
+- User can navigate conversation history easily and see summaries.
+
+### Usage / balance display (web-ui)
+
+- [ ] Add a usage panel showing:
+  - [ ] tokens used (if available)
+  - [ ] estimated cost (if available)
+  - [ ] balance/credits (if available)
+  - [ ] clear "Not available for this provider" states
+
+Acceptance:
+
+- UI displays usage/balance when supported and degrades gracefully otherwise.
 
 ## Milestone 4 — Electron wrapper (reuses the same web UI)
 
@@ -176,6 +269,23 @@ Acceptance:
 
 - Auto-loop runs multiple steps and always outputs valid JSON.
 
+### Conversation rotation (auto-summary)
+
+- [ ] Introduce a session conversation model:
+  - [ ] Each run session has one or more "conversations" with:
+    - [ ] id, createdAt (Europe/Madrid), closedAt
+    - [ ] messages (or event references)
+    - [ ] rolling summary (string)
+- [ ] Add auto-rotation policy:
+  - [ ] When conversation size crosses a threshold (tokens estimate or message count), generate/update a compact summary and start a new conversation automatically.
+  - [ ] The new conversation must include only: summary + essential pointers (files, decisions, next step).
+- [ ] Persist conversation summaries and timestamps.
+
+Acceptance:
+
+- Long sessions stay responsive by rotating to new conversations automatically.
+- Each conversation is timestamped and searchable in history.
+
 ## Milestone 6 — Quality gates + Git integration (server-first)
 
 - [ ] Implement Git adapter (native `git` spawn)
@@ -210,73 +320,129 @@ Acceptance:
 ## Final setup & deployment automation (post-development)
 
 Goal:
-Provide reproducible commands and automation to bootstrap infrastructure, run the system in production, and support self-hosting (e.g. Raspberry Pi, Docker, reverse proxy).
+Provide reproducible commands and automation to bootstrap infrastructure, build production artifacts, and run the system in a self-hosted environment (e.g. Raspberry Pi, Docker, reverse proxy).
 
-This section MUST NOT be started until all core milestones are completed.
+This section MUST NOT be started until all previous milestones are fully completed and accepted.
+
+---
 
 ### Unified commands (required)
 
-- [ ] Ensure all services can be run using documented commands:
+Goal:
+Ensure there is exactly one documented way to run the system in each mode.
+
+- [ ] Ensure all services can be run using documented commands for:
   - [ ] Development / watch mode
   - [ ] Production build
   - [ ] Production run
 
-Root-level commands (final state):
+#### Root-level commands (final state)
 
-- `pnpm dev` → run server + web UI in watch mode
+- `pnpm dev` → run server-api + web-ui in watch mode
 - `pnpm dev:server`
 - `pnpm dev:web`
 - `pnpm dev:desktop`
-- `pnpm build` → build all artifacts
-- `pnpm start` → run production server
-- `pnpm preview:web` → serve built web UI locally
+- `pnpm build` → build all production artifacts
+- `pnpm start` → run production server using built output
+- `pnpm preview:web` → serve built web-ui locally (debug only)
 
 Acceptance:
 
-- All commands work consistently across environments.
-- No undocumented startup paths exist.
+- All commands behave consistently across environments (macOS/Linux/Windows where applicable).
+- There are no undocumented startup paths.
+- Dev commands NEVER depend on Docker.
+
+---
 
 ### Setup automation (final stage)
 
-- [ ] Provide a single setup entrypoint:
-  - [ ] `pnpm setup` (preferred for cross-platform)
-- [ ] Setup must:
+Goal:
+Provide a single, repeatable entrypoint to prepare a new machine for self-hosting.
+
+- [ ] Provide a single setup command:
+  - [ ] `pnpm setup` (preferred for cross-platform consistency)
+- [ ] The setup command MUST:
   - [ ] Pull required Docker images
+  - [ ] Create required Docker volumes and networks
   - [ ] Start infrastructure services (e.g. MySQL)
-  - [ ] Create required volumes/networks
-  - [ ] Print connection details and next steps
+  - [ ] Print connection details and next operational steps
+
+Rules:
+
+- Setup automation MUST NOT start application services.
+- Setup automation MUST NOT be required for development mode.
+
+Acceptance:
+
+- Running `pnpm setup` on a clean machine prepares all required infrastructure.
+- No manual steps beyond environment variables are required.
+
+---
 
 ### Docker & infrastructure
 
-- [ ] Add `docker-compose.yml` (or `compose.yaml`) for local/self-hosted infra:
+Goal:
+Provide a minimal, production-ready Docker setup suitable for Raspberry Pi.
+
+- [ ] Add `docker-compose.yml` (or `compose.yaml`) for infrastructure only:
   - [ ] MySQL service with persistent volume
   - [ ] Explicit environment configuration
-- [ ] Add `Dockerfile` for server API
+- [ ] Add a multi-stage `Dockerfile` for the application:
+  - [ ] Build stage: build server-api and web-ui
+  - [ ] Runtime stage: run server-api and serve built web-ui
 - [ ] Add commands:
-  - [ ] `pnpm docker:build:server`
-  - [ ] `pnpm docker:run:server`
-- [ ] Containers must be suitable for Raspberry Pi (ARM64).
+  - [ ] `pnpm docker:build` (build production image)
+  - [ ] `pnpm docker:run` (run production container)
+
+Constraints:
+
+- Containers MUST be suitable for ARM64 (Raspberry Pi).
+- Docker is a deployment concern, not a development requirement.
+
+---
+
+### Docker container composition (mandatory)
+
+- [ ] The production Docker image MUST include:
+  - [ ] server-api runtime
+  - [ ] built web-ui static assets
+- [ ] The server MUST:
+  - [ ] expose API under `/api`
+  - [ ] serve the web UI under `/`
+- [ ] A separate frontend container is NOT required for normal operation.
+
+Acceptance:
+
+- A single Docker container exposes both the API and the web UI.
+- Accessing the container root URL loads the PWA.
+- All `/api/*` endpoints function correctly.
+
+---
 
 ### Optional publishing (explicitly optional)
 
-- [ ] Image tagging and pushing:
+- [ ] Image tagging and publishing:
   - [ ] `pnpm docker:tag`
   - [ ] `pnpm docker:push`
-- [ ] These steps MUST require explicit configuration and confirmation.
+- [ ] Publishing steps MUST:
+  - [ ] Require explicit configuration
+  - [ ] Require explicit user confirmation
+
+---
 
 ### Documentation (required)
 
 - [ ] Add `docs/DEPLOYMENT.md` covering:
-  - [ ] Local dev
-  - [ ] Production run
-  - [ ] Docker setup
+  - [ ] Local development (no Docker)
+  - [ ] Production build and run
+  - [ ] Docker usage
   - [ ] Raspberry Pi notes
   - [ ] Nginx reverse proxy example
-  - [ ] Required environment variables (AUTH_TOKEN, ports, workspace root)
+  - [ ] Required environment variables (`AUTH_TOKEN`, ports, workspace root)
 
 Acceptance:
 
-- A new machine can be fully set up using only documented commands.
+- A new machine can be fully set up and running using only documented commands.
 - No manual steps beyond environment variables are required.
 
 ## Deferred (explicitly out of scope)
