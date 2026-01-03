@@ -215,6 +215,28 @@
   - None
 - Next:
   - Enforce workspace sandbox path allowlist and command policy checks in the server API.
+### 2026-01-03 18:46 (Europe/Madrid) - Server API
+
+- Summary: Added workspace allowlist enforcement and command policy utilities with sandbox tests and server integration.
+- Decisions:
+  - Require WORKSPACE_ROOTS to start the server and deny roots outside the allowlist.
+  - Add sandbox policy tests after implementation (non-TDD).
+- Changes:
+  - apps/server-api/src/constants.ts
+  - apps/server-api/src/config.ts
+  - apps/server-api/src/sandbox.ts
+  - apps/server-api/src/sandbox.test.ts
+  - apps/server-api/src/server.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Add Dockerfile and minimal run docs for the server API.
 ### 2026-01-03 17:22 (Europe/Madrid) - Testing
 
 - Summary: Established domain/shared test scaffolding with provider registry coverage and a shared package smoke test.

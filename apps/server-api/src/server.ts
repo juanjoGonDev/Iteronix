@@ -55,6 +55,7 @@ import {
   type ProviderStoreError,
   type ProviderStore
 } from "./providers";
+import { createWorkspacePolicy, type WorkspacePolicy } from "./sandbox";
 import {
   createKanbanStore,
   KanbanStoreErrorCode,
@@ -84,6 +85,7 @@ export const startServer = (): void => {
   const logsStore = createLogsStore();
   const providerStore = createProviderStore();
   const kanbanStore = createKanbanStore();
+  const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -95,7 +97,8 @@ export const startServer = (): void => {
       historyStore,
       logsStore,
       providerStore,
-      kanbanStore
+      kanbanStore,
+      workspacePolicy
     );
   });
 
@@ -112,7 +115,8 @@ const handleRequest = async (
   historyStore: HistoryStore,
   logsStore: LogsStore,
   providerStore: ProviderStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePolicy: WorkspacePolicy
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -137,7 +141,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleCreateProject(req, res, projectStore);
+    await handleCreateProject(req, res, projectStore, workspacePolicy);
     return;
   }
 
@@ -147,7 +151,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleOpenProject(req, res, projectStore);
+    await handleOpenProject(req, res, projectStore, workspacePolicy);
     return;
   }
 
@@ -400,7 +404,8 @@ const handleRequest = async (
 const handleCreateProject = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
+  workspacePolicy: WorkspacePolicy
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -414,7 +419,16 @@ const handleCreateProject = async (
     return;
   }
 
-  const created = store.create(parsed.value);
+  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  if (rootResult.type === ResultType.Err) {
+    respondError(res, rootResult.error);
+    return;
+  }
+
+  const created = store.create({
+    ...parsed.value,
+    rootPath: rootResult.value
+  });
   if (created.type === ResultType.Err) {
     respondError(res, mapProjectStoreError(created.error));
     return;
@@ -428,7 +442,8 @@ const handleCreateProject = async (
 const handleOpenProject = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
+  workspacePolicy: WorkspacePolicy
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -442,7 +457,18 @@ const handleOpenProject = async (
     return;
   }
 
-  const opened = store.open(parsed.value);
+  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  if (rootResult.type === ResultType.Err) {
+    respondError(res, rootResult.error);
+    return;
+  }
+
+  const openInput =
+    parsed.value.name !== undefined
+      ? { name: parsed.value.name, rootPath: rootResult.value }
+      : { rootPath: rootResult.value };
+
+  const opened = store.open(openInput);
   if (opened.type === ResultType.Err) {
     respondError(res, mapProjectStoreError(opened.error));
     return;

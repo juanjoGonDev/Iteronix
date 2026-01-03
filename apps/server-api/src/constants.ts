@@ -52,7 +52,9 @@ export const BearerScheme = "Bearer";
 export const EnvKey = {
   Port: "PORT",
   Host: "HOST",
-  AuthToken: "AUTH_TOKEN"
+  AuthToken: "AUTH_TOKEN",
+  WorkspaceRoots: "WORKSPACE_ROOTS",
+  CommandAllowlist: "COMMAND_ALLOWLIST"
 } as const;
 
 export const DefaultServerConfig = {
@@ -87,6 +89,10 @@ export const ErrorMessage = {
   ProviderNotFound: "Provider not found",
   NotFound: "Not found",
   InvalidPath: "Invalid path",
+  WorkspaceRootsMissing: "Workspace roots are required",
+  WorkspaceNotAllowed: "Workspace root not allowed",
+  MissingCommand: "Missing command",
+  CommandNotAllowed: "Command not allowed",
   AuthTokenMissing: "AUTH_TOKEN is required",
   InvalidPort: "Invalid PORT value",
   MethodNotAllowed: "Method not allowed",
