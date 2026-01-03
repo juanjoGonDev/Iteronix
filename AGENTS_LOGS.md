@@ -21,3 +21,23 @@
   - pnpm install reported ignored build scripts (esbuild) pending approval.
 - Next:
   - Define remaining domain ports and provider registry settings schema.
+### 2026-01-03 14:33 (Europe/Madrid) - Domain
+
+- Summary: Added domain ports for history, logs, policy, filesystem, and secrets with a shared Result type.
+- Decisions:
+  - Use a simple Result union for domain port responses.
+  - Keep ports minimal and side-effect free with typed error codes.
+- Changes:
+  - packages/domain/src/ports/*
+  - packages/domain/src/result.ts
+  - packages/domain/src/index.ts
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement provider registry and provider settings schema in domain.

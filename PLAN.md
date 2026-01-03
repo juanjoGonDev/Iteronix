@@ -43,7 +43,7 @@ Acceptance:
 
 - [x] Define `LLMProviderPort` + provider capabilities in `packages/domain`
 - [x] Define run session model + event model (stream-friendly)
-- [ ] Define ports: history store, logs store, policy/permissions, filesystem, secrets (interfaces only)
+- [x] Define ports: history store, logs store, policy/permissions, filesystem, secrets (interfaces only)
 - [ ] Implement provider registry + settings (typed + validated via JSON schema)
 - [ ] Implement one provider adapter: `codex-cli` (spawn) in `packages/adapters`
 
