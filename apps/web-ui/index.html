@@ -153,6 +153,59 @@
         line-height: 1.6;
       }
 
+      .hero-side {
+        display: grid;
+        gap: 16px;
+      }
+
+      .panel.stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+
+      .field input {
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-family: var(--font-body);
+        font-size: 14px;
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--ink);
+      }
+
+      .field input::placeholder {
+        color: rgba(91, 106, 112, 0.7);
+      }
+
+      .target {
+        display: grid;
+        gap: 6px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(44, 140, 124, 0.08);
+        border: 1px solid rgba(44, 140, 124, 0.2);
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .target strong {
+        font-size: 14px;
+        color: var(--ink);
+        word-break: break-all;
+      }
+
       .hero-tags {
         display: flex;
         flex-wrap: wrap;
@@ -325,7 +378,22 @@
             <span class="tag">Streaming events</span>
           </div>
         </div>
-        <div>
+        <div class="hero-side">
+          <div class="panel stack">
+            <h3>Connection</h3>
+            <div class="field">
+              <label for="base-url">Base URL</label>
+              <input id="base-url" type="url" inputmode="url" placeholder="http://localhost:4000" autocomplete="url" data-base-url>
+            </div>
+            <div class="field">
+              <label for="auth-token">Auth token</label>
+              <input id="auth-token" type="password" placeholder="Token" autocomplete="off" data-auth-token>
+            </div>
+            <div class="target">
+              <span>Target</span>
+              <strong data-current-target>Not set</strong>
+            </div>
+          </div>
           <div class="panel">
             <h3>Active Project</h3>
             <p>Workspace policies are enforced per root.</p>
@@ -410,7 +478,90 @@
       </section>
     </div>
     <script>
-      if ("serviceWorker" in navigator) {
+      const storageKeyBaseUrl = "iteronix.baseUrl";
+      const storageKeyToken = "iteronix.authToken";
+      const emptyLabel = "Not set";
+      const baseUrlInput = document.querySelector("[data-base-url]");
+      const tokenInput = document.querySelector("[data-auth-token]");
+      const targetDisplay = document.querySelector("[data-current-target]");
+
+      startApp();
+
+      function startApp() {
+        initConnectionSettings();
+        registerServiceWorker();
+      }
+
+      function initConnectionSettings() {
+        syncFromStorage();
+        registerStorageHandlers();
+      }
+
+      function syncFromStorage() {
+        const baseUrl = getStoredValue(storageKeyBaseUrl, "");
+        const token = getStoredValue(storageKeyToken, "");
+        if (baseUrlInput instanceof HTMLInputElement) {
+          baseUrlInput.value = baseUrl;
+        }
+        if (tokenInput instanceof HTMLInputElement) {
+          tokenInput.value = token;
+        }
+        setDisplay(baseUrl);
+      }
+
+      function registerStorageHandlers() {
+        if (baseUrlInput instanceof HTMLInputElement) {
+          baseUrlInput.addEventListener("input", handleBaseUrlInput);
+        }
+        if (tokenInput instanceof HTMLInputElement) {
+          tokenInput.addEventListener("input", handleTokenInput);
+        }
+      }
+
+      function handleBaseUrlInput() {
+        if (!(baseUrlInput instanceof HTMLInputElement)) {
+          return;
+        }
+        const value = baseUrlInput.value.trim();
+        saveValue(storageKeyBaseUrl, value);
+        setDisplay(value);
+      }
+
+      function handleTokenInput() {
+        if (!(tokenInput instanceof HTMLInputElement)) {
+          return;
+        }
+        const value = tokenInput.value.trim();
+        saveValue(storageKeyToken, value);
+      }
+
+      function saveValue(key, value) {
+        if (value === "") {
+          localStorage.removeItem(key);
+          return;
+        }
+        localStorage.setItem(key, value);
+      }
+
+      function setDisplay(baseUrl) {
+        if (!(targetDisplay instanceof HTMLElement)) {
+          return;
+        }
+        targetDisplay.textContent = baseUrl === "" ? emptyLabel : baseUrl;
+      }
+
+      function getStoredValue(key, fallback) {
+        const value = localStorage.getItem(key);
+        if (value === null) {
+          return fallback;
+        }
+        return value;
+      }
+
+      function registerServiceWorker() {
+        if (!("serviceWorker" in navigator)) {
+          return;
+        }
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js").catch(() => {});
         });

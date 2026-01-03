@@ -317,3 +317,22 @@
   - None
 - Next:
   - Implement server connection configuration UI (base URL + token).
+
+### 2026-01-03 19:09 (Europe/Madrid) - Web UI
+
+- Summary: Added UI controls for server base URL and auth token with localStorage persistence and target display.
+- Decisions:
+  - Store connection settings in localStorage to persist across reloads.
+  - Reflect the current target directly in the connection panel.
+- Changes:
+  - apps/web-ui/index.html
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Implement the Projects screen (create/open/recent) in apps/web-ui.
