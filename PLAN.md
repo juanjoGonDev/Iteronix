@@ -74,7 +74,7 @@ Acceptance:
 - [x] Implement `apps/web-ui` as responsive, mobile-first
 - [x] PWA: manifest + service worker
 - [x] Server connection: configurable base URL + token
-- [ ] Screens (minimal):
+- [x] Screens (minimal):
   - [x] Projects (create/open/recent)
   - [x] Repo explorer + Monaco editor
   - [x] Runs: start, live stream logs, history

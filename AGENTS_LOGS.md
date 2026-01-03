@@ -431,3 +431,21 @@
   - None
 - Next:
   - Confirm remaining Milestone 3 UI work and update PLAN.md if needed.
+
+### 2026-01-03 20:09 (Europe/Madrid) - Web UI
+
+- Summary: Confirmed the minimal UI screens are present and marked the parent checklist item complete.
+- Decisions:
+  - Only update the parent checklist once all child screens were checked.
+  - Leave remaining UI refactor tasks untouched.
+- Changes:
+  - PLAN.md
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - None
+- Next:
+  - Separate each screen into its own component with shared utilities in apps/web-ui.
