@@ -80,8 +80,8 @@ Acceptance:
   - [x] Runs: start, live stream logs, history
   - [x] Settings: provider/model/precision, per project/profile
   - [x] Kanban board: create/move tasks; show task details
-- [ ] No Electron-specific code in UI
 - [ ] Separate each screen into its own component, dont repeat code, use shared components/utilitiesm but with a single responsibility (apply to all screens)
+- [ ] No Electron-specific code in UI
 
 Acceptance:
 
