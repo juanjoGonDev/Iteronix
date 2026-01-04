@@ -1,27 +1,30 @@
-import { initKanbanScreen } from "./screens/kanban.js";
-import { initConnectionScreen } from "./screens/connection.js";
-import { initProjectsScreen } from "./screens/projects.js";
-import { initRepoScreen } from "./screens/repo.js";
-import { initRunsScreen } from "./screens/runs.js";
-import { initSettingsScreen } from "./screens/settings.js";
-import { storageKeys } from "./shared/constants.js";
-import { initShell } from "./shared/shell.js";
-import { registerServiceWorker } from "./shared/service-worker.js";
-import { getStoredValue } from "./shared/storage.js";
-import { createStore } from "./shared/store.js";
+import { renderKanbanScreen } from "./screens/kanban.js";
+import { renderOverviewScreen } from "./screens/overview.js";
+import { renderProjectsScreen } from "./screens/projects.js";
+import { renderRepositoryScreen } from "./screens/repository.js";
+import { renderRunsScreen } from "./screens/runs.js";
+import { renderSettingsScreen } from "./screens/settings.js";
+import { routes } from "./shared/navigation.js";
+import { initRouter } from "./shared/router.js";
+import { renderShell } from "./shared/shell.js";
 
-const appRoot = document.querySelector("[data-app]");
+const appRoot = document.querySelector("#app");
 
 if (appRoot instanceof HTMLElement) {
-  const baseUrlStore = createStore(getStoredValue(storageKeys.baseUrl, ""));
-  const tokenStore = createStore(getStoredValue(storageKeys.token, ""));
+  const shell = renderShell();
+  appRoot.appendChild(shell.app);
 
-  initShell({ root: appRoot });
-  initConnectionScreen({ root: appRoot, baseUrlStore, tokenStore });
-  initProjectsScreen(appRoot);
-  initRepoScreen(appRoot);
-  initRunsScreen({ root: appRoot, baseUrlStore });
-  initSettingsScreen(appRoot);
-  initKanbanScreen(appRoot);
-  registerServiceWorker();
+  initRouter({
+    outlet: shell.outlet,
+    navLinks: shell.navLinks,
+    routes: [
+      { route: routes.overview, render: renderOverviewScreen },
+      { route: routes.projects, render: renderProjectsScreen },
+      { route: routes.repository, render: renderRepositoryScreen },
+      { route: routes.runs, render: renderRunsScreen },
+      { route: routes.settings, render: renderSettingsScreen },
+      { route: routes.kanban, render: renderKanbanScreen }
+    ],
+    fallback: routes.overview
+  });
 }

@@ -1,114 +1,94 @@
-import {
-  clearChildren,
-  createElement,
-  isHTMLButtonElement,
-  isHTMLElement,
-  isHTMLInputElement,
-  selectElement
-} from "./dom.js";
-import { headerActionIds, headerActions, navigationItems } from "./ui.js";
+import { appendChildren, createElement, setAttributes, setText } from "./dom.js";
+import { createIcon } from "./icons.js";
+import { headerActionItems, navigationItems } from "./navigation.js";
+import { createButton, createDisabledNote } from "./primitives.js";
 
-type ShellContext = {
-  root: ParentNode;
+type ShellElements = {
+  app: HTMLElement;
+  outlet: HTMLElement;
+  navLinks: HTMLAnchorElement[];
 };
 
-type ActionTargets = {
-  baseUrlInput: HTMLInputElement | null;
-  runStartButton: HTMLButtonElement | null;
+const brandLabel = "Iteronix";
+const headerTitle = "Agent Orchestration";
+const headerSubtitle = "Unified cockpit for provider workflows";
+const navTitle = "Navigation";
+const workspaceTitle = "Workspace";
+const connectionTitle = "Connection";
+
+export const renderShell = (): ShellElements => {
+  const app = createElement("div", "app-shell");
+  const header = buildHeader();
+  const layout = createElement("div", "layout");
+  const sidebar = buildSidebar();
+  const main = createElement("main", "main");
+  const rightPanel = createElement("aside", "right-panel");
+  rightPanel.style.display = "none";
+  appendChildren(layout, [sidebar.element, main, rightPanel]);
+  appendChildren(app, [header, layout]);
+  return { app, outlet: main, navLinks: sidebar.links };
 };
 
-const scrollBehavior: ScrollBehavior = "smooth";
-const scrollBlock: ScrollLogicalPosition = "start";
+const buildHeader = (): HTMLElement => {
+  const header = createElement("header", "app-header");
+  const brand = createElement("div", "brand");
+  const brandMark = createElement("div", "brand-mark");
+  const brandText = createElement("div");
+  const title = createElement("div");
+  const subtitle = createElement("div", "muted");
+  setText(title, brandLabel);
+  setText(subtitle, headerTitle);
+  appendChildren(brandText, [title, subtitle]);
+  appendChildren(brand, [brandMark, brandText]);
+  const actions = createElement("div", "header-actions");
+  appendChildren(actions, buildHeaderActions());
+  appendChildren(header, [brand, actions]);
+  return header;
+};
 
-export const initShell = (context: ShellContext): void => {
-  const navList = selectElement(context.root, "[data-nav-list]", isHTMLElement);
-  const topActions = selectElement(context.root, "[data-top-actions]", isHTMLElement);
-  const baseUrlInput = selectElement(
-    context.root,
-    "[data-base-url]",
-    isHTMLInputElement
-  );
-  const runStartButton = selectElement(
-    context.root,
-    "[data-run-start]",
-    isHTMLButtonElement
-  );
-  renderNavigation(navList);
-  renderHeaderActions(topActions, context.root, {
-    baseUrlInput,
-    runStartButton
+const buildHeaderActions = (): HTMLElement[] => {
+  return headerActionItems.flatMap((item) => {
+    const button = createButton(item.label, { variant: "secondary", disabled: true });
+    const note = createDisabledNote();
+    const wrapper = createElement("div");
+    appendChildren(wrapper, [button, note]);
+    return [wrapper];
   });
 };
 
-const renderNavigation = (container: HTMLElement | null): void => {
-  if (!container) {
-    return;
-  }
-  clearChildren(container);
-  navigationItems.forEach((item) => {
-    container.appendChild(buildNavItem(item));
+type SidebarResult = {
+  element: HTMLElement;
+  links: HTMLAnchorElement[];
+};
+
+const buildSidebar = (): SidebarResult => {
+  const sidebar = createElement("aside", "sidebar");
+  const navSection = createElement("div", "sidebar-section");
+  const title = createElement("div", "sidebar-title");
+  setText(title, navTitle);
+  const list = createElement("nav", "nav-list");
+  const links = navigationItems.map((item) => {
+    const link = createElement("a", "nav-link") as HTMLAnchorElement;
+    setAttributes(link, { href: item.route, "aria-label": item.label });
+    const iconWrapper = createElement("span", "nav-icon");
+    iconWrapper.appendChild(createIcon(item.icon));
+    const label = createElement("span", "nav-label");
+    setText(label, item.label);
+    appendChildren(link, [iconWrapper, label]);
+    list.appendChild(link);
+    return link;
   });
-};
-
-const renderHeaderActions = (
-  container: HTMLElement | null,
-  root: ParentNode,
-  targets: ActionTargets
-): void => {
-  if (!container) {
-    return;
-  }
-  clearChildren(container);
-  headerActions.forEach((action) => {
-    container.appendChild(buildHeaderAction(action, root, targets));
-  });
-};
-
-const buildNavItem = (item: (typeof navigationItems)[number]): HTMLElement => {
-  const link = createElement("a", "nav-link");
-  link.href = item.target;
-  const label = createElement("span");
-  label.textContent = item.label;
-  const chip = createElement("span", "chip");
-  chip.textContent = item.chip;
-  link.appendChild(label);
-  link.appendChild(chip);
-  return link;
-};
-
-const buildHeaderAction = (
-  action: (typeof headerActions)[number],
-  root: ParentNode,
-  targets: ActionTargets
-): HTMLElement => {
-  const wrapper = createElement("div", "top-action");
-  const button = createElement("button", buildActionClass(action.variant));
-  button.type = "button";
-  button.textContent = action.label;
-  button.addEventListener("click", () => {
-    handleHeaderAction(action.id, action.target, root, targets);
-  });
-  wrapper.appendChild(button);
-  return wrapper;
-};
-
-const buildActionClass = (variant: "primary" | "secondary"): string =>
-  variant === "primary" ? "btn primary" : "btn";
-
-const handleHeaderAction = (
-  actionId: (typeof headerActions)[number]["id"],
-  target: string,
-  root: ParentNode,
-  targets: ActionTargets
-): void => {
-  const targetSection = root.querySelector(target);
-  if (targetSection instanceof HTMLElement) {
-    targetSection.scrollIntoView({ behavior: scrollBehavior, block: scrollBlock });
-  }
-  if (actionId === headerActionIds.connect && targets.baseUrlInput) {
-    targets.baseUrlInput.focus();
-  }
-  if (actionId === headerActionIds.newRun && targets.runStartButton) {
-    targets.runStartButton.focus();
-  }
+  appendChildren(navSection, [title, list]);
+  const statusSection = createElement("div", "sidebar-section");
+  const statusTitle = createElement("div", "sidebar-title");
+  setText(statusTitle, workspaceTitle);
+  const statusCard = createElement("div", "panel");
+  const statusHeading = createElement("h3");
+  setText(statusHeading, connectionTitle);
+  const statusBody = createElement("p", "muted");
+  setText(statusBody, headerSubtitle);
+  appendChildren(statusCard, [statusHeading, statusBody]);
+  appendChildren(statusSection, [statusTitle, statusCard]);
+  appendChildren(sidebar, [navSection, statusSection]);
+  return { element: sidebar, links };
 };

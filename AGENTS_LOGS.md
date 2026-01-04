@@ -687,3 +687,49 @@
   - Dashboard spec uses a dark palette and Material icons that conflict with current global UI invariants.
 - Next:
   - Implement the layout shell consistency checklist doc and apply interaction completeness validation for another screen.
+### 2026-01-04 03:58 (Europe/Madrid) — Web UI
+
+- Summary: Added a global sidebar collapse state in the shell and wired a header toggle with persisted state.
+- Decisions:
+  - Chose an icon-only rail using existing nav chips and hid the workspace card in collapsed mode to preserve navigation without introducing a new icon set.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/src/index.ts
+  - apps/web-ui/src/shared/constants.ts
+  - apps/web-ui/src/shared/shell.ts
+  - apps/web-ui/src/shared/ui.ts
+- Commands:
+  - `TZ=Europe/Madrid date "+%Y-%m-%d %H:%M"`
+- Issues/Risks:
+  - None.
+- Next:
+  - Run web-ui quality gates and capture a UI screenshot.
+### 2026-01-04 04:07 (Europe/Madrid) — Web UI
+
+- Summary: Rebuilt the web UI baseline from scratch with a new shared shell, navigation, icon system, tokens, and screen stubs.
+- Decisions:
+  - Standardized navigation on hash-based routes with a single icon set and global header/sidebar structure.
+  - Implemented a disabled primary action on each screen with a visible “Not available yet” note to avoid dead UI.
+- Changes:
+  - apps/web-ui/index.html
+  - apps/web-ui/src/index.ts
+  - apps/web-ui/src/shared/dom.ts
+  - apps/web-ui/src/shared/icons.ts
+  - apps/web-ui/src/shared/navigation.ts
+  - apps/web-ui/src/shared/primitives.ts
+  - apps/web-ui/src/shared/router.ts
+  - apps/web-ui/src/shared/shell.ts
+  - apps/web-ui/src/screens/kanban.ts
+  - apps/web-ui/src/screens/overview.ts
+  - apps/web-ui/src/screens/projects.ts
+  - apps/web-ui/src/screens/repository.ts
+  - apps/web-ui/src/screens/runs.ts
+  - apps/web-ui/src/screens/settings.ts
+  - apps/web-ui/src/screens/screen.ts
+  - PLAN.md
+- Commands:
+  - `TZ=Europe/Madrid date "+%Y-%m-%d %H:%M"`
+- Issues/Risks:
+  - None.
+- Next:
+  - Implement the first UI screen from the PNG/HTML spec on top of the new shell.

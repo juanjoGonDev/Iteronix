@@ -138,12 +138,12 @@ Acceptance:
 Goal:
 Prevent inconsistent navigation/iconography and avoid partially working UI.
 
-- [ ] Establish global UI invariants (single source of truth):
+- [x] Establish global UI invariants (single source of truth):
   - [x] Sidebar menu: canonical items, order, labels, icons, grouping
   - [x] Header layout: canonical structure and global actions
   - [x] One icon set for the entire app (no mixing)
   - [x] Shared tokens: spacing/typography/colors/radius/shadows
-- [ ] Implement a single Layout Shell used by all screens:
+- [x] Implement a single Layout Shell used by all screens:
 
   - [ ] Header + Sidebar + Main + optional Right Panel
   - [ ] No per-screen shell variants
