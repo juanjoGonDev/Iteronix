@@ -4,9 +4,14 @@
 
 - One UI only: responsive PWA reused across browser + Electron + optional server-hosted.
 - API-first: UI always talks to server API (local or remote).
-- Provider-agnostic from day 1: Codex is only one provider.
+- Provider-agnostic from day 1: Codex is only one provider (never hardcode to one provider).
 - Incremental milestones; each milestone must produce a runnable artifact.
 - No extra features outside this plan. If needed, add a checkbox first.
+- Provider defaults:
+  - Default provider MUST be `opencode-cli` once implemented.
+  - `codex-cli` remains optional to install/configure.
+
+---
 
 ## Milestone 0 — Repo bootstrap (empty folder → healthy monorepo)
 
@@ -40,6 +45,8 @@ Acceptance:
 
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass.
 
+---
+
 ## Milestone 1 — Core foundation (provider-agnostic)
 
 - [x] Define `LLMProviderPort` + provider capabilities in `packages/domain`
@@ -63,6 +70,44 @@ Acceptance:
 Acceptance:
 
 - Providers that support usage can report it; others return "not available" without breaking flows.
+
+---
+
+## Milestone 1.5 — Add `opencode-cli` provider (default)
+
+Goal:
+Add a second CLI provider (`opencode-cli`) and make it the default provider for new projects/profiles. `codex-cli` remains supported but optional.
+
+- [ ] Research and document `opencode` CLI invocation model in `docs/providers/opencode-cli.md`:
+  - [ ] install instructions
+  - [ ] required env vars / auth
+  - [ ] prompt input method
+  - [ ] output format and streaming behavior (if any)
+  - [ ] exit codes and error patterns
+- [ ] Implement `opencode-cli` provider adapter in `packages/adapters` (spawn-based):
+  - [ ] conforms to `LLMProviderPort`
+  - [ ] supports streaming if `opencode` supports it; otherwise buffer + emit events consistently
+  - [ ] maps CLI failures to typed provider errors
+- [ ] Add provider registry entry for `opencode-cli`:
+  - [ ] `id`, `displayName`, `type=cli`, capabilities, models (or dynamic listing if supported)
+  - [ ] `configurationSchema` (JSON schema) for settings
+- [ ] Set `opencode-cli` as the default selection for:
+  - [ ] new projects
+  - [ ] new profiles
+- [ ] Keep `codex-cli` optional:
+  - [ ] do NOT require it at install time
+  - [ ] UI must clearly show "not installed" / "not configured" states for providers
+- [ ] Add tests:
+  - [ ] domain-level provider registry/selection behavior
+  - [ ] adapter-level spawn command building (pure, unit-testable)
+
+Acceptance:
+
+- A new project defaults to `opencode-cli`.
+- User can switch to `codex-cli` if installed/configured.
+- Running a prompt works through `opencode-cli` and emits the same event model.
+
+---
 
 ## Milestone 2 — Headless server API (Docker-ready, server-first)
 
@@ -112,7 +157,9 @@ Acceptance:
 
 - Config is persisted per project and can be updated via API with validation.
 
-## Milestone 3 - Web UI (single responsive PWA)
+---
+
+## Milestone 3 — Web UI (single responsive PWA)
 
 - [x] Implement `apps/web-ui` as responsive, mobile-first
 - [x] PWA: manifest + service worker
@@ -143,7 +190,7 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
   - [x] Header layout: canonical structure and global actions
   - [x] One icon set for the entire app (no mixing)
   - [x] Shared tokens: spacing/typography/colors/radius/shadows
-- [x] Implement a single Layout Shell used by all screens:
+- [ ] Implement a single Layout Shell used by all screens:
 
   - [ ] Header + Sidebar + Main + optional Right Panel
   - [ ] No per-screen shell variants
@@ -219,6 +266,8 @@ Acceptance:
 
 - UI displays usage/balance when supported and degrades gracefully otherwise.
 
+---
+
 ## Milestone 4 — Electron wrapper (reuses the same web UI)
 
 - [ ] Implement `apps/desktop-main` to:
@@ -231,11 +280,12 @@ Acceptance:
 
 - Desktop runs and uses the same web UI without duplicating UI code.
 
+---
+
 ## Milestone 4.5 — Dev/Prod commands
 
 Goal:
-
-- Provide consistent commands to run everything in dev/watch and production.
+Provide consistent commands to run everything in dev/watch and production.
 
 ### Root scripts (required)
 
@@ -249,19 +299,6 @@ Goal:
   - [x] `pnpm start` (production server)
   - [x] `pnpm preview:web` (serve built web-ui locally)
 - [x] Ensure all scripts work on macOS/Linux/Windows where possible.
-
-Suggested behavior:
-
-- `pnpm dev`:
-  - starts `apps/server-api` in watch mode (SSE enabled)
-  - starts `apps/web-ui` via Vite dev server
-- `pnpm dev:desktop`:
-  - starts Electron main and points to the web-ui dev server URL
-- `pnpm build`:
-  - builds packages (domain/shared/adapters)
-  - builds server
-  - builds web-ui (PWA)
-  - optionally packages desktop (separate step if preferred)
 
 Acceptance:
 
@@ -294,6 +331,8 @@ Acceptance:
   - [x] `pnpm build` (build main process)
   - [ ] Optional later: `pnpm package` (installer/binary)
 
+---
+
 ## Milestone 5 — Auto-loop with strict JSON schema (provider-agnostic)
 
 - [ ] Define strict agent step JSON schema (Ajv)
@@ -322,6 +361,8 @@ Acceptance:
 - Long sessions stay responsive by rotating to new conversations automatically.
 - Each conversation is timestamped and searchable in history.
 
+---
+
 ## Milestone 6 — Quality gates + Git integration (server-first)
 
 - [ ] Implement Git adapter (native `git` spawn)
@@ -333,6 +374,8 @@ Acceptance:
 
 - Server can apply changes, run gates, and commit.
 
+---
+
 ## Milestone 7 — Workflow graph editor (n8n-like)
 
 - [ ] Add workflow editor in web UI (React Flow)
@@ -342,6 +385,8 @@ Acceptance:
 Acceptance:
 
 - Create and run a simple flow end-to-end.
+
+---
 
 ## Milestone 8 — Plugins (v0, server-side)
 
@@ -353,14 +398,14 @@ Acceptance:
 
 - Install a plugin and emit an event.
 
+---
+
 ## Final setup & deployment automation (post-development)
 
 Goal:
 Provide reproducible commands and automation to bootstrap infrastructure, build production artifacts, and run the system in a self-hosted environment (e.g. Raspberry Pi, Docker, reverse proxy).
 
 This section MUST NOT be started until all previous milestones are fully completed and accepted.
-
----
 
 ### Unified commands (required)
 
@@ -388,8 +433,6 @@ Acceptance:
 - There are no undocumented startup paths.
 - Dev commands NEVER depend on Docker.
 
----
-
 ### Setup automation (final stage)
 
 Goal:
@@ -413,8 +456,6 @@ Acceptance:
 - Running `pnpm setup` on a clean machine prepares all required infrastructure.
 - No manual steps beyond environment variables are required.
 
----
-
 ### Docker & infrastructure
 
 Goal:
@@ -435,8 +476,6 @@ Constraints:
 - Containers MUST be suitable for ARM64 (Raspberry Pi).
 - Docker is a deployment concern, not a development requirement.
 
----
-
 ### Docker container composition (mandatory)
 
 - [ ] The production Docker image MUST include:
@@ -453,8 +492,6 @@ Acceptance:
 - Accessing the container root URL loads the PWA.
 - All `/api/*` endpoints function correctly.
 
----
-
 ### Optional publishing (explicitly optional)
 
 - [ ] Image tagging and publishing:
@@ -463,8 +500,6 @@ Acceptance:
 - [ ] Publishing steps MUST:
   - [ ] Require explicit configuration
   - [ ] Require explicit user confirmation
-
----
 
 ### Documentation (required)
 
@@ -480,6 +515,8 @@ Acceptance:
 
 - A new machine can be fully set up and running using only documented commands.
 - No manual steps beyond environment variables are required.
+
+---
 
 ## Deferred (explicitly out of scope)
 
