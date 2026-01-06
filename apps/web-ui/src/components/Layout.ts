@@ -136,12 +136,12 @@ export class MainLayout extends Component<MainLayoutProps, MainLayoutState> {
 
     const { sidebarCollapsed } = this.state;
 
-    return createElement('div', { className: `w-full h-full flex` }, [
+      return createElement('div', { className: `w-full h-full flex` }, [
       // Sidebar
       sidebar && createElement('aside', {
         className: `${css.layout.sidebar} ${sidebarCollapsed ? 'w-20' : 'w-64'}`
       }, [
-        typeof sidebar === 'function' ? sidebar() : sidebar
+        typeof sidebar === 'function' ? sidebar : sidebar
       ]),
 
       // Main Content

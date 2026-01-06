@@ -81,8 +81,74 @@ export class App extends Component<AppProps, AppState> {
         case 'settings':
           return createElement(SettingsScreen, {});
         case 'projects':
+          return createElement('div', { 
+            className: 'max-w-[1600px] mx-auto p-6' 
+          }, [
+            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['Projects']),
+            createElement('div', { 
+              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
+            }, [
+              createElement('span', { 
+                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
+              }, ['folder_open']),
+              createElement('h2', { 
+                className: 'text-xl font-bold text-white mb-2' 
+              }, ['Projects Management']),
+              createElement('p', { 
+                className: 'text-text-secondary mb-4' 
+              }, ['Browse and manage your coding projects. Full implementation coming soon.']),
+              createElement('button', {
+                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
+                disabled: true
+              }, ['Not available yet'])
+            ])
+          ]);
         case 'workflows':
+          return createElement('div', { 
+            className: 'max-w-[1600px] mx-auto p-6' 
+          }, [
+            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['Workflows']),
+            createElement('div', { 
+              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
+            }, [
+              createElement('span', { 
+                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
+              }, ['account_tree']),
+              createElement('h2', { 
+                className: 'text-xl font-bold text-white mb-2' 
+              }, ['Workflow Editor']),
+              createElement('p', { 
+                className: 'text-text-secondary mb-4' 
+              }, ['Design and automate your coding workflows. Full implementation coming soon.']),
+              createElement('button', {
+                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
+                disabled: true
+              }, ['Not available yet'])
+            ])
+          ]);
         case 'history':
+          return createElement('div', { 
+            className: 'max-w-[1600px] mx-auto p-6' 
+          }, [
+            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['History']),
+            createElement('div', { 
+              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
+            }, [
+              createElement('span', { 
+                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
+              }, ['history']),
+              createElement('h2', { 
+                className: 'text-xl font-bold text-white mb-2' 
+              }, ['Run History']),
+              createElement('p', { 
+                className: 'text-text-secondary mb-4' 
+              }, ['View past coding sessions and their results. Full implementation coming soon.']),
+              createElement('button', {
+                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
+                disabled: true
+              }, ['Not available yet'])
+            ])
+          ]);
         default:
           return createElement('div', { 
             className: 'flex items-center justify-center h-full text-text-secondary' 
@@ -90,13 +156,13 @@ export class App extends Component<AppProps, AppState> {
             createElement('div', { className: 'text-center' }, [
               createElement('span', { 
                 className: 'material-symbols-outlined text-6xl mb-4' 
-              }, ['construction']),
+              }, ['error_outline']),
               createElement('h2', { 
                 className: 'text-2xl font-bold text-white mb-2' 
-              }, ['Coming Soon']),
+              }, ['Screen Not Found']),
               createElement('p', { 
                 className: 'text-text-secondary max-w-md' 
-              }, [`${currentScreen.charAt(0).toUpperCase() + currentScreen.slice(1)} screen is under construction`])
+              }, [`The screen "${currentScreen}" does not exist`])
             ])
           ]);
       }
@@ -127,7 +193,7 @@ export class App extends Component<AppProps, AppState> {
     });
 
     // Sidebar component
-    const sidebarComponent = () => createElement(Sidebar, {
+    const sidebarComponent = createElement(Sidebar, {
       brand,
       navigation: [...navigation, {
         icon: 'settings',
@@ -136,7 +202,9 @@ export class App extends Component<AppProps, AppState> {
         active: currentScreen === 'settings',
         onClick: () => this.setState({ currentScreen: 'settings' })
       }],
-      user
+      user,
+      onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
+      collapsed: this.state.sidebarCollapsed
     });
 
     return createElement(MainLayout, {

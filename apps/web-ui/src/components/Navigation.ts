@@ -41,6 +41,8 @@ interface SidebarProps extends ComponentProps {
     avatar?: string | null;
     role?: string;
   } | null;
+  onToggle?: () => void;
+  collapsed?: boolean;
   className?: string;
 }
 
@@ -126,10 +128,10 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
       brand = { name: 'Iteronix', icon: 'terminal', version: null },
       navigation = [],
       user = null,
+      onToggle,
+      collapsed = false,
       className = ''
     } = this.props;
-
-    const { collapsed } = this.state;
 
     return createElement('aside', {
       className: `${css.layout.sidebar} ${collapsed ? 'w-20' : 'w-64'} ${className}`
@@ -149,6 +151,14 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
             brand.version && createElement('span', {
               className: 'text-xs text-text-secondary font-mono mt-0.5'
             }, [brand.version])
+          ]),
+          onToggle && createElement('button', {
+            onClick: onToggle,
+            className: 'ml-auto p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-colors'
+          }, [
+            createElement('span', { 
+              className: `material-symbols-outlined text-[18px] transition-transform ${collapsed ? 'rotate-180' : ''}` 
+            }, ['menu_open'])
           ])
         ])
       ]),

@@ -25,6 +25,32 @@
   - Recomendación: Reinicia tu IDE y limpia caches si aún ves errores
   - Próximos pasos: Continuar con otros packages si existen más archivos .js por convertir
 
+### 2025-01-06 22:15 (Europe/Madrid) — Layout Shell & UI Consistency Completion
+
+- Summary: Verificado y completado el layout shell base, ensuring consistencia de UI y eliminando elementos muertos.
+- Decisions:
+  - Conectar sidebar collapse toggle con estado global
+  - Implementar stubs para todas las rutas faltantes con estados deshabilitados claros
+  - Crear UI_CHECKLIST.md para mantener invariantes
+  - Garantizar que todos los elementos clickeables funcionen o estén explícitamente deshabilitados
+- Changes:
+  - **Fixed sidebar collapse**: Added toggle button connected to global state in App component
+  - **Fixed dead UI**: Replaced "Coming Soon" placeholder with proper disabled states for projects, workflows, history screens
+  - **Added UI_CHECKLIST.md**: Comprehensive checklist for maintaining UI invariants
+  - **Fixed lint errors**: Corrected TypeScript strict issues in server-api, web-ui scripts, and service worker
+  - **Updated PLAN.md**: Marked layout shell and UI checklist tasks as completed
+- Commands:
+  - `pnpm lint` - PASO ✓ (0 errores, 0 warnings)
+  - `pnpm typecheck` - PASO ✓ (0 errores)
+  - `pnpm build` - PASO ✓
+- Issues/Risks:
+  - **None**: Layout shell is fully functional with working navigation and no dead UI elements
+  - **Consistency**: All screens now follow same layout pattern and design tokens
+- Next:
+  - Layout shell baseline is complete and ready for next UI implementation tasks
+  - All navigation routes have corresponding screens with proper disabled states
+  - UI invariants documented and enforced through checklist
+
 ### 2026-01-06 15:09 (Europe/Madrid) — UI Testing & Module Loading
 
 - Summary: Successfully diagnosed and fixed critical module loading issues preventing the web UI from loading JavaScript modules.

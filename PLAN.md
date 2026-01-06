@@ -62,9 +62,9 @@ Acceptance:
 ### Provider usage & balance (best-effort)
 
 - [ ] Extend provider capabilities to optionally support:
-  - [ ] token usage reporting (per request/response)
-  - [ ] cost estimation (optional)
-  - [ ] balance/credits retrieval (optional; provider-dependent)
+  - [x] token usage reporting (per request/response)
+  - [x] cost estimation (optional)
+  - [x] balance/credits retrieval (optional; provider-dependent)
 - [ ] Define `UsageReport` and `BalanceInfo` types where fields are optional and validated.
 
 Acceptance:
@@ -79,27 +79,27 @@ Goal:
 Add a second CLI provider (`opencode-cli`) and make it the default provider for new projects/profiles. `codex-cli` remains supported but optional.
 
 - [ ] Research and document `opencode` CLI invocation model in `docs/providers/opencode-cli.md`:
-  - [ ] install instructions
-  - [ ] required env vars / auth
-  - [ ] prompt input method
-  - [ ] output format and streaming behavior (if any)
-  - [ ] exit codes and error patterns
+  - [x] install instructions
+  - [x] required env vars / auth
+  - [x] prompt input method
+  - [x] output format and streaming behavior (if any)
+  - [x] exit codes and error patterns
 - [ ] Implement `opencode-cli` provider adapter in `packages/adapters` (spawn-based):
-  - [ ] conforms to `LLMProviderPort`
-  - [ ] supports streaming if `opencode` supports it; otherwise buffer + emit events consistently
-  - [ ] maps CLI failures to typed provider errors
+  - [x] conforms to `LLMProviderPort`
+  - [x] supports streaming if `opencode` supports it; otherwise buffer + emit events consistently
+  - [x] maps CLI failures to typed provider errors
 - [ ] Add provider registry entry for `opencode-cli`:
-  - [ ] `id`, `displayName`, `type=cli`, capabilities, models (or dynamic listing if supported)
-  - [ ] `configurationSchema` (JSON schema) for settings
+  - [x] `id`, `displayName`, `type=cli`, capabilities, models (or dynamic listing if supported)
+  - [x] `configurationSchema` (JSON schema) for settings
 - [ ] Set `opencode-cli` as the default selection for:
-  - [ ] new projects
-  - [ ] new profiles
+  - [x] new projects
+  - [x] new profiles
 - [ ] Keep `codex-cli` optional:
-  - [ ] do NOT require it at install time
-  - [ ] UI must clearly show "not installed" / "not configured" states for providers
+  - [x] do NOT require it at install time
+  - [x] UI must clearly show "not installed" / "not configured" states for providers
 - [ ] Add tests:
-  - [ ] domain-level provider registry/selection behavior
-  - [ ] adapter-level spawn command building (pure, unit-testable)
+  - [x] domain-level provider registry/selection behavior
+  - [x] adapter-level spawn command building (pure, unit-testable)
 
 Acceptance:
 
@@ -130,11 +130,11 @@ Acceptance:
 
 - [ ] Add support for a `REVIEW` column in the Kanban domain model (between IDEAS and TODO, or configurable)
 - [ ] Add task lifecycle actions via API:
-  - [ ] submit-to-review (AI can create tasks directly in REVIEW)
-  - [ ] approve (moves REVIEW → TODO)
-  - [ ] request-changes (stores reviewer comment and moves back to IN_PROGRESS or stays in REVIEW)
-  - [ ] close / reopen
-  - [ ] delete (soft-delete preferred; keep audit trail)
+  - [x] submit-to-review (AI can create tasks directly in REVIEW)
+  - [x] approve (moves REVIEW → TODO)
+  - [x] request-changes (stores reviewer comment and moves back to IN_PROGRESS or stays in REVIEW)
+  - [x] close / reopen
+  - [x] delete (soft-delete preferred; keep audit trail)
 - [ ] Persist reviewer comments/history per task (audit-friendly)
 - [ ] Ensure permissions/policy checks for destructive actions (delete/close)
 
@@ -146,10 +146,10 @@ Acceptance:
 ### Per-project configuration (server)
 
 - [ ] Add per-project config storage and API:
-  - [ ] `maxLoops` (number | null). null = infinite loops allowed (must be explicitly enabled).
-  - [ ] `onRunComplete` hooks (optional):
-    - [ ] play sound (boolean, shell-dependent)
-    - [ ] call webhook/API (url + method + headers + template payload)
+  - [x] `maxLoops` (number | null). null = infinite loops allowed (must be explicitly enabled).
+  - [x] `onRunComplete` hooks (optional):
+    - [x] play sound (boolean, shell-dependent)
+    - [x] call webhook/API (url + method + headers + template payload)
 - [ ] Validate config with JSON schema; reject unsafe configs.
 - [ ] Ensure webhook calls are policy-checked (allowlist domains optional; at minimum: explicit opt-in per project).
 
@@ -190,25 +190,25 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
   - [x] Header layout: canonical structure and global actions
   - [x] One icon set for the entire app (no mixing)
   - [x] Shared tokens: spacing/typography/colors/radius/shadows
-- [ ] Implement a single Layout Shell used by all screens:
+- [x] Implement a single Layout Shell used by all screens:
 
-  - [ ] Header + Sidebar + Main + optional Right Panel
-  - [ ] No per-screen shell variants
+  - [x] Header + Sidebar + Main + optional Right Panel
+  - [x] No per-screen shell variants
 
 - [ ] Interaction completeness gate (per screen):
 
-  - [ ] Every clickable element must either:
-    - [ ] work end-to-end, OR
-    - [ ] be visibly disabled + explain "Not available yet"
-  - [ ] No broken menus, no dead buttons, no fake dropdowns, no placeholder navigation
+  - [x] Every clickable element must either:
+    - [x] work end-to-end, OR
+    - [x] be visibly disabled + explain "Not available yet"
+  - [x] No broken menus, no dead buttons, no fake dropdowns, no placeholder navigation
 
-- [ ] Add a “UI consistency checklist” (docs/UI_CHECKLIST.md):
-  - [ ] menu order/icons unchanged across screens
-  - [ ] header consistent
-  - [ ] all navigation routes valid
-  - [ ] interactive controls open/close correctly
-  - [ ] disabled states have explanations
-  - [ ] no regressions after changes
+- [x] Add a "UI consistency checklist" (docs/UI_CHECKLIST.md):
+  - [x] menu order/icons unchanged across screens
+  - [x] header consistent
+  - [x] all navigation routes valid
+  - [x] interactive controls open/close correctly
+  - [x] disabled states have explanations
+  - [x] no regressions after changes
 
 Acceptance:
 
@@ -219,13 +219,13 @@ Acceptance:
 ### Kanban: REVIEW column UX (web-ui)
 
 - [ ] Add a `REVIEW` column view with:
-  - [ ] Approve button (moves to TODO)
-  - [ ] Request changes: comment input + action (moves back accordingly)
-  - [ ] Close / Reopen actions
-  - [ ] Delete action (with confirmation)
+  - [x] Approve button (moves to TODO)
+  - [x] Request changes: comment input + action (moves back accordingly)
+  - [x] Close / Reopen actions
+  - [x] Delete action (with confirmation)
 - [ ] Task detail panel shows:
-  - [ ] reviewer comments (chronological)
-  - [ ] status transitions history (timestamps)
+  - [x] reviewer comments (chronological)
+  - [x] status transitions history (timestamps)
 
 Acceptance:
 
@@ -234,9 +234,9 @@ Acceptance:
 ### Per-project settings UX (web-ui)
 
 - [ ] Add project settings section with:
-  - [ ] Loop limit: infinite toggle + numeric max loops
-  - [ ] On complete: sound toggle (if supported by current shell) (optional)
-  - [ ] Optional webhook config (URL + payload preview + test button)
+  - [x] Loop limit: infinite toggle + numeric max loops
+  - [x] On complete: sound toggle (if supported by current shell) (optional)
+  - [x] Optional webhook config (URL + payload preview + test button)
 - [ ] Clear warnings for infinite loops and external webhooks.
 
 Acceptance:
@@ -246,8 +246,8 @@ Acceptance:
 ### Conversation UX (web-ui)
 
 - [ ] Show conversation list per run session:
-  - [ ] createdAt / closedAt
-  - [ ] preview of summary
+  - [x] createdAt / closedAt
+  - [x] preview of summary
 - [ ] Allow user to open a specific conversation and view events/messages.
 
 Acceptance:
@@ -257,10 +257,10 @@ Acceptance:
 ### Usage / balance display (web-ui)
 
 - [ ] Add a usage panel showing:
-  - [ ] tokens used (if available)
-  - [ ] estimated cost (if available)
-  - [ ] balance/credits (if available)
-  - [ ] clear "Not available for this provider" states
+  - [x] tokens used (if available)
+  - [x] estimated cost (if available)
+  - [x] balance/credits (if available)
+  - [x] clear "Not available for this provider" states
 
 Acceptance:
 
@@ -329,7 +329,7 @@ Acceptance:
 - [x] Provide scripts:
   - [x] `pnpm dev` (runs Electron main in watch mode; loads web-ui dev URL)
   - [x] `pnpm build` (build main process)
-  - [ ] Optional later: `pnpm package` (installer/binary)
+  - [x] Optional later: `pnpm package` (installer/binary)
 
 ---
 
@@ -347,13 +347,13 @@ Acceptance:
 ### Conversation rotation (auto-summary)
 
 - [ ] Introduce a session conversation model:
-  - [ ] Each run session has one or more "conversations" with:
-    - [ ] id, createdAt (Europe/Madrid), closedAt
-    - [ ] messages (or event references)
-    - [ ] rolling summary (string)
+  - [x] Each run session has one or more "conversations" with:
+    - [x] id, createdAt (Europe/Madrid), closedAt
+    - [x] messages (or event references)
+    - [x] rolling summary (string)
 - [ ] Add auto-rotation policy:
-  - [ ] When conversation size crosses a threshold (tokens estimate or message count), generate/update a compact summary and start a new conversation automatically.
-  - [ ] The new conversation must include only: summary + essential pointers (files, decisions, next step).
+  - [x] When conversation size crosses a threshold (tokens estimate or message count), generate/update a compact summary and start a new conversation automatically.
+  - [x] The new conversation must include only: summary + essential pointers (files, decisions, next step).
 - [ ] Persist conversation summaries and timestamps.
 
 Acceptance:
@@ -413,9 +413,9 @@ Goal:
 Ensure there is exactly one documented way to run the system in each mode.
 
 - [ ] Ensure all services can be run using documented commands for:
-  - [ ] Development / watch mode
-  - [ ] Production build
-  - [ ] Production run
+  - [x] Development / watch mode
+  - [x] Production build
+  - [x] Production run
 
 #### Root-level commands (final state)
 
@@ -439,12 +439,12 @@ Goal:
 Provide a single, repeatable entrypoint to prepare a new machine for self-hosting.
 
 - [ ] Provide a single setup command:
-  - [ ] `pnpm setup` (preferred for cross-platform consistency)
+  - [x] `pnpm setup` (preferred for cross-platform consistency)
 - [ ] The setup command MUST:
-  - [ ] Pull required Docker images
-  - [ ] Create required Docker volumes and networks
-  - [ ] Start infrastructure services (e.g. MySQL)
-  - [ ] Print connection details and next operational steps
+  - [x] Pull required Docker images
+  - [x] Create required Docker volumes and networks
+  - [x] Start infrastructure services (e.g. MySQL)
+  - [x] Print connection details and next operational steps
 
 Rules:
 
@@ -462,14 +462,14 @@ Goal:
 Provide a minimal, production-ready Docker setup suitable for Raspberry Pi.
 
 - [ ] Add `docker-compose.yml` (or `compose.yaml`) for infrastructure only:
-  - [ ] MySQL service with persistent volume
-  - [ ] Explicit environment configuration
+  - [x] MySQL service with persistent volume
+  - [x] Explicit environment configuration
 - [ ] Add a multi-stage `Dockerfile` for the application:
-  - [ ] Build stage: build server-api and web-ui
-  - [ ] Runtime stage: run server-api and serve built web-ui
+  - [x] Build stage: build server-api and web-ui
+  - [x] Runtime stage: run server-api and serve built web-ui
 - [ ] Add commands:
-  - [ ] `pnpm docker:build` (build production image)
-  - [ ] `pnpm docker:run` (run production container)
+  - [x] `pnpm docker:build` (build production image)
+  - [x] `pnpm docker:run` (run production container)
 
 Constraints:
 
@@ -479,11 +479,11 @@ Constraints:
 ### Docker container composition (mandatory)
 
 - [ ] The production Docker image MUST include:
-  - [ ] server-api runtime
-  - [ ] built web-ui static assets
+  - [x] server-api runtime
+  - [x] built web-ui static assets
 - [ ] The server MUST:
-  - [ ] expose API under `/api`
-  - [ ] serve the web UI under `/`
+  - [x] expose API under `/api`
+  - [x] serve the web UI under `/`
 - [ ] A separate frontend container is NOT required for normal operation.
 
 Acceptance:
@@ -495,21 +495,21 @@ Acceptance:
 ### Optional publishing (explicitly optional)
 
 - [ ] Image tagging and publishing:
-  - [ ] `pnpm docker:tag`
-  - [ ] `pnpm docker:push`
+  - [x] `pnpm docker:tag`
+  - [x] `pnpm docker:push`
 - [ ] Publishing steps MUST:
-  - [ ] Require explicit configuration
-  - [ ] Require explicit user confirmation
+  - [x] Require explicit configuration
+  - [x] Require explicit user confirmation
 
 ### Documentation (required)
 
 - [ ] Add `docs/DEPLOYMENT.md` covering:
-  - [ ] Local development (no Docker)
-  - [ ] Production build and run
-  - [ ] Docker usage
-  - [ ] Raspberry Pi notes
-  - [ ] Nginx reverse proxy example
-  - [ ] Required environment variables (`AUTH_TOKEN`, ports, workspace root)
+  - [x] Local development (no Docker)
+  - [x] Production build and run
+  - [x] Docker usage
+  - [x] Raspberry Pi notes
+  - [x] Nginx reverse proxy example
+  - [x] Required environment variables (`AUTH_TOKEN`, ports, workspace root)
 
 Acceptance:
 

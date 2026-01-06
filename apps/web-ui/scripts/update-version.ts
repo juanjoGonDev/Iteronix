@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 
 // Read package.json to get version
 const packagePath = join(__dirname, '..', 'package.json');
-const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+const packageJson = JSON.parse(readFileSync(packagePath, 'utf8')) as { version: string };
 const version = packageJson.version;
 
 // Update constants file with actual version
