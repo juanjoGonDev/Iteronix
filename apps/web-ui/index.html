@@ -1,308 +1,109 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Iteronix</title>
-    <meta name="description" content="Provider-agnostic agent orchestration cockpit.">
-    <meta name="theme-color" content="#1c2533">
-    <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-    <style>
-      :root {
-        color-scheme: light;
-        --bg: #f6f7fb;
-        --surface: #ffffff;
-        --surface-muted: #f0f2f6;
-        --border: rgba(16, 24, 40, 0.12);
-        --ink: #101828;
-        --muted: #5c6470;
-        --accent: #3758f9;
-        --accent-muted: rgba(55, 88, 249, 0.12);
-        --danger: #d92d20;
-        --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
-        --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
-        --text-xs: 12px;
-        --text-sm: 13px;
-        --text-md: 14px;
-        --text-lg: 16px;
-        --text-xl: 20px;
-        --space-2xs: 4px;
-        --space-xs: 6px;
-        --space-sm: 8px;
-        --space-md: 12px;
-        --space-lg: 16px;
-        --space-xl: 20px;
-        --space-2xl: 24px;
-        --space-3xl: 32px;
-        --radius-sm: 8px;
-        --radius-md: 12px;
-        --radius-lg: 16px;
-        --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
-        --shadow-md: 0 12px 24px rgba(16, 24, 40, 0.12);
-        --sidebar-width: 240px;
-        --header-height: 64px;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: var(--font-body);
-        color: var(--ink);
-        background: var(--bg);
-      }
-
-      a {
-        color: inherit;
-      }
-
-      .app-shell {
-        min-height: 100vh;
-        display: grid;
-        grid-template-rows: var(--header-height) 1fr;
-      }
-
-      .app-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 var(--space-3xl);
-        background: var(--surface);
-        border-bottom: 1px solid var(--border);
-        position: sticky;
-        top: 0;
-        z-index: 10;
-      }
-
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);
-        font-family: var(--font-display);
-        font-weight: 600;
-      }
-
-      .brand-mark {
-        width: 32px;
-        height: 32px;
-        border-radius: var(--radius-sm);
-        background: linear-gradient(135deg, var(--accent), #7b8bff);
-        box-shadow: var(--shadow-sm);
-      }
-
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--space-md);
-      }
-
-      .layout {
-        display: grid;
-        grid-template-columns: var(--sidebar-width) 1fr;
-        min-height: calc(100vh - var(--header-height));
-      }
-
-      .sidebar {
-        background: var(--surface);
-        border-right: 1px solid var(--border);
-        padding: var(--space-2xl) var(--space-lg);
-        display: grid;
-        gap: var(--space-xl);
-      }
-
-      .sidebar-section {
-        display: grid;
-        gap: var(--space-sm);
-      }
-
-      .sidebar-title {
-        font-size: var(--text-xs);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .nav-list {
-        display: grid;
-        gap: var(--space-xs);
-      }
-
-      .nav-link {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);
-        padding: var(--space-sm) var(--space-md);
-        border-radius: var(--radius-sm);
-        text-decoration: none;
-        background: transparent;
-        border: 1px solid transparent;
-        transition: background 0.2s ease, border 0.2s ease;
-      }
-
-      .nav-link[aria-current="page"] {
-        background: var(--accent-muted);
-        border-color: rgba(55, 88, 249, 0.3);
-      }
-
-      .nav-link:hover,
-      .nav-link:focus-visible {
-        background: var(--surface-muted);
-        border-color: var(--border);
-      }
-
-      .nav-icon {
-        width: 18px;
-        height: 18px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--muted);
-      }
-
-      .nav-label {
-        font-size: var(--text-md);
-      }
-
-      .main {
-        padding: var(--space-3xl);
-        display: grid;
-        gap: var(--space-2xl);
-      }
-
-      .screen-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-lg);
-      }
-
-      .screen-title {
-        margin: 0;
-        font-size: var(--text-xl);
-      }
-
-      .panel {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: var(--space-xl);
-        box-shadow: var(--shadow-sm);
-      }
-
-      .panel-grid {
-        display: grid;
-        gap: var(--space-lg);
-      }
-
-      .card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: var(--space-lg);
-      }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0 var(--space-sm);
-        height: 22px;
-        border-radius: 999px;
-        font-size: var(--text-xs);
-        background: var(--surface-muted);
-        color: var(--muted);
-      }
-
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-xs);
-        padding: var(--space-xs) var(--space-lg);
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--ink);
-        font-size: var(--text-sm);
-        cursor: pointer;
-      }
-
-      .btn.primary {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #ffffff;
-      }
-
-      .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .input,
-      .select {
-        width: 100%;
-        padding: var(--space-xs) var(--space-md);
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        background: var(--surface);
-        font-size: var(--text-sm);
-      }
-
-      .muted {
-        color: var(--muted);
-        font-size: var(--text-sm);
-      }
-
-      .disabled-note {
-        font-size: var(--text-xs);
-        color: var(--danger);
-      }
-
-      .tabs {
-        display: inline-flex;
-        gap: var(--space-xs);
-        padding: var(--space-xs);
-        border-radius: var(--radius-sm);
-        background: var(--surface-muted);
-      }
-
-      .tab {
-        padding: var(--space-xs) var(--space-md);
-        border-radius: var(--radius-sm);
-        background: transparent;
-        border: 1px solid transparent;
-        font-size: var(--text-sm);
-      }
-
-      .tab.active {
-        background: var(--surface);
-        border-color: var(--border);
-      }
-
-      .popover {
-        padding: var(--space-md);
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border);
-        background: var(--surface);
-        box-shadow: var(--shadow-md);
-      }
-
-      @media (max-width: 1024px) {
-        .layout {
-          grid-template-columns: 1fr;
-        }
-
-        .sidebar {
-          position: sticky;
-          top: var(--header-height);
-          z-index: 5;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/index.ts"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iteronix - Autonomous Coding Platform</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  
+  <!-- App Bundle -->
+  <script type="module" src="./dist/index.js"></script>
+  
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#137fec",
+            "background-light": "#f6f7f8",
+            "background-dark": "#101922",
+            "surface-dark": "#1c2127", 
+            "surface-dark-hover": "#1c2631",
+            "border-dark": "#2b3644",
+            "text-secondary": "#9dabb9",
+            "card-dark": "#242e38",
+            "node-bg": "#23262b",
+          },
+          fontFamily: {
+            display: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem", 
+            xl: "0.75rem",
+            full: "9999px",
+          },
+        },
+      },
+    };
+  </script>
+  
+  <!-- Custom Styles -->
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+    }
+    
+    .font-mono {
+      font-family: "JetBrains Mono", monospace;
+    }
+    
+    /* Scrollbar styles */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #101922;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #2b3644;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #374151;
+    }
+    
+    /* Hide scrollbars */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="fixed inset-0 bg-background-dark flex items-center justify-center z-50">
+    <div class="flex flex-col items-center gap-4">
+      <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center">
+        <span class="material-symbols-outlined text-white text-2xl">terminal</span>
+      </div>
+      <div class="flex flex-col items-center">
+        <h1 class="text-white font-bold text-xl">Iteronix</h1>
+        <p class="text-text-secondary text-sm">Loading platform...</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Main App Container -->
+  <div id="app-root" class="w-full h-full hidden">
+    <!-- App will be rendered here by JS -->
+  </div>
+</body>
 </html>

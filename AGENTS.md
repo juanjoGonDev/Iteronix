@@ -33,6 +33,14 @@ The system must support:
 
 ## 3) Code conventions
 
+### 📋 **File Type Policy**
+- **TypeScript ONLY**: All source files must use `.ts` extension
+- **NO JavaScript (.js)**: Prohibited in source code (except: scripts/, tools/, build/)
+- **Strict Typing**: No `any`, no unsafe casts, explicit typing required
+- **Consistent Imports**: Use `.ts` extensions consistently
+
+## 3) Code conventions
+
 - Function order (top-down call order): if `a()` calls `c()` and `c()` calls `b()`, declare `a`, then `c`, then `b`.
 - Avoid giant files; prefer composition and clear boundaries.
 - No magic strings; use enums/unions/constants.
@@ -52,7 +60,7 @@ The system must support:
 - `docs/` — design notes, API docs if needed
 - `AGENTS_LOGS.md` — append-only context log
 
-### 4.2 “Single UI” strategy (mandatory)
+### 4.2 "Single UI" strategy (mandatory)
 
 - The UI is implemented once as a responsive web app (PWA-first) in `apps/web-ui`.
 - Electron must NOT have a separate UI:
@@ -283,7 +291,7 @@ Rules:
 
 - The implementation MUST match the PNG visually and the HTML structure conceptually.
 - The HTML MUST NOT be copied as a full-page blob into production code.
-- The agent MUST translate the spec into reusable components (Angular-style composition).
+- The agent MUST translate the spec into reusable components (component-based composition).
 - If the spec is ambiguous, do not guess: log and request clarification.
 
 ## UI continuity & completion contract (mandatory)
@@ -304,7 +312,7 @@ These must remain consistent across ALL screens unless explicitly changed by an 
 
   - Typography scale, spacing scale, colors/tokens, border radius, shadows, and icon style are global invariants.
   - Do not introduce new icon styles or mixed icon sets. Pick ONE icon set and use it everywhere.
-  - No per-screen “creative” styling. Everything must come from shared primitives and tokens.
+  - No per-screen "creative" styling. Everything must come from shared primitives and tokens.
 
 - Layout structure:
   - All screens must use the same shell: header + sidebar + main content + optional right panel.
@@ -351,3 +359,68 @@ A UI change is considered complete only if:
 - The screen works end-to-end for its intended interactions (navigation, open/close, submit/cancel).
 - No new inconsistencies in menu/header/iconography are introduced.
 - All quality gates pass.
+
+## 🤖 AI Agent Integration with Stagehand
+
+### UI Testing & Screenshots Protocol (mandatory)
+
+The AI agent (`@browserbasehq/stagehand` installed) must capture and analyze UI state systematically:
+
+**📸 Screenshots Protocol:**
+- Take screenshots before major interactions
+- Store in `apps/web-ui/screenshots/` with descriptive names
+- Format: `[timestamp]_[action]_[screen].png`
+- Document UI state changes visually
+- Screenshots are committed to `apps/web-ui/screenshots/` with descriptive names
+- `screenshots/` is gitignored for local development but `.gitkeep` maintains directory
+
+**🎯 Core Actions:**
+- Navigate to any route (`#dashboard`, `#settings`, etc.)
+- Click buttons, links, and interactive elements  
+- Fill forms and input fields
+- Scroll pages and panels
+- Extract text and element information
+- Wait for element visibility
+- Take screenshots for validation
+
+**🔍 Element Identification:**
+- Use `data-testid` attributes for reliable targeting
+- Target by semantic HTML elements
+- Use CSS selectors for complex elements
+- Component-based selection (`Button`, `Input`, `Card` classes)
+
+**🧪 Professional Workflow Integration:**
+- Test user flows end-to-end
+- Validate form submissions
+- Check navigation paths
+- Verify state changes
+- Document UI behavior with screenshots
+
+### 📋 Interaction Examples
+
+```javascript
+// Navigate and take screenshot
+await page.goto('http://localhost:3000/#dashboard');
+await page.screenshot('./screenshots/0010_initial_dashboard.png');
+
+// Click and capture interaction
+await page.click('[data-testid="new-project-button"]');
+await page.screenshot('./screenshots/0020_after_new_project_click.png');
+
+// Fill forms with validation
+await page.fill('input[name="apiKey"]', 'sk-proj-xxxxxxxx');
+await page.screenshot('./screenshots/0030_api_key_filled.png');
+await page.click('[data-testid="save-settings"]');
+await page.screenshot('./screenshots/0040_settings_saved.png');
+```
+
+### 🎨 Best Practices for AI Interaction
+
+1. **Screenshots First**: Always capture before/after states
+2. **Descriptive Names**: Use timestamp_action_screen format  
+3. **Use data-testid** for test-critical elements
+4. **Wait for states** before proceeding
+5. **Validate expected outcomes** after each interaction
+6. **Document failures** with screenshots and context
+
+The AI agent can now fully automate UI testing, user flow validation, and integration testing with professional-grade visual documentation.

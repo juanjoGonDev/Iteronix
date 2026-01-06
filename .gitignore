@@ -32,3 +32,15 @@ build/
 out/
 
 *.tsbuildinfo
+
+.log
+
+# UI Screenshots
+apps/web-ui/screenshots/
+screenshots/
+
+# No JavaScript files in source (except allowed patterns)
+*.js
+!scripts/*.js
+!*.config.js
+!test-server.js
