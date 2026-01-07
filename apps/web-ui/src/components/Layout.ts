@@ -139,7 +139,7 @@ export class MainLayout extends Component<MainLayoutProps, MainLayoutState> {
       return createElement('div', { className: `w-full h-full flex` }, [
       // Sidebar
       sidebar && createElement('aside', {
-        className: `${css.layout.sidebar} ${sidebarCollapsed ? 'w-20' : 'w-64'}`
+        className: sidebarCollapsed ? css.layout.sidebarCollapsed : css.layout.sidebar
       }, [
         typeof sidebar === 'function' ? sidebar : sidebar
       ]),

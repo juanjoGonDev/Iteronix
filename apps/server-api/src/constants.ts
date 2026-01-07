@@ -11,6 +11,9 @@ export const RoutePath = {
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
   FilesWrite: "/files/write",
+  FilesDelete: "/files/delete",
+  FilesCreate: "/files/create",
+  FilesMove: "/files/move",
   SessionsStart: "/sessions/start",
   SessionsStop: "/sessions/stop",
   SessionsStream: "/sessions/stream",
@@ -96,7 +99,9 @@ export const ErrorMessage = {
   AuthTokenMissing: "AUTH_TOKEN is required",
   InvalidPort: "Invalid PORT value",
   MethodNotAllowed: "Method not allowed",
-  InternalServerError: "Internal server error"
+  InternalServerError: "Internal server error",
+  MissingSourcePath: "Missing sourcePath",
+  MissingTargetPath: "Missing targetPath"
 } as const;
 
 export const MimeType = {
@@ -120,6 +125,12 @@ export const FileField = {
   ProjectId: "projectId",
   Path: "path",
   Content: "content"
+} as const;
+
+export const FileMoveField = {
+  ProjectId: "projectId",
+  SourcePath: "sourcePath",
+  TargetPath: "targetPath"
 } as const;
 
 export const SessionField = {

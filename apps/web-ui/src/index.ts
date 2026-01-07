@@ -2,9 +2,12 @@ import { Component, createElement, ComponentProps } from './shared/Component';
 import { MainLayout } from './components/Layout';
 import { Sidebar } from './components/Navigation';
 import { ROUTES, APP_VERSION } from './shared/constants';
+import { router } from './shared/Router';
 
 // Import screens
 import { DashboardScreen } from './screens/Dashboard';
+import { Explorer } from './screens/Explorer';
+import { KanbanBoard } from './screens/Kanban';
 import { SettingsScreen } from './screens/Settings';
 
 interface AppState {
@@ -22,6 +25,47 @@ export class App extends Component<AppProps, AppState> {
       currentScreen: 'overview',
       sidebarCollapsed: false
     });
+    
+    // Initialize router
+    this.setupRouter();
+  }
+
+  private setupRouter(): void {
+    // Register routes - bind to this instance to maintain context
+    router.register('', () => {
+      this.updateScreen('overview');
+    });
+    
+    router.register('overview', () => {
+      this.updateScreen('overview');
+    });
+    
+    router.register('projects', () => {
+      this.updateScreen('projects');
+    });
+    
+    router.register('workflows', () => {
+      this.updateScreen('workflows');
+    });
+    
+    router.register('explorer', () => {
+      this.updateScreen('explorer');
+    });
+    
+    router.register('history', () => {
+      this.updateScreen('history');
+    });
+    
+    router.register('settings', () => {
+      this.updateScreen('settings');
+    });
+  }
+
+  private updateScreen(screen: string): void {
+    if (this.state.currentScreen !== screen) {
+      this.setState({ currentScreen: screen });
+      this.updateDOM();
+    }
   }
 
   override   render(): HTMLElement {
@@ -34,28 +78,60 @@ export class App extends Component<AppProps, AppState> {
         label: 'Overview',
         href: ROUTES.OVERVIEW,
         active: currentScreen === 'overview',
-        onClick: () => this.setState({ currentScreen: 'overview' })
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.OVERVIEW);
+        }
       },
       {
         icon: 'folder_open',
         label: 'Projects',
         href: ROUTES.PROJECTS,
         active: currentScreen === 'projects',
-        onClick: () => this.setState({ currentScreen: 'projects' })
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.PROJECTS);
+        }
+      },
+      {
+        icon: 'code',
+        label: 'Explorer',
+        href: ROUTES.EXPLORER,
+        active: currentScreen === 'explorer',
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.EXPLORER);
+        }
+      },
+      {
+        icon: 'view_kanban',
+        label: 'Kanban',
+        href: ROUTES.KANBAN,
+        active: currentScreen === 'kanban',
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.KANBAN);
+        }
       },
       {
         icon: 'account_tree',
         label: 'Workflows',
         href: ROUTES.WORKFLOWS,
         active: currentScreen === 'workflows',
-        onClick: () => this.setState({ currentScreen: 'workflows' })
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.WORKFLOWS);
+        }
       },
       {
         icon: 'history',
         label: 'History',
         href: ROUTES.HISTORY,
         active: currentScreen === 'history',
-        onClick: () => this.setState({ currentScreen: 'history' })
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.HISTORY);
+        }
       }
     ];
 
@@ -80,73 +156,40 @@ export class App extends Component<AppProps, AppState> {
           return createElement(DashboardScreen, {});
         case 'settings':
           return createElement(SettingsScreen, {});
+        case 'explorer':
+          return createElement(Explorer, {});
         case 'projects':
           return createElement('div', { 
-            className: 'max-w-[1600px] mx-auto p-6' 
+            className: 'flex items-center justify-center h-full text-text-secondary' 
           }, [
-            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['Projects']),
-            createElement('div', { 
-              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
-            }, [
-              createElement('span', { 
-                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
-              }, ['folder_open']),
-              createElement('h2', { 
-                className: 'text-xl font-bold text-white mb-2' 
-              }, ['Projects Management']),
-              createElement('p', { 
-                className: 'text-text-secondary mb-4' 
-              }, ['Browse and manage your coding projects. Full implementation coming soon.']),
-              createElement('button', {
-                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
-                disabled: true
-              }, ['Not available yet'])
+            createElement('div', { className: 'text-center' }, [
+              createElement('h1', { 
+                className: 'text-6xl font-bold text-white mb-4' 
+              }, ['Projects'])
             ])
           ]);
+        case 'kanban':
+          return createElement(KanbanBoard, {});
+        case 'explorer':
+          return createElement(Explorer, {});
         case 'workflows':
           return createElement('div', { 
-            className: 'max-w-[1600px] mx-auto p-6' 
+            className: 'flex items-center justify-center h-full text-text-secondary' 
           }, [
-            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['Workflows']),
-            createElement('div', { 
-              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
-            }, [
-              createElement('span', { 
-                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
-              }, ['account_tree']),
-              createElement('h2', { 
-                className: 'text-xl font-bold text-white mb-2' 
-              }, ['Workflow Editor']),
-              createElement('p', { 
-                className: 'text-text-secondary mb-4' 
-              }, ['Design and automate your coding workflows. Full implementation coming soon.']),
-              createElement('button', {
-                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
-                disabled: true
-              }, ['Not available yet'])
+            createElement('div', { className: 'text-center' }, [
+              createElement('h1', { 
+                className: 'text-6xl font-bold text-white mb-4' 
+              }, ['Workflows'])
             ])
           ]);
         case 'history':
           return createElement('div', { 
-            className: 'max-w-[1600px] mx-auto p-6' 
+            className: 'flex items-center justify-center h-full text-text-secondary' 
           }, [
-            createElement('h1', { className: 'text-3xl font-bold text-white mb-4' }, ['History']),
-            createElement('div', { 
-              className: 'bg-surface-dark border border-border-dark rounded-xl p-8 text-center' 
-            }, [
-              createElement('span', { 
-                className: 'material-symbols-outlined text-6xl text-text-secondary mb-4' 
-              }, ['history']),
-              createElement('h2', { 
-                className: 'text-xl font-bold text-white mb-2' 
-              }, ['Run History']),
-              createElement('p', { 
-                className: 'text-text-secondary mb-4' 
-              }, ['View past coding sessions and their results. Full implementation coming soon.']),
-              createElement('button', {
-                className: 'bg-surface-dark-hover border border-border-dark rounded-lg px-4 py-2 text-text-secondary hover:text-white transition-colors cursor-not-allowed',
-                disabled: true
-              }, ['Not available yet'])
+            createElement('div', { className: 'text-center' }, [
+              createElement('h1', { 
+                className: 'text-6xl font-bold text-white mb-4' 
+              }, ['History'])
             ])
           ]);
         default:
@@ -200,7 +243,10 @@ export class App extends Component<AppProps, AppState> {
         label: 'Settings',
         href: ROUTES.SETTINGS,
         active: currentScreen === 'settings',
-        onClick: () => this.setState({ currentScreen: 'settings' })
+        onClick: (e: Event) => {
+          e.preventDefault();
+          router.navigate(ROUTES.SETTINGS);
+        }
       }],
       user,
       onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
@@ -247,16 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const appElement = appInstance.render();
     appRoot.appendChild(appElement);
 
-    // Handle hash changes for routing
-    window.addEventListener('hashchange', () => {
-      const hash = window.location.hash.slice(1) || 'overview';
-      appInstance.setState({ currentScreen: hash });
-    });
 
-  // Handle initial hash
-  const initialHash = window.location.hash.slice(1) || 'overview';
-  if (initialHash !== 'overview') {
-    appInstance.setState({ currentScreen: initialHash });
-  }
   }
 });

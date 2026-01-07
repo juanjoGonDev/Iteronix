@@ -108,9 +108,63 @@ export const writeFileContent = async (
   try {
     await fs.mkdir(dirname(resolved.value.target), { recursive: true });
     await fs.writeFile(resolved.value.target, content, TextEncoding);
-    return ok({
+  return ok({
       bytesWritten: Buffer.byteLength(content, TextEncoding)
     });
+  }
+  catch (error: unknown) {
+    return err(mapFsError(error));
+  }
+};
+
+export const deleteFile = async (
+  rootPath: string,
+  targetPath: string
+): Promise<Result<{ success: boolean }, FileError>> => {
+  const resolved = resolveSandboxPath(rootPath, targetPath);
+  if (resolved.type === ResultType.Err) {
+    return resolved;
+  }
+
+  try {
+    await fs.unlink(resolved.value.target);
+    return ok({ success: true });
+  } catch (error: unknown) {
+    return err(mapFsError(error));
+  }
+};
+
+export const createDirectory = async (
+  rootPath: string,
+  targetPath: string
+): Promise<Result<{ success: boolean }, FileError>> => {
+  const resolved = resolveSandboxPath(rootPath, targetPath);
+  if (resolved.type === ResultType.Err) {
+    return resolved;
+  }
+
+  try {
+    await fs.mkdir(resolved.value.target, { recursive: true });
+    return ok({ success: true });
+  } catch (error: unknown) {
+    return err(mapFsError(error));
+  }
+};
+
+export const moveFile = async (
+  rootPath: string,
+  sourcePath: string,
+  targetPath: string
+): Promise<Result<{ success: boolean }, FileError>> => {
+  const resolved = resolveSandboxPath(rootPath, sourcePath);
+  if (resolved.type === ResultType.Err) {
+    return resolved;
+  }
+
+  try {
+    await fs.mkdir(dirname(resolved.value.target), { recursive: true });
+    await fs.rename(resolved.value.target, targetPath);
+    return ok({ success: true });
   } catch (error: unknown) {
     return err(mapFsError(error));
   }

@@ -175,6 +175,36 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.FilesDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileDelete(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileCreate(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesMove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileMove(req, res, projectStore);
+    return;
+  }
+
   if (path === RoutePath.FilesWrite) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -182,6 +212,36 @@ const handleRequest = async (
     }
 
     await handleFileWrite(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileDelete(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileCreate(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesMove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileMove(req, res, projectStore);
     return;
   }
 
@@ -550,6 +610,129 @@ const handleFileRead = async (
 
   respondJson(res, HttpStatus.Ok, {
     content: readResult.value.content
+  });
+};
+
+const handleFileDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const deleteResult = await deleteFile(
+    projectResult.value.rootPath,
+    parsed.value.path
+  );
+  if (deleteResult.type === ResultType.Err) {
+    respondError(res, deleteResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: deleteResult.value.success
+  });
+};
+
+const handleFileCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const createResult = await createDirectory(
+    projectResult.value.rootPath,
+    dirname(parsed.value.path)
+  );
+  if (createResult.type === ResultType.Err) {
+    respondError(res, createResult.error);
+    return;
+  }
+
+  const writeResult = await writeFileContent(
+    projectResult.value.rootPath,
+    parsed.value.path,
+    parsed.value.content
+  );
+  if (writeResult.type === ResultType.Err) {
+    respondError(res, writeResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    path: parsed.value.path,
+    bytesWritten: writeResult.value.bytesWritten
+  });
+};
+
+const handleFileMove = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileMoveRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const moveResult = await moveFile(
+    projectResult.value.rootPath,
+    parsed.value.sourcePath,
+    parsed.value.targetPath
+  );
+  if (moveResult.type === ResultType.Err) {
+    respondError(res, moveResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: moveResult.value.success
   });
 };
 
@@ -1324,8 +1507,7 @@ type ApiError = {
 
 const readJsonBody = async (
   req: IncomingMessage
-): Promise<Result<unknown, ApiError>> =>
-  new Promise((resolve) => {
+  ): Promise<Result<unknown, ApiError>> => {
     const chunks: string[] = [];
 
     req.on("data", (chunk: Buffer | string) => {
@@ -1361,11 +1543,11 @@ const readJsonBody = async (
         })
       );
     });
-  });
+  };
 
-const parseCreateProject = (
+const parseFileDeleteRequest = (
   value: unknown
-): Result<ProjectCreateInput, ApiError> => {
+): Result<{ projectId: string; path: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
@@ -1373,27 +1555,159 @@ const parseCreateProject = (
     });
   }
 
-  const rootPath = readRequiredString(
+  const projectId = readRequiredString(
     value,
-    ProjectField.RootPath,
-    ErrorMessage.MissingRootPath
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
   );
-  if (rootPath.type === ResultType.Err) {
-    return rootPath;
+  if (projectId.type === ResultType.Err) {
+    return projectId;
   }
 
-  const name = readRequiredString(
+  const path = readRequiredString(
     value,
-    ProjectField.Name,
-    ErrorMessage.MissingName
+    FileField.Path,
+    ErrorMessage.MissingPath
   );
-  if (name.type === ResultType.Err) {
-    return name;
+  if (path.type === ResultType.Err) {
+    return path;
   }
 
   return ok({
-    name: name.value,
-    rootPath: rootPath.value
+    projectId: projectId.value,
+    path: path.value
+  });
+};
+
+const parseFileCreateRequest = (
+  value: unknown
+): Result<{ projectId: string; path: string; content: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  const content = readRequiredStringAllowEmpty(
+    value,
+    FileField.Content,
+    ErrorMessage.MissingContent
+  );
+  if (content.type === ResultType.Err) {
+    return content;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value,
+    content: content.value
+  });
+};
+
+const parseFileMoveRequest = (
+  value: unknown
+): Result<{ projectId: string; sourcePath: string; targetPath: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const sourcePath = readRequiredString(
+    value,
+    FileMoveField.SourcePath,
+    ErrorMessage.MissingSourcePath
+  );
+  if (sourcePath.type === ResultType.Err) {
+    return sourcePath;
+  }
+
+  const targetPath = readRequiredString(
+    value,
+    FileMoveField.TargetPath,
+    ErrorMessage.MissingTargetPath
+  );
+  if (targetPath.type === ResultType.Err) {
+    return targetPath;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    sourcePath: sourcePath.value,
+    targetPath: targetPath.value
+  });
+};
+
+const parseFileWriteRequest = (
+  value: unknown
+): Result<{ projectId: string; path: string; content: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  const content = readRequiredStringAllowEmpty(
+    value,
+    FileField.Content,
+    ErrorMessage.MissingContent
+  );
+  if (content.type === ResultType.Err) {
+    return content;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value,
+    content: content.value
   });
 };
 

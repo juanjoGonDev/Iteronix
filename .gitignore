@@ -33,7 +33,7 @@ out/
 
 *.tsbuildinfo
 
-.log
+*.log
 
 # UI Screenshots
 apps/web-ui/screenshots/

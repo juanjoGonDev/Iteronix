@@ -154,11 +154,12 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
           ]),
           onToggle && createElement('button', {
             onClick: onToggle,
-            className: 'ml-auto p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-colors'
+            className: 'ml-auto p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-all duration-300',
+            title: collapsed ? 'Expand sidebar' : 'Collapse sidebar'
           }, [
             createElement('span', { 
-              className: `material-symbols-outlined text-[18px] transition-transform ${collapsed ? 'rotate-180' : ''}` 
-            }, ['menu_open'])
+              className: `material-symbols-outlined text-[18px] transition-all duration-300 ${collapsed ? 'rotate-180' : ''}` 
+            }, [collapsed ? 'menu_open' : 'close_sidebar'])
           ])
         ])
       ]),

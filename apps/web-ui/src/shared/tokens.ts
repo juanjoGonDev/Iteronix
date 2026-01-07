@@ -94,6 +94,7 @@ interface StatusVariants {
 
 interface LayoutVariants {
   sidebar: string;
+  sidebarCollapsed: string;
   header: string;
   main: string;
 }
@@ -199,7 +200,8 @@ export const css: CSSClasses = {
   
   // Layout utilities
   layout: {
-    sidebar: 'w-64 bg-surface-dark border-r border-border-dark flex flex-col shrink-0 transition-all duration-300',
+    sidebar: 'w-64 bg-surface-dark border-r border-border-dark flex flex-col shrink-0 transition-all duration-300 ease-in-out',
+    sidebarCollapsed: 'w-20 bg-surface-dark border-r border-border-dark flex flex-col shrink-0 transition-all duration-300 ease-in-out overflow-hidden',
     header: 'h-16 flex items-center justify-between px-6 border-b border-border-dark bg-surface-dark/50 backdrop-blur-sm sticky top-0 z-20',
     main: 'flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark',
   }

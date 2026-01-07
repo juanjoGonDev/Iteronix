@@ -23,7 +23,7 @@ export class Router {
 
   // Initialize router
   private init(): void {
-    window.addEventListener('hashchange', () => {
+    window.addEventListener('popstate', () => {
       this.handleRouteChange();
     });
     
@@ -38,13 +38,27 @@ export class Router {
 
   // Navigate to a route
   navigate(path: string): void {
-    window.location.hash = path;
+    // Prevent infinite recursion
+    if (window.location.pathname === path) {
+      return;
+    }
+    try {
+      window.history.pushState({}, '', path);
+      this.handleRouteChange();
+    } catch (error) {
+      console.warn('Navigation error:', error);
+    }
   }
 
-  // Handle hash change
+  // Handle route change
   private handleRouteChange(): void {
-    const hash = window.location.hash.slice(1) || '/';
-    const [routePath, ...paramParts] = hash.split('/');
+    const pathname = window.location.pathname || '/';
+    const [routePath, ...paramParts] = pathname.split('/');
+    
+    // Prevent recursion if same route
+    if (this.currentRoute === routePath) {
+      return;
+    }
     
     // Find matching route
     let matchedRoute: string | null = null;
@@ -102,7 +116,7 @@ export class Router {
 
   // Handle 404
   private handleNotFound(): void {
-    console.warn(`Route not found: ${window.location.hash}`);
+    console.warn(`Route not found: ${window.location.pathname}`);
     // Navigate to default route or show 404 page
     this.navigate('/');
   }
