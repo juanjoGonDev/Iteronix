@@ -5,7 +5,7 @@
 When multiple sources of instruction exist, they MUST be applied in the following strict order:
 
 1. This file (`AGENTS.md`)
-2. `SKILLS/` definitions (if a task matches a skill, the skill MUST be applied)
+2. `.opencode/skill/` definitions (if a task matches a skill, the skill MUST be applied)
 3. `PLAN.md`
 4. `AGENTS_LOGS.md` (latest decisions and context)
 5. `ui-spec/` (PNG + HTML for UI work)
@@ -45,7 +45,7 @@ Skills define reusable, repeatable behaviors.
 
 Skills are defined under:
 
-/skills/
+.opencode/skill/<skill-name>/SKILL.md
 
 Each skill describes:
 
