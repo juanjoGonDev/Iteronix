@@ -37,15 +37,12 @@ interface HeaderProps extends ComponentProps {
   className?: string;
 }
 
-interface MainLayoutState {
-  sidebarCollapsed: boolean;
-}
-
 interface MainLayoutProps extends ComponentProps {
   sidebar?: (() => HTMLElement) | HTMLElement | null;
   header?: (() => unknown) | unknown | null;
   children?: unknown;
   className?: string;
+  sidebarCollapsed?: boolean;
 }
 
 export class Header extends Component<HeaderProps> {
@@ -121,20 +118,15 @@ export class Header extends Component<HeaderProps> {
   }
 }
 
-export class MainLayout extends Component<MainLayoutProps, MainLayoutState> {
-  constructor(props: MainLayoutProps = {}) {
-    super(props, { sidebarCollapsed: false });
-  }
-
+export class MainLayout extends Component<MainLayoutProps> {
   override render(): HTMLElement {
     const { 
       sidebar = null,
       header = null,
       children,
-      className = ''
+      className = '',
+      sidebarCollapsed = false
     } = this.props;
-
-    const { sidebarCollapsed } = this.state;
 
       return createElement('div', { className: `w-full h-full flex` }, [
       // Sidebar

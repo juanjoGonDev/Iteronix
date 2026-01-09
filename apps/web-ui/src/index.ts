@@ -256,7 +256,8 @@ export class App extends Component<AppProps, AppState> {
     return createElement(MainLayout, {
       sidebar: sidebarComponent,
       header: header,
-      className: 'transition-all duration-300'
+      className: 'transition-all duration-300',
+      sidebarCollapsed: this.state.sidebarCollapsed
     }, [renderScreen()]);
   }
 
@@ -290,8 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Create and mount app
     const appInstance = new App({});
-    const appElement = appInstance.render();
-    appRoot.appendChild(appElement);
+    appInstance.mount(appRoot);
 
 
   }

@@ -10,6 +10,7 @@ interface NavigationItemProps extends ComponentProps {
   onClick?: (e: Event) => void;
   badge?: string | number;
   className?: string;
+  collapsed?: boolean;
 }
 
 interface BreadcrumbItem {
@@ -59,7 +60,8 @@ export class NavigationItem extends Component<NavigationItemProps> {
       href = '#',
       onClick,
       badge = null,
-      className = ''
+      className = '',
+      collapsed = false
     } = this.props;
 
     const baseClasses = css.navItem.default;
@@ -77,10 +79,10 @@ export class NavigationItem extends Component<NavigationItemProps> {
       createElement('span', { 
         className: `material-symbols-outlined text-[24px] ${active ? 'fill-1' : ''}` 
       }, [icon]),
-      createElement('span', { 
+      !collapsed && createElement('span', { 
         className: 'text-sm font-medium' 
       }, [label]),
-      badge && createElement('span', {
+      !collapsed && badge && createElement('span', {
         className: 'bg-surface-dark text-white text-xs font-medium px-2 py-0.5 rounded-full border border-border-dark'
       }, [String(badge)])
     ]);
@@ -134,13 +136,17 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
     } = this.props;
 
     return createElement('aside', {
-      className: `${css.layout.sidebar} ${collapsed ? 'w-20' : 'w-64'} ${className}`
+      className: className
     }, [
       // Brand
-      createElement('div', { className: 'p-4 flex flex-col gap-1' }, [
-        createElement('div', { className: 'flex items-center gap-3 px-2' }, [
+      createElement('div', { 
+        className: collapsed ? 'p-3 flex flex-col gap-1' : 'p-4 flex flex-col gap-1'
+      }, [
+        createElement('div', { 
+          className: `flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-2'}`
+        }, [
           createElement('div', {
-            className: 'w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20'
+            className: 'w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20 shrink-0'
           }, [
             createElement('span', { className: 'material-symbols-outlined text-[20px]' }, [brand.icon])
           ]),
@@ -154,22 +160,25 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
           ]),
           onToggle && createElement('button', {
             onClick: onToggle,
-            className: 'ml-auto p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-all duration-300',
+            className: `${collapsed ? '' : 'ml-auto'} p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-all duration-300`,
             title: collapsed ? 'Expand sidebar' : 'Collapse sidebar'
           }, [
-            createElement('span', { 
-              className: `material-symbols-outlined text-[18px] transition-all duration-300 ${collapsed ? 'rotate-180' : ''}` 
-            }, [collapsed ? 'menu_open' : 'close_sidebar'])
+            createElement('span', {
+              className: 'material-symbols-outlined text-[18px] transition-all duration-300'
+            }, [collapsed ? 'arrow_forward_ios' : 'arrow_back_ios'])
           ])
         ])
       ]),
 
       // Navigation
-      createElement('nav', { className: 'flex flex-1 overflow-y-auto py-6 px-3 flex flex-col gap-1' }, [
+      createElement('nav', { 
+        className: `flex flex-1 overflow-y-auto ${collapsed ? 'py-4 px-1' : 'py-6 px-3'} flex flex-col gap-1`
+      }, [
         navigation.map((item: NavigationItemProps, index: number) => {
           const navItem = new NavigationItem({
             key: `nav-${index}`,
             ...item,
+            collapsed,
             className: collapsed ? 'justify-center' : ''
           });
           return navItem.render();
@@ -177,9 +186,11 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
       ]),
 
       // User Profile
-      user && createElement('div', { className: 'p-4 border-t border-border-dark' }, [
+      user && createElement('div', { 
+        className: `${collapsed ? 'p-3' : 'p-4'} border-t border-border-dark`
+      }, [
         createElement('div', {
-          className: 'flex items-center gap-3 p-2 rounded-lg hover:bg-surface-dark-hover cursor-pointer transition-colors'
+          className: `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} p-2 rounded-lg hover:bg-surface-dark-hover cursor-pointer transition-colors`
         }, [
           createElement(Avatar, {
             src: user.avatar || null,

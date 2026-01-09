@@ -22,11 +22,13 @@ export class Component<TProps extends ComponentProps = ComponentProps, TState = 
   // State management
   setState(newState: Partial<TState>): void {
     this.state = { ...this.state, ...newState };
-    if (this.element?.parentNode) {
-      const newElement = this.render();
-      this.element.parentNode.replaceChild(newElement, this.element);
-      this.element = newElement;
-    }
+    requestAnimationFrame(() => {
+      if (this.element?.parentNode) {
+        const newElement = this.render();
+        this.element.parentNode.replaceChild(newElement, this.element);
+        this.element = newElement;
+      }
+    });
   }
 
   // Mount to DOM
