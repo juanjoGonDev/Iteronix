@@ -1,12 +1,26 @@
 {
   "name": "@iteronix/web-ui",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "pnpm -w exec concurrently -k -n build,serve \"pnpm -C apps/web-ui run build:watch\" \"pnpm -C apps/web-ui run serve\"",
-    "build": "pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json",
+    "dev": "pnpm -w exec concurrently -k -n build,serve \"pnpm -C apps/web-ui run build:watch\" \"pnpm -C apps/web-ui run serve:express\"",
+    "build": "tsx scripts/update-version.ts && pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json",
     "build:watch": "pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json --watch",
-    "serve": "pnpm -w exec live-server apps/web-ui --port=5173 --no-browser",
-    "preview": "pnpm -w exec live-server apps/web-ui --port=4173 --no-browser"
+    "serve": "tsx scripts/serve.ts",
+    "serve:express": "tsx scripts/serve.ts",
+    "preview": "tsx scripts/simple-serve.ts",
+    "test-serve": "tsx scripts/simple-serve.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "puppeteer": "^24.34.0"
+  },
+  "devDependencies": {
+    "@browserbasehq/stagehand": "^3.0.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.21.0"
   }
 }

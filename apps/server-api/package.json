@@ -8,5 +8,8 @@
     "build:watch": "pnpm -w exec tsc -p apps/server-api/tsconfig.build.json --watch",
     "start": "node ../../dist/apps/server-api/src/index.js",
     "start:watch": "node --watch ../../dist/apps/server-api/src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
   }
 }
