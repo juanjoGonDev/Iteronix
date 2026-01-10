@@ -1,3 +1,26 @@
+### 2026-01-10 22:22 (Europe/Madrid) — OpenCode Configuration for AGENTS.md Enforcement
+
+- Summary: Configuración completa de OpenCode para enforce AGENTS.md automáticamente. Se ha añadido una sección compacta al inicio de AGENTS.md, creado un agente build personalizado, y configurado config.json con los skills habilitados.
+- Decisions:
+  - Crear sección compacta "CRITICAL RULES" al inicio de AGENTS.md con checklist visual
+  - Crear agente build.md que resume y enforce todas las reglas de AGENTS.md
+  - Configurar config.json con build como agente primary y skills habilitados
+  - Aplicar skills automáticamente cuando la tarea lo requiera
+- Changes:
+  - **Added CRITICAL RULES section** in AGENTS.md: Checklist visual con las 7 reglas más importantes
+  - **Created .opencode/agent/build.md**: Agente build con prompt compacto que resume AGENTS.md completo
+  - **Created .opencode/config.json**: Configuración con agente build como primary y skills habilitados
+  - **Skills enabled**: tdd-red-green-refactor, quality-gates-enforcer, command-discovery, ci-parity-finalizer, change-scope-guard, patch-reviewer, repo-invariants-guardian, minimal-diff-mode, strict-acceptance-criteria, ui-implementation-from-spec, dev-server-watchmode-port-aware, live-coding-narrator, failing-tests-first
+- Commands:
+  - No commands run (configuration only)
+- Issues/Risks:
+  - **Pre-existing errors**: Hay errores en logger/types en server-api que no son causados por estos cambios
+  - **Agent configuration**: OpenCode debe cargar correctamente la nueva configuración y el agente build
+- Next:
+  - OpenCode ahora enforce AGENTS.md a través del agente build
+  - Skills se aplican automáticamente cuando la tarea lo requiere
+  - Quality gates se ejecutan antes de finalizar cualquier tarea
+
 ### 2025-01-06 21:00 (Europe/Madrid) — TypeScript IDE Errors Resolved
 
 - Summary: Corregidos todos los errores específicos que causaban problemas en el IDE. El código está 100% TypeScript strict compliant.

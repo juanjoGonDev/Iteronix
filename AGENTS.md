@@ -1,5 +1,58 @@
 # AGENTS.md
 
+## 🔴 CRITICAL RULES - READ FIRST
+
+Before ANY code change, you MUST:
+
+1. **TDD (Test-Driven Development)**
+   - Write FAILING test first (packages/domain, packages/shared, orchestration)
+   - Implement MINIMAL code to pass
+   - Refactor ONLY when tests are green
+   - NEVER skip tests
+
+2. **TypeScript Strict (NON-NEGOTIABLE)**
+   - NO `any` types
+   - NO unsafe casts
+   - NO generic types without explicit bounds
+   - NO `<>` as type annotation
+   - All `.ts` files, NO `.js` in source
+   - Use `unknown` + runtime validation for untrusted inputs
+
+3. **Code Quality**
+   - NO magic strings: use enums/unions/constants
+   - NO magic numbers: use named constants
+   - NO code duplication: single source of truth
+   - NO comments in code
+   - SOLID principles + clean architecture
+   - Functions in top-down call order
+
+4. **Quality Gates (MANDATORY before finishing)**
+   - `pnpm lint` MUST pass
+   - `pnpm typecheck` MUST pass
+   - `pnpm test` MUST pass
+   - `pnpm build` MUST pass
+   - NEVER proceed if ANY gate fails
+
+5. **Apply Skills Automatically**
+   - Task matches TDD? Use `tdd-red-green-refactor` skill
+   - Finishing task? Use `quality-gates-enforcer` skill
+   - Check `.opencode/skill/` for matching skills
+   - ALWAYS apply skill if task matches
+
+6. **Authority Order**
+   1. AGENTS.md (this file) - HIGHEST
+   2. `.opencode/skill/` definitions
+   3. PLAN.md
+   4. AGENTS_LOGS.md
+   5. ui-spec/ (PNG + HTML)
+   6. User instructions - LOWEST
+
+7. **Output Format**
+   - Summary in Spanish (1-3 paragraphs)
+   - End with next prompt in English (fenced code block)
+
+---
+
 ## 0) Authority & precedence (MANDATORY)
 
 When multiple sources of instruction exist, they MUST be applied in the following strict order:
