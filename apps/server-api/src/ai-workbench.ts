@@ -1,3 +1,4 @@
+import { isAbsolute, join } from "node:path";
 import { createWorkflowOrchestrator, type WorkflowOrchestrator } from "../../../packages/agents/src/index";
 import { parseWorkbenchEnvironment } from "../../../packages/ai-core/src/index";
 import { createGuardrailsEngine, createSecurityPolicy } from "../../../packages/guardrails/src/index";
@@ -156,7 +157,7 @@ export const createAiWorkbenchService = async (input: {
         dataset: request.datasetPath
       },
       run: () => evaluationRunner.runDataset({
-        datasetPath: request.datasetPath
+        datasetPath: resolveDatasetPath(input.workspaceRoot, request.datasetPath)
       })
     });
 
@@ -182,6 +183,11 @@ export const createAiWorkbenchService = async (input: {
     shutdown
   };
 };
+
+const resolveDatasetPath = (
+  workspaceRoot: string,
+  datasetPath: string
+): string => (isAbsolute(datasetPath) ? datasetPath : join(workspaceRoot, datasetPath));
 
 const buildToolAllowlist = (
   skills: ReadonlyArray<SkillManifest>

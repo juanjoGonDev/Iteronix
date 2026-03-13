@@ -1,18 +1,42 @@
-import { Component, createElement, ComponentProps } from './shared/Component';
-import { MainLayout } from './components/Layout';
-import { Sidebar } from './components/Navigation';
-import { ROUTES, APP_VERSION } from './shared/constants';
-import { router } from './shared/Router';
-import { installClientLogForwarder } from './shared/logger-impl';
+import { Component, createElement, type ComponentProps } from "./shared/Component.js";
+import { MainLayout, Header } from "./components/Layout.js";
+import { Sidebar } from "./components/Navigation.js";
+import { APP_VERSION, ROUTES } from "./shared/constants.js";
+import { router } from "./shared/Router.js";
+import { installClientLogForwarder } from "./shared/logger-impl.js";
+import { DashboardScreen } from "./screens/Dashboard.js";
+import { Explorer } from "./screens/Explorer.js";
+import { KanbanBoard } from "./screens/Kanban.js";
+import { SettingsScreen } from "./screens/Settings.js";
+import { WorkflowsScreen } from "./screens/Workflows.js";
+import { HistoryScreen } from "./screens/History.js";
 
-// Import screens
-import { DashboardScreen } from './screens/Dashboard';
-import { Explorer } from './screens/Explorer';
-import { KanbanBoard } from './screens/Kanban';
-import { SettingsScreen } from './screens/Settings';
+const ScreenId = {
+  Overview: "overview",
+  Projects: "projects",
+  Explorer: "explorer",
+  Kanban: "kanban",
+  Workflows: "workflows",
+  History: "history",
+  Settings: "settings"
+} as const;
+
+type ScreenId = typeof ScreenId[keyof typeof ScreenId];
+
+const RootRoute = "/";
+
+const ScreenLabel: Record<ScreenId, string> = {
+  overview: "Overview",
+  projects: "Projects",
+  explorer: "Explorer",
+  kanban: "Kanban",
+  workflows: "Workflows",
+  history: "History",
+  settings: "Settings"
+};
 
 interface AppState {
-  currentScreen: string;
+  currentScreen: ScreenId;
   sidebarCollapsed: boolean;
 }
 
@@ -23,283 +47,234 @@ interface AppProps extends ComponentProps {
 export class App extends Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props, {
-      currentScreen: 'overview',
+      currentScreen: ScreenId.Overview,
       sidebarCollapsed: false
     });
 
     installClientLogForwarder();
-
     this.setupRouter();
 
-    console.info('Application started', {
+    console.info("Application started", {
       version: APP_VERSION,
-      screen: 'overview'
+      screen: ScreenId.Overview
+    });
+  }
+
+  override render(): HTMLElement {
+    return createElement(MainLayout, {
+      sidebar: createElement(Sidebar, {
+        brand: {
+          name: "Iteronix",
+          icon: "terminal",
+          version: `v${APP_VERSION}`
+        },
+        navigation: this.buildNavigationItems(),
+        user: {
+          name: "John Doe",
+          role: "DevOps Lead",
+          avatar: null
+        },
+        onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
+        collapsed: this.state.sidebarCollapsed
+      }),
+      header: () => this.renderHeader(),
+      className: "transition-all duration-300",
+      sidebarCollapsed: this.state.sidebarCollapsed,
+      children: this.renderCurrentScreen()
     });
   }
 
   private setupRouter(): void {
-    // Register routes - bind to this instance to maintain context
-    router.register('', () => {
-      this.updateScreen('overview');
-    });
-    
-    router.register('overview', () => {
-      this.updateScreen('overview');
-    });
-    
-    router.register('projects', () => {
-      this.updateScreen('projects');
-    });
-    
-    router.register('workflows', () => {
-      this.updateScreen('workflows');
-    });
-    
-    router.register('explorer', () => {
-      this.updateScreen('explorer');
-    });
-    
-    router.register('history', () => {
-      this.updateScreen('history');
-    });
-    
-    router.register('settings', () => {
-      this.updateScreen('settings');
+    router.register(RootRoute, () => this.updateScreen(ScreenId.Overview));
+    router.register(ROUTES.OVERVIEW, () => this.updateScreen(ScreenId.Overview));
+    router.register(ROUTES.PROJECTS, () => this.updateScreen(ScreenId.Projects));
+    router.register(ROUTES.EXPLORER, () => this.updateScreen(ScreenId.Explorer));
+    router.register(ROUTES.KANBAN, () => this.updateScreen(ScreenId.Kanban));
+    router.register(ROUTES.WORKFLOWS, () => this.updateScreen(ScreenId.Workflows));
+    router.register(ROUTES.HISTORY, () => this.updateScreen(ScreenId.History));
+    router.register(ROUTES.SETTINGS, () => this.updateScreen(ScreenId.Settings));
+    router.start();
+  }
+
+  private buildNavigationItems(): Array<{
+    icon: string;
+    label: string;
+    href: string;
+    active: boolean;
+    onClick: (event: Event) => void;
+  }> {
+    return [
+      this.createNavigationItem(ScreenId.Overview, "dashboard", ScreenLabel.overview, ROUTES.OVERVIEW),
+      this.createNavigationItem(ScreenId.Projects, "folder_open", ScreenLabel.projects, ROUTES.PROJECTS),
+      this.createNavigationItem(ScreenId.Explorer, "code", ScreenLabel.explorer, ROUTES.EXPLORER),
+      this.createNavigationItem(ScreenId.Kanban, "view_kanban", ScreenLabel.kanban, ROUTES.KANBAN),
+      this.createNavigationItem(ScreenId.Workflows, "account_tree", ScreenLabel.workflows, ROUTES.WORKFLOWS),
+      this.createNavigationItem(ScreenId.History, "history", ScreenLabel.history, ROUTES.HISTORY),
+      this.createNavigationItem(ScreenId.Settings, "settings", ScreenLabel.settings, ROUTES.SETTINGS)
+    ];
+  }
+
+  private createNavigationItem(
+    screen: ScreenId,
+    icon: string,
+    label: string,
+    href: string
+  ): {
+    icon: string;
+    label: string;
+    href: string;
+    active: boolean;
+    onClick: (event: Event) => void;
+  } {
+    return {
+      icon,
+      label,
+      href,
+      active: this.state.currentScreen === screen,
+      onClick: (event: Event) => {
+        event.preventDefault();
+        router.navigate(href);
+      }
+    };
+  }
+
+  private renderHeader(): HTMLElement {
+    const actions = buildHeaderActions(this.state.currentScreen);
+
+    return createElement(Header, {
+      title: this.state.currentScreen === ScreenId.Overview ? null : ScreenLabel[this.state.currentScreen],
+      breadcrumbs:
+        this.state.currentScreen === ScreenId.Overview
+          ? []
+          : [
+              { label: "Iteronix", href: ROUTES.OVERVIEW },
+              { label: ScreenLabel[this.state.currentScreen] }
+            ],
+      actions
     });
   }
 
-  private updateScreen(screen: string): void {
+  private renderCurrentScreen(): HTMLElement {
+    if (this.state.currentScreen === ScreenId.Overview) {
+      return createElement(DashboardScreen, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.Explorer) {
+      return createElement(Explorer, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.Kanban) {
+      return createElement(KanbanBoard, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.Workflows) {
+      return createElement(WorkflowsScreen, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.History) {
+      return createElement(HistoryScreen, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.Settings) {
+      return createElement(SettingsScreen, {});
+    }
+
+    if (this.state.currentScreen === ScreenId.Projects) {
+      return renderPlaceholderScreen({
+        title: "Projects",
+        description: "Project management remains available here. Use Workflows and History for the AI Workbench vertical slice."
+      });
+    }
+
+    return renderPlaceholderScreen({
+      title: "Unavailable screen",
+      description: `The route for ${this.state.currentScreen} is not wired yet.`
+    });
+  }
+
+  private updateScreen(screen: ScreenId): void {
     if (this.state.currentScreen !== screen) {
       this.setState({ currentScreen: screen });
-      this.updateDOM();
-    }
-  }
-
-  override   render(): HTMLElement {
-    const { currentScreen } = this.state;
-
-    // Navigation configuration
-    const navigation = [
-      {
-        icon: 'dashboard',
-        label: 'Overview',
-        href: ROUTES.OVERVIEW,
-        active: currentScreen === 'overview',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.OVERVIEW);
-        }
-      },
-      {
-        icon: 'folder_open',
-        label: 'Projects',
-        href: ROUTES.PROJECTS,
-        active: currentScreen === 'projects',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.PROJECTS);
-        }
-      },
-      {
-        icon: 'code',
-        label: 'Explorer',
-        href: ROUTES.EXPLORER,
-        active: currentScreen === 'explorer',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.EXPLORER);
-        }
-      },
-      {
-        icon: 'view_kanban',
-        label: 'Kanban',
-        href: ROUTES.KANBAN,
-        active: currentScreen === 'kanban',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.KANBAN);
-        }
-      },
-      {
-        icon: 'account_tree',
-        label: 'Workflows',
-        href: ROUTES.WORKFLOWS,
-        active: currentScreen === 'workflows',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.WORKFLOWS);
-        }
-      },
-      {
-        icon: 'history',
-        label: 'History',
-        href: ROUTES.HISTORY,
-        active: currentScreen === 'history',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.HISTORY);
-        }
-      }
-    ];
-
-    // Brand configuration
-    const brand = {
-      name: 'Iteronix',
-      icon: 'terminal',
-      version: `v${APP_VERSION} (Stable)`
-    };
-
-    // User configuration
-    const user = {
-      name: 'John Doe',
-      role: 'DevOps Lead',
-      avatar: null // Will use initials
-    };
-
-    // Render current screen
-    const renderScreen = (): HTMLElement => {
-      switch (currentScreen) {
-        case 'overview':
-          return createElement(DashboardScreen, {});
-        case 'settings':
-          return createElement(SettingsScreen, {});
-        case 'explorer':
-          return createElement(Explorer, {});
-        case 'projects':
-          return createElement('div', { 
-            className: 'flex items-center justify-center h-full text-text-secondary' 
-          }, [
-            createElement('div', { className: 'text-center' }, [
-              createElement('h1', { 
-                className: 'text-6xl font-bold text-white mb-4' 
-              }, ['Projects'])
-            ])
-          ]);
-        case 'kanban':
-          return createElement(KanbanBoard, {});
-        case 'explorer':
-          return createElement(Explorer, {});
-        case 'workflows':
-          return createElement('div', { 
-            className: 'flex items-center justify-center h-full text-text-secondary' 
-          }, [
-            createElement('div', { className: 'text-center' }, [
-              createElement('h1', { 
-                className: 'text-6xl font-bold text-white mb-4' 
-              }, ['Workflows'])
-            ])
-          ]);
-        case 'history':
-          return createElement('div', { 
-            className: 'flex items-center justify-center h-full text-text-secondary' 
-          }, [
-            createElement('div', { className: 'text-center' }, [
-              createElement('h1', { 
-                className: 'text-6xl font-bold text-white mb-4' 
-              }, ['History'])
-            ])
-          ]);
-        default:
-          return createElement('div', { 
-            className: 'flex items-center justify-center h-full text-text-secondary' 
-          }, [
-            createElement('div', { className: 'text-center' }, [
-              createElement('span', { 
-                className: 'material-symbols-outlined text-6xl mb-4' 
-              }, ['error_outline']),
-              createElement('h2', { 
-                className: 'text-2xl font-bold text-white mb-2' 
-              }, ['Screen Not Found']),
-              createElement('p', { 
-                className: 'text-text-secondary max-w-md' 
-              }, [`The screen "${currentScreen}" does not exist`])
-            ])
-          ]);
-      }
-    };
-
-    // Header configuration
-    const header = () => ({
-      title: currentScreen === 'overview' ? null : currentScreen.charAt(0).toUpperCase() + currentScreen.slice(1),
-      breadcrumbs: currentScreen === 'overview' ? [] : [
-        { label: 'Iteronix', href: ROUTES.OVERVIEW },
-        { label: currentScreen.charAt(0).toUpperCase() + currentScreen.slice(1) }
-      ],
-      actions: {
-        status: currentScreen === 'overview' ? {
-          api: 'API Online',
-          runners: '4/12 Active'
-        } : null,
-        notifications: {
-          unread: 2,
-          onClick: () => console.log('Notifications clicked')
-        },
-        primary: currentScreen === 'overview' ? {
-          icon: 'add',
-          label: 'New Project',
-          onClick: () => console.log('New project clicked')
-        } : null
-      }
-    });
-
-    // Sidebar component
-    const sidebarComponent = createElement(Sidebar, {
-      brand,
-      navigation: [...navigation, {
-        icon: 'settings',
-        label: 'Settings',
-        href: ROUTES.SETTINGS,
-        active: currentScreen === 'settings',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          router.navigate(ROUTES.SETTINGS);
-        }
-      }],
-      user,
-      onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
-      collapsed: this.state.sidebarCollapsed
-    });
-
-    return createElement(MainLayout, {
-      sidebar: sidebarComponent,
-      header: header,
-      className: 'transition-all duration-300',
-      sidebarCollapsed: this.state.sidebarCollapsed
-    }, [renderScreen()]);
-  }
-
-
-
-  updateDOM(): void {
-    const appRoot = document.getElementById('app-root');
-    if (appRoot) {
-      // Remove existing content
-      appRoot.innerHTML = '';
-      
-      // Render new content
-      const newElement = this.render();
-      appRoot.appendChild(newElement);
     }
   }
 }
 
-  // Initialize app when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  // Hide loading screen
-  const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen) {
-    (loadingScreen as HTMLElement).style.display = 'none';
+const renderPlaceholderScreen = (input: {
+  title: string;
+  description: string;
+}): HTMLElement =>
+  createElement("div", {
+    className: "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8"
+  }, [
+    createElement("div", {
+      className: "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left"
+    }, [
+      createElement("h1", { className: "text-2xl font-semibold text-white" }, [input.title]),
+      createElement("p", { className: "mt-3 max-w-xl text-sm leading-6 text-text-secondary" }, [input.description])
+    ])
+  ]);
+
+const buildHeaderActions = (screen: ScreenId): {
+  notifications: {
+    unread: number;
+    onClick: () => void;
+  };
+  status?: {
+    api: string;
+    runners: string;
+  };
+  primary?: {
+    icon: string;
+    label: string;
+    onClick: () => void;
+  };
+} => {
+  const actions: {
+    notifications: {
+      unread: number;
+      onClick: () => void;
+    };
+    status?: {
+      api: string;
+      runners: string;
+    };
+    primary?: {
+      icon: string;
+      label: string;
+      onClick: () => void;
+    };
+  } = {
+    notifications: {
+      unread: 0,
+      onClick: () => router.navigate(ROUTES.HISTORY)
+    }
+  };
+
+  if (screen === ScreenId.Overview) {
+    actions.status = {
+      api: "API online",
+      runners: "workbench ready"
+    };
+    actions.primary = {
+      icon: "smart_toy",
+      label: "Open Workbench",
+      onClick: () => router.navigate(ROUTES.WORKFLOWS)
+    };
   }
 
-  // Show app root
-  const appRoot = document.getElementById('app-root');
-  if (appRoot) {
-    appRoot.classList.remove('hidden');
-    
-    // Create and mount app
+  return actions;
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const loadingScreen = document.getElementById("loading-screen");
+  if (loadingScreen instanceof HTMLElement) {
+    loadingScreen.style.display = "none";
+  }
+
+  const appRoot = document.getElementById("app-root");
+  if (appRoot instanceof HTMLElement) {
+    appRoot.classList.remove("hidden");
     const appInstance = new App({});
     appInstance.mount(appRoot);
-
-
   }
 });

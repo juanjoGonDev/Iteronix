@@ -386,12 +386,15 @@ Acceptance:
 - [x] Add evaluation harness with JSONL datasets, regression checks, and CI smoke coverage
 - [x] Expose server API endpoints for skill runs, agent workflows, eval runs, and memory queries
 - [x] Add observability bootstrap, OTLP tracing support, README, deployment docs, CI workflow, and example skill assets
+- [x] Add Workflows UI for example skill runs, reviewer-gated workflows, citations, confidence, memory, and evidence
+- [x] Add History UI for persisted run browsing, evidence inspection, and minimal eval-suite execution/results
 
 Acceptance:
 
 - Server API can execute a skill run end to end using memory, optional retrieval, citations, confidence, and evidence reporting.
 - A multi-agent workflow can execute planner → retriever → executor → reviewer with policy-bound tool access.
 - CI runs lint, typecheck, tests, build, and the minimal eval suite.
+- The web UI can run the example skill and reviewer workflow end to end, show citations/confidence/evidence, and browse eval results/history.
 
 ---
 

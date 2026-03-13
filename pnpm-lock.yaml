@@ -23,6 +23,9 @@ importers:
       '@qdrant/js-client-rest':
         specifier: ^1.17.0
         version: 1.17.0(typescript@5.9.3)
+      dotenv:
+        specifier: 17.2.3
+        version: 17.2.3
       lru-cache:
         specifier: ^11.2.6
         version: 11.2.6
@@ -66,11 +69,7 @@ importers:
 
   apps/desktop-main: {}
 
-  apps/server-api:
-    dependencies:
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
+  apps/server-api: {}
 
   apps/web-ui:
     dependencies:

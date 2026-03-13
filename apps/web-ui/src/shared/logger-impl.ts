@@ -1,3 +1,5 @@
+import { readServerConnection } from "./server-config.js";
+
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 type LogEntry = {
@@ -7,16 +9,6 @@ type LogEntry = {
   message: string;
   runId?: string;
 };
-
-const StorageKey = {
-  ServerUrl: "iteronix_server_url",
-  AuthToken: "iteronix_auth_token"
-} as const;
-
-const DefaultConfig = {
-  ServerUrl: "http://localhost:4000",
-  AuthToken: "dev-token"
-} as const;
 
 const EndpointPath = {
   LogsAppend: "/logs/append",
@@ -160,18 +152,7 @@ const resetRemoteLogs = (config: {
 const readClientLogForwarderConfig = (): {
   serverUrl: string;
   authToken: string;
-} => {
-  const serverUrl = localStorage.getItem(StorageKey.ServerUrl);
-  const authToken = localStorage.getItem(StorageKey.AuthToken);
-
-  const normalizedServerUrl = serverUrl && serverUrl.trim().length > 0 ? serverUrl.trim() : DefaultConfig.ServerUrl;
-  const normalizedAuthToken = authToken && authToken.trim().length > 0 ? authToken.trim() : DefaultConfig.AuthToken;
-
-  return {
-    serverUrl: normalizedServerUrl,
-    authToken: normalizedAuthToken
-  };
-};
+} => readServerConnection();
 
 const createId = (): string => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

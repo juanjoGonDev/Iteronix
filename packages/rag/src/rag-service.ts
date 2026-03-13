@@ -204,11 +204,16 @@ const collectFiles = async (
   }
 };
 
+const IgnoredWorkspaceDirectories: ReadonlyArray<string> = [
+  "node_modules",
+  ".git",
+  ".iteronix",
+  "dist",
+  "screenshots"
+] as const;
+
 const shouldIgnorePath = (name: string): boolean =>
-  name === "node_modules" ||
-  name === ".git" ||
-  name === "dist" ||
-  name === "screenshots";
+  IgnoredWorkspaceDirectories.includes(name);
 
 const shouldIndexFile = (name: string): boolean =>
   name.endsWith(".md") ||

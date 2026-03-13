@@ -1,7 +1,7 @@
 import http from 'http';
 import { fileURLToPath } from 'url';
-import { dirname, join, extname } from 'path';
-import { readFileSync } from 'fs';
+import { dirname, extname, join } from 'path';
+import { existsSync, readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,19 +21,19 @@ const mimeTypes: Record<string, string> = {
 
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
   try {
-    let filePath = req.url === '/' ? '/index.html' : req.url || '';
-    const fullPath = join(projectRoot, filePath);
-    
-    // Security check - don't allow directory traversal
+    const requestPath = req.url === '/' ? '/index.html' : req.url || '';
+    const resolvedPath = resolveRequestPath(requestPath);
+    const fullPath = join(projectRoot, resolvedPath);
+
     if (!fullPath.startsWith(projectRoot)) {
       res.writeHead(400);
       res.end('Bad Request');
       return;
     }
-    
-    const ext = extname(filePath);
+
+    const ext = extname(resolvedPath);
     const contentType = mimeTypes[ext] || 'text/plain';
-    
+
     try {
       const content = readFileSync(fullPath);
       res.writeHead(200, {
@@ -58,3 +58,19 @@ server.listen(port, () => {
   console.log(`🔥 Ready for Stagehand interaction`);
   console.log(`📸 Screenshots: ${join(projectRoot, 'screenshots')}\n`);
 });
+
+const resolveRequestPath = (requestPath: string): string => {
+  if (requestPath.startsWith('/dist/') && !requestPath.includes('.', '/dist/'.length)) {
+    const modulePath = `${requestPath}.js`;
+    const fullModulePath = join(projectRoot, modulePath);
+    if (existsSync(fullModulePath)) {
+      return modulePath;
+    }
+  }
+
+  if (!requestPath.includes('.', 1)) {
+    return '/index.html';
+  }
+
+  return requestPath;
+};

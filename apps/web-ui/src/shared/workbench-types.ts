@@ -1,0 +1,176 @@
+export const WorkbenchSkillName = "example-skill";
+export const MinimalEvalDatasetPath = "packages/eval/fixtures/minimal-suite.jsonl";
+export const DefaultMemoryQueryLimit = 4;
+
+export const ReviewerDecision = {
+  Approved: "approved",
+  Denied: "denied"
+} as const;
+
+export type ReviewerDecision =
+  typeof ReviewerDecision[keyof typeof ReviewerDecision];
+
+export const WorkbenchRunRecordKind = {
+  Skill: "skill",
+  Workflow: "workflow"
+} as const;
+
+export type WorkbenchRunRecordKind =
+  typeof WorkbenchRunRecordKind[keyof typeof WorkbenchRunRecordKind];
+
+export const WorkbenchRecordStatus = {
+  Completed: "completed",
+  AwaitingApproval: "awaiting_approval",
+  Approved: "approved",
+  Denied: "denied"
+} as const;
+
+export type WorkbenchRecordStatus =
+  typeof WorkbenchRecordStatus[keyof typeof WorkbenchRecordStatus];
+
+export type Citation = {
+  chunkId: string;
+  sourceId: string;
+  uri: string;
+  snippet: string;
+  retrievedAt: string;
+  updatedAt: string;
+  score: number;
+  sourceType: string;
+};
+
+export type ConfidenceScore = {
+  score: number;
+  label: "low" | "medium" | "high";
+  signals: ReadonlyArray<string>;
+};
+
+export type UsageRecord = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+};
+
+export type EvidenceReport = {
+  traceId: string;
+  sessionId: string;
+  decisions: ReadonlyArray<string>;
+  guardrailsTriggered: ReadonlyArray<string>;
+  retrievedSources: ReadonlyArray<Citation>;
+  confidence: ConfidenceScore;
+  usage: UsageRecord;
+};
+
+export type SkillRunResponse = {
+  skill: {
+    metadata: {
+      name: string;
+      version: string;
+      description: string;
+      tags: ReadonlyArray<string>;
+    };
+  };
+  output: {
+    answer: string;
+    confidence: number;
+  };
+  citations: ReadonlyArray<Citation>;
+  confidence: ConfidenceScore;
+  evidenceReport: EvidenceReport;
+  traceId: string;
+  usage: UsageRecord;
+};
+
+export type WorkflowStep = {
+  stage: "planner" | "retriever" | "executor" | "reviewer";
+  status: "completed" | "awaiting_approval";
+  summary: string;
+  timestamp: string;
+};
+
+export type WorkflowRunResponse = {
+  status: "completed" | "awaiting_approval";
+  steps: ReadonlyArray<WorkflowStep>;
+  checkpoint?: {
+    stage: "reviewer";
+    summary: string;
+  };
+  final: SkillRunResponse;
+};
+
+export type EvaluationRunResponse = {
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+  };
+  results: ReadonlyArray<{
+    caseId: string;
+    passed: boolean;
+    traceId: string;
+    reasons: ReadonlyArray<string>;
+  }>;
+};
+
+export type MemorySearchResult = {
+  id: string;
+  kind: string;
+  sessionId?: string | undefined;
+  runId?: string | undefined;
+  content: string;
+  createdAt: string;
+  expiresAt?: string | undefined;
+  pii: boolean;
+  tags: ReadonlyArray<string>;
+  score: number;
+  metadata: {
+    redacted: boolean;
+  };
+};
+
+export type WorkflowReview = {
+  decision: ReviewerDecision;
+  reason: string;
+  decidedAt: string;
+};
+
+type WorkbenchRunHistoryRecordBase = {
+  id: string;
+  skillName: string;
+  sessionId: string;
+  question: string;
+  createdAt: string;
+  updatedAt: string;
+  status: WorkbenchRecordStatus;
+  memory: ReadonlyArray<MemorySearchResult>;
+};
+
+export type WorkbenchSkillHistoryRecord = WorkbenchRunHistoryRecordBase & {
+  kind: typeof WorkbenchRunRecordKind.Skill;
+  result: SkillRunResponse;
+};
+
+export type WorkbenchWorkflowHistoryRecord = WorkbenchRunHistoryRecordBase & {
+  kind: typeof WorkbenchRunRecordKind.Workflow;
+  result: WorkflowRunResponse;
+  review?: WorkflowReview;
+};
+
+export type WorkbenchRunHistoryRecord =
+  | WorkbenchSkillHistoryRecord
+  | WorkbenchWorkflowHistoryRecord;
+
+export type WorkbenchEvalHistoryRecord = {
+  id: string;
+  datasetPath: string;
+  createdAt: string;
+  updatedAt: string;
+  result: EvaluationRunResponse;
+};
+
+export type WorkbenchHistoryState = {
+  runs: ReadonlyArray<WorkbenchRunHistoryRecord>;
+  evals: ReadonlyArray<WorkbenchEvalHistoryRecord>;
+};

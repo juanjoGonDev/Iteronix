@@ -34,6 +34,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
     "@opentelemetry/sdk-node": "^0.213.0",
     "@qdrant/js-client-rest": "^1.17.0",
+    "dotenv": "17.2.3",
     "lru-cache": "^11.2.6",
     "pg": "^8.20.0",
     "rate-limiter-flexible": "^9.1.1",

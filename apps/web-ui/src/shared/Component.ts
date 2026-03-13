@@ -73,7 +73,9 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
   if (typeof tag === 'function') {
     // Create component instance
     const component = new tag(attributes);
-    return component.render();
+    const rendered = component.render();
+    component.element = rendered;
+    return rendered;
   } else if (typeof tag === 'string') {
     element = document.createElement(tag);
   } else {
@@ -99,6 +101,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('change', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {
       element.addEventListener('submit', value as EventListener);
+    } else if (typeof value === 'boolean') {
+      if (value) {
+        element.setAttribute(key, '');
+      }
     } else {
       element.setAttribute(key, String(value));
     }

@@ -512,4 +512,35 @@
 - Next:
   - Entregar resumen final conforme a `AGENTS.md`
 
+### 2026-03-13 00:50 (Europe/Madrid) — AI Workbench UI Vertical Slice
+
+- Summary: Completadas las pantallas `Workflows` y `History` sobre los endpoints del workbench, con ejecución real de skill, workflow con reviewer manual, evidence reports, citas, confianza, memoria y eval suite mínima desde la UI.
+- Decisions:
+  - Aplicar `ui-implementation-from-spec`, `repo-invariants-guardian`, `strict-acceptance-criteria` y `quality-gates-enforcer` para mantener shell, rutas y acceptance criteria sin ampliar scope
+  - Mantener la persistencia de runs/evals en `localStorage` como fuente de verdad UI y usar el backend sólo para ejecución/evidencia
+  - Corregir problemas estructurales del runtime del web UI en vez de parchear pantallas individualmente: `MainLayout` debía recibir `children` vía props, el router debía arrancar tras registrar rutas y el renderer debía respetar boolean props + permitir `setState()` en componentes anidados
+  - Endurecer el preview server para imports ES module sin extensión y mover `dotenv` al root para que `pnpm start` del server resuelva dependencias desde `dist`
+- Changes:
+  - **Created apps/web-ui/src/screens/Workflows.ts** y **History.ts** con ejecución real de skill/workflow/evals, reviewer approve/deny, evidence/citations/confidence/memory e historial
+  - **Created apps/web-ui/src/components/WorkbenchPanels.ts**, **shared/server-config.ts**, **shared/workbench-types.ts**, **shared/workbench-codec.ts**, **shared/workbench-client.ts**, **shared/workbench-history.ts**
+  - **Added tests**: `apps/web-ui/src/shared/Router.test.ts`, `apps/web-ui/src/shared/workbench-history.test.ts`
+  - **Updated apps/web-ui/src/index.ts**, `shared/Router.ts`, `shared/Component.ts`, `scripts/simple-serve.ts`, `shared/logger-impl.ts`
+  - **Updated packages/rag/src/rag-service.ts` + test** para ignorar `.iteronix` al indexar el workspace
+  - **Updated packages/eval/src/ci-eval.test.ts** para usar directorios temporales y mantener la suite estable entre reruns
+  - **Moved dotenv to root package.json / pnpm-lock.yaml** para restaurar el arranque del `server-api` compilado
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/shared/Router.test.ts`
+  - `pnpm -C apps/web-ui build`
+  - `pnpm lint && pnpm typecheck && pnpm test && pnpm build` - PASO ✓
+  - Verificación manual con Playwright:
+    - `Workflows`: skill run end-to-end con citas/confianza/evidence
+    - `Workflows`: workflow con reviewer `Approve and continue` y `Request changes`
+    - `History`: ejecución del eval suite y render del resultado `5/5 passed`
+- Issues/Risks:
+  - El logger del cliente sigue intentando usar la conexión previa al boot; durante la validación manual generó `401` contra `/logs/reset`/`/logs/append` al cambiar el backend desde la propia UI, sin bloquear el slice del workbench
+  - El retrieval del skill de ejemplo sigue priorizando coincidencias de código/tests antes que documentación curada; funcional para el slice, pero conviene ajustar ranking/filters en el siguiente incremento
+- Next:
+  - Llevar el ajuste de logger al mismo modelo reactivo de `server-config`
+  - Afinar ranking del RAG para priorizar docs/README/skills por encima de tests/config cuando la pregunta es descriptiva
+
 
