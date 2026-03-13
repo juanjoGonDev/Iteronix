@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "name": "example-skill",
+    "version": "1.0.0",
+    "description": "Answers repository questions using Iteronix memory and RAG with citations.",
+    "tags": ["rag", "memory", "workbench"]
+  },
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "minLength": 3
+      }
+    },
+    "required": ["question"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "answer": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": ["answer", "confidence"]
+  },
+  "toolAllowlist": ["retrieve_context", "session_memory"],
+  "promptTemplate": "Use grounded repository evidence to answer the question and keep the answer concise.",
+  "evaluationRubric": [
+    "Answer must cite at least one source when retrieval is used.",
+    "Answer must remain grounded in repository content.",
+    "Answer must preserve safe-by-default behavior."
+  ],
+  "fixtures": [
+    {
+      "name": "architecture",
+      "input": {
+        "question": "What is Iteronix?"
+      }
+    }
+  ],
+  "options": {
+    "useRag": true,
+    "topK": 3
+  }
+}

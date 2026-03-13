@@ -20,6 +20,8 @@ export const RoutePath = {
   HistoryList: "/history/list",
   HistoryEvents: "/history/events",
   LogsQuery: "/logs/query",
+  LogsAppend: "/logs/append",
+  LogsReset: "/logs/reset", 
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
   ProvidersSettings: "/providers/settings",
@@ -34,7 +36,11 @@ export const RoutePath = {
   KanbanTasksCreate: "/kanban/tasks/create",
   KanbanTasksList: "/kanban/tasks/list",
   KanbanTasksUpdate: "/kanban/tasks/update",
-  KanbanTasksDelete: "/kanban/tasks/delete"
+  KanbanTasksDelete: "/kanban/tasks/delete",
+  AiSkillsRun: "/ai/skills/run",
+  AiWorkflowsRun: "/ai/workflows/run",
+  AiEvalsRun: "/ai/evals/run",
+  AiMemoryQuery: "/ai/memory/query"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -57,12 +63,14 @@ export const EnvKey = {
   Host: "HOST",
   AuthToken: "AUTH_TOKEN",
   WorkspaceRoots: "WORKSPACE_ROOTS",
-  CommandAllowlist: "COMMAND_ALLOWLIST"
+  CommandAllowlist: "COMMAND_ALLOWLIST",
+  LogDir: "LOG_DIR"
 } as const;
 
 export const DefaultServerConfig = {
   Host: "0.0.0.0",
-  Port: 4000
+  Port: 4000,
+  LogDir: "../web-ui/logs"
 } as const;
 
 export const ErrorMessage = {
@@ -101,7 +109,11 @@ export const ErrorMessage = {
   MethodNotAllowed: "Method not allowed",
   InternalServerError: "Internal server error",
   MissingSourcePath: "Missing sourcePath",
-  MissingTargetPath: "Missing targetPath"
+  MissingTargetPath: "Missing targetPath",
+  MissingSkillName: "Missing skillName",
+  MissingInput: "Missing input",
+  MissingQuestion: "Missing question",
+  MissingDatasetPath: "Missing datasetPath"
 } as const;
 
 export const MimeType = {
@@ -185,6 +197,16 @@ export const KanbanTaskField = {
   Position: "position"
 } as const;
 
+export const AiField = {
+  SkillName: "skillName",
+  Input: "input",
+  Question: "question",
+  DatasetPath: "datasetPath",
+  AutoApprove: "autoApprove",
+  Query: "query",
+  Limit: "limit"
+} as const;
+
 export const FileEntryKind = {
   File: "file",
   Directory: "directory"
@@ -201,5 +223,6 @@ export const HttpStatus = {
   NotFound: 404,
   Conflict: 409,
   MethodNotAllowed: 405,
+  TooManyRequests: 429,
   InternalServerError: 500
 } as const;

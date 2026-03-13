@@ -3,6 +3,7 @@ import { MainLayout } from './components/Layout';
 import { Sidebar } from './components/Navigation';
 import { ROUTES, APP_VERSION } from './shared/constants';
 import { router } from './shared/Router';
+import { installClientLogForwarder } from './shared/logger-impl';
 
 // Import screens
 import { DashboardScreen } from './screens/Dashboard';
@@ -25,9 +26,15 @@ export class App extends Component<AppProps, AppState> {
       currentScreen: 'overview',
       sidebarCollapsed: false
     });
-    
-    // Initialize router
+
+    installClientLogForwarder();
+
     this.setupRouter();
+
+    console.info('Application started', {
+      version: APP_VERSION,
+      screen: 'overview'
+    });
   }
 
   private setupRouter(): void {

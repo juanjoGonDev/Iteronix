@@ -44,3 +44,6 @@ screenshots/
 !scripts/*.js
 !*.config.js
 !test-server.js
+
+.iteronix/
+qdrant_storage/

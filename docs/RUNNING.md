@@ -23,6 +23,10 @@ Notes:
 - `pnpm start` - run server API from built output
 - `pnpm preview:web` - serve the built web UI locally
 
+## Evaluation
+
+- `pnpm eval:min` - run the minimal AI evaluation suite backed by `packages/eval/fixtures/minimal-suite.jsonl`
+
 ## Cleanup
 
 - `pnpm clean` - remove build artifacts

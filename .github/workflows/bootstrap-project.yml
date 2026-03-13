@@ -1,0 +1,46 @@
+name: Bootstrap Labels and Milestones
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              { name: 'ai-workbench', color: '1f6feb', description: 'AI workbench scope' },
+              { name: 'memory', color: '0e8a16', description: 'Hierarchical memory work' },
+              { name: 'rag', color: '5319e7', description: 'Retrieval and context systems' },
+              { name: 'mcp', color: 'd93f0b', description: 'MCP interoperability' },
+              { name: 'guardrails', color: 'b60205', description: 'Security and policy work' }
+            ];
+            for (const label of labels) {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label.name,
+                color: label.color,
+                description: label.description
+              }).catch(() => undefined);
+            }
+            const milestones = ['AI Workbench MVP', 'AI Workbench Production'];
+            const existing = await github.paginate(github.rest.issues.listMilestones, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all'
+            });
+            for (const title of milestones) {
+              if (!existing.some((milestone) => milestone.title === title)) {
+                await github.rest.issues.createMilestone({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title
+                });
+              }
+            }

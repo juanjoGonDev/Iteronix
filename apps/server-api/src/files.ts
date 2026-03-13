@@ -108,11 +108,10 @@ export const writeFileContent = async (
   try {
     await fs.mkdir(dirname(resolved.value.target), { recursive: true });
     await fs.writeFile(resolved.value.target, content, TextEncoding);
-  return ok({
+    return ok({
       bytesWritten: Buffer.byteLength(content, TextEncoding)
     });
-  }
-  catch (error: unknown) {
+  } catch (error: unknown) {
     return err(mapFsError(error));
   }
 };

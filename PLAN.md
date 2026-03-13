@@ -52,6 +52,7 @@ Acceptance:
 - [x] Define `LLMProviderPort` + provider capabilities in `packages/domain`
 - [x] Define run session model + event model (stream-friendly)
 - [x] Define ports: history store, logs store, policy/permissions, filesystem, secrets (interfaces only)
+- [x] Implement logs store adapter: `file-logs-store` in `packages/adapters`
 - [x] Implement provider registry + settings (typed + validated via JSON schema)
 - [x] Implement one provider adapter: `codex-cli` (spawn) in `packages/adapters`
 
@@ -373,6 +374,24 @@ Acceptance:
 Acceptance:
 
 - Server can apply changes, run gates, and commit.
+
+## Milestone 6.5 — AI Engineering Workbench
+
+- [x] Add shared AI runtime package with typed config, run context, evidence, and usage models
+- [x] Add hierarchical memory package with working, episodic, and semantic memories plus TTL and retention policies
+- [x] Add skills runtime with on-disk manifests, schema validation, guardrails, memory integration, and evidence capture
+- [x] Add RAG package with ingestion, chunking, retrieval, citations, credibility scoring, and cache-aware gating
+- [x] Add MCP interoperability package with Iteronix MCP server exposure and external MCP client adapters
+- [x] Add multi-agent workflow orchestration with planner, retriever, executor, reviewer, and human checkpoint support
+- [x] Add evaluation harness with JSONL datasets, regression checks, and CI smoke coverage
+- [x] Expose server API endpoints for skill runs, agent workflows, eval runs, and memory queries
+- [x] Add observability bootstrap, OTLP tracing support, README, deployment docs, CI workflow, and example skill assets
+
+Acceptance:
+
+- Server API can execute a skill run end to end using memory, optional retrieval, citations, confidence, and evidence reporting.
+- A multi-agent workflow can execute planner → retriever → executor → reviewer with policy-bound tool access.
+- CI runs lint, typecheck, tests, build, and the minimal eval suite.
 
 ---
 

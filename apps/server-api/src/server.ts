@@ -1,9 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import {
+  AiField,
   BearerPrefix,
   BearerScheme,
   ErrorMessage,
   FileField,
+  FileMoveField,
   HeaderName,
   HttpMethod,
   HttpStatus,
@@ -22,7 +26,10 @@ import {
 } from "./constants";
 import { loadConfig, type ServerConfig } from "./config";
 import {
+  createDirectory,
+  deleteFile,
   listFileTree,
+  moveFile,
   readFileContent,
   writeFileContent
 } from "./files";
@@ -41,13 +48,16 @@ import {
   type HistoryStoreError,
   type HistoryStore
 } from "./history";
+import { LogLevel as LogLevelValues, type LogLevel } from "./logs";
 import {
-  createLogsStore,
-  LogLevel,
-  LogsStoreErrorCode,
-  type LogsStoreError,
-  type LogsStore
-} from "./logs";
+  LogsStoreErrorCode as DomainLogsStoreErrorCode,
+  type LogsStoreError as DomainLogsStoreError
+} from "../../../packages/domain/src/ports/logs-store";
+import {
+  createServerLogsStore,
+  type ServerLogEntry,
+  type ServerLogsStore
+} from "./server-logs-store";
 import {
   createProviderStore,
   ProviderStoreErrorCode,
@@ -75,17 +85,26 @@ import {
 } from "./sessions";
 import { createSseStream } from "./sse";
 import { err, ok, ResultType, type Result } from "./result";
+import {
+  createAiWorkbenchService,
+  type AiWorkbenchService
+} from "./ai-workbench";
 
-export const startServer = (): void => {
+export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
+  const logsStore = await createServerLogsStore(config.logDir);
+  installServerConsoleForwarder(logsStore);
+
   const projectStore = createProjectStore();
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
   const historyStore = createHistoryStore();
-  const logsStore = createLogsStore();
   const providerStore = createProviderStore();
   const kanbanStore = createKanbanStore();
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
+  const aiWorkbench = await createAiWorkbenchService({
+    workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
+  });
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -98,7 +117,8 @@ export const startServer = (): void => {
       logsStore,
       providerStore,
       kanbanStore,
-      workspacePolicy
+      workspacePolicy,
+      aiWorkbench
     );
   });
 
@@ -113,10 +133,11 @@ const handleRequest = async (
   sessionStore: SessionStore,
   sessionEvents: SessionEventHub,
   historyStore: HistoryStore,
-  logsStore: LogsStore,
+  logsStore: ServerLogsStore,
   providerStore: ProviderStore,
   kanbanStore: KanbanStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  aiWorkbench: AiWorkbenchService
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -125,6 +146,12 @@ const handleRequest = async (
     });
     return;
   }
+
+  if (handleCorsPreflight(req, res)) {
+    return;
+  }
+
+  applyCorsHeaders(req, res);
 
   if (!isAuthorized(req, config.authToken)) {
     respondUnauthorized(res);
@@ -305,6 +332,26 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.LogsAppend) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleLogsAppend(req, res, logsStore);
+    return;
+  }
+
+  if (path === RoutePath.LogsReset) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleLogsReset(res, logsStore);
+    return;
+  }
+
   if (path === RoutePath.ProvidersList) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -452,6 +499,46 @@ const handleRequest = async (
     }
 
     await handleKanbanTaskDelete(req, res, projectStore, kanbanStore);
+    return;
+  }
+
+  if (path === RoutePath.AiSkillsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiSkillRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiWorkflowsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiWorkflowRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiEvalsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiEvalRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiMemoryQuery) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiMemoryQuery(req, res, aiWorkbench);
     return;
   }
 
@@ -939,7 +1026,7 @@ const handleHistoryEvents = async (
 const handleLogsQuery = async (
   req: IncomingMessage,
   res: ServerResponse,
-  logsStore: LogsStore
+  logsStore: ServerLogsStore
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -955,12 +1042,51 @@ const handleLogsQuery = async (
 
   const logs = logsStore.query(parsed.value);
   if (logs.type === ResultType.Err) {
-    respondError(res, mapLogsStoreError(logs.error));
+    respondError(res, mapDomainLogsStoreError(logs.error));
     return;
   }
 
   respondJson(res, HttpStatus.Ok, {
     logs: logs.value
+  });
+};
+
+const handleLogsAppend = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  logsStore: ServerLogsStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseLogsAppendRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await logsStore.append(parsed.value);
+  if (result.type === ResultType.Err) {
+    respondError(res, mapDomainLogsStoreError(result.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: true
+  });
+};
+
+const handleLogsReset = async (
+  res: ServerResponse,
+  logsStore: ServerLogsStore
+): Promise<void> => {
+  await logsStore.reset();
+
+  respondJson(res, HttpStatus.Ok, {
+    success: true
   });
 };
 
@@ -1505,9 +1631,10 @@ type ApiError = {
   message: string;
 };
 
-const readJsonBody = async (
+const readJsonBody = (
   req: IncomingMessage
-  ): Promise<Result<unknown, ApiError>> => {
+): Promise<Result<unknown, ApiError>> =>
+  new Promise((resolve) => {
     const chunks: string[] = [];
 
     req.on("data", (chunk: Buffer | string) => {
@@ -1543,7 +1670,7 @@ const readJsonBody = async (
         })
       );
     });
-  };
+  });
 
 const parseFileDeleteRequest = (
   value: unknown
@@ -1711,6 +1838,36 @@ const parseFileWriteRequest = (
   });
 };
 
+const parseCreateProject = (
+  value: unknown
+): Result<ProjectCreateInput, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const rootPath = readRequiredString(
+    value,
+    ProjectField.RootPath,
+    ErrorMessage.MissingRootPath
+  );
+  if (rootPath.type === ResultType.Err) {
+    return rootPath;
+  }
+
+  const name = readRequiredString(value, ProjectField.Name, ErrorMessage.MissingName);
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+
+  return ok({
+    name: name.value,
+    rootPath: rootPath.value
+  });
+};
+
 const parseOpenProject = (
   value: unknown
 ): Result<ProjectOpenInput, ApiError> => {
@@ -1808,50 +1965,6 @@ const parseFileReadRequest = (
   return ok({
     projectId: projectId.value,
     path: path.value
-  });
-};
-
-const parseFileWriteRequest = (
-  value: unknown
-): Result<{ projectId: string; path: string; content: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readRequiredString(
-    value,
-    FileField.Path,
-    ErrorMessage.MissingPath
-  );
-  if (path.type === ResultType.Err) {
-    return path;
-  }
-
-  const content = readRequiredStringAllowEmpty(
-    value,
-    FileField.Content,
-    ErrorMessage.MissingContent
-  );
-  if (content.type === ResultType.Err) {
-    return content;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    path: path.value,
-    content: content.value
   });
 };
 
@@ -2016,6 +2129,63 @@ const parseLogsQueryRequest = (
   }
 
   return ok(input);
+};
+
+const LogsAppendField = {
+  Id: "id",
+  Timestamp: "timestamp",
+  Level: "level",
+  Message: "message",
+  RunId: "runId"
+} as const;
+
+const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const id = readRequiredString(value, LogsAppendField.Id, ErrorMessage.InvalidBody);
+  if (id.type === ResultType.Err) {
+    return id;
+  }
+
+  const timestamp = readRequiredString(value, LogsAppendField.Timestamp, ErrorMessage.InvalidBody);
+  if (timestamp.type === ResultType.Err) {
+    return timestamp;
+  }
+
+  const levelValue = readRequiredString(value, LogsAppendField.Level, ErrorMessage.InvalidBody);
+  if (levelValue.type === ResultType.Err) {
+    return levelValue;
+  }
+
+  const parsedLevel = parseLogLevel(levelValue.value);
+  if (parsedLevel.type === ResultType.Err) {
+    return parsedLevel;
+  }
+
+  const message = readRequiredString(value, LogsAppendField.Message, ErrorMessage.InvalidBody);
+  if (message.type === ResultType.Err) {
+    return message;
+  }
+
+  const runId = readOptionalString(value, LogsAppendField.RunId);
+
+  const entry: ServerLogEntry = {
+    id: id.value,
+    timestamp: timestamp.value,
+    level: parsedLevel.value,
+    message: message.value
+  };
+
+  if (runId) {
+    entry.runId = runId;
+  }
+
+  return ok(entry);
 };
 
 const parseProvidersListRequest = (
@@ -2825,6 +2995,291 @@ const parseKanbanTaskDeleteRequest = (
   });
 };
 
+const handleAiSkillRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiSkillRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runSkill(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiWorkflowRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiWorkflowRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runWorkflow(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiEvalRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiEvalRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runEvaluation(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiMemoryQuery = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiMemoryQueryRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.searchMemory(parsed.value);
+    respondJson(res, HttpStatus.Ok, {
+      items: result
+    });
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const parseAiSkillRunRequest = (
+  value: unknown
+): Result<{ skillName: string; sessionId: string; input: unknown }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const skillName = readRequiredString(
+    value,
+    AiField.SkillName,
+    ErrorMessage.MissingSkillName
+  );
+  if (skillName.type === ResultType.Err) {
+    return skillName;
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  if (!(AiField.Input in value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingInput
+    });
+  }
+
+  return ok({
+    skillName: skillName.value,
+    sessionId: sessionId.value,
+    input: value[AiField.Input]
+  });
+};
+
+const parseAiWorkflowRunRequest = (
+  value: unknown
+): Result<
+  {
+    skillName: string;
+    sessionId: string;
+    question: string;
+    autoApprove: boolean;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const skillName = readRequiredString(
+    value,
+    AiField.SkillName,
+    ErrorMessage.MissingSkillName
+  );
+  if (skillName.type === ResultType.Err) {
+    return skillName;
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  const question = readRequiredString(
+    value,
+    AiField.Question,
+    ErrorMessage.MissingQuestion
+  );
+  if (question.type === ResultType.Err) {
+    return question;
+  }
+
+  const autoApprove = readOptionalBooleanField(value, AiField.AutoApprove);
+  if (autoApprove.type === ResultType.Err) {
+    return autoApprove;
+  }
+
+  return ok({
+    skillName: skillName.value,
+    sessionId: sessionId.value,
+    question: question.value,
+    autoApprove: autoApprove.value ?? true
+  });
+};
+
+const parseAiEvalRunRequest = (
+  value: unknown
+): Result<{ datasetPath: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const datasetPath = readRequiredString(
+    value,
+    AiField.DatasetPath,
+    ErrorMessage.MissingDatasetPath
+  );
+  if (datasetPath.type === ResultType.Err) {
+    return datasetPath;
+  }
+
+  return ok({
+    datasetPath: datasetPath.value
+  });
+};
+
+const parseAiMemoryQueryRequest = (
+  value: unknown
+): Result<
+  {
+    sessionId: string;
+    query: string;
+    limit: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  const query = readRequiredString(
+    value,
+    AiField.Query,
+    ErrorMessage.MissingQuestion
+  );
+  if (query.type === ResultType.Err) {
+    return query;
+  }
+
+  const limit = readOptionalNumberField(value, AiField.Limit);
+  if (limit.type === ResultType.Err) {
+    return limit;
+  }
+
+  return ok({
+    sessionId: sessionId.value,
+    query: query.value,
+    limit: limit.value ?? 10
+  });
+};
+
 const getSessionById = (
   store: SessionStore,
   id: string
@@ -2865,8 +3320,8 @@ const mapHistoryStoreError = (error: HistoryStoreError): ApiError => {
   };
 };
 
-const mapLogsStoreError = (error: LogsStoreError): ApiError => {
-  if (error.code === LogsStoreErrorCode.InvalidInput) {
+const mapDomainLogsStoreError = (error: DomainLogsStoreError): ApiError => {
+  if (error.code === DomainLogsStoreErrorCode.InvalidQuery) {
     return {
       status: HttpStatus.BadRequest,
       message: error.message
@@ -2966,6 +3421,151 @@ const extractBearerToken = (header: string): string | undefined => {
 
   const token = header.slice(BearerPrefix.length).trim();
   return token.length > 0 ? token : undefined;
+};
+
+const CorsHeaderName = {
+  Origin: "origin",
+  AccessControlAllowOrigin: "access-control-allow-origin",
+  AccessControlAllowHeaders: "access-control-allow-headers",
+  AccessControlAllowMethods: "access-control-allow-methods",
+  AccessControlMaxAge: "access-control-max-age",
+  Vary: "vary"
+} as const;
+
+const CorsHeaderValue = {
+  AllowHeaders: "authorization,content-type",
+  AllowMethods: "GET,POST,OPTIONS",
+  MaxAgeSeconds: "600",
+  OptionsMethod: "OPTIONS",
+  VaryOrigin: "origin"
+} as const;
+
+const Separator = {
+  Space: " "
+} as const;
+
+const handleCorsPreflight = (req: IncomingMessage, res: ServerResponse): boolean => {
+  const origin = readCorsOrigin(req);
+  if (!origin || !isAllowedCorsOrigin(origin)) {
+    return false;
+  }
+
+  if (req.method !== CorsHeaderValue.OptionsMethod) {
+    return false;
+  }
+
+  applyCorsHeaders(req, res);
+  res.statusCode = HttpStatus.Ok;
+  res.end();
+  return true;
+};
+
+const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
+  const origin = readCorsOrigin(req);
+  if (!origin || !isAllowedCorsOrigin(origin)) {
+    return;
+  }
+
+  res.setHeader(CorsHeaderName.AccessControlAllowOrigin, origin);
+  res.setHeader(CorsHeaderName.AccessControlAllowHeaders, CorsHeaderValue.AllowHeaders);
+  res.setHeader(CorsHeaderName.AccessControlAllowMethods, CorsHeaderValue.AllowMethods);
+  res.setHeader(CorsHeaderName.AccessControlMaxAge, CorsHeaderValue.MaxAgeSeconds);
+  res.setHeader(CorsHeaderName.Vary, CorsHeaderValue.VaryOrigin);
+};
+
+const readCorsOrigin = (req: IncomingMessage): string | undefined => {
+  const originHeader = req.headers[CorsHeaderName.Origin];
+  return typeof originHeader === "string" ? originHeader : undefined;
+};
+
+const isAllowedCorsOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return false;
+    }
+
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+};
+
+const installServerConsoleForwarder = (logsStore: ServerLogsStore): void => {
+  const original = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+    debug: console.debug.bind(console),
+    trace: console.trace.bind(console)
+  };
+
+  const methodLevel: Record<keyof typeof original, LogLevel> = {
+    log: LogLevelValues.Info,
+    info: LogLevelValues.Info,
+    warn: LogLevelValues.Warn,
+    error: LogLevelValues.Error,
+    debug: LogLevelValues.Debug,
+    trace: LogLevelValues.Trace
+  };
+
+  const forward = (method: keyof typeof original, args: unknown[]): void => {
+    const entry: ServerLogEntry = {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      level: methodLevel[method],
+      message: args.map((value) => safeSerializeServerValue(value)).join(Separator.Space)
+    };
+
+    void logsStore.append(entry);
+  };
+
+  console.log = (...args: unknown[]): void => {
+    forward("log", args);
+    original.log(...args);
+  };
+
+  console.info = (...args: unknown[]): void => {
+    forward("info", args);
+    original.info(...args);
+  };
+
+  console.warn = (...args: unknown[]): void => {
+    forward("warn", args);
+    original.warn(...args);
+  };
+
+  console.error = (...args: unknown[]): void => {
+    forward("error", args);
+    original.error(...args);
+  };
+
+  console.debug = (...args: unknown[]): void => {
+    forward("debug", args);
+    original.debug(...args);
+  };
+
+  console.trace = (...args: unknown[]): void => {
+    forward("trace", args);
+    original.trace(...args);
+  };
+};
+
+const safeSerializeServerValue = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return value.stack ? `${value.name}: ${value.message}\n${value.stack}` : `${value.name}: ${value.message}`;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 };
 
 const respondUnauthorized = (res: ServerResponse): void => {
@@ -3117,6 +3717,25 @@ const readOptionalNumberField = (
   return ok(value);
 };
 
+const readOptionalBooleanField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<boolean | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (typeof value !== "boolean") {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(value);
+};
+
 const parseHistoryRunStatus = (
   value: string
 ): Result<HistoryRunStatus, ApiError> => {
@@ -3149,12 +3768,12 @@ const isHistoryRunStatus = (value: string): value is HistoryRunStatus =>
   value === HistoryRunStatus.Canceled;
 
 const isLogLevel = (value: string): value is LogLevel =>
-  value === LogLevel.Trace ||
-  value === LogLevel.Debug ||
-  value === LogLevel.Info ||
-  value === LogLevel.Warn ||
-  value === LogLevel.Error ||
-  value === LogLevel.Fatal;
+  value === LogLevelValues.Trace ||
+  value === LogLevelValues.Debug ||
+  value === LogLevelValues.Info ||
+  value === LogLevelValues.Warn ||
+  value === LogLevelValues.Error ||
+  value === LogLevelValues.Fatal;
 
 const parseJson = (raw: string): Result<unknown, ApiError> => {
   try {
