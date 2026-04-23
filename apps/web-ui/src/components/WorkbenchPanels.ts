@@ -56,6 +56,12 @@ export interface CitationEvidenceGroup {
   provenance: ReadonlyArray<Citation>;
 }
 
+export interface EvidenceSourceSummary {
+  sourceId: string;
+  uri: string;
+  chunkCount: number;
+}
+
 export class SectionPanel extends Component<SectionPanelProps> {
   override render(): HTMLElement {
     const { title, subtitle = null, actions = null, children, className = "" } = this.props;
@@ -149,9 +155,36 @@ export const createCitationEvidenceGroups = (
     provenance: evidenceSources.filter((source) => source.sourceId === citation.sourceId)
   }));
 
+export const createEvidenceSourceSummaries = (
+  retrievedSources: ReadonlyArray<Citation>
+): ReadonlyArray<EvidenceSourceSummary> => {
+  const summaries = new Map<string, EvidenceSourceSummary>();
+
+  for (const source of retrievedSources) {
+    const current = summaries.get(source.sourceId);
+    if (!current) {
+      summaries.set(source.sourceId, {
+        sourceId: source.sourceId,
+        uri: source.uri,
+        chunkCount: 1
+      });
+      continue;
+    }
+
+    summaries.set(source.sourceId, {
+      ...current,
+      chunkCount: current.chunkCount + 1
+    });
+  }
+
+  return [...summaries.values()];
+};
+
 export class EvidenceReportPanel extends Component<EvidenceReportPanelProps> {
   override render(): HTMLElement {
     const { report, className = "" } = this.props;
+    const sourceSummaries = createEvidenceSourceSummaries(report.retrievedSources);
+    const totalRetrievedChunks = report.retrievedSources.length;
 
     return createElement("div", { className: `grid gap-4 md:grid-cols-2 ${className}` }, [
       createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3" }, [
@@ -204,6 +237,19 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps> {
                   className: "rounded-md border border-border-dark px-3 py-2"
                 }, [item])
               )
+            ])
+      ]),
+      createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 md:col-span-2" }, [
+        createElement("div", { className: "flex items-center justify-between gap-3" }, [
+          createElement("h3", { className: "text-sm font-semibold text-white" }, ["Provenance summary"]),
+          createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [
+            `${sourceSummaries.length} source${sourceSummaries.length === 1 ? "" : "s"} • ${totalRetrievedChunks} chunk${totalRetrievedChunks === 1 ? "" : "s"}`
+          ])
+        ]),
+        sourceSummaries.length === 0
+          ? createElement("p", { className: "mt-3 text-sm text-text-secondary" }, ["No retrieved sources were recorded."])
+          : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              sourceSummaries.map((summary) => renderEvidenceSourceSummary(summary))
             ])
       ])
     ]);
@@ -287,6 +333,20 @@ const renderDefinition = (label: string, value: string): HTMLElement =>
   createElement("div", { className: "flex flex-col gap-1" }, [
     createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
     createElement("dd", { className: "text-sm font-medium text-white" }, [value])
+  ]);
+
+const renderEvidenceSourceSummary = (summary: EvidenceSourceSummary): HTMLElement =>
+  createElement("div", {
+    key: summary.sourceId,
+    className: "flex items-center justify-between gap-3 rounded-md border border-border-dark px-3 py-3"
+  }, [
+    createElement("div", { className: "min-w-0" }, [
+      createElement("p", { className: "truncate text-sm font-medium text-white" }, [summary.uri]),
+      createElement("p", { className: "text-xs text-text-secondary" }, [summary.sourceId])
+    ]),
+    createElement("span", {
+      className: "shrink-0 rounded-md border border-border-dark px-2 py-1 text-xs uppercase tracking-wide text-text-secondary"
+    }, [`${summary.chunkCount} chunk${summary.chunkCount === 1 ? "" : "s"}`])
   ]);
 
 const renderCitationProvenance = (group: CitationEvidenceGroup): HTMLElement =>

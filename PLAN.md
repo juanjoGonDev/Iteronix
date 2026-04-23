@@ -390,6 +390,7 @@ Acceptance:
 - [x] Add History UI for persisted run browsing, evidence inspection, and minimal eval-suite execution/results
 - [x] Collapse repeated citations by source in skill/API responses while preserving chunk-level evidence provenance for traces and reports
 - [x] Add expandable UI provenance for collapsed citations in Workflows and History without changing the server API
+- [x] Add compact per-source provenance summary to the evidence panel using retrieved chunk counts without changing citation expansion
 
 Acceptance:
 

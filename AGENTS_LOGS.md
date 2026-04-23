@@ -585,4 +585,26 @@
 - Next:
   - Deduplicar visualmente las fuentes repetidas dentro del evidence report si el panel necesita una vista más compacta que la provenance completa por chunk
 
+### 2026-04-24 00:51 (Europe/Madrid) — Evidence Panel Provenance Summary
+
+- Summary: Añadido un resumen compacto por documento dentro de `EvidenceReportPanel` para mostrar cuántos chunks se recuperaron por fuente sin obligar a abrir cada cita expandible.
+- Decisions:
+  - Aplicar `ui-implementations`, `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Reutilizar `EvidenceReportPanel` y el shape existente de `Citation`, derivando el resumen directamente desde `evidenceReport.retrievedSources`
+  - Mantener intacto `CitationsList` y la expansión chunk-level ya existente en `Workflows` y `History`
+- Changes:
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.ts**: helper compartido `createEvidenceSourceSummaries` y bloque visual `Provenance summary` con conteo determinista por fuente
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.test.ts**: cobertura del resumen compacto por `sourceId`
+  - **Updated PLAN.md**: checkbox del incremento UI para el resumen por fuente en el panel de evidencia
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/components/WorkbenchPanels.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - El orden del resumen sigue la primera aparición en `retrievedSources`; si más adelante se necesita ordenación por score o recencia, habrá que definirla explícitamente
+- Next:
+  - Compactar opcionalmente la sección completa de `retrievedSources` del evidence report si el panel necesita una vista documental aún más resumida
+
 
