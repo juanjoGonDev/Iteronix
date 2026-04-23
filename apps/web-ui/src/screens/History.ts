@@ -248,6 +248,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
           subtitle: "Retrieved sources and provenance for the selected run.",
           children: createElement(CitationsList, {
             citations: finalResult.citations,
+            evidenceSources: finalResult.evidenceReport.retrievedSources,
             emptyLabel: "This run did not store citations."
           })
         }),

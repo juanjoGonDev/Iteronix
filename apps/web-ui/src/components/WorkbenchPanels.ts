@@ -23,6 +23,7 @@ interface ConfidenceBadgeProps extends ComponentProps {
 
 interface CitationsListProps extends ComponentProps {
   citations: ReadonlyArray<Citation>;
+  evidenceSources?: ReadonlyArray<Citation>;
   title?: string;
   emptyLabel?: string;
   className?: string;
@@ -48,6 +49,11 @@ interface EmptyStatePanelProps extends ComponentProps {
   title: string;
   description: string;
   className?: string;
+}
+
+export interface CitationEvidenceGroup {
+  citation: Citation;
+  provenance: ReadonlyArray<Citation>;
 }
 
 export class SectionPanel extends Component<SectionPanelProps> {
@@ -94,10 +100,12 @@ export class CitationsList extends Component<CitationsListProps> {
   override render(): HTMLElement {
     const {
       citations,
+      evidenceSources = [],
       title = "Citations",
       emptyLabel = "No citations recorded.",
       className = ""
     } = this.props;
+    const citationGroups = createCitationEvidenceGroups(citations, evidenceSources);
 
     return createElement("div", { className: `flex flex-col gap-3 ${className}` }, [
       createElement("div", { className: "flex items-center justify-between" }, [
@@ -107,25 +115,39 @@ export class CitationsList extends Component<CitationsListProps> {
       citations.length === 0
         ? createElement("div", { className: "rounded-lg border border-dashed border-border-dark px-3 py-4 text-sm text-text-secondary" }, [emptyLabel])
         : createElement("div", { className: "flex flex-col gap-3" }, [
-            citations.map((citation) =>
+            citationGroups.map((group) =>
               createElement("div", {
-                key: citation.chunkId,
+                key: group.citation.sourceId,
                 className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3"
               }, [
                 createElement("div", { className: "flex items-center justify-between gap-3" }, [
                   createElement("div", { className: "min-w-0" }, [
-                    createElement("p", { className: "truncate text-sm font-medium text-white" }, [citation.uri]),
-                    createElement("p", { className: "text-xs text-text-secondary" }, [`${citation.sourceType} • score ${citation.score.toFixed(2)}`])
+                    createElement("p", { className: "truncate text-sm font-medium text-white" }, [group.citation.uri]),
+                    createElement("p", { className: "text-xs text-text-secondary" }, [
+                      `${group.citation.sourceType} • score ${group.citation.score.toFixed(2)} • ${group.provenance.length} chunk${group.provenance.length === 1 ? "" : "s"}`
+                    ])
                   ]),
-                  createElement("span", { className: "text-xs text-text-secondary" }, [formatTimestamp(citation.retrievedAt)])
+                  createElement("span", { className: "text-xs text-text-secondary" }, [formatTimestamp(group.citation.retrievedAt)])
                 ]),
-                createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [citation.snippet])
+                createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [group.citation.snippet]),
+                group.provenance.length > 0
+                  ? renderCitationProvenance(group)
+                  : ""
               ])
             )
           ])
     ]);
   }
 }
+
+export const createCitationEvidenceGroups = (
+  citations: ReadonlyArray<Citation>,
+  evidenceSources: ReadonlyArray<Citation>
+): ReadonlyArray<CitationEvidenceGroup> =>
+  citations.map((citation) => ({
+    citation,
+    provenance: evidenceSources.filter((source) => source.sourceId === citation.sourceId)
+  }));
 
 export class EvidenceReportPanel extends Component<EvidenceReportPanelProps> {
   override render(): HTMLElement {
@@ -265,6 +287,45 @@ const renderDefinition = (label: string, value: string): HTMLElement =>
   createElement("div", { className: "flex flex-col gap-1" }, [
     createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
     createElement("dd", { className: "text-sm font-medium text-white" }, [value])
+  ]);
+
+const renderCitationProvenance = (group: CitationEvidenceGroup): HTMLElement =>
+  createElement("details", {
+    className: "mt-3 overflow-hidden rounded-lg border border-border-dark bg-surface-dark/60"
+  }, [
+    createElement("summary", {
+      className: "cursor-pointer list-none px-3 py-3 text-sm text-white"
+    }, [
+      createElement("div", { className: "flex items-center justify-between gap-3" }, [
+        createElement("span", { className: "font-medium" }, ["Inspect chunk provenance"]),
+        createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [
+          `${group.provenance.length} chunk${group.provenance.length === 1 ? "" : "s"}`
+        ])
+      ])
+    ]),
+    createElement("div", { className: "flex flex-col gap-2 border-t border-border-dark px-3 py-3" }, [
+      group.provenance.map((source) =>
+        createElement("div", {
+          key: source.chunkId,
+          className: "rounded-md border border-border-dark bg-background-dark/40 px-3 py-3"
+        }, [
+          createElement("div", { className: "flex items-center justify-between gap-3" }, [
+            createElement("div", { className: "min-w-0" }, [
+              createElement("p", {
+                className: "truncate text-xs uppercase tracking-wide text-text-secondary"
+              }, [source.chunkId]),
+              createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                `${source.sourceType} • score ${source.score.toFixed(2)} • updated ${formatTimestamp(source.updatedAt)}`
+              ])
+            ]),
+            createElement("span", { className: "text-xs text-text-secondary" }, [
+              formatTimestamp(source.retrievedAt)
+            ])
+          ]),
+          createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [source.snippet])
+        ])
+      )
+    ])
   ]);
 
 const iconForStage = (stage: WorkflowStep["stage"]): string => {

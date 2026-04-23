@@ -565,4 +565,24 @@
 - Next:
   - Añadir una vista UI opcional que agrupe citas por documento y permita expandir la provenance chunk-level desde el evidence report
 
+### 2026-04-24 00:40 (Europe/Madrid) — UI Citation Provenance Expansion
+
+- Summary: Extendida la UI del AI Workbench para que las citas colapsadas por fuente puedan expandirse y mostrar toda la provenance chunk-level desde `evidenceReport.retrievedSources`, sin modificar el contrato actual del servidor.
+- Decisions:
+  - Aplicar `ui-implementations`, `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Reutilizar `CitationsList` como único punto de render de citas en vez de introducir paneles duplicados en `Workflows` y `History`
+  - Usar `details/summary` nativo para la expansión, evitando estado adicional y manteniendo una UI funcional en ambos screens con el sistema de componentes actual
+- Changes:
+  - **Added apps/web-ui/src/components/WorkbenchPanels.test.ts**: cobertura del agrupado `citation -> provenance`
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.ts**: helper compartido `createCitationEvidenceGroups`, render de expansión chunk-level y soporte `evidenceSources`
+  - **Updated apps/web-ui/src/screens/Workflows.ts** y **History.ts**: paso explícito de `evidenceReport.retrievedSources` hacia `CitationsList`
+  - **Updated PLAN.md**: checkbox del incremento UI de provenance expandible
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/components/WorkbenchPanels.test.ts`
+  - `pnpm vitest run apps/web-ui/src/shared/workbench-history.test.ts apps/web-ui/src/shared/Router.test.ts`
+- Issues/Risks:
+  - La expansión usa `details/summary`; si más adelante se requiere persistencia de estado abierto entre rerenders, habrá que moverlo a un estado explícito del componente
+- Next:
+  - Deduplicar visualmente las fuentes repetidas dentro del evidence report si el panel necesita una vista más compacta que la provenance completa por chunk
+
 
