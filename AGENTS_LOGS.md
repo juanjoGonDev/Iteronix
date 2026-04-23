@@ -653,4 +653,28 @@
 - Next:
   - Validar con browser automation si conviene que el botón `Focus evidence` haga además scroll automático hasta el panel de evidence
 
+### 2026-04-24 01:17 (Europe/Madrid) — Browser Validation for Source Linking
+
+- Summary: Añadida una validación browser determinista con Puppeteer para comprobar que una cita colapsada puede enfocar el documento equivalente en `EvidenceReportPanel` y que el filtro resultante puede limpiarse sin romper el flujo.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Validar el flujo sobre `History` sembrando `localStorage` con un fixture estable, evitando depender de respuestas LLM o del backend AI en tiempo real
+  - Reutilizar el preview existente de `apps/web-ui` y guardar screenshots en `apps/web-ui/screenshots/`, sin introducir cambios en la API ni en el flujo de servidor
+- Changes:
+  - **Added apps/web-ui/scripts/validate-workbench-source-linking.ts**: script Puppeteer que levanta el preview, abre `History`, enfoca `/README.md`, verifica el filtrado de evidence y comprueba `Clear filter`
+  - **Updated apps/web-ui/package.json**: nuevo comando `pnpm -C apps/web-ui validate:source-linking`
+  - **Updated PLAN.md**: checkbox de validación browser para el enlace cita→evidence
+- Commands:
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `aicommits --all -y`
+- Issues/Risks:
+  - La validación usa un fixture persistido en `localStorage`; verifica el flujo real del navegador, pero no cubre regresiones de datos provenientes del backend live
+- Next:
+  - Si se quiere cobertura end-to-end completa, añadir una segunda validación browser que ejecute el skill real antes de inspeccionar `History`
+
 

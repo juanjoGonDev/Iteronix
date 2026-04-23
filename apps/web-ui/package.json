@@ -10,7 +10,8 @@
     "serve": "tsx scripts/serve.ts",
     "serve:express": "tsx scripts/serve.ts",
     "preview": "tsx scripts/simple-serve.ts",
-    "test-serve": "tsx scripts/simple-serve.ts"
+    "test-serve": "tsx scripts/simple-serve.ts",
+    "validate:source-linking": "tsx scripts/validate-workbench-source-linking.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
