@@ -1,5 +1,6 @@
 import { Component, createElement, type ComponentProps } from "../shared/Component.js";
 import { Card, StatusBadge } from "./Card.js";
+import { Button } from "./Button.js";
 import type {
   Citation,
   ConfidenceScore,
@@ -32,6 +33,10 @@ interface CitationsListProps extends ComponentProps {
 interface EvidenceReportPanelProps extends ComponentProps {
   report: EvidenceReport;
   className?: string;
+}
+
+interface EvidenceReportPanelState {
+  activeSourceId: string | null;
 }
 
 interface WorkflowStepsListProps extends ComponentProps {
@@ -180,11 +185,33 @@ export const createEvidenceSourceSummaries = (
   return [...summaries.values()];
 };
 
-export class EvidenceReportPanel extends Component<EvidenceReportPanelProps> {
+export const filterEvidenceSourcesBySourceId = (
+  retrievedSources: ReadonlyArray<Citation>,
+  sourceId: string | null
+): ReadonlyArray<Citation> =>
+  sourceId
+    ? retrievedSources.filter((source) => source.sourceId === sourceId)
+    : retrievedSources;
+
+export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, EvidenceReportPanelState> {
+  constructor(props?: EvidenceReportPanelProps) {
+    if (!props) {
+      throw new Error("EvidenceReportPanel requires a report.");
+    }
+
+    super(props, {
+      activeSourceId: null
+    });
+  }
+
   override render(): HTMLElement {
     const { report, className = "" } = this.props;
     const sourceSummaries = createEvidenceSourceSummaries(report.retrievedSources);
     const totalRetrievedChunks = report.retrievedSources.length;
+    const filteredSources = filterEvidenceSourcesBySourceId(report.retrievedSources, this.state.activeSourceId);
+    const activeSourceSummary = this.state.activeSourceId
+      ? sourceSummaries.find((summary) => summary.sourceId === this.state.activeSourceId) ?? null
+      : null;
 
     return createElement("div", { className: `grid gap-4 md:grid-cols-2 ${className}` }, [
       createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3" }, [
@@ -242,17 +269,64 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps> {
       createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 md:col-span-2" }, [
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
           createElement("h3", { className: "text-sm font-semibold text-white" }, ["Provenance summary"]),
-          createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [
-            `${sourceSummaries.length} source${sourceSummaries.length === 1 ? "" : "s"} • ${totalRetrievedChunks} chunk${totalRetrievedChunks === 1 ? "" : "s"}`
+          createElement("div", { className: "flex items-center gap-3" }, [
+            this.state.activeSourceId
+              ? createElement(Button, {
+                  variant: "ghost",
+                  size: "sm",
+                  onClick: () => this.clearSourceFilter(),
+                  children: "Show all"
+                })
+              : "",
+            createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [
+              `${sourceSummaries.length} source${sourceSummaries.length === 1 ? "" : "s"} • ${totalRetrievedChunks} chunk${totalRetrievedChunks === 1 ? "" : "s"}`
+            ])
           ])
         ]),
         sourceSummaries.length === 0
           ? createElement("p", { className: "mt-3 text-sm text-text-secondary" }, ["No retrieved sources were recorded."])
           : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
-              sourceSummaries.map((summary) => renderEvidenceSourceSummary(summary))
+              sourceSummaries.map((summary) => renderEvidenceSourceSummary(summary, summary.sourceId === this.state.activeSourceId, () => this.handleSourceFilter(summary.sourceId)))
+            ])
+      ]),
+      createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 md:col-span-2" }, [
+        createElement("div", { className: "flex items-center justify-between gap-3" }, [
+          createElement("div", { className: "flex flex-col gap-1" }, [
+            createElement("h3", { className: "text-sm font-semibold text-white" }, ["Retrieved chunks"]),
+            createElement("p", { className: "text-xs text-text-secondary" }, [
+              activeSourceSummary
+                ? `${filteredSources.length} chunk${filteredSources.length === 1 ? "" : "s"} from ${activeSourceSummary.uri}`
+                : `${filteredSources.length} recorded chunk${filteredSources.length === 1 ? "" : "s"}`
+            ])
+          ]),
+          activeSourceSummary
+            ? createElement(Button, {
+                variant: "secondary",
+                size: "sm",
+                onClick: () => this.clearSourceFilter(),
+                children: "Clear filter"
+              })
+            : ""
+        ]),
+        filteredSources.length === 0
+          ? createElement("p", { className: "mt-3 text-sm text-text-secondary" }, ["No retrieved chunks match the current source filter."])
+          : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              filteredSources.map((source) => renderRetrievedEvidenceChunk(source))
             ])
       ])
     ]);
+  }
+
+  private handleSourceFilter(sourceId: string): void {
+    this.setState({
+      activeSourceId: sourceId
+    });
+  }
+
+  private clearSourceFilter(): void {
+    this.setState({
+      activeSourceId: null
+    });
   }
 }
 
@@ -335,10 +409,16 @@ const renderDefinition = (label: string, value: string): HTMLElement =>
     createElement("dd", { className: "text-sm font-medium text-white" }, [value])
   ]);
 
-const renderEvidenceSourceSummary = (summary: EvidenceSourceSummary): HTMLElement =>
-  createElement("div", {
+const renderEvidenceSourceSummary = (
+  summary: EvidenceSourceSummary,
+  isActive: boolean,
+  onClick: () => void
+): HTMLElement =>
+  createElement("button", {
+    type: "button",
     key: summary.sourceId,
-    className: "flex items-center justify-between gap-3 rounded-md border border-border-dark px-3 py-3"
+    onClick,
+    className: `flex w-full items-center justify-between gap-3 rounded-md border px-3 py-3 text-left transition-colors ${isActive ? "border-primary bg-primary/10" : "border-border-dark hover:bg-surface-dark-hover"}`
   }, [
     createElement("div", { className: "min-w-0" }, [
       createElement("p", { className: "truncate text-sm font-medium text-white" }, [summary.uri]),
@@ -347,6 +427,27 @@ const renderEvidenceSourceSummary = (summary: EvidenceSourceSummary): HTMLElemen
     createElement("span", {
       className: "shrink-0 rounded-md border border-border-dark px-2 py-1 text-xs uppercase tracking-wide text-text-secondary"
     }, [`${summary.chunkCount} chunk${summary.chunkCount === 1 ? "" : "s"}`])
+  ]);
+
+const renderRetrievedEvidenceChunk = (source: Citation): HTMLElement =>
+  createElement("div", {
+    key: source.chunkId,
+    className: "rounded-md border border-border-dark bg-background-dark/40 px-3 py-3"
+  }, [
+    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+      createElement("div", { className: "min-w-0" }, [
+        createElement("p", {
+          className: "truncate text-xs uppercase tracking-wide text-text-secondary"
+        }, [source.chunkId]),
+        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+          `${source.sourceType} • score ${source.score.toFixed(2)} • updated ${formatTimestamp(source.updatedAt)}`
+        ])
+      ]),
+      createElement("span", { className: "text-xs text-text-secondary" }, [
+        formatTimestamp(source.retrievedAt)
+      ])
+    ]),
+    createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [source.snippet])
   ]);
 
 const renderCitationProvenance = (group: CitationEvidenceGroup): HTMLElement =>
@@ -364,27 +465,7 @@ const renderCitationProvenance = (group: CitationEvidenceGroup): HTMLElement =>
       ])
     ]),
     createElement("div", { className: "flex flex-col gap-2 border-t border-border-dark px-3 py-3" }, [
-      group.provenance.map((source) =>
-        createElement("div", {
-          key: source.chunkId,
-          className: "rounded-md border border-border-dark bg-background-dark/40 px-3 py-3"
-        }, [
-          createElement("div", { className: "flex items-center justify-between gap-3" }, [
-            createElement("div", { className: "min-w-0" }, [
-              createElement("p", {
-                className: "truncate text-xs uppercase tracking-wide text-text-secondary"
-              }, [source.chunkId]),
-              createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-                `${source.sourceType} • score ${source.score.toFixed(2)} • updated ${formatTimestamp(source.updatedAt)}`
-              ])
-            ]),
-            createElement("span", { className: "text-xs text-text-secondary" }, [
-              formatTimestamp(source.retrievedAt)
-            ])
-          ]),
-          createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [source.snippet])
-        ])
-      )
+      group.provenance.map((source) => renderRetrievedEvidenceChunk(source))
     ])
   ]);
 

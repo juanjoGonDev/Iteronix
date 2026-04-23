@@ -607,4 +607,26 @@
 - Next:
   - Compactar opcionalmente la sección completa de `retrievedSources` del evidence report si el panel necesita una vista documental aún más resumida
 
+### 2026-04-24 00:56 (Europe/Madrid) — Source-Aware Evidence Filtering
+
+- Summary: Añadido filtrado por documento dentro de `EvidenceReportPanel` para que el resumen de provenance pueda aislar la lista chunk-level desde la propia UI sin tocar la API del servidor.
+- Decisions:
+  - Aplicar `uncodixfy` y mantener el cambio encapsulado en el componente compartido `apps/web-ui/src/components/WorkbenchPanels.ts`
+  - Derivar el filtro desde `retrievedSources` usando `sourceId`, preservando el orden original de chunks y manteniendo `CitationsList` sin cambios
+  - Exponer un reset explícito del filtro con acciones `Show all` y `Clear filter` para evitar estados ambiguos en Workflows e History
+- Changes:
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.test.ts**: cobertura del helper de filtrado por fuente y reset al listado completo
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.ts**: estado local `activeSourceId`, helper `filterEvidenceSourcesBySourceId`, resumen clicable por fuente y sección `Retrieved chunks`
+  - **Updated PLAN.md**: checkbox del filtro por fuente dentro del panel de evidencia compartido
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/components/WorkbenchPanels.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - El filtro es local al ciclo de vida del panel; cuando la pantalla vuelve a renderizar con un run distinto, el estado se reinicia deliberadamente para evitar arrastrar un `sourceId` ajeno
+- Next:
+  - Añadir selección cruzada opcional entre la lista principal de citas colapsadas y el filtro del evidence panel si se quiere una navegación documental más directa
+
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createCitationEvidenceGroups,
-  createEvidenceSourceSummaries
+  createEvidenceSourceSummaries,
+  filterEvidenceSourcesBySourceId
 } from "./WorkbenchPanels.js";
 import type { Citation } from "../shared/workbench-types.js";
 
@@ -128,6 +129,38 @@ describe("workbench citation groups", () => {
         chunkCount: 1
       }
     ]);
+  });
+
+  it("filters retrieved chunks by source and clears back to the full list", () => {
+    const retrievedSources: ReadonlyArray<Citation> = [
+      createCitation({
+        chunkId: "README.md#0",
+        sourceId: "README.md",
+        uri: "/README.md",
+        snippet: "README chunk 0",
+        score: 0.92
+      }),
+      createCitation({
+        chunkId: "docs/AI_WORKBENCH.md#0",
+        sourceId: "docs/AI_WORKBENCH.md",
+        uri: "/docs/AI_WORKBENCH.md",
+        snippet: "Architecture chunk 0",
+        score: 0.9
+      }),
+      createCitation({
+        chunkId: "README.md#1",
+        sourceId: "README.md",
+        uri: "/README.md",
+        snippet: "README chunk 1",
+        score: 0.91
+      })
+    ];
+
+    expect(filterEvidenceSourcesBySourceId(retrievedSources, "README.md")).toEqual([
+      retrievedSources[0],
+      retrievedSources[2]
+    ]);
+    expect(filterEvidenceSourcesBySourceId(retrievedSources, null)).toEqual(retrievedSources);
   });
 });
 
