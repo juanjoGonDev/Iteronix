@@ -629,4 +629,28 @@
 - Next:
   - Añadir selección cruzada opcional entre la lista principal de citas colapsadas y el filtro del evidence panel si se quiere una navegación documental más directa
 
+### 2026-04-24 01:08 (Europe/Madrid) — Linked Citation Source Focus
+
+- Summary: Enlazada la selección de fuentes entre `CitationsList` y `EvidenceReportPanel` para que elegir una cita colapsada enfoque el mismo documento dentro del panel de evidence en `Workflows` y `History`.
+- Decisions:
+  - Aplicar `ui-implementations`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `quality-gates-enforcer` y un paso TDD mínimo sobre helpers compartidos
+  - Mantener el contrato del servidor intacto y mover el enlace al estado de pantalla mediante `selectedEvidenceSourceId`
+  - Hacer `EvidenceReportPanel` compatible con modo controlado/no controlado y dejar `CitationsList` con callback opcional para no romper usos existentes
+- Changes:
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.ts**: `CitationsList` ahora puede notificar/mostrar una fuente activa y `EvidenceReportPanel` acepta selección externa mediante `activeSourceId` + `onSourceSelect`
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.test.ts**: cobertura del helper `resolveEvidenceSourceFocus` para limpiar selección inválida entre runs
+  - **Updated apps/web-ui/src/screens/Workflows.ts** y **History.ts**: estado compartido `selectedEvidenceSourceId` cableado entre lista de citas y panel de evidence
+  - **Updated PLAN.md**: checkbox del enlace entre citas colapsadas y evidence compartido
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/components/WorkbenchPanels.test.ts`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm test`
+  - `pnpm build`
+  - `aicommits --all -y`
+- Issues/Risks:
+  - La selección enlazada se resetea cuando cambia el run activo o se ejecuta una evaluación para evitar conservar un `sourceId` que ya no pertenece al dataset visible
+- Next:
+  - Validar con browser automation si conviene que el botón `Focus evidence` haga además scroll automático hasta el panel de evidence
+
 

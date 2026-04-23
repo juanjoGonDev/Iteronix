@@ -32,6 +32,7 @@ interface WorkflowsScreenState {
   pendingAction: "connection" | "skill" | "workflow" | "approve" | "deny" | null;
   errorMessage: string | null;
   noticeMessage: string | null;
+  selectedEvidenceSourceId: string | null;
 }
 
 export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenState> {
@@ -52,7 +53,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       latestRun,
       pendingAction: null,
       errorMessage: null,
-      noticeMessage: null
+      noticeMessage: null,
+      selectedEvidenceSourceId: null
     };
   }
 
@@ -276,7 +278,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         createElement("div", { className: "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" }, [
           createElement(CitationsList, {
             citations: finalResult.citations,
-            evidenceSources: finalResult.evidenceReport.retrievedSources
+            evidenceSources: finalResult.evidenceReport.retrievedSources,
+            activeSourceId: this.state.selectedEvidenceSourceId,
+            onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
           }),
           createElement(SectionPanel, {
             title: "Session memory",
@@ -357,7 +361,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       title: "Evidence report",
       subtitle: `Trace ${readFinalResult(latestRun).traceId}`,
       children: createElement(EvidenceReportPanel, {
-        report: readFinalResult(latestRun).evidenceReport
+        report: readFinalResult(latestRun).evidenceReport,
+        activeSourceId: this.state.selectedEvidenceSourceId,
+        onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
       })
     });
   }
@@ -420,7 +426,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         pendingAction: null,
         noticeMessage: "Skill run completed and stored in History.",
         errorMessage: null,
-        reviewReason: ""
+        reviewReason: "",
+        selectedEvidenceSourceId: null
       });
     } catch (error) {
       this.setState({
@@ -469,7 +476,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             ? "Workflow paused at reviewer checkpoint."
             : "Workflow completed and stored in History.",
         errorMessage: null,
-        reviewReason: ""
+        reviewReason: "",
+        selectedEvidenceSourceId: null
       });
     } catch (error) {
       this.setState({
@@ -508,7 +516,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         pendingAction: null,
         noticeMessage: "Workflow approved and completed.",
         errorMessage: null,
-        reviewReason: ""
+        reviewReason: "",
+        selectedEvidenceSourceId: null
       });
     } catch (error) {
       this.setState({
@@ -535,7 +544,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       pendingAction: null,
       noticeMessage: "Workflow marked as denied.",
       errorMessage: null,
-      reviewReason: ""
+      reviewReason: "",
+      selectedEvidenceSourceId: null
     });
   }
 

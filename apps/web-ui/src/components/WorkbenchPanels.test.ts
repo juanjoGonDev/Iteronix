@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createCitationEvidenceGroups,
   createEvidenceSourceSummaries,
-  filterEvidenceSourcesBySourceId
+  filterEvidenceSourcesBySourceId,
+  resolveEvidenceSourceFocus
 } from "./WorkbenchPanels.js";
 import type { Citation } from "../shared/workbench-types.js";
 
@@ -161,6 +162,29 @@ describe("workbench citation groups", () => {
       retrievedSources[2]
     ]);
     expect(filterEvidenceSourcesBySourceId(retrievedSources, null)).toEqual(retrievedSources);
+  });
+
+  it("drops a linked source selection when the next evidence set no longer contains it", () => {
+    const retrievedSources: ReadonlyArray<Citation> = [
+      createCitation({
+        chunkId: "README.md#0",
+        sourceId: "README.md",
+        uri: "/README.md",
+        snippet: "README chunk 0",
+        score: 0.92
+      }),
+      createCitation({
+        chunkId: "docs/AI_WORKBENCH.md#0",
+        sourceId: "docs/AI_WORKBENCH.md",
+        uri: "/docs/AI_WORKBENCH.md",
+        snippet: "Architecture chunk 0",
+        score: 0.9
+      })
+    ];
+
+    expect(resolveEvidenceSourceFocus("README.md", retrievedSources)).toBe("README.md");
+    expect(resolveEvidenceSourceFocus("missing.md", retrievedSources)).toBeNull();
+    expect(resolveEvidenceSourceFocus(null, retrievedSources)).toBeNull();
   });
 });
 

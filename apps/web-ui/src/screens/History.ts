@@ -22,6 +22,7 @@ interface HistoryScreenState {
   history: WorkbenchHistoryState;
   selectedKind: "run" | "eval";
   selectedId: string | null;
+  selectedEvidenceSourceId: string | null;
   datasetPath: string;
   pendingAction: "eval" | null;
   errorMessage: string | null;
@@ -39,6 +40,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       history,
       selectedKind: selection.kind,
       selectedId: selection.id,
+      selectedEvidenceSourceId: null,
       datasetPath: MinimalEvalDatasetPath,
       pendingAction: null,
       errorMessage: null,
@@ -239,7 +241,9 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         title: "Evidence report",
         subtitle: `Confidence ${Math.round(finalResult.confidence.score * 100)}% • ${finalResult.citations.length} citations`,
         children: createElement(EvidenceReportPanel, {
-          report: finalResult.evidenceReport
+          report: finalResult.evidenceReport,
+          activeSourceId: this.state.selectedEvidenceSourceId,
+          onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
         })
       }),
       createElement("div", { className: "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" }, [
@@ -249,6 +253,8 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
           children: createElement(CitationsList, {
             citations: finalResult.citations,
             evidenceSources: finalResult.evidenceReport.retrievedSources,
+            activeSourceId: this.state.selectedEvidenceSourceId,
+            onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId }),
             emptyLabel: "This run did not store citations."
           })
         }),
@@ -310,7 +316,11 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
 
     return createElement("button", {
       className: `rounded-lg border px-3 py-3 text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-border-dark bg-background-dark/40 hover:bg-surface-dark-hover"}`,
-      onClick: () => this.setState({ selectedKind: input.kind, selectedId: input.id })
+      onClick: () => this.setState({
+        selectedKind: input.kind,
+        selectedId: input.id,
+        selectedEvidenceSourceId: null
+      })
     }, [
       createElement("p", { className: "truncate text-sm font-medium text-white" }, [input.title]),
       createElement("p", { className: "mt-1 text-xs uppercase tracking-wide text-text-secondary" }, [input.meta]),
@@ -340,6 +350,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         history,
         selectedKind: "eval",
         selectedId: record.id,
+        selectedEvidenceSourceId: null,
         pendingAction: null,
         noticeMessage: "Evaluation stored in History.",
         errorMessage: null
@@ -363,6 +374,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       history,
       selectedKind: kind,
       selectedId,
+      selectedEvidenceSourceId: null,
       errorMessage: null,
       noticeMessage: null
     });

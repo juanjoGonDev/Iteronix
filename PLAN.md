@@ -392,6 +392,7 @@ Acceptance:
 - [x] Add expandable UI provenance for collapsed citations in Workflows and History without changing the server API
 - [x] Add compact per-source provenance summary to the evidence panel using retrieved chunk counts without changing citation expansion
 - [x] Add source-aware evidence filtering in the shared evidence panel so summary rows can isolate chunk-level provenance without changing server APIs
+- [x] Link collapsed citation selection to the shared evidence panel so choosing a source focuses the matching document provenance in Workflows and History
 
 Acceptance:
 

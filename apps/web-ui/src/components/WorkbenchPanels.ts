@@ -25,6 +25,8 @@ interface ConfidenceBadgeProps extends ComponentProps {
 interface CitationsListProps extends ComponentProps {
   citations: ReadonlyArray<Citation>;
   evidenceSources?: ReadonlyArray<Citation>;
+  activeSourceId?: string | null;
+  onSourceSelect?: ((sourceId: string) => void) | null;
   title?: string;
   emptyLabel?: string;
   className?: string;
@@ -32,6 +34,8 @@ interface CitationsListProps extends ComponentProps {
 
 interface EvidenceReportPanelProps extends ComponentProps {
   report: EvidenceReport;
+  activeSourceId?: string | null;
+  onSourceSelect?: ((sourceId: string | null) => void) | null;
   className?: string;
 }
 
@@ -112,6 +116,8 @@ export class CitationsList extends Component<CitationsListProps> {
     const {
       citations,
       evidenceSources = [],
+      activeSourceId = null,
+      onSourceSelect = null,
       title = "Citations",
       emptyLabel = "No citations recorded.",
       className = ""
@@ -129,7 +135,7 @@ export class CitationsList extends Component<CitationsListProps> {
             citationGroups.map((group) =>
               createElement("div", {
                 key: group.citation.sourceId,
-                className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3"
+                className: `rounded-lg border px-3 py-3 ${group.citation.sourceId === activeSourceId ? "border-primary bg-primary/10" : "border-border-dark bg-background-dark/40"}`
               }, [
                 createElement("div", { className: "flex items-center justify-between gap-3" }, [
                   createElement("div", { className: "min-w-0" }, [
@@ -138,7 +144,17 @@ export class CitationsList extends Component<CitationsListProps> {
                       `${group.citation.sourceType} • score ${group.citation.score.toFixed(2)} • ${group.provenance.length} chunk${group.provenance.length === 1 ? "" : "s"}`
                     ])
                   ]),
-                  createElement("span", { className: "text-xs text-text-secondary" }, [formatTimestamp(group.citation.retrievedAt)])
+                  createElement("div", { className: "flex items-center gap-2" }, [
+                    onSourceSelect
+                      ? createElement(Button, {
+                          variant: group.citation.sourceId === activeSourceId ? "secondary" : "ghost",
+                          size: "sm",
+                          onClick: () => onSourceSelect(group.citation.sourceId),
+                          children: group.citation.sourceId === activeSourceId ? "Focused" : "Focus evidence"
+                        })
+                      : "",
+                    createElement("span", { className: "text-xs text-text-secondary" }, [formatTimestamp(group.citation.retrievedAt)])
+                  ])
                 ]),
                 createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [group.citation.snippet]),
                 group.provenance.length > 0
@@ -193,6 +209,14 @@ export const filterEvidenceSourcesBySourceId = (
     ? retrievedSources.filter((source) => source.sourceId === sourceId)
     : retrievedSources;
 
+export const resolveEvidenceSourceFocus = (
+  sourceId: string | null,
+  retrievedSources: ReadonlyArray<Citation>
+): string | null =>
+  sourceId && retrievedSources.some((source) => source.sourceId === sourceId)
+    ? sourceId
+    : null;
+
 export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, EvidenceReportPanelState> {
   constructor(props?: EvidenceReportPanelProps) {
     if (!props) {
@@ -208,9 +232,13 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, Evi
     const { report, className = "" } = this.props;
     const sourceSummaries = createEvidenceSourceSummaries(report.retrievedSources);
     const totalRetrievedChunks = report.retrievedSources.length;
-    const filteredSources = filterEvidenceSourcesBySourceId(report.retrievedSources, this.state.activeSourceId);
-    const activeSourceSummary = this.state.activeSourceId
-      ? sourceSummaries.find((summary) => summary.sourceId === this.state.activeSourceId) ?? null
+    const activeSourceId = resolveEvidenceSourceFocus(
+      this.props.activeSourceId ?? this.state.activeSourceId,
+      report.retrievedSources
+    );
+    const filteredSources = filterEvidenceSourcesBySourceId(report.retrievedSources, activeSourceId);
+    const activeSourceSummary = activeSourceId
+      ? sourceSummaries.find((summary) => summary.sourceId === activeSourceId) ?? null
       : null;
 
     return createElement("div", { className: `grid gap-4 md:grid-cols-2 ${className}` }, [
@@ -270,7 +298,7 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, Evi
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
           createElement("h3", { className: "text-sm font-semibold text-white" }, ["Provenance summary"]),
           createElement("div", { className: "flex items-center gap-3" }, [
-            this.state.activeSourceId
+            activeSourceId
               ? createElement(Button, {
                   variant: "ghost",
                   size: "sm",
@@ -286,7 +314,7 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, Evi
         sourceSummaries.length === 0
           ? createElement("p", { className: "mt-3 text-sm text-text-secondary" }, ["No retrieved sources were recorded."])
           : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
-              sourceSummaries.map((summary) => renderEvidenceSourceSummary(summary, summary.sourceId === this.state.activeSourceId, () => this.handleSourceFilter(summary.sourceId)))
+              sourceSummaries.map((summary) => renderEvidenceSourceSummary(summary, summary.sourceId === activeSourceId, () => this.handleSourceFilter(summary.sourceId)))
             ])
       ]),
       createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 md:col-span-2" }, [
@@ -318,12 +346,22 @@ export class EvidenceReportPanel extends Component<EvidenceReportPanelProps, Evi
   }
 
   private handleSourceFilter(sourceId: string): void {
+    if (this.props.onSourceSelect) {
+      this.props.onSourceSelect(sourceId);
+      return;
+    }
+
     this.setState({
       activeSourceId: sourceId
     });
   }
 
   private clearSourceFilter(): void {
+    if (this.props.onSourceSelect) {
+      this.props.onSourceSelect(null);
+      return;
+    }
+
     this.setState({
       activeSourceId: null
     });
