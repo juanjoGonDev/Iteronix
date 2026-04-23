@@ -677,4 +677,24 @@
 - Next:
   - Si se quiere cobertura end-to-end completa, añadir una segunda validación browser que ejecute el skill real antes de inspeccionar `History`
 
+### 2026-04-24 01:24 (Europe/Madrid) — Browser Validation Recheck
+
+- Summary: Revalidado el flujo browser de source-linking solicitado para confirmar que la implementación ya presente en el repo sigue cumpliendo los criterios de aceptación sin cambios adicionales.
+- Decisions:
+  - No tocar código de producto porque `apps/web-ui/scripts/validate-workbench-source-linking.ts` ya cubre apertura de `History`, foco por cita colapsada y limpieza del filtro
+  - Ejecutar únicamente las comprobaciones deterministas y dejar trazabilidad de esta verificación
+- Changes:
+  - **Updated AGENTS_LOGS.md**: entrada de revalidación del flujo browser existente
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `aicommits --all -y`
+- Issues/Risks:
+  - Ninguno nuevo; la limitación sigue siendo que la validación browser usa fixture local en `localStorage`
+- Next:
+  - Integrar `validate:source-linking` en CI si se quiere evitar regresiones browser fuera del entorno local
+
 
