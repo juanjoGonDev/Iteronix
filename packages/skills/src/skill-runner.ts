@@ -1,4 +1,5 @@
 import {
+  collapseCitationsBySource,
   compileSerializableSchema,
   createRunContext,
   createUsageRecord,
@@ -78,13 +79,14 @@ export const createSkillRunner = (input: {
 
     const memoryContext = await loadSessionMemory(input.memoryManager, request.sessionId, question);
     const ragResult = await maybeRetrieveContext(input.guardrails, input.ragService, skill, request.sessionId, question);
-    const outputCandidate = createOutputCandidate(question, ragResult.context, ragResult.citations.length > 0, memoryContext, skill.promptTemplate, ragResult.confidence.score);
+    const citations = collapseCitationsBySource(ragResult.citations);
+    const outputCandidate = createOutputCandidate(question, ragResult.context, citations.length > 0, memoryContext, skill.promptTemplate, ragResult.confidence.score);
     const parsedOutput = compileSerializableSchema(skill.outputSchema).parse(outputCandidate);
     const output = readOutputValue(parsedOutput);
 
     const outputGuard = await input.guardrails.checkOutput({
       skillName: skill.metadata.name,
-      citationsCount: ragResult.citations.length,
+      citationsCount: citations.length,
       requiresGrounding: Boolean(skill.options?.useRag && ragResult.decision.shouldRetrieve)
     });
     if (!outputGuard.allowed) {
@@ -94,7 +96,7 @@ export const createSkillRunner = (input: {
     await input.memoryManager.rememberEpisodic({
       sessionId: request.sessionId,
       runId: context.runId,
-      content: `Skill ${skill.metadata.name} retrieved context with ${ragResult.citations.length} citations`,
+      content: `Skill ${skill.metadata.name} retrieved context with ${citations.length} citations`,
       createdAt: now().toISOString(),
       tags: [skill.metadata.name, "episodic"]
     });
@@ -121,7 +123,7 @@ export const createSkillRunner = (input: {
     return {
       skill,
       output,
-      citations: ragResult.citations,
+      citations,
       confidence: ragResult.confidence,
       evidenceReport,
       traceId: context.traceId,

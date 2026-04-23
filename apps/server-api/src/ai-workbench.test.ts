@@ -162,4 +162,121 @@ describe("ai workbench service", () => {
     expect(result.summary.total).toBe(1);
     expect(result.summary.failed).toBe(0);
   });
+
+  it("returns deduplicated citations while keeping full evidence provenance", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "iteronix-citation-service-"));
+    const skillsDir = join(workspace, "skills");
+    const skillDir = join(skillsDir, "example-skill");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, "skill.json"),
+      JSON.stringify({
+        metadata: {
+          name: "example-skill",
+          version: "1.0.0",
+          description: "Answers with citations",
+          tags: ["server"]
+        },
+        inputSchema: {
+          type: "object",
+          properties: {
+            question: {
+              type: "string"
+            }
+          },
+          required: ["question"]
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "string"
+            },
+            confidence: {
+              type: "number"
+            }
+          },
+          required: ["answer", "confidence"]
+        },
+        toolAllowlist: ["retrieve_context", "session_memory"],
+        promptTemplate: "Answer from repo docs and cite sources.",
+        evaluationRubric: ["Requires citations."],
+        options: {
+          useRag: true
+        }
+      }),
+      "utf8"
+    );
+
+    mkdirSync(join(workspace, "docs"), { recursive: true });
+    writeFileSync(
+      join(workspace, "README.md"),
+      [
+        "# Iteronix",
+        "",
+        "Iteronix includes a headless server API and reusable web UI.",
+        "",
+        "Iteronix includes memory, skills and evaluation."
+      ].join("\n"),
+      "utf8"
+    );
+    writeFileSync(
+      join(workspace, "docs", "AI_WORKBENCH.md"),
+      [
+        "# AI Workbench",
+        "",
+        "The current AI workbench architecture uses planner, retriever, executor and reviewer."
+      ].join("\n"),
+      "utf8"
+    );
+
+    const service = await createAiWorkbenchService({
+      workspaceRoot: workspace,
+      skillsDir,
+      memoryDir: join(workspace, ".iteronix", "memory"),
+      evidenceDir: join(workspace, ".iteronix", "evidence")
+    });
+
+    const includes = await service.runSkill({
+      skillName: "example-skill",
+      sessionId: "session-dedup-1",
+      input: {
+        question: "What does Iteronix include?"
+      }
+    });
+    const architecture = await service.runSkill({
+      skillName: "example-skill",
+      sessionId: "session-dedup-2",
+      input: {
+        question: "What is the current AI workbench architecture?"
+      }
+    });
+
+    expect(includes.output.answer).toContain("Iteronix");
+    expect(architecture.output.answer.toLowerCase()).toContain("architecture");
+    expect(new Set(includes.citations.map((citation) => citation.sourceId)).size).toBe(
+      includes.citations.length
+    );
+    expect(
+      new Set(architecture.citations.map((citation) => citation.sourceId)).size
+    ).toBe(architecture.citations.length);
+    expect(includes.citations.every((citation) => isDocumentationCitation(citation.uri))).toBe(
+      true
+    );
+    expect(
+      architecture.citations.every((citation) => isDocumentationCitation(citation.uri))
+    ).toBe(true);
+    expect(includes.evidenceReport.retrievedSources.length).toBeGreaterThanOrEqual(
+      includes.citations.length
+    );
+    expect(architecture.evidenceReport.retrievedSources.length).toBeGreaterThanOrEqual(
+      architecture.citations.length
+    );
+  });
 });
+
+const isDocumentationCitation = (uri: string): boolean =>
+  uri === "/README.md" ||
+  uri === "/AGENTS.md" ||
+  uri.startsWith("/docs/") ||
+  uri.startsWith("/skills/");

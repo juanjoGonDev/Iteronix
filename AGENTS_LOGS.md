@@ -543,4 +543,26 @@
   - Llevar el ajuste de logger al mismo modelo reactivo de `server-config`
   - Afinar ranking del RAG para priorizar docs/README/skills por encima de tests/config cuando la pregunta es descriptiva
 
+### 2026-04-24 00:15 (Europe/Madrid) — Citation Presentation Dedup
+
+- Summary: Mejorada la presentación de citas del AI Workbench para colapsar chunks repetidos del mismo documento en la respuesta del skill/API, manteniendo a la vez la provenance completa por chunk dentro de `evidenceReport`.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Mantener el contrato HTTP/UI intacto: `citations` sigue siendo `ReadonlyArray<Citation>` y `evidenceReport.retrievedSources` conserva el mismo shape
+  - Implementar la deduplicación en la capa compartida (`packages/ai-core`) y consumirla en `packages/skills`, evitando tocar `RagService` y preservando la evidencia cruda
+- Changes:
+  - **Updated packages/ai-core/src/runtime.ts**: helper determinista `collapseCitationsBySource`
+  - **Added packages/ai-core/src/runtime.test.ts**: cobertura del colapso determinista por `sourceId`
+  - **Updated packages/skills/src/skill-runner.ts** y **skill-runner.test.ts**: `result.citations` deduplicadas y `evidenceReport.retrievedSources` sin colapsar
+  - **Updated apps/server-api/src/ai-workbench.test.ts**: verificación end-to-end para las preguntas `What does Iteronix include?` y `What is the current AI workbench architecture?`
+  - **Updated PLAN.md**: checkbox del ajuste de presentation dedup en `Milestone 6.5`
+- Commands:
+  - `pnpm vitest run packages/ai-core/src/runtime.test.ts`
+  - `pnpm vitest run packages/skills/src/skill-runner.test.ts`
+  - `pnpm vitest run apps/server-api/src/ai-workbench.test.ts`
+- Issues/Risks:
+  - La respuesta de presentación ya no enumera múltiples chunks del mismo documento; si más adelante la UI necesita navegación chunk-a-chunk, deberá leerla desde `evidenceReport.retrievedSources`
+- Next:
+  - Añadir una vista UI opcional que agrupe citas por documento y permita expandir la provenance chunk-level desde el evidence report
+
 

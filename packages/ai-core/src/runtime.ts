@@ -60,6 +60,8 @@ export type ToolDefinition = {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 };
 
+const InvalidTimestamp = 0;
+
 export type ToolRegistry = {
   list: () => ReadonlyArray<ToolDefinition>;
   get: (toolId: string) => ToolDefinition | undefined;
@@ -124,6 +126,21 @@ export const createConfidenceScore = (
   signals
 });
 
+export const collapseCitationsBySource = (
+  citations: ReadonlyArray<Citation>
+): ReadonlyArray<Citation> => {
+  const citationsBySource = new Map<string, Citation>();
+
+  for (const citation of citations) {
+    const current = citationsBySource.get(citation.sourceId);
+    if (!current || compareCitationPresentation(citation, current) < 0) {
+      citationsBySource.set(citation.sourceId, citation);
+    }
+  }
+
+  return [...citationsBySource.values()].sort(compareCitationPresentation);
+};
+
 export const estimateTextTokens = (text: string): number =>
   Math.max(1, Math.ceil(text.length / 4));
 
@@ -157,4 +174,32 @@ const toConfidenceLabel = (
   }
 
   return "low";
+};
+
+const compareCitationPresentation = (left: Citation, right: Citation): number => {
+  if (left.score !== right.score) {
+    return right.score - left.score;
+  }
+
+  const updatedAtOrder = readTimestamp(right.updatedAt) - readTimestamp(left.updatedAt);
+  if (updatedAtOrder !== 0) {
+    return updatedAtOrder;
+  }
+
+  const retrievedAtOrder = readTimestamp(right.retrievedAt) - readTimestamp(left.retrievedAt);
+  if (retrievedAtOrder !== 0) {
+    return retrievedAtOrder;
+  }
+
+  const sourceOrder = left.sourceId.localeCompare(right.sourceId);
+  if (sourceOrder !== 0) {
+    return sourceOrder;
+  }
+
+  return left.chunkId.localeCompare(right.chunkId);
+};
+
+const readTimestamp = (value: string): number => {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? InvalidTimestamp : timestamp;
 };
