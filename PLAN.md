@@ -394,12 +394,13 @@ Acceptance:
 - [x] Add source-aware evidence filtering in the shared evidence panel so summary rows can isolate chunk-level provenance without changing server APIs
 - [x] Link collapsed citation selection to the shared evidence panel so choosing a source focuses the matching document provenance in Workflows and History
 - [x] Add deterministic Puppeteer validation for collapsed-citation source linking and evidence filter clearing in `apps/web-ui`
+- [x] Integrate the browser source-linking validation into CI with Puppeteer prerequisites and failure-only screenshot artifacts
 
 Acceptance:
 
 - Server API can execute a skill run end to end using memory, optional retrieval, citations, confidence, and evidence reporting.
 - A multi-agent workflow can execute planner → retriever → executor → reviewer with policy-bound tool access.
-- CI runs lint, typecheck, tests, build, and the minimal eval suite.
+- CI runs lint, typecheck, tests, build, the browser source-linking validation, and the minimal eval suite.
 - The web UI can run the example skill and reviewer workflow end to end, show citations/confidence/evidence, and browse eval results/history.
 
 ---

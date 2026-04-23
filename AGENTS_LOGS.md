@@ -698,3 +698,25 @@
   - Integrar `validate:source-linking` en CI si se quiere evitar regresiones browser fuera del entorno local
 
 
+
+### 2026-04-24 01:34 (Europe/Madrid) — CI Browser Validation Integration
+
+- Summary: Integrada la validación browser de source-linking en el workflow de CI para que ejecute el flujo Puppeteer después del build y publique screenshots sólo cuando el job falla.
+- Decisions:
+  - Preparar Chrome y dependencias del runner con `pnpm -C apps/web-ui exec puppeteer browsers install chrome --install-deps` en lugar de introducir una acción externa adicional
+  - Mantener `validate:source-linking` después de `pnpm build` y antes de `pnpm eval:min` para que el validador use el artefacto compilado que exige el script
+  - Subir `apps/web-ui/screenshots/` únicamente bajo `if: failure()` para conservar artefactos útiles sin contaminar ejecuciones verdes
+- Changes:
+  - **Updated .github/workflows/ci.yml**: paso de preparación Puppeteer, ejecución de `validate:source-linking` y upload condicional de screenshots
+  - **Updated PLAN.md**: checkbox de integración CI y criterio de aceptación ampliado para incluir la validación browser
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm eval:min`
+- Issues/Risks:
+  - El validador browser sigue generando screenshots locales en cada ejecución satisfactoria; CI sólo los conservará como artefacto cuando falle el job
+- Next:
+  - Verificar si conviene limpiar automáticamente screenshots locales antiguos para evitar acumulación en desarrollos largos

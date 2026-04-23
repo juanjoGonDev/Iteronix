@@ -23,8 +23,16 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm -C apps/web-ui exec puppeteer browsers install chrome --install-deps
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm -C apps/web-ui validate:source-linking
       - run: pnpm eval:min
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-ui-source-linking-screenshots
+          path: apps/web-ui/screenshots/
+          if-no-files-found: ignore
