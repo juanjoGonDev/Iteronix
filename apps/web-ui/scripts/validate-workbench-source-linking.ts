@@ -1,4 +1,4 @@
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readdir, rm } from "node:fs/promises";
 import { constants as FsConstants } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -37,9 +37,18 @@ const ValidationText = {
   ArchitectureChunk: "Evidence Architecture chunk 0"
 } as const;
 
+const RuntimeFlag = {
+  PreserveScreenshots: "--preserve-screenshots"
+} as const;
+
+const ScreenshotArtifact = {
+  Extension: ".png"
+} as const;
+
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
+const runtimeOptions = parseRuntimeOptions(process.argv.slice(2));
 
 const historyFixture: WorkbenchHistoryState = {
   runs: [
@@ -162,6 +171,7 @@ await validateWorkbenchSourceLinking();
 async function validateWorkbenchSourceLinking(): Promise<void> {
   await assertBuildOutputExists();
   await mkdir(screenshotDirectory, { recursive: true });
+  await prepareScreenshotDirectory(runtimeOptions);
 
   const previewServer = startPreviewServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
@@ -224,6 +234,30 @@ function startPreviewServer(): ChildProcess {
     stdio: "pipe",
     shell: process.platform === "win32"
   });
+}
+
+function parseRuntimeOptions(args: ReadonlyArray<string>): { preserveScreenshots: boolean } {
+  return {
+    preserveScreenshots: args.includes(RuntimeFlag.PreserveScreenshots)
+  };
+}
+
+async function prepareScreenshotDirectory(input: {
+  preserveScreenshots: boolean;
+}): Promise<void> {
+  if (input.preserveScreenshots) {
+    return;
+  }
+
+  const entries = await readdir(screenshotDirectory, {
+    withFileTypes: true
+  });
+
+  const removablePaths = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(ScreenshotArtifact.Extension))
+    .map((entry) => join(screenshotDirectory, entry.name));
+
+  await Promise.all(removablePaths.map(removeScreenshotArtifact));
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
@@ -409,5 +443,11 @@ async function stopProcess(child: ChildProcess): Promise<void> {
 async function delay(ms: number): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
+  });
+}
+
+async function removeScreenshotArtifact(path: string): Promise<void> {
+  await rm(path, {
+    force: true
   });
 }

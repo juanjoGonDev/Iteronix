@@ -395,6 +395,7 @@ Acceptance:
 - [x] Link collapsed citation selection to the shared evidence panel so choosing a source focuses the matching document provenance in Workflows and History
 - [x] Add deterministic Puppeteer validation for collapsed-citation source linking and evidence filter clearing in `apps/web-ui`
 - [x] Integrate the browser source-linking validation into CI with Puppeteer prerequisites and failure-only screenshot artifacts
+- [x] Retain only the latest local browser-validation screenshots by default, with an explicit preserve flag for manual debugging
 
 Acceptance:
 

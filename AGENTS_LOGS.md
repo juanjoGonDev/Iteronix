@@ -720,3 +720,26 @@
   - El validador browser sigue generando screenshots locales en cada ejecución satisfactoria; CI sólo los conservará como artefacto cuando falle el job
 - Next:
   - Verificar si conviene limpiar automáticamente screenshots locales antiguos para evitar acumulación en desarrollos largos
+
+### 2026-04-24 01:39 (Europe/Madrid) — Screenshot Retention for Browser Validation
+
+- Summary: Ajustada la validación browser de source-linking para que limpie capturas PNG antiguas por defecto y conserve artefactos previos sólo cuando se pasa un flag explícito de preservación.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer`; no abrir TDD formal porque el cambio afecta a un script de soporte en `apps/web-ui/scripts`, fuera del ámbito core obligatorio
+  - Mantener intactos el nombre del comando `validate:source-linking`, la carpeta `apps/web-ui/screenshots/` y la integración de CI existente para no romper el flujo actual
+  - Implementar el modo opt-in con `--preserve-screenshots` y eliminar sólo `*.png`, preservando cualquier otro archivo auxiliar como `.gitkeep`
+- Changes:
+  - **Updated apps/web-ui/scripts/validate-workbench-source-linking.ts**: parseo de flag runtime, limpieza previa de screenshots y borrado selectivo de artefactos PNG
+  - **Updated PLAN.md**: checkbox del comportamiento de retención por defecto con modo preserve explícito
+- Commands:
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:source-linking -- --preserve-screenshots`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - El flag `--preserve-screenshots` depende de que se pase correctamente al script desde `pnpm`; la verificación local confirma el flujo actual con `pnpm -C apps/web-ui validate:source-linking -- --preserve-screenshots`
+- Next:
+  - Si se quiere una ergonomía mayor, exponer un script dedicado `validate:source-linking:preserve` en `apps/web-ui/package.json` para no depender del separador `--`
