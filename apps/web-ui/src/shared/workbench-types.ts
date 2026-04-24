@@ -2,6 +2,60 @@ export const WorkbenchSkillName = "example-skill";
 export const MinimalEvalDatasetPath = "packages/eval/fixtures/minimal-suite.jsonl";
 export const DefaultMemoryQueryLimit = 4;
 
+export const QualityGateEventName = {
+  Progress: "quality-gates-progress"
+} as const;
+
+export const QualityGateId = {
+  Lint: "lint",
+  Typecheck: "typecheck",
+  Test: "test",
+  Build: "build"
+} as const;
+
+export type QualityGateId = typeof QualityGateId[keyof typeof QualityGateId];
+
+export type QualityGateRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "canceled";
+
+export type ProjectRecord = {
+  id: string;
+  name: string;
+  rootPath: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QualityGateRunRecord = {
+  id: string;
+  projectId: string;
+  status: QualityGateRunStatus;
+  createdAt: string;
+  updatedAt: string;
+  gates: ReadonlyArray<QualityGateId>;
+  passedCount: number;
+  currentGate?: QualityGateId;
+  failedGate?: QualityGateId;
+};
+
+export type QualityGateEventRecord = {
+  id: string;
+  runId: string;
+  type: "delta" | "message" | "usage" | "error" | "done" | "status";
+  timestamp: string;
+  data: Record<string, unknown>;
+};
+
+export type ServerSentEventMessage = {
+  id?: string;
+  event: string;
+  data: unknown;
+};
+
 export const ReviewerDecision = {
   Approved: "approved",
   Denied: "denied"

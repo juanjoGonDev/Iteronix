@@ -905,3 +905,31 @@
   - La UI aún no consume estos endpoints; el milestone queda partido explícitamente en server listo y presentación pendiente
 - Next:
   - Integrar los quality gates en `apps/web-ui` para lanzar runs, ver progreso SSE y consultar histórico por proyecto
+
+### 2026-04-24 12:37 (Europe/Madrid) — Quality Gates UI
+
+- Summary: Integrada la UI de quality gates en `apps/web-ui` reutilizando la ruta `Projects`, con apertura de proyecto, lanzamiento de `lint/typecheck/test/build`, polling de histórico por proyecto y detalle de eventos en vivo mediante SSE autenticado por `fetch`.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `quality-gates-enforcer` y `ui-implementation-from-spec`, manteniendo las invariantes del shell actual porque no existe `ui-spec` específico para `Projects`
+  - Resolver el stream SSE en el cliente con `fetch` + parser propio en lugar de `EventSource`, ya que la API exige bearer token
+  - Extraer la lógica pura de selección, ordenado y merge de eventos a `apps/web-ui/src/screens/projects-state.ts` para fijarla con tests antes de simplificar la pantalla
+- Changes:
+  - **Added apps/web-ui/src/shared/server-api-client.ts** y **quality-gates-client.ts** con codecs tipados para `/projects/open`, `/quality-gates/run`, `/quality-gates/list`, `/quality-gates/events` y `/quality-gates/stream`
+  - **Added apps/web-ui/src/shared/project-session.ts** para persistir proyecto actual y recientes en `localStorage`
+  - **Added apps/web-ui/src/screens/Projects.ts** y **projects-state.ts** para la pantalla completa de quality gates con polling, SSE, detalle de runs y eventos
+  - **Updated apps/web-ui/src/index.ts** para reemplazar el placeholder de `Projects` por la nueva pantalla
+  - **Added tests** en `apps/web-ui/src/shared/project-session.test.ts`, `apps/web-ui/src/shared/quality-gates-client.test.ts` y `apps/web-ui/src/screens/projects-state.test.ts`
+  - **Updated PLAN.md** marcando como completada la UI del Milestone 6
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm vitest run apps/web-ui/src/screens/projects-state.test.ts apps/web-ui/src/shared/quality-gates-client.test.ts apps/web-ui/src/shared/project-session.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - La validación browser existente sigue cubriendo el flujo de source-linking del workbench, no el nuevo screen de quality gates; la parte nueva queda protegida por tests unitarios de estado/codec y por los gates globales
+- Next:
+  - Añadir una validación browser determinista del screen `Projects` con stub de API si se quiere elevar cobertura end-to-end del flujo SSE/polling

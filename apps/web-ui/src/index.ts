@@ -10,6 +10,7 @@ import { KanbanBoard } from "./screens/Kanban.js";
 import { SettingsScreen } from "./screens/Settings.js";
 import { WorkflowsScreen } from "./screens/Workflows.js";
 import { HistoryScreen } from "./screens/History.js";
+import { ProjectsScreen } from "./screens/Projects.js";
 
 const ScreenId = {
   Overview: "overview",
@@ -180,10 +181,7 @@ export class App extends Component<AppProps, AppState> {
     }
 
     if (this.state.currentScreen === ScreenId.Projects) {
-      return renderPlaceholderScreen({
-        title: "Projects",
-        description: "Project management remains available here. Use Workflows and History for the AI Workbench vertical slice."
-      });
+      return createElement(ProjectsScreen, {});
     }
 
     return renderPlaceholderScreen({
