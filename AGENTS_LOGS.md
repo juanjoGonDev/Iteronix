@@ -986,3 +986,27 @@
   - Ninguno nuevo; el workflow sigue subiendo el mismo directorio de screenshots sólo en fallo, ahora compartido por ambos validadores browser
 - Next:
   - Si se quiere elevar la paridad local con CI documentalmente, añadir `validate:quality-gates` a `docs/RUNNING.md` como comando browser soportado por el pipeline
+
+### 2026-04-25 01:35 (Europe/Madrid) — CI Browser Validation Docs
+
+- Summary: Actualizada la documentación operativa para reflejar que CI ejecuta ambos validadores browser (`source-linking` y `quality-gates`), manteniendo `docs/RUNNING.md` como referencia canónica y dejando `docs/AI_WORKBENCH.md` en modo resumen con enlace.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `repo-invariants-guardian`, `ci-parity-finalizer`, `minimal-diff-mode` y `quality-gates-enforcer`
+  - Concentrar el detalle operativo en `docs/RUNNING.md`, incluyendo la cobertura CI y la nota de screenshots sólo en fallo
+  - Evitar duplicar prosa larga en `docs/AI_WORKBENCH.md`; dejar una referencia corta que apunte a `docs/RUNNING.md`
+- Changes:
+  - **Updated docs/RUNNING.md**: tabla browser con `validate:quality-gates` y nota explícita de cobertura CI para ambos comandos
+  - **Updated docs/AI_WORKBENCH.md**: resumen corto de cobertura CI enlazado a la referencia canónica
+  - **Updated PLAN.md**: checkbox documental de cobertura CI browser marcado como completado
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm eval:min`
+- Issues/Risks:
+  - Ninguno nuevo; la documentación queda alineada con el workflow CI actual sin tocar código de producto
+- Next:
+  - Si se quiere seguir reduciendo duplicación, reflejar la misma referencia canónica desde `README.md` sin añadir más prosa operativa

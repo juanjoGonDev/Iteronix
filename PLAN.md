@@ -404,6 +404,7 @@ Acceptance:
 - [x] Add compact browser-validation reference tables to `README.md` and `docs/RUNNING.md` without reintroducing duplicated long-form guidance
 - [x] Add deterministic Puppeteer validation for the `Projects` quality-gates flow using a stub API server and local browser storage seeding
 - [x] Integrate the `Projects` quality-gates browser validation into CI with the same Puppeteer prerequisites and failure-only screenshot artifacts
+- [x] Document in `docs/RUNNING.md` that CI executes both browser validations, with `docs/AI_WORKBENCH.md` linking back to the canonical command reference
 
 Acceptance:
 

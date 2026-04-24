@@ -45,4 +45,4 @@
 
 ## Browser validation workflows
 
-The shared browser validation flow for collapsed-citation source linking and evidence filter clearing is executed from `apps/web-ui/scripts/validate-workbench-source-linking.ts`. Use the default command for a clean latest-only screenshot set and the preserve variant for manual debugging with older captures retained. The canonical command reference and screenshot-retention rules live in [`docs/RUNNING.md`](./RUNNING.md#browser-validation). CI remains unchanged and still runs the default cleanup variant after `pnpm build`.
+The canonical browser-validation command reference lives in [`docs/RUNNING.md`](./RUNNING.md#browser-validation). CI now runs both `pnpm -C apps/web-ui validate:source-linking` and `pnpm -C apps/web-ui validate:quality-gates` after `pnpm build`, while screenshot retention and manual-debug variants remain documented only in `docs/RUNNING.md`.
