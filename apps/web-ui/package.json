@@ -11,7 +11,8 @@
     "serve:express": "tsx scripts/serve.ts",
     "preview": "tsx scripts/simple-serve.ts",
     "test-serve": "tsx scripts/simple-serve.ts",
-    "validate:source-linking": "tsx scripts/validate-workbench-source-linking.ts"
+    "validate:source-linking": "tsx scripts/validate-workbench-source-linking.ts",
+    "validate:source-linking:preserve": "tsx scripts/validate-workbench-source-linking.ts --preserve-screenshots"
   },
   "dependencies": {
     "cors": "^2.8.5",

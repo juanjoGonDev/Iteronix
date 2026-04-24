@@ -396,6 +396,7 @@ Acceptance:
 - [x] Add deterministic Puppeteer validation for collapsed-citation source linking and evidence filter clearing in `apps/web-ui`
 - [x] Integrate the browser source-linking validation into CI with Puppeteer prerequisites and failure-only screenshot artifacts
 - [x] Retain only the latest local browser-validation screenshots by default, with an explicit preserve flag for manual debugging
+- [x] Add a dedicated `validate:source-linking:preserve` script in `apps/web-ui` so manual debugging can keep prior screenshots without pnpm argument forwarding syntax
 
 Acceptance:
 

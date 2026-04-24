@@ -743,3 +743,25 @@
   - El flag `--preserve-screenshots` depende de que se pase correctamente al script desde `pnpm`; la verificación local confirma el flujo actual con `pnpm -C apps/web-ui validate:source-linking -- --preserve-screenshots`
 - Next:
   - Si se quiere una ergonomía mayor, exponer un script dedicado `validate:source-linking:preserve` en `apps/web-ui/package.json` para no depender del separador `--`
+
+### 2026-04-24 10:24 (Europe/Madrid) — Preserve Script for Browser Validation
+
+- Summary: Añadido un script dedicado para ejecutar la validación browser conservando screenshots previos sin depender del separador `--` de pnpm, manteniendo intacto el comportamiento de limpieza por defecto.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer` por tratarse de un ajuste de ergonomía con criterio verificable y diff mínimo
+  - Limitar el cambio funcional a `apps/web-ui/package.json`, reutilizando el flag `--preserve-screenshots` ya soportado por el script existente
+  - Actualizar `PLAN.md` y `AGENTS_LOGS.md` como trazabilidad suficiente; no abrir documentación adicional porque el flujo sólo cambia a nivel de script local de desarrollo
+- Changes:
+  - **Updated apps/web-ui/package.json**: nuevo script `validate:source-linking:preserve`
+  - **Updated PLAN.md**: checkbox del script dedicado de preservación para debugging manual
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - Ninguno nuevo; el flujo preserve sigue generando capturas adicionales hasta que se ejecute de nuevo el script por defecto o se limpien manualmente
+- Next:
+  - Si se quiere hacer el comportamiento aún más visible, documentar ambos scripts de validación browser en `README.md` o `docs/AI_WORKBENCH.md`
