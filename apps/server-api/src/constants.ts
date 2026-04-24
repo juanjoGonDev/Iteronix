@@ -28,6 +28,10 @@ export const RoutePath = {
   GitStatus: "/git/status",
   GitDiff: "/git/diff",
   GitCommit: "/git/commit",
+  QualityGatesRun: "/quality-gates/run",
+  QualityGatesList: "/quality-gates/list",
+  QualityGatesEvents: "/quality-gates/events",
+  QualityGatesStream: "/quality-gates/stream",
   KanbanBoardsCreate: "/kanban/boards/create",
   KanbanBoardsList: "/kanban/boards/list",
   KanbanBoardsUpdate: "/kanban/boards/update",
@@ -134,6 +138,7 @@ export const HeaderValue = {
 export const TextEncoding = "utf8";
 
 export const ProjectField = {
+  ProjectId: "projectId",
   RootPath: "rootPath",
   Name: "name"
 } as const;
@@ -216,6 +221,14 @@ export const GitField = {
   ProjectId: "projectId",
   Staged: "staged",
   Message: "message"
+} as const;
+
+export const QualityGateField = {
+  ProjectId: "projectId",
+  RunId: "runId",
+  Gates: "gates",
+  Status: "status",
+  Limit: "limit"
 } as const;
 
 export const FileEntryKind = {

@@ -368,7 +368,8 @@ Acceptance:
 
 - [x] Implement Git adapter (native `git` spawn)
 - [x] Expose git status/diff/commit endpoints
-- [ ] Quality gates runnable by server; UI displays results
+- [x] Quality gates runnable by server with typed run/list/events/stream endpoints
+- [ ] UI displays quality gate results
 - [ ] Optional: auto-commit with Conventional Commits
 
 Acceptance:

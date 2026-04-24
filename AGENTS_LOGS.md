@@ -880,3 +880,28 @@
   - Los endpoints Git quedan bloqueados si `COMMAND_ALLOWLIST` no incluye `git`, lo cual es consistente con el modelo safe-by-default actual pero requerirá configuración explícita en entornos reales
 - Next:
   - Implementar la ejecución de quality gates desde `apps/server-api` y exponer los resultados para completar el siguiente bloque del Milestone 6
+
+### 2026-04-24 12:11 (Europe/Madrid) — Server-side Quality Gates
+
+- Summary: Implementada la ejecución server-first de quality gates con adapter nativo de procesos, endpoints tipados para iniciar/listar/eventos, stream SSE de progreso y persistencia de runs/eventos en el modelo `history` existente del servidor.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `command-discovery` y `quality-gates-enforcer`
+  - Resolver el runner genérico en `packages/adapters/src/command-runner` y mantener la política safe-by-default en `apps/server-api` mediante `WorkspacePolicy` + `CommandPolicy`
+  - Persistir los quality gate runs en `HistoryStore` extendido, en lugar de crear un store paralelo, para reutilizar la semántica existente de runs/eventos y soportar polling + SSE con el mismo modelo
+- Changes:
+  - **Added packages/adapters/src/command-runner/command-runner.ts** y **command-runner.test.ts**: ejecución de comandos con streaming `stdout/stderr`, captura de resultado final y tests del adapter
+  - **Added apps/server-api/src/quality-gates.ts** y **quality-gates.test.ts**: catálogo `lint/typecheck/test/build`, validación tipada, background execution, polling y event hub para SSE
+  - **Updated apps/server-api/src/history.ts**: creación/actualización de runs, append de eventos y filtros por `projectId` + `runType`
+  - **Updated apps/server-api/src/constants.ts** y **server.ts**: rutas `/quality-gates/run`, `/quality-gates/list`, `/quality-gates/events`, `/quality-gates/stream` y cableado del runner/catalog en el shell HTTP
+  - **Updated PLAN.md**: milestone 6 separado en servidor completado y pendiente de UI
+- Commands:
+  - `pnpm vitest run packages/adapters/src/command-runner/command-runner.test.ts apps/server-api/src/quality-gates.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Los quality gates reales dependen de que `COMMAND_ALLOWLIST` incluya el comando efectivo del catálogo, que por defecto es `pnpm`
+  - La UI aún no consume estos endpoints; el milestone queda partido explícitamente en server listo y presentación pendiente
+- Next:
+  - Integrar los quality gates en `apps/web-ui` para lanzar runs, ver progreso SSE y consultar histórico por proyecto

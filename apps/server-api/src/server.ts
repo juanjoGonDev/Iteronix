@@ -42,6 +42,20 @@ import {
   parseGitStatusRequest
 } from "./git";
 import {
+  createDefaultQualityGateCatalog,
+  createQualityGateEventHub,
+  listQualityGateEvents,
+  listQualityGateRuns,
+  parseQualityGateEventsRequest,
+  parseQualityGateListRequest,
+  parseQualityGateRunRequest,
+  parseQualityGateStreamRequest,
+  QualityGateEventName,
+  startQualityGateRun,
+  type QualityGateCatalog,
+  type QualityGateEventHub
+} from "./quality-gates";
+import {
   createProjectStore,
   ProjectStoreErrorCode,
   type Project,
@@ -103,6 +117,10 @@ import {
   type AiWorkbenchService
 } from "./ai-workbench";
 import {
+  createCommandRunnerAdapter,
+  type CommandRunner
+} from "../../../packages/adapters/src/command-runner/command-runner";
+import {
   createGitCliAdapter,
   type GitRepository
 } from "../../../packages/adapters/src/git/git-adapter";
@@ -116,6 +134,7 @@ export const startServer = async (): Promise<void> => {
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
   const historyStore = createHistoryStore();
+  const qualityGateEventHub = createQualityGateEventHub();
   const providerStore = createProviderStore();
   const kanbanStore = createKanbanStore();
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
@@ -126,6 +145,8 @@ export const startServer = async (): Promise<void> => {
   const aiWorkbench = await createAiWorkbenchService({
     workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
   });
+  const commandRunner = createCommandRunnerAdapter();
+  const qualityGateCatalog = createDefaultQualityGateCatalog();
   const git = createGitCliAdapter();
   const server = createServer((req, res) => {
     void handleRequest(
@@ -136,11 +157,14 @@ export const startServer = async (): Promise<void> => {
       sessionStore,
       sessionEvents,
       historyStore,
+      qualityGateEventHub,
       logsStore,
       providerStore,
       kanbanStore,
       workspacePolicy,
       commandPolicy,
+      commandRunner,
+      qualityGateCatalog,
       aiWorkbench,
       git
     );
@@ -157,11 +181,14 @@ const handleRequest = async (
   sessionStore: SessionStore,
   sessionEvents: SessionEventHub,
   historyStore: HistoryStore,
+  qualityGateEventHub: QualityGateEventHub,
   logsStore: ServerLogsStore,
   providerStore: ProviderStore,
   kanbanStore: KanbanStore,
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
+  commandRunner: CommandRunner,
+  qualityGateCatalog: QualityGateCatalog,
   aiWorkbench: AiWorkbenchService,
   git: GitRepository
 ): Promise<void> => {
@@ -456,6 +483,56 @@ const handleRequest = async (
       commandPolicy,
       git
     );
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateRunRequest(
+      req,
+      res,
+      projectStore,
+      historyStore,
+      workspacePolicy,
+      commandPolicy,
+      commandRunner,
+      qualityGateEventHub,
+      qualityGateCatalog
+    );
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateListRequest(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesEvents) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateEventsRequest(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesStream) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    handleQualityGateStreamRequest(req, res, url, historyStore, qualityGateEventHub);
     return;
   }
 
@@ -3178,6 +3255,152 @@ const handleGitCommitRequest = async (
 
   respondJson(res, HttpStatus.Created, {
     commit: result.value
+  });
+};
+
+const handleQualityGateRunRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  historyStore: HistoryStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  commandRunner: CommandRunner,
+  eventHub: QualityGateEventHub,
+  catalog: QualityGateCatalog
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await startQualityGateRun(parsed.value, {
+    projectStore,
+    historyStore,
+    workspacePolicy,
+    commandPolicy,
+    commandRunner,
+    eventHub,
+    catalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    run: result.value
+  });
+};
+
+const handleQualityGateListRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = listQualityGateRuns(parsed.value, {
+    historyStore
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    runs: result.value
+  });
+};
+
+const handleQualityGateEventsRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateEventsRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = listQualityGateEvents(parsed.value, {
+    historyStore
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    events: result.value
+  });
+};
+
+const handleQualityGateStreamRequest = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  historyStore: HistoryStore,
+  eventHub: QualityGateEventHub
+): void => {
+  const parsed = parseQualityGateStreamRequest(url.searchParams);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const existing = listQualityGateEvents(parsed.value, {
+    historyStore
+  });
+  if (existing.type === ResultType.Err) {
+    respondError(res, existing.error);
+    return;
+  }
+
+  const stream = createSseStream(res);
+  for (const event of existing.value) {
+    stream.send({
+      event: QualityGateEventName.Progress,
+      id: event.id,
+      data: event
+    });
+  }
+
+  const unsubscribe = eventHub.subscribe(parsed.value.runId, (event) => {
+    stream.send({
+      event: QualityGateEventName.Progress,
+      id: event.id,
+      data: event
+    });
+  });
+
+  req.on("close", () => {
+    unsubscribe();
+    stream.close();
   });
 };
 
