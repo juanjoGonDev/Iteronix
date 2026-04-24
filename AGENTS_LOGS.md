@@ -810,3 +810,26 @@
   - Ninguno nuevo; el último run fue el modo normal y el directorio `apps/web-ui/screenshots/` quedó de nuevo con las 3 capturas del run más reciente
 - Next:
   - Si se quiere centralizar aún más la operación diaria, añadir una tabla corta en `README.md` que apunte a `docs/RUNNING.md` para comandos de validación y depuración
+
+### 2026-04-24 10:36 (Europe/Madrid) — Canonical Browser Validation Docs
+
+- Summary: Consolidada la documentación de validación browser para que `docs/RUNNING.md` quede como referencia operativa única, mientras `README.md` y `docs/AI_WORKBENCH.md` sólo resumen el flujo y enlazan al detalle canónico.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer` para mantener el cambio limitado a documentación y verificación
+  - No tocar CI ni código de producto; limitar la consolidación a `README.md`, `docs/AI_WORKBENCH.md` y `PLAN.md`
+  - Mantener `docs/RUNNING.md` como source of truth y ejecutar ambos scripts browser terminando con el modo normal para dejar `apps/web-ui/screenshots/` con sólo el último run
+- Changes:
+  - **Updated README.md**: resumen corto de validación browser con enlace a `docs/RUNNING.md`
+  - **Updated docs/AI_WORKBENCH.md**: resumen operativo corto con enlace a `docs/RUNNING.md`
+  - **Updated PLAN.md**: checkbox de consolidación del command reference canónico
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - Ninguno nuevo; el directorio `apps/web-ui/screenshots/` quedó otra vez con 3 capturas tras cerrar la verificación con el modo normal
+- Next:
+  - Si se quiere reducir mantenimiento documental futuro, mover la lista de comandos de QA browser a una tabla compartida o plantilla de docs

@@ -45,11 +45,4 @@
 
 ## Browser validation workflows
 
-- `pnpm -C apps/web-ui validate:source-linking`
-  - Use this for the normal deterministic browser check of collapsed-citation source linking and evidence filter clearing.
-  - The command deletes older `apps/web-ui/screenshots/*.png` files first, then captures the latest run only.
-- `pnpm -C apps/web-ui validate:source-linking:preserve`
-  - Use this when investigating a flaky or visual regression and you need to compare the new run with previous screenshots.
-  - The command keeps existing PNG artifacts and appends the new captures from the latest run.
-
-Both commands exercise the same `apps/web-ui/scripts/validate-workbench-source-linking.ts` flow against the built preview app. The current CI workflow is unchanged: it runs the default cleanup variant after `pnpm build` and uploads `apps/web-ui/screenshots/` only if the job fails.
+The shared browser validation flow for collapsed-citation source linking and evidence filter clearing is executed from `apps/web-ui/scripts/validate-workbench-source-linking.ts`. Use the default command for a clean latest-only screenshot set and the preserve variant for manual debugging with older captures retained. The canonical command reference and screenshot-retention rules live in [`docs/RUNNING.md`](./RUNNING.md#browser-validation). CI remains unchanged and still runs the default cleanup variant after `pnpm build`.

@@ -399,6 +399,7 @@ Acceptance:
 - [x] Add a dedicated `validate:source-linking:preserve` script in `apps/web-ui` so manual debugging can keep prior screenshots without pnpm argument forwarding syntax
 - [x] Document the browser validation workflows and screenshot-retention behavior in `README.md` and `docs/AI_WORKBENCH.md`
 - [x] Document the browser validation commands in `docs/RUNNING.md` so the operational reference stays aligned with the README and AI workbench guides
+- [x] Consolidate browser-validation documentation so `docs/RUNNING.md` is the canonical command reference and other docs link back to it
 
 Acceptance:
 
