@@ -933,3 +933,31 @@
   - La validación browser existente sigue cubriendo el flujo de source-linking del workbench, no el nuevo screen de quality gates; la parte nueva queda protegida por tests unitarios de estado/codec y por los gates globales
 - Next:
   - Añadir una validación browser determinista del screen `Projects` con stub de API si se quiere elevar cobertura end-to-end del flujo SSE/polling
+
+### 2026-04-24 23:52 (Europe/Madrid) — Projects Browser Validation
+
+- Summary: Añadida una validación browser determinista del screen `Projects` en `apps/web-ui`, con stub API local para `/projects/open` y quality gates, eventos SSE reales, polling de histórico y screenshots bajo `apps/web-ui/screenshots/`.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Fijar el comportamiento del stub con una fixture pura en `apps/web-ui/scripts/quality-gates-validation-fixture.ts`, testeada antes de integrar el script Puppeteer
+  - Extraer runtime compartido de validación browser a `apps/web-ui/scripts/browser-validation-runtime.ts` para evitar duplicar cleanup de screenshots, espera HTTP y shutdown de procesos
+  - Servir el stub en un origen separado con CORS explícito porque la UI usa `fetch` con `Authorization` y `Content-Type: application/json`
+- Changes:
+  - **Added apps/web-ui/scripts/quality-gates-validation-fixture.ts** y **quality-gates-validation-fixture.test.ts**: fixture determinista para progreso de runs y codificación SSE
+  - **Added apps/web-ui/scripts/browser-validation-runtime.ts**: utilidades compartidas para preview server, readiness checks, screenshots y cleanup
+  - **Added apps/web-ui/scripts/validate-quality-gates-projects.ts** y script npm `validate:quality-gates` en `apps/web-ui/package.json`
+  - **Updated apps/web-ui/scripts/validate-workbench-source-linking.ts** para reutilizar el runtime compartido sin cambiar su comportamiento funcional
+  - **Updated PLAN.md** marcando la validación Puppeteer del flujo `Projects` como completada
+- Commands:
+  - `pnpm vitest run apps/web-ui/scripts/quality-gates-validation-fixture.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+- Issues/Risks:
+  - El stub de quality gates sólo cubre el vertical slice del screen `Projects`; no valida el backend real, por diseño, para mantener la prueba browser determinista y sin dependencias externas
+- Next:
+  - Si se quiere elevar cobertura CI del flujo `Projects`, integrar `validate:quality-gates` en `.github/workflows/ci.yml` con artefactos de screenshot en fallo

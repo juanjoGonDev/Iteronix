@@ -12,7 +12,8 @@
     "preview": "tsx scripts/simple-serve.ts",
     "test-serve": "tsx scripts/simple-serve.ts",
     "validate:source-linking": "tsx scripts/validate-workbench-source-linking.ts",
-    "validate:source-linking:preserve": "tsx scripts/validate-workbench-source-linking.ts --preserve-screenshots"
+    "validate:source-linking:preserve": "tsx scripts/validate-workbench-source-linking.ts --preserve-screenshots",
+    "validate:quality-gates": "tsx scripts/validate-quality-gates-projects.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

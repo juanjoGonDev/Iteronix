@@ -402,6 +402,7 @@ Acceptance:
 - [x] Document the browser validation commands in `docs/RUNNING.md` so the operational reference stays aligned with the README and AI workbench guides
 - [x] Consolidate browser-validation documentation so `docs/RUNNING.md` is the canonical command reference and other docs link back to it
 - [x] Add compact browser-validation reference tables to `README.md` and `docs/RUNNING.md` without reintroducing duplicated long-form guidance
+- [x] Add deterministic Puppeteer validation for the `Projects` quality-gates flow using a stub API server and local browser storage seeding
 
 Acceptance:
 

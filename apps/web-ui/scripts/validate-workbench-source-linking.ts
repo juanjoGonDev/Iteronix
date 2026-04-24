@@ -1,10 +1,17 @@
-import { access, mkdir, readdir, rm } from "node:fs/promises";
-import { constants as FsConstants } from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import type { WorkbenchHistoryState } from "../src/shared/workbench-types.js";
+import {
+  assertBrowserValidationBuildOutput,
+  captureBrowserValidationScreenshot,
+  parseBrowserValidationRuntimeOptions,
+  prepareBrowserValidationDirectory,
+  startPreviewServer,
+  stopProcess,
+  waitForCondition as waitForBrowserValidationCondition,
+  waitForHttpReady
+} from "./browser-validation-runtime.js";
 
 const ValidationConfig = {
   BaseUrl: "http://127.0.0.1:4000",
@@ -37,18 +44,10 @@ const ValidationText = {
   ArchitectureChunk: "Evidence Architecture chunk 0"
 } as const;
 
-const RuntimeFlag = {
-  PreserveScreenshots: "--preserve-screenshots"
-} as const;
-
-const ScreenshotArtifact = {
-  Extension: ".png"
-} as const;
-
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
-const runtimeOptions = parseRuntimeOptions(process.argv.slice(2));
+const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
 
 const historyFixture: WorkbenchHistoryState = {
   runs: [
@@ -169,15 +168,20 @@ const historyFixture: WorkbenchHistoryState = {
 await validateWorkbenchSourceLinking();
 
 async function validateWorkbenchSourceLinking(): Promise<void> {
-  await assertBuildOutputExists();
-  await mkdir(screenshotDirectory, { recursive: true });
-  await prepareScreenshotDirectory(runtimeOptions);
+  await assertBrowserValidationBuildOutput(buildOutputPath);
+  await prepareBrowserValidationDirectory({
+    directory: screenshotDirectory,
+    preserveScreenshots: runtimeOptions.preserveScreenshots
+  });
 
-  const previewServer = startPreviewServer();
+  const previewServer = startPreviewServer(projectRoot);
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    await waitForHttpReady(`${ValidationConfig.BaseUrl}${ValidationConfig.PreviewHealthPath}`);
+    await waitForHttpReady(`${ValidationConfig.BaseUrl}${ValidationConfig.PreviewHealthPath}`, {
+      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
 
     browser = await puppeteer.launch({
       headless: true,
@@ -194,7 +198,12 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
       waitUntil: "networkidle0"
     });
     await waitForPageText(page, ValidationText.ScreenTitle);
-    await captureScreenshot(page, "before-focus");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "before-focus",
+      artifactName: "workbench-source-linking"
+    });
 
     await clickCitationFocusAction(page, ValidationText.ReadmeUri);
     await waitForRetrievedChunksState(page, {
@@ -205,7 +214,12 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
       ],
       forbidden: [ValidationText.ArchitectureChunk]
     });
-    await captureScreenshot(page, "after-focus");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-focus",
+      artifactName: "workbench-source-linking"
+    });
 
     await clickNamedButton(page, ValidationText.ClearFilter);
     await waitForRetrievedChunksState(page, {
@@ -217,7 +231,12 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
       ],
       forbidden: []
     });
-    await captureScreenshot(page, "after-clear");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-clear",
+      artifactName: "workbench-source-linking"
+    });
 
     console.log("Browser validation passed for linked citation source focus.");
   } finally {
@@ -226,38 +245,6 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
     }
     await stopProcess(previewServer);
   }
-}
-
-function startPreviewServer(): ChildProcess {
-  return spawn("pnpm", ["preview"], {
-    cwd: projectRoot,
-    stdio: "pipe",
-    shell: process.platform === "win32"
-  });
-}
-
-function parseRuntimeOptions(args: ReadonlyArray<string>): { preserveScreenshots: boolean } {
-  return {
-    preserveScreenshots: args.includes(RuntimeFlag.PreserveScreenshots)
-  };
-}
-
-async function prepareScreenshotDirectory(input: {
-  preserveScreenshots: boolean;
-}): Promise<void> {
-  if (input.preserveScreenshots) {
-    return;
-  }
-
-  const entries = await readdir(screenshotDirectory, {
-    withFileTypes: true
-  });
-
-  const removablePaths = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(ScreenshotArtifact.Extension))
-    .map((entry) => join(screenshotDirectory, entry.name));
-
-  await Promise.all(removablePaths.map(removeScreenshotArtifact));
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
@@ -370,84 +357,12 @@ async function waitForPageText(page: Page, text: string): Promise<void> {
   }, `page text "${text}"`);
 }
 
-async function captureScreenshot(page: Page, suffix: string): Promise<void> {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outputPath = join(
-    screenshotDirectory,
-    `${timestamp}_${suffix}_workbench-source-linking.png`
-  );
-
-  await page.screenshot({
-    path: outputPath,
-    fullPage: true
-  });
-}
-
-async function assertBuildOutputExists(): Promise<void> {
-  try {
-    await access(buildOutputPath, FsConstants.F_OK);
-  } catch {
-    throw new Error(`Build output missing at ${buildOutputPath}. Run pnpm build before this validation.`);
-  }
-}
-
-async function waitForHttpReady(url: string): Promise<void> {
-  await waitForCondition(async () => {
-    try {
-      const response = await fetch(url);
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, `HTTP readiness for ${url}`, ValidationConfig.PreviewStartupTimeoutMs);
-}
-
 async function waitForCondition(
   check: () => Promise<boolean>,
-  label: string,
-  timeoutMs: number = ValidationConfig.UiPollingTimeoutMs
+  label: string
 ): Promise<void> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await check()) {
-      return;
-    }
-
-    await delay(ValidationConfig.UiPollingIntervalMs);
-  }
-
-  throw new Error(`Timed out waiting for ${label}`);
-}
-
-async function stopProcess(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.pid === undefined) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-        stdio: "ignore"
-      });
-      killer.on("exit", () => resolve());
-      killer.on("error", () => resolve());
-    });
-    return;
-  }
-
-  child.kill("SIGTERM");
-  await delay(250);
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function removeScreenshotArtifact(path: string): Promise<void> {
-  await rm(path, {
-    force: true
+  await waitForBrowserValidationCondition(check, label, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
   });
 }
