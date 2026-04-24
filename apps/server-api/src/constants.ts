@@ -25,6 +25,9 @@ export const RoutePath = {
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
   ProvidersSettings: "/providers/settings",
+  GitStatus: "/git/status",
+  GitDiff: "/git/diff",
+  GitCommit: "/git/commit",
   KanbanBoardsCreate: "/kanban/boards/create",
   KanbanBoardsList: "/kanban/boards/list",
   KanbanBoardsUpdate: "/kanban/boards/update",
@@ -113,7 +116,9 @@ export const ErrorMessage = {
   MissingSkillName: "Missing skillName",
   MissingInput: "Missing input",
   MissingQuestion: "Missing question",
-  MissingDatasetPath: "Missing datasetPath"
+  MissingDatasetPath: "Missing datasetPath",
+  MissingCommitMessage: "Missing commit message",
+  InvalidCommitMessage: "Invalid Conventional Commit message"
 } as const;
 
 export const MimeType = {
@@ -205,6 +210,12 @@ export const AiField = {
   AutoApprove: "autoApprove",
   Query: "query",
   Limit: "limit"
+} as const;
+
+export const GitField = {
+  ProjectId: "projectId",
+  Staged: "staged",
+  Message: "message"
 } as const;
 
 export const FileEntryKind = {

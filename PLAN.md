@@ -366,8 +366,8 @@ Acceptance:
 
 ## Milestone 6 — Quality gates + Git integration (server-first)
 
-- [ ] Implement Git adapter (native `git` spawn)
-- [ ] Expose git status/diff/commit endpoints
+- [x] Implement Git adapter (native `git` spawn)
+- [x] Expose git status/diff/commit endpoints
 - [ ] Quality gates runnable by server; UI displays results
 - [ ] Optional: auto-commit with Conventional Commits
 

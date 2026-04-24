@@ -34,6 +34,14 @@ import {
   writeFileContent
 } from "./files";
 import {
+  executeGitCommit,
+  executeGitDiff,
+  executeGitStatus,
+  parseGitCommitRequest,
+  parseGitDiffRequest,
+  parseGitStatusRequest
+} from "./git";
+import {
   createProjectStore,
   ProjectStoreErrorCode,
   type Project,
@@ -65,7 +73,12 @@ import {
   type ProviderStoreError,
   type ProviderStore
 } from "./providers";
-import { createWorkspacePolicy, type WorkspacePolicy } from "./sandbox";
+import {
+  createCommandPolicy,
+  createWorkspacePolicy,
+  type CommandPolicy,
+  type WorkspacePolicy
+} from "./sandbox";
 import {
   createKanbanStore,
   KanbanStoreErrorCode,
@@ -89,6 +102,10 @@ import {
   createAiWorkbenchService,
   type AiWorkbenchService
 } from "./ai-workbench";
+import {
+  createGitCliAdapter,
+  type GitRepository
+} from "../../../packages/adapters/src/git/git-adapter";
 
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
@@ -102,9 +119,14 @@ export const startServer = async (): Promise<void> => {
   const providerStore = createProviderStore();
   const kanbanStore = createKanbanStore();
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
+  const commandPolicy = createCommandPolicy(
+    config.commandAllowlist,
+    workspacePolicy
+  );
   const aiWorkbench = await createAiWorkbenchService({
     workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
   });
+  const git = createGitCliAdapter();
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -118,7 +140,9 @@ export const startServer = async (): Promise<void> => {
       providerStore,
       kanbanStore,
       workspacePolicy,
-      aiWorkbench
+      commandPolicy,
+      aiWorkbench,
+      git
     );
   });
 
@@ -137,7 +161,9 @@ const handleRequest = async (
   providerStore: ProviderStore,
   kanbanStore: KanbanStore,
   workspacePolicy: WorkspacePolicy,
-  aiWorkbench: AiWorkbenchService
+  commandPolicy: CommandPolicy,
+  aiWorkbench: AiWorkbenchService,
+  git: GitRepository
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -379,6 +405,57 @@ const handleRequest = async (
     }
 
     await handleProviderSettingsUpdate(req, res, projectStore, providerStore);
+    return;
+  }
+
+  if (path === RoutePath.GitStatus) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitStatusRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitDiff) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitDiffRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitCommit) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitCommitRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
     return;
   }
 
@@ -2992,6 +3069,115 @@ const parseKanbanTaskDeleteRequest = (
     projectId: projectId.value,
     boardId: boardId.value,
     taskId: taskId.value
+  });
+};
+
+const handleGitStatusRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitStatus(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    repository: result.value
+  });
+};
+
+const handleGitDiffRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitDiffRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitDiff(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    diff: result.value.diff,
+    staged: result.value.staged
+  });
+};
+
+const handleGitCommitRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitCommitRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitCommit(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    commit: result.value
   });
 };
 

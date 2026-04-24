@@ -856,3 +856,27 @@
   - Ninguno nuevo; `apps/web-ui/screenshots/` quedó otra vez con 3 capturas tras terminar con la variante normal
 - Next:
   - Si se quiere seguir reduciendo duplicación documental, centralizar otros comandos operativos repetidos de `README.md` en `docs/RUNNING.md`
+
+### 2026-04-24 10:56 (Europe/Madrid) — Git Adapter and Server Endpoints
+
+- Summary: Implementado un adapter Git nativo por `spawn` en `packages/adapters` y expuestos endpoints server-first para `status`, `diff` y `commit` en `apps/server-api`, con validación tipada, enforcement de Conventional Commits y sandbox/policy checks sobre workspace y comando.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer`, además de trabajar en modo tests-first sobre el adapter y la capa API aunque el cambio no toque dominio puro
+  - Mantener `COMMAND_ALLOWLIST` como default-deny existente: los endpoints Git sólo ejecutan `git` si el `CommandPolicy` lo permite explícitamente
+  - Resolver la API Git en un módulo dedicado `apps/server-api/src/git.ts` para no seguir engordando la lógica de validación dentro de `server.ts` y para facilitar tests aislados del server layer
+- Changes:
+  - **Added packages/adapters/src/git/git-adapter.ts** y **git-adapter.test.ts**: adapter nativo para `git status`, `git diff` y `git commit`, parser de porcelain status y tests reales contra repos temporales
+  - **Updated packages/adapters/src/index.ts**: export del nuevo adapter Git
+  - **Added apps/server-api/src/git.ts** y **git.test.ts**: validación tipada, enforcement de Conventional Commits, mapping de errores y tests de API layer
+  - **Updated apps/server-api/src/constants.ts** y **server.ts**: nuevas rutas `/git/status`, `/git/diff`, `/git/commit` y cableado server-first con `WorkspacePolicy` + `CommandPolicy`
+  - **Updated PLAN.md**: hitos de adapter Git y endpoints Git marcados como completados
+- Commands:
+  - `pnpm vitest run packages/adapters/src/git/git-adapter.test.ts apps/server-api/src/git.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Los endpoints Git quedan bloqueados si `COMMAND_ALLOWLIST` no incluye `git`, lo cual es consistente con el modelo safe-by-default actual pero requerirá configuración explícita en entornos reales
+- Next:
+  - Implementar la ejecución de quality gates desde `apps/server-api` y exponer los resultados para completar el siguiente bloque del Milestone 6
