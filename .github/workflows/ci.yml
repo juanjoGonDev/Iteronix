@@ -29,10 +29,11 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:source-linking
+      - run: pnpm -C apps/web-ui validate:quality-gates
       - run: pnpm eval:min
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: web-ui-source-linking-screenshots
+          name: web-ui-browser-validation-screenshots
           path: apps/web-ui/screenshots/
           if-no-files-found: ignore

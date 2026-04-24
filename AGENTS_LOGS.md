@@ -961,3 +961,28 @@
   - El stub de quality gates sólo cubre el vertical slice del screen `Projects`; no valida el backend real, por diseño, para mantener la prueba browser determinista y sin dependencias externas
 - Next:
   - Si se quiere elevar cobertura CI del flujo `Projects`, integrar `validate:quality-gates` en `.github/workflows/ci.yml` con artefactos de screenshot en fallo
+
+### 2026-04-25 01:30 (Europe/Madrid) — CI Quality Gates Browser Validation
+
+- Summary: Integrada la validación browser `validate:quality-gates` en `.github/workflows/ci.yml`, reutilizando el mismo prerrequisito de Chrome/Puppeteer del flujo `source-linking` y manteniendo la subida de screenshots sólo en fallo.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `repo-invariants-guardian`, `ci-parity-finalizer`, `minimal-diff-mode` y `quality-gates-enforcer`
+  - Mantener el paso único `pnpm -C apps/web-ui exec puppeteer browsers install chrome --install-deps`, porque cubre ambas validaciones browser
+  - Ejecutar `validate:quality-gates` inmediatamente después de `validate:source-linking` para preservar el orden actual del pipeline browser y no mezclar este cambio con otros pasos de CI
+  - Renombrar el artefacto de screenshots a un nombre genérico de browser validation, manteniendo `if: failure()` y el mismo directorio `apps/web-ui/screenshots/`
+- Changes:
+  - **Updated .github/workflows/ci.yml**: nuevo paso `pnpm -C apps/web-ui validate:quality-gates` tras `pnpm build` y `validate:source-linking`
+  - **Updated .github/workflows/ci.yml**: artefacto de fallo renombrado a `web-ui-browser-validation-screenshots`
+  - **Updated PLAN.md**: checkbox de integración CI del flujo browser `Projects` marcado como completado
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm eval:min`
+- Issues/Risks:
+  - Ninguno nuevo; el workflow sigue subiendo el mismo directorio de screenshots sólo en fallo, ahora compartido por ambos validadores browser
+- Next:
+  - Si se quiere elevar la paridad local con CI documentalmente, añadir `validate:quality-gates` a `docs/RUNNING.md` como comando browser soportado por el pipeline
