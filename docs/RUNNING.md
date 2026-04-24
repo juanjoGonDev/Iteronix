@@ -27,6 +27,11 @@ Notes:
 
 - `pnpm eval:min` - run the minimal AI evaluation suite backed by `packages/eval/fixtures/minimal-suite.jsonl`
 
+## Browser validation
+
+- `pnpm -C apps/web-ui validate:source-linking` - run the deterministic browser validation for collapsed-citation source linking and evidence filter clearing, removing older `apps/web-ui/screenshots/*.png` files before capturing the latest run
+- `pnpm -C apps/web-ui validate:source-linking:preserve` - run the same browser validation while keeping existing screenshots so the new captures can be compared with prior runs during manual debugging
+
 ## Cleanup
 
 - `pnpm clean` - remove build artifacts

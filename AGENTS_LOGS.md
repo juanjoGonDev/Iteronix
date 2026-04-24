@@ -788,3 +788,25 @@
   - El último comando ejecutado fue el modo preserve, así que el directorio local `apps/web-ui/screenshots/` conserva capturas adicionales para depuración manual hasta que se vuelva a ejecutar el modo normal
 - Next:
   - Si se quiere reducir dudas operativas, añadir una referencia cruzada desde `docs/RUNNING.md` hacia esta sección de validación browser
+
+### 2026-04-24 10:31 (Europe/Madrid) — Running Guide Browser Validation Docs
+
+- Summary: Añadida la referencia operativa de validación browser a `docs/RUNNING.md` para que el manual de ejecución quede alineado con `README.md` y `docs/AI_WORKBENCH.md`, incluyendo cuándo usar el modo normal y cuándo usar el modo preserve.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer` para mantener el cambio limitado a documentación y trazabilidad
+  - No tocar CI ni código de producto; sólo ampliar `docs/RUNNING.md` con los dos comandos y su comportamiento de screenshots
+  - Ejecutar `validate:source-linking:preserve` y terminar con `validate:source-linking` para verificar ambos flujos y dejar el directorio local `apps/web-ui/screenshots/` limpio con el último run
+- Changes:
+  - **Updated docs/RUNNING.md**: sección de validación browser con comandos normal/preserve y limpieza vs conservación de PNGs
+  - **Updated PLAN.md**: checkbox de alineación del command reference operativo
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - Ninguno nuevo; el último run fue el modo normal y el directorio `apps/web-ui/screenshots/` quedó de nuevo con las 3 capturas del run más reciente
+- Next:
+  - Si se quiere centralizar aún más la operación diaria, añadir una tabla corta en `README.md` que apunte a `docs/RUNNING.md` para comandos de validación y depuración
