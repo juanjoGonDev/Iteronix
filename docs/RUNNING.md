@@ -29,8 +29,10 @@ Notes:
 
 ## Browser validation
 
-- `pnpm -C apps/web-ui validate:source-linking` - run the deterministic browser validation for collapsed-citation source linking and evidence filter clearing, removing older `apps/web-ui/screenshots/*.png` files before capturing the latest run
-- `pnpm -C apps/web-ui validate:source-linking:preserve` - run the same browser validation while keeping existing screenshots so the new captures can be compared with prior runs during manual debugging
+| Command | Use case | Screenshot behavior |
+| --- | --- | --- |
+| `pnpm -C apps/web-ui validate:source-linking` | Deterministic browser validation for normal verification | Deletes older `apps/web-ui/screenshots/*.png` files before capturing the latest run |
+| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs | Keeps existing screenshots and appends the new captures from the latest run |
 
 ## Cleanup
 

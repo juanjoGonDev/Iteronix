@@ -833,3 +833,26 @@
   - Ninguno nuevo; el directorio `apps/web-ui/screenshots/` quedó otra vez con 3 capturas tras cerrar la verificación con el modo normal
 - Next:
   - Si se quiere reducir mantenimiento documental futuro, mover la lista de comandos de QA browser a una tabla compartida o plantilla de docs
+
+### 2026-04-24 10:39 (Europe/Madrid) — Browser Validation Reference Tables
+
+- Summary: Añadidas tablas cortas de referencia para validación browser en `README.md` y `docs/RUNNING.md`, manteniendo este último como fuente operativa canónica y evitando reintroducir prosa larga duplicada en `docs/AI_WORKBENCH.md`.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer` para resolver la petición con un diff documental mínimo y verificable
+  - Dejar la tabla completa en `docs/RUNNING.md` y una versión resumida en `README.md` enlazando al detalle canónico
+  - No tocar `docs/AI_WORKBENCH.md`, CI ni código de producto; cerrar la verificación con `validate:source-linking` para dejar `apps/web-ui/screenshots/` en estado limpio
+- Changes:
+  - **Updated README.md**: tabla corta de comandos browser y casos de uso
+  - **Updated docs/RUNNING.md**: tabla canónica con comando, caso de uso y comportamiento de screenshots
+  - **Updated PLAN.md**: checkbox de tablas compactas de referencia browser
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+  - `pnpm -C apps/web-ui validate:source-linking`
+- Issues/Risks:
+  - Ninguno nuevo; `apps/web-ui/screenshots/` quedó otra vez con 3 capturas tras terminar con la variante normal
+- Next:
+  - Si se quiere seguir reduciendo duplicación documental, centralizar otros comandos operativos repetidos de `README.md` en `docs/RUNNING.md`

@@ -64,7 +64,12 @@ pnpm eval:min
 
 ### Browser validation for source linking
 
-Use `pnpm -C apps/web-ui validate:source-linking` for the default clean run and `pnpm -C apps/web-ui validate:source-linking:preserve` when you need to keep older screenshots for manual comparison. The operational command reference and screenshot-retention details live in [`docs/RUNNING.md`](docs/RUNNING.md#browser-validation).
+| Command | Use case |
+| --- | --- |
+| `pnpm -C apps/web-ui validate:source-linking` | Normal clean run with only the latest screenshots kept |
+| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging when older screenshots must remain available for comparison |
+
+The canonical operational reference, including screenshot-retention behavior, lives in [`docs/RUNNING.md`](docs/RUNNING.md#browser-validation).
 
 ### Run the AI evaluation slice
 
