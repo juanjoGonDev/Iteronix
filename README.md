@@ -62,6 +62,22 @@ pnpm build
 pnpm eval:min
 ```
 
+### Browser validation for source linking
+
+Use the default validation when you want a clean screenshot set for the latest run only:
+
+```bash
+pnpm -C apps/web-ui validate:source-linking
+```
+
+Use the preserve variant when you are debugging a browser regression and want to keep older screenshots alongside the new run:
+
+```bash
+pnpm -C apps/web-ui validate:source-linking:preserve
+```
+
+Both commands write screenshots to `apps/web-ui/screenshots/`. The default command removes older `*.png` artifacts before capturing the new run, while the preserve command keeps existing screenshots for manual comparison. CI continues to use the default cleanup command after `pnpm build` and uploads screenshots only when the workflow fails.
+
 ### Run the AI evaluation slice
 
 ```bash

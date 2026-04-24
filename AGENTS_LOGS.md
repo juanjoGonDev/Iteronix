@@ -765,3 +765,26 @@
   - Ninguno nuevo; el flujo preserve sigue generando capturas adicionales hasta que se ejecute de nuevo el script por defecto o se limpien manualmente
 - Next:
   - Si se quiere hacer el comportamiento aún más visible, documentar ambos scripts de validación browser en `README.md` o `docs/AI_WORKBENCH.md`
+
+### 2026-04-24 10:28 (Europe/Madrid) — Browser Validation Docs
+
+- Summary: Documentados los flujos de validación browser del workbench en la guía general y en la documentación específica del AI Workbench, aclarando cuándo usar el modo normal frente al modo preserve y cómo se comporta la retención de screenshots.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer` para resolver la petición con cambios acotados y verificables
+  - Añadir la explicación breve en `README.md` y el detalle operativo en `docs/AI_WORKBENCH.md`, sin tocar el workflow de CI existente
+  - Mantener la documentación alineada con el comportamiento real: el script normal limpia PNGs previos, el modo preserve conserva artefactos, y CI sigue usando la variante normal tras `pnpm build`
+- Changes:
+  - **Updated README.md**: sección de validación browser con ambos comandos y política de screenshots
+  - **Updated docs/AI_WORKBENCH.md**: sección operativa para `validate:source-linking` y `validate:source-linking:preserve`
+  - **Updated PLAN.md**: checkbox de documentación de los flujos browser
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:source-linking:preserve`
+- Issues/Risks:
+  - El último comando ejecutado fue el modo preserve, así que el directorio local `apps/web-ui/screenshots/` conserva capturas adicionales para depuración manual hasta que se vuelva a ejecutar el modo normal
+- Next:
+  - Si se quiere reducir dudas operativas, añadir una referencia cruzada desde `docs/RUNNING.md` hacia esta sección de validación browser
