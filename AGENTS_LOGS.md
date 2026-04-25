@@ -1083,3 +1083,29 @@
   - El nuevo validador browser queda local por ahora; aún no está integrado en CI
 - Next:
   - El siguiente paso con más valor es completar el flujo Git server-first con stage/unstage/discard controlados y luego exponerlo en la misma pantalla `Projects`
+### 2026-04-25 22:35 (Europe/Madrid) — Git Staging Controls End-to-End
+
+- Summary: Cerrado el flujo server-first de stage/unstage/revert para Git entre `packages/adapters`, `apps/server-api` y `apps/web-ui`, reutilizando el screen `Projects` y extendiendo el validador browser existente en lugar de abrir otra pantalla o introducir scripts paralelos.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `minimal-diff-mode`, `quality-gates-enforcer` y `uncodixfy`
+  - Mantener el contrato HTTP minimalista con `paths[]` tipado para `/git/stage`, `/git/unstage` y `/git/revert`, y refrescar el estado Git desde la UI tras cada mutación en vez de duplicar lógica local
+  - Usar confirmación sólo para `revert`, por ser la operación destructiva, y dejar `stage`/`unstage` como acciones directas por fichero con estados deshabilitados mientras hay otra operación Git en curso
+  - Extender `validate-projects-git-workspace.ts` con un stub stateful para cubrir stage, unstage, revert y commit en el mismo flujo browser determinista
+- Changes:
+  - **Updated packages/adapters/src/git/git-adapter.ts** y **git-adapter.test.ts**: nuevas operaciones `stagePaths`, `unstagePaths`, `revertPaths` con tests rojos/verdes
+  - **Updated apps/server-api/src/constants.ts**, **git.ts**, **git.test.ts** y **server.ts**: endpoints `/git/stage`, `/git/unstage`, `/git/revert`, parser tipado de `paths[]` y ejecución sandboxed sobre proyectos abiertos
+  - **Updated apps/web-ui/src/shared/workbench-types.ts**, **git-client.ts**, **git-client.test.ts**, **projects-state.ts** y **projects-state.test.ts**: contrato cliente para mutaciones Git y helpers puros de acciones por sección
+  - **Updated apps/web-ui/src/screens/Projects.ts**: botones por fichero para stage/unstage/revert, confirmación de revert y refresco del workspace/diff sin romper el layout existente
+  - **Updated apps/web-ui/scripts/validate-projects-git-workspace.ts**: stub API stateful y validación browser de stage/unstage/revert/commit
+  - **Updated PLAN.md**: hito Git server-first ampliado con staging controls backend/UI
+- Commands:
+  - `pnpm vitest run packages/adapters/src/git/git-adapter.test.ts apps/server-api/src/git.test.ts`
+  - `pnpm vitest run apps/web-ui/src/shared/git-client.test.ts apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - El validador adapter en Windows necesitó tolerar CRLF al comprobar `git restore`; la cobertura relevante quedó en restauración de contenido y flujo API/UI, no en los metadatos de line endings del working tree local
+- Next:
+  - El siguiente paso con más valor ya no es documental: exponer staging/unstaging masivo por selección y diff file-switching fino desde `Projects` para repositorios con muchos cambios

@@ -21,6 +21,24 @@ export type GateExecutionState =
   | "failed"
   | "canceled";
 
+export const GitStatusSection = {
+  Staged: "staged",
+  Unstaged: "unstaged",
+  Untracked: "untracked"
+} as const;
+
+export type GitStatusSection =
+  typeof GitStatusSection[keyof typeof GitStatusSection];
+
+export const GitWorkspaceAction = {
+  Stage: "stage",
+  Unstage: "unstage",
+  Revert: "revert"
+} as const;
+
+export type GitWorkspaceAction =
+  typeof GitWorkspaceAction[keyof typeof GitWorkspaceAction];
+
 export const resolveSelectedRunId = (
   selectedRunId: string | null,
   runs: ReadonlyArray<QualityGateRunRecord>
@@ -110,6 +128,20 @@ export const groupGitStatusEntries = (
   unstaged: repository.entries.filter((entry) => entry.unstaged),
   untracked: repository.entries.filter((entry) => entry.untracked)
 });
+
+export const readGitSectionActions = (
+  section: GitStatusSection
+): ReadonlyArray<GitWorkspaceAction> => {
+  if (section === GitStatusSection.Staged) {
+    return [GitWorkspaceAction.Unstage];
+  }
+
+  if (section === GitStatusSection.Unstaged) {
+    return [GitWorkspaceAction.Stage, GitWorkspaceAction.Revert];
+  }
+
+  return [GitWorkspaceAction.Stage];
+};
 
 export const resolveGitDiffScope = (
   repository: GitRepositoryRecord | null,

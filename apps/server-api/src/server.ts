@@ -34,9 +34,12 @@ import {
   writeFileContent
 } from "./files";
 import {
+  GitPathOperationKind,
+  executeGitPathOperation,
   executeGitCommit,
   executeGitDiff,
   executeGitStatus,
+  parseGitPathRequest,
   parseGitCommitRequest,
   parseGitDiffRequest,
   parseGitStatusRequest
@@ -465,6 +468,60 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitStage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Stage
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitUnstage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Unstage
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitRevert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Revert
     );
     return;
   }
@@ -3255,6 +3312,43 @@ const handleGitCommitRequest = async (
 
   respondJson(res, HttpStatus.Created, {
     commit: result.value
+  });
+};
+
+const handleGitPathOperationRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: GitPathOperationKind
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitPathRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitPathOperation(parsed.value, operation, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    paths: result.value.paths
   });
 };
 

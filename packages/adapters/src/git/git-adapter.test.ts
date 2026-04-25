@@ -119,6 +119,89 @@ describe("git cli adapter", () => {
       expect(result.error.command).toBe(GitCommandName);
     }
   });
+
+  it("stages and unstages selected paths", async () => {
+    const repo = await createTempGitRepository();
+    const adapter = createGitCliAdapter();
+
+    await writeFile(join(repo.path, "tracked.txt"), "updated tracked\n", "utf8");
+    await writeFile(join(repo.path, "new-file.txt"), "new file\n", "utf8");
+
+    const staged = await adapter.stagePaths({
+      rootPath: repo.path,
+      paths: ["tracked.txt", "new-file.txt"]
+    });
+
+    expect(staged.type).toBe(ResultType.Ok);
+    if (staged.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(staged.value.paths).toEqual(["tracked.txt", "new-file.txt"]);
+
+    const stagedStatus = await adapter.getStatus({
+      rootPath: repo.path
+    });
+
+    expect(stagedStatus.type).toBe(ResultType.Ok);
+    if (stagedStatus.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(stagedStatus.value.stagedCount).toBe(2);
+    expect(stagedStatus.value.entries.every((entry) => entry.staged)).toBe(true);
+
+    const unstaged = await adapter.unstagePaths({
+      rootPath: repo.path,
+      paths: ["tracked.txt"]
+    });
+
+    expect(unstaged.type).toBe(ResultType.Ok);
+    if (unstaged.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(unstaged.value.paths).toEqual(["tracked.txt"]);
+
+    const unstagedStatus = await adapter.getStatus({
+      rootPath: repo.path
+    });
+
+    expect(unstagedStatus.type).toBe(ResultType.Ok);
+    if (unstagedStatus.type !== ResultType.Ok) {
+      return;
+    }
+
+    const trackedEntry = unstagedStatus.value.entries.find((entry) => entry.path === "tracked.txt");
+    const newEntry = unstagedStatus.value.entries.find((entry) => entry.path === "new-file.txt");
+
+    expect(trackedEntry?.staged).toBe(false);
+    expect(trackedEntry?.unstaged).toBe(true);
+    expect(newEntry?.staged).toBe(true);
+  });
+
+  it("reverts unstaged tracked changes for selected paths", async () => {
+    const repo = await createTempGitRepository();
+    const adapter = createGitCliAdapter();
+
+    await writeFile(join(repo.path, "tracked.txt"), "updated tracked\n", "utf8");
+
+    const reverted = await adapter.revertPaths({
+      rootPath: repo.path,
+      paths: ["tracked.txt"]
+    });
+
+    expect(reverted.type).toBe(ResultType.Ok);
+    if (reverted.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(reverted.value.paths).toEqual(["tracked.txt"]);
+
+    const content = await readFile(join(repo.path, "tracked.txt"), "utf8");
+
+    expect(normalizeLineEndings(content)).toBe("initial\n");
+  });
 });
 
 const createTempGitRepository = async (): Promise<{ path: string }> => {
@@ -147,3 +230,6 @@ const runGit = (cwd: string, args: ReadonlyArray<string>): string =>
     cwd,
     encoding: "utf8"
   });
+
+const normalizeLineEndings = (value: string): string =>
+  value.replace(/\r\n/gu, "\n");

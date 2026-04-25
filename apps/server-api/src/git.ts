@@ -2,6 +2,7 @@ import type {
   GitAdapterError,
   GitCommitResult,
   GitDiffResult,
+  GitPathOperationResult,
   GitRepository,
   GitStatusResult
 } from "../../../packages/adapters/src/git/git-adapter";
@@ -23,6 +24,15 @@ export type GitApiDependencies = {
   commandPolicy: CommandPolicy;
   git: GitRepository;
 };
+
+export const GitPathOperationKind = {
+  Stage: "stage",
+  Unstage: "unstage",
+  Revert: "revert"
+} as const;
+
+export type GitPathOperationKind =
+  typeof GitPathOperationKind[keyof typeof GitPathOperationKind];
 
 export const parseGitStatusRequest = (
   value: unknown
@@ -69,6 +79,37 @@ export const parseGitDiffRequest = (
   return ok({
     projectId: projectId.value,
     staged: staged.value ?? false
+  });
+};
+
+export const parseGitPathRequest = (
+  value: unknown
+): Result<{ projectId: string; paths: ReadonlyArray<string> }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(
+    value,
+    GitField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const paths = readRequiredStringArray(
+    value,
+    GitField.Paths,
+    ErrorMessage.MissingPaths
+  );
+  if (paths.type === ResultType.Err) {
+    return paths;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    paths: paths.value
   });
 };
 
@@ -138,6 +179,24 @@ export const executeGitDiff = async (
   const result = await dependencies.git.getDiff({
     rootPath: root.value,
     staged: input.staged
+  });
+
+  return mapGitResult(result);
+};
+
+export const executeGitPathOperation = async (
+  input: { projectId: string; paths: ReadonlyArray<string> },
+  operation: GitPathOperationKind,
+  dependencies: GitApiDependencies
+): Promise<Result<GitPathOperationResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await readGitPathOperation(operation, dependencies.git)({
+    rootPath: root.value,
+    paths: input.paths
   });
 
   return mapGitResult(result);
@@ -279,4 +338,52 @@ const readOptionalBoolean = (
   }
 
   return ok(value);
+};
+
+const readRequiredStringArray = (
+  record: Record<string, unknown>,
+  key: string,
+  message: string
+): Result<ReadonlyArray<string>, ApiError> => {
+  const value = record[key];
+  if (!Array.isArray(value) || value.length === 0) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message
+    });
+  }
+
+  const paths: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return invalidBody();
+    }
+
+    const trimmed = item.trim();
+    if (trimmed.length === 0) {
+      return err({
+        status: HttpStatus.BadRequest,
+        message
+      });
+    }
+
+    paths.push(trimmed);
+  }
+
+  return ok(paths);
+};
+
+const readGitPathOperation = (
+  operation: GitPathOperationKind,
+  git: GitRepository
+): GitRepository["stagePaths"] => {
+  if (operation === GitPathOperationKind.Stage) {
+    return git.stagePaths;
+  }
+
+  if (operation === GitPathOperationKind.Unstage) {
+    return git.unstagePaths;
+  }
+
+  return git.revertPaths;
 };

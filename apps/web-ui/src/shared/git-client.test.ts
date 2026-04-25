@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseGitCommitResponse,
   parseGitDiffResponse,
+  parseGitPathOperationResponse,
   parseGitStatusResponse
 } from "./git-client.js";
 
@@ -49,6 +50,12 @@ describe("git client codecs", () => {
       staged: true,
       diff: "diff --git a/file.ts b/file.ts"
     });
+    const pathOperation = parseGitPathOperationResponse({
+      paths: [
+        "apps/web-ui/src/shared/git-client.ts",
+        "apps/web-ui/src/screens/Projects.ts"
+      ]
+    });
     const commit = parseGitCommitResponse({
       commit: {
         hash: "9f3c2ad1",
@@ -61,6 +68,10 @@ describe("git client codecs", () => {
     expect(repository.entries[2]?.untracked).toBe(true);
     expect(stagedDiff.staged).toBe(true);
     expect(stagedDiff.diff).toContain("diff --git");
+    expect(pathOperation.paths).toEqual([
+      "apps/web-ui/src/shared/git-client.ts",
+      "apps/web-ui/src/screens/Projects.ts"
+    ]);
     expect(commit.hash).toBe("9f3c2ad1");
   });
 });

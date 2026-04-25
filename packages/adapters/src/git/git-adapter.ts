@@ -47,6 +47,10 @@ export type GitDiffResult = {
   diff: string;
 };
 
+export type GitPathOperationResult = {
+  paths: ReadonlyArray<string>;
+};
+
 export type GitCommitResult = {
   hash: string;
   message: string;
@@ -64,6 +68,24 @@ export type GitRepository = {
       staged: boolean;
     }
   ) => Promise<Result<GitDiffResult, GitAdapterError>>;
+  stagePaths: (
+    input: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ) => Promise<Result<GitPathOperationResult, GitAdapterError>>;
+  unstagePaths: (
+    input: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ) => Promise<Result<GitPathOperationResult, GitAdapterError>>;
+  revertPaths: (
+    input: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ) => Promise<Result<GitPathOperationResult, GitAdapterError>>;
   createCommit: (
     input: {
       rootPath: string;
@@ -126,6 +148,45 @@ export const createGitCliAdapter = (
     };
   };
 
+  const stagePaths = async (
+    stageInput: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ): Promise<Result<GitPathOperationResult, GitAdapterError>> =>
+    runGitPathOperation({
+      command,
+      rootPath: stageInput.rootPath,
+      paths: stageInput.paths,
+      args: ["add", "--"]
+    });
+
+  const unstagePaths = async (
+    unstageInput: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ): Promise<Result<GitPathOperationResult, GitAdapterError>> =>
+    runGitPathOperation({
+      command,
+      rootPath: unstageInput.rootPath,
+      paths: unstageInput.paths,
+      args: ["restore", "--staged", "--"]
+    });
+
+  const revertPaths = async (
+    revertInput: {
+      rootPath: string;
+      paths: ReadonlyArray<string>;
+    }
+  ): Promise<Result<GitPathOperationResult, GitAdapterError>> =>
+    runGitPathOperation({
+      command,
+      rootPath: revertInput.rootPath,
+      paths: revertInput.paths,
+      args: ["restore", "--worktree", "--source=HEAD", "--"]
+    });
+
   const createCommit = async (
     commitInput: {
       rootPath: string;
@@ -162,6 +223,9 @@ export const createGitCliAdapter = (
   return {
     getStatus,
     getDiff,
+    stagePaths,
+    unstagePaths,
+    revertPaths,
     createCommit
   };
 };
@@ -198,6 +262,31 @@ const runGitCommand = async (
     value: {
       stdout: execution.value.stdout,
       stderr: execution.value.stderr
+    }
+  };
+};
+
+const runGitPathOperation = async (
+  input: {
+    command: string;
+    rootPath: string;
+    paths: ReadonlyArray<string>;
+    args: ReadonlyArray<string>;
+  }
+): Promise<Result<GitPathOperationResult, GitAdapterError>> => {
+  const result = await runGitCommand({
+    command: input.command,
+    rootPath: input.rootPath,
+    args: [...input.args, ...input.paths]
+  });
+  if (result.type === ResultType.Err) {
+    return result;
+  }
+
+  return {
+    type: ResultType.Ok,
+    value: {
+      paths: [...input.paths]
     }
   };
 };

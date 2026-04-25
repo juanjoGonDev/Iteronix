@@ -2,12 +2,16 @@ import { requestJson } from "./server-api-client.js";
 import type {
   GitCommitRecord,
   GitDiffRecord,
+  GitPathOperationRecord,
   GitRepositoryRecord
 } from "./workbench-types.js";
 
 const EndpointPath = {
   GitStatus: "/git/status",
   GitDiff: "/git/diff",
+  GitStage: "/git/stage",
+  GitUnstage: "/git/unstage",
+  GitRevert: "/git/revert",
   GitCommit: "/git/commit"
 } as const;
 
@@ -19,6 +23,18 @@ export type GitClient = {
     projectId: string;
     staged: boolean;
   }) => Promise<GitDiffRecord>;
+  stagePaths: (input: {
+    projectId: string;
+    paths: ReadonlyArray<string>;
+  }) => Promise<GitPathOperationRecord>;
+  unstagePaths: (input: {
+    projectId: string;
+    paths: ReadonlyArray<string>;
+  }) => Promise<GitPathOperationRecord>;
+  revertPaths: (input: {
+    projectId: string;
+    paths: ReadonlyArray<string>;
+  }) => Promise<GitPathOperationRecord>;
   createCommit: (input: {
     projectId: string;
     message: string;
@@ -43,6 +59,33 @@ export const createGitClient = (): GitClient => ({
       },
       parse: parseGitDiffResponse
     }),
+  stagePaths: (input) =>
+    requestJson({
+      path: EndpointPath.GitStage,
+      body: {
+        projectId: input.projectId,
+        paths: [...input.paths]
+      },
+      parse: parseGitPathOperationResponse
+    }),
+  unstagePaths: (input) =>
+    requestJson({
+      path: EndpointPath.GitUnstage,
+      body: {
+        projectId: input.projectId,
+        paths: [...input.paths]
+      },
+      parse: parseGitPathOperationResponse
+    }),
+  revertPaths: (input) =>
+    requestJson({
+      path: EndpointPath.GitRevert,
+      body: {
+        projectId: input.projectId,
+        paths: [...input.paths]
+      },
+      parse: parseGitPathOperationResponse
+    }),
   createCommit: (input) =>
     requestJson({
       path: EndpointPath.GitCommit,
@@ -63,6 +106,18 @@ export const parseGitDiffResponse = (value: unknown): GitDiffRecord => {
   return {
     staged: readRequiredBoolean(record, "gitDiffResponse", "staged"),
     diff: readRequiredString(record, "gitDiffResponse", "diff")
+  };
+};
+
+export const parseGitPathOperationResponse = (
+  value: unknown
+): GitPathOperationRecord => {
+  const record = ensureRecord(value, "gitPathOperationResponse");
+
+  return {
+    paths: readRequiredArray(record, "gitPathOperationResponse", "paths").map((path) =>
+      readArrayString(path, "gitPathOperationResponse.paths")
+    )
   };
 };
 
@@ -171,6 +226,17 @@ const readRequiredBoolean = (
   }
 
   return nested;
+};
+
+const readArrayString = (
+  value: unknown,
+  label: string
+): string => {
+  if (typeof value !== "string") {
+    throw new Error(`Invalid ${label}`);
+  }
+
+  return value;
 };
 
 const readOptionalString = (

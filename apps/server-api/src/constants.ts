@@ -27,6 +27,9 @@ export const RoutePath = {
   ProvidersSettings: "/providers/settings",
   GitStatus: "/git/status",
   GitDiff: "/git/diff",
+  GitStage: "/git/stage",
+  GitUnstage: "/git/unstage",
+  GitRevert: "/git/revert",
   GitCommit: "/git/commit",
   QualityGatesRun: "/quality-gates/run",
   QualityGatesList: "/quality-gates/list",
@@ -122,6 +125,7 @@ export const ErrorMessage = {
   MissingQuestion: "Missing question",
   MissingDatasetPath: "Missing datasetPath",
   MissingCommitMessage: "Missing commit message",
+  MissingPaths: "Missing paths",
   InvalidCommitMessage: "Invalid Conventional Commit message"
 } as const;
 
@@ -219,6 +223,7 @@ export const AiField = {
 
 export const GitField = {
   ProjectId: "projectId",
+  Paths: "paths",
   Staged: "staged",
   Message: "message"
 } as const;

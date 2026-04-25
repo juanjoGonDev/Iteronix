@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  GitStatusSection,
+  GitWorkspaceAction,
   groupGitStatusEntries,
   isConventionalCommitMessage,
   mergeRunEvents,
+  readGitSectionActions,
   readGitCommitValidationMessage,
   resolveGitDiffScope,
   readGateExecutionState,
@@ -146,6 +149,19 @@ describe("projects state helpers", () => {
         GitDiffScope.Staged
       )
     ).toBe(GitDiffScope.Unstaged);
+  });
+
+  it("maps each git status section to the expected workspace actions", () => {
+    expect(readGitSectionActions(GitStatusSection.Staged)).toEqual([
+      GitWorkspaceAction.Unstage
+    ]);
+    expect(readGitSectionActions(GitStatusSection.Unstaged)).toEqual([
+      GitWorkspaceAction.Stage,
+      GitWorkspaceAction.Revert
+    ]);
+    expect(readGitSectionActions(GitStatusSection.Untracked)).toEqual([
+      GitWorkspaceAction.Stage
+    ]);
   });
 
   it("validates conventional commit messages for the git workspace form", () => {

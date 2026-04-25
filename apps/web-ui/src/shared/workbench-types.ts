@@ -69,6 +69,10 @@ export type GitCommitRecord = {
   message: string;
 };
 
+export type GitPathOperationRecord = {
+  paths: ReadonlyArray<string>;
+};
+
 export type QualityGateRunRecord = {
   id: string;
   projectId: string;

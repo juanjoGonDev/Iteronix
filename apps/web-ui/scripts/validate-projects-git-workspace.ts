@@ -35,6 +35,9 @@ const RequestPath = {
   QualityGatesEvents: "/quality-gates/events",
   GitStatus: "/git/status",
   GitDiff: "/git/diff",
+  GitStage: "/git/stage",
+  GitUnstage: "/git/unstage",
+  GitRevert: "/git/revert",
   GitCommit: "/git/commit"
 } as const;
 
@@ -48,11 +51,15 @@ const ResponseHeader = {
 const ValidationText = {
   ScreenTitle: "Projects",
   OpenProject: "Open project",
-  StagedDiffButton: "Staged diff (2)",
+  StagedDiffButton: "Staged diff (1)",
   CreateCommit: "Create commit",
   InvalidCommit: "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
+  GitDetailsStaged: "apps/web-ui/src/screens/GitDetails.ts staged.",
+  GitDetailsUnstaged: "apps/web-ui/src/screens/GitDetails.ts moved out of the index.",
+  QualityGatesReverted: "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
   CommitCreated: "Commit 9f3c2ad1 created.",
   StagedDiffZero: "Staged diff (0)",
+  UnstagedDiffZero: "Unstaged diff (0)",
   StagedDiffMarker: "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
   UnstagedDiffMarker: "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts"
 } as const;
@@ -70,82 +77,22 @@ const FixtureProject: ProjectRecord = {
   updatedAt: FixtureTimestamp.ProjectUpdatedAt
 };
 
-const FixtureRepositoryBeforeCommit = {
-  branch: "feature/git-ui",
-  upstream: "origin/feature/git-ui",
-  ahead: 2,
-  behind: 0,
-  clean: false,
-  stagedCount: 2,
-  unstagedCount: 1,
-  untrackedCount: 1,
-  entries: [
-    {
-      path: "apps/web-ui/src/screens/Projects.ts",
-      indexStatus: "M",
-      workingTreeStatus: " ",
-      staged: true,
-      unstaged: false,
-      untracked: false
-    },
-    {
-      path: "apps/web-ui/src/shared/git-client.ts",
-      indexStatus: "A",
-      workingTreeStatus: " ",
-      staged: true,
-      unstaged: false,
-      untracked: false
-    },
-    {
-      path: "apps/web-ui/src/shared/quality-gates-client.ts",
-      indexStatus: " ",
-      workingTreeStatus: "M",
-      staged: false,
-      unstaged: true,
-      untracked: false
-    },
-    {
-      path: "apps/web-ui/src/screens/GitDetails.ts",
-      indexStatus: "?",
-      workingTreeStatus: "?",
-      staged: false,
-      unstaged: false,
-      untracked: true
-    }
-  ]
+const FixtureFilePath = {
+  Projects: "apps/web-ui/src/screens/Projects.ts",
+  QualityGatesClient: "apps/web-ui/src/shared/quality-gates-client.ts",
+  GitDetails: "apps/web-ui/src/screens/GitDetails.ts"
 } as const;
 
-const FixtureRepositoryAfterCommit = {
-  branch: "feature/git-ui",
-  upstream: "origin/feature/git-ui",
-  ahead: 3,
-  behind: 0,
-  clean: false,
-  stagedCount: 0,
-  unstagedCount: 1,
-  untrackedCount: 1,
-  entries: [
-    {
-      path: "apps/web-ui/src/shared/quality-gates-client.ts",
-      indexStatus: " ",
-      workingTreeStatus: "M",
-      staged: false,
-      unstaged: true,
-      untracked: false
-    },
-    {
-      path: "apps/web-ui/src/screens/GitDetails.ts",
-      indexStatus: "?",
-      workingTreeStatus: "?",
-      staged: false,
-      unstaged: false,
-      untracked: true
-    }
-  ]
+const StubFileStatus = {
+  Staged: "staged",
+  Unstaged: "unstaged",
+  Untracked: "untracked"
 } as const;
+
+type StubFileStatus = typeof StubFileStatus[keyof typeof StubFileStatus];
 
 const FixtureDiff = {
-  Staged: [
+  ProjectsStaged: [
     "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
     "index 1a2b3c4..5d6e7f8 100644",
     "--- a/apps/web-ui/src/screens/Projects.ts",
@@ -153,7 +100,15 @@ const FixtureDiff = {
     "@@ -12,6 +12,9 @@",
     "+import { createGitClient } from \"../shared/git-client.js\";"
   ].join("\n"),
-  Unstaged: [
+  GitDetailsStaged: [
+    "diff --git a/apps/web-ui/src/screens/GitDetails.ts b/apps/web-ui/src/screens/GitDetails.ts",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/apps/web-ui/src/screens/GitDetails.ts",
+    "@@ -0,0 +1,5 @@",
+    "+export const GitDetails = \"ready\";"
+  ].join("\n"),
+  QualityGatesUnstaged: [
     "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts",
     "index 0f0f0f0..1a1a1a1 100644",
     "--- a/apps/web-ui/src/shared/quality-gates-client.ts",
@@ -169,7 +124,16 @@ const FixtureCommit = {
 } as const;
 
 type StubState = {
-  committed: boolean;
+  files: Record<string, StubFile>;
+  commitCount: number;
+};
+
+type StubFile = {
+  path: string;
+  tracked: boolean;
+  status: StubFileStatus;
+  stagedDiff?: string;
+  unstagedDiff?: string;
 };
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -227,13 +191,52 @@ async function validateProjectsGitWorkspace(): Promise<void> {
     await clickNamedButton(page, ValidationText.OpenProject);
     await waitForPageTexts(page, [
       FixtureProject.name,
-      FixtureRepositoryBeforeCommit.branch,
-      "apps/web-ui/src/screens/Projects.ts"
+      "feature/git-ui",
+      FixtureFilePath.Projects,
+      FixtureFilePath.QualityGatesClient,
+      FixtureFilePath.GitDetails
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-open",
+      artifactName: "projects-git-workspace"
+    });
+
+    await clickGitRowAction(page, FixtureFilePath.GitDetails, "Stage");
+    await waitForPageTexts(page, [
+      ValidationText.GitDetailsStaged,
+      "Staged changes",
+      FixtureFilePath.GitDetails
+    ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-stage",
+      artifactName: "projects-git-workspace"
+    });
+
+    await clickGitRowAction(page, FixtureFilePath.GitDetails, "Unstage");
+    await waitForPageTexts(page, [
+      ValidationText.GitDetailsUnstaged,
+      "Untracked files",
+      FixtureFilePath.GitDetails
+    ]);
+
+    const revertDialog = waitForNextDialog(
+      page,
+      readRevertDialogMessage(FixtureFilePath.QualityGatesClient)
+    );
+    await clickGitRowAction(page, FixtureFilePath.QualityGatesClient, "Revert");
+    await revertDialog;
+    await waitForPageTexts(page, [
+      ValidationText.QualityGatesReverted,
+      ValidationText.UnstagedDiffZero
+    ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-revert",
       artifactName: "projects-git-workspace"
     });
 
@@ -258,7 +261,8 @@ async function validateProjectsGitWorkspace(): Promise<void> {
     await waitForPageTexts(page, [
       ValidationText.CommitCreated,
       ValidationText.StagedDiffZero,
-      ValidationText.UnstagedDiffMarker
+      ValidationText.UnstagedDiffZero,
+      FixtureFilePath.GitDetails
     ]);
     await captureBrowserValidationScreenshot({
       page,
@@ -281,7 +285,8 @@ async function startGitWorkspaceStubServer(): Promise<{
   close: () => Promise<void>;
 }> {
   const state: StubState = {
-    committed: false
+    files: createInitialStubFiles(),
+    commitCount: 0
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -362,6 +367,21 @@ async function handleStubRequest(
     return;
   }
 
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitStage) {
+    await handleGitPathMutation(request, response, state, "stage");
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitUnstage) {
+    await handleGitPathMutation(request, response, state, "unstage");
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitRevert) {
+    await handleGitPathMutation(request, response, state, "revert");
+    return;
+  }
+
   if (request.method === "POST" && requestUrl.pathname === RequestPath.GitCommit) {
     await handleGitCommit(request, response, state);
     return;
@@ -407,7 +427,7 @@ async function handleGitStatus(
   }
 
   writeJson(response, 200, {
-    repository: state.committed ? FixtureRepositoryAfterCommit : FixtureRepositoryBeforeCommit
+    repository: createGitRepositoryResponse(state)
   });
 }
 
@@ -427,17 +447,61 @@ async function handleGitDiff(
     return;
   }
 
-  if (staged) {
-    writeJson(response, 200, {
-      staged: true,
-      diff: state.committed ? "" : FixtureDiff.Staged
+  writeJson(response, 200, {
+    staged,
+    diff: createGitDiffResponse(state, staged)
+  });
+}
+
+async function handleGitPathMutation(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: StubState,
+  operation: "stage" | "unstage" | "revert"
+): Promise<void> {
+  const body = await readJsonBody(request);
+  const projectId = readRequiredString(body, "projectId");
+  const paths = readRequiredStringArray(body, "paths");
+
+  if (projectId !== FixtureProject.id) {
+    writeJson(response, 400, {
+      message: "Unexpected project id"
+    });
+    return;
+  }
+
+  if (paths.length !== 1) {
+    writeJson(response, 400, {
+      message: "Expected a single path"
+    });
+    return;
+  }
+
+  const path = paths[0];
+  if (!path) {
+    writeJson(response, 400, {
+      message: "Expected a single path"
+    });
+    return;
+  }
+
+  try {
+    if (operation === "stage") {
+      applyGitStage(state, path);
+    } else if (operation === "unstage") {
+      applyGitUnstage(state, path);
+    } else {
+      applyGitRevert(state, path);
+    }
+  } catch (error) {
+    writeJson(response, 400, {
+      message: error instanceof Error ? error.message : "Invalid git mutation"
     });
     return;
   }
 
   writeJson(response, 200, {
-    staged: false,
-    diff: FixtureDiff.Unstaged
+    paths
   });
 }
 
@@ -464,11 +528,176 @@ async function handleGitCommit(
     return;
   }
 
-  state.committed = true;
+  applyGitCommit(state);
 
   writeJson(response, 201, {
     commit: FixtureCommit
   });
+}
+
+function createInitialStubFiles(): Record<string, StubFile> {
+  return {
+    [FixtureFilePath.Projects]: {
+      path: FixtureFilePath.Projects,
+      tracked: true,
+      status: StubFileStatus.Staged,
+      stagedDiff: FixtureDiff.ProjectsStaged
+    },
+    [FixtureFilePath.QualityGatesClient]: {
+      path: FixtureFilePath.QualityGatesClient,
+      tracked: true,
+      status: StubFileStatus.Unstaged,
+      unstagedDiff: FixtureDiff.QualityGatesUnstaged
+    },
+    [FixtureFilePath.GitDetails]: {
+      path: FixtureFilePath.GitDetails,
+      tracked: false,
+      status: StubFileStatus.Untracked,
+      stagedDiff: FixtureDiff.GitDetailsStaged
+    }
+  };
+}
+
+function createGitRepositoryResponse(state: StubState): {
+  branch: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+  clean: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  entries: ReadonlyArray<{
+    path: string;
+    indexStatus: string;
+    workingTreeStatus: string;
+    staged: boolean;
+    unstaged: boolean;
+    untracked: boolean;
+  }>;
+} {
+  const entries = Object.values(state.files)
+    .map(createGitStatusEntry)
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  const stagedCount = entries.filter((entry) => entry.staged).length;
+  const unstagedCount = entries.filter((entry) => entry.unstaged).length;
+  const untrackedCount = entries.filter((entry) => entry.untracked).length;
+
+  return {
+    branch: "feature/git-ui",
+    upstream: "origin/feature/git-ui",
+    ahead: 2 + state.commitCount,
+    behind: 0,
+    clean: entries.length === 0,
+    stagedCount,
+    unstagedCount,
+    untrackedCount,
+    entries
+  };
+}
+
+function createGitStatusEntry(file: StubFile): {
+  path: string;
+  indexStatus: string;
+  workingTreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+} | null {
+  if (file.status === StubFileStatus.Staged) {
+    return {
+      path: file.path,
+      indexStatus: file.tracked ? "M" : "A",
+      workingTreeStatus: " ",
+      staged: true,
+      unstaged: false,
+      untracked: false
+    };
+  }
+
+  if (file.status === StubFileStatus.Unstaged) {
+    return {
+      path: file.path,
+      indexStatus: " ",
+      workingTreeStatus: "M",
+      staged: false,
+      unstaged: true,
+      untracked: false
+    };
+  }
+
+  if (file.status === StubFileStatus.Untracked) {
+    return {
+      path: file.path,
+      indexStatus: "?",
+      workingTreeStatus: "?",
+      staged: false,
+      unstaged: false,
+      untracked: true
+    };
+  }
+
+  return null;
+}
+
+function createGitDiffResponse(
+  state: StubState,
+  staged: boolean
+): string {
+  const diffs = Object.values(state.files)
+    .filter((file) =>
+      staged
+        ? file.status === StubFileStatus.Staged && typeof file.stagedDiff === "string"
+        : file.status === StubFileStatus.Unstaged && typeof file.unstagedDiff === "string"
+    )
+    .map((file) => staged ? file.stagedDiff : file.unstagedDiff)
+    .filter((diff): diff is string => typeof diff === "string");
+
+  return diffs.join("\n\n");
+}
+
+function applyGitStage(state: StubState, path: string): void {
+  const file = readStubFile(state, path);
+  state.files[path] = {
+    ...file,
+    status: StubFileStatus.Staged
+  };
+}
+
+function applyGitUnstage(state: StubState, path: string): void {
+  const file = readStubFile(state, path);
+  state.files[path] = {
+    ...file,
+    status: file.tracked ? StubFileStatus.Unstaged : StubFileStatus.Untracked
+  };
+}
+
+function applyGitRevert(state: StubState, path: string): void {
+  const file = readStubFile(state, path);
+  if (!file.tracked || file.status !== StubFileStatus.Unstaged) {
+    throw new Error(`Cannot revert ${path}`);
+  }
+
+  delete state.files[path];
+}
+
+function applyGitCommit(state: StubState): void {
+  for (const [path, file] of Object.entries(state.files)) {
+    if (file.status === StubFileStatus.Staged) {
+      delete state.files[path];
+    }
+  }
+
+  state.commitCount += 1;
+}
+
+function readStubFile(state: StubState, path: string): StubFile {
+  const file = state.files[path];
+  if (!file) {
+    throw new Error(`Unexpected path ${path}`);
+  }
+
+  return file;
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
@@ -559,6 +788,74 @@ async function clickNamedButton(page: Page, label: string): Promise<void> {
   if (!clicked) {
     throw new Error(`Could not click "${label}"`);
   }
+}
+
+async function clickGitRowAction(
+  page: Page,
+  path: string,
+  label: string
+): Promise<void> {
+  const clicked = await page.evaluate(
+    (input: {
+      path: string;
+      label: string;
+    }) => {
+      const container = Array.from(document.querySelectorAll("div"))
+        .filter((element) => {
+          const text = element.textContent ?? "";
+          return (
+            text.includes(input.path) &&
+            Array.from(element.querySelectorAll("button")).some(
+              (button) => button.textContent?.trim() === input.label
+            )
+          );
+        })
+        .sort(
+          (left, right) =>
+            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+        )[0];
+      const button = container
+        ? Array.from(container.querySelectorAll("button")).find(
+            (element) => element.textContent?.trim() === input.label
+          )
+        : undefined;
+
+      if (!(button instanceof HTMLButtonElement)) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    },
+    {
+      path,
+      label
+    }
+  );
+
+  if (!clicked) {
+    throw new Error(`Could not click "${label}" for ${path}`);
+  }
+}
+
+function waitForNextDialog(page: Page, expectedMessage: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Expected dialog "${expectedMessage}"`));
+    }, ValidationConfig.UiPollingTimeoutMs);
+
+    page.once("dialog", async (dialog) => {
+      clearTimeout(timeout);
+
+      if (dialog.message() !== expectedMessage) {
+        reject(new Error(`Unexpected dialog message "${dialog.message()}"`));
+        return;
+      }
+
+      await dialog.accept();
+      resolve();
+    });
+  });
 }
 
 async function waitForPageText(page: Page, text: string): Promise<void> {
@@ -656,6 +953,29 @@ function readRequiredBoolean(value: unknown, key: string): boolean {
   }
 
   return nested;
+}
+
+function readRequiredStringArray(value: unknown, key: string): string[] {
+  if (!isRecord(value)) {
+    throw new Error(`Invalid ${key}`);
+  }
+
+  const nested = value[key];
+  if (!Array.isArray(nested) || nested.length === 0) {
+    throw new Error(`Invalid ${key}`);
+  }
+
+  return nested.map((item) => {
+    if (typeof item !== "string" || item.trim().length === 0) {
+      throw new Error(`Invalid ${key}`);
+    }
+
+    return item.trim();
+  });
+}
+
+function readRevertDialogMessage(path: string): string {
+  return `Revert unstaged changes for ${path}?`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

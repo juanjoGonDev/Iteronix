@@ -6,10 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitCliAdapter, GitCommandName } from "../../../packages/adapters/src/git/git-adapter";
 import { ErrorMessage, HttpStatus } from "./constants";
 import {
+  executeGitPathOperation,
   executeGitCommit,
   executeGitDiff,
   executeGitStatus,
-  parseGitCommitRequest
+  parseGitCommitRequest,
+  parseGitPathRequest
 } from "./git";
 import { createProjectStore } from "./projects";
 import { ResultType } from "./result";
@@ -136,6 +138,108 @@ describe("git api", () => {
     if (parsed.type === ResultType.Err) {
       expect(parsed.error.status).toBe(HttpStatus.BadRequest);
       expect(parsed.error.message).toBe(ErrorMessage.InvalidCommitMessage);
+    }
+  });
+
+  it("parses git path operation requests with one or more paths", () => {
+    const parsed = parseGitPathRequest({
+      projectId: "project-1",
+      paths: [" tracked.txt ", "src/index.ts"]
+    });
+
+    expect(parsed.type).toBe(ResultType.Ok);
+    if (parsed.type === ResultType.Ok) {
+      expect(parsed.value).toEqual({
+        projectId: "project-1",
+        paths: ["tracked.txt", "src/index.ts"]
+      });
+    }
+  });
+
+  it("stages, unstages and reverts paths through the api contract", async () => {
+    const repo = await createTempGitRepository();
+    const store = createProjectStore();
+    const opened = store.open({
+      rootPath: repo.path
+    });
+
+    if (opened.type !== ResultType.Ok) {
+      throw new Error("Expected opened project");
+    }
+
+    await writeFile(join(repo.path, "tracked.txt"), "changed\n", "utf8");
+    await writeFile(join(repo.path, "new-file.txt"), "new file\n", "utf8");
+
+    const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
+    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const adapter = createGitCliAdapter();
+    const dependencies = {
+      projectStore: store,
+      workspacePolicy,
+      commandPolicy,
+      git: adapter
+    };
+
+    const staged = await executeGitPathOperation(
+      {
+        projectId: opened.value.id,
+        paths: ["tracked.txt", "new-file.txt"]
+      },
+      "stage",
+      dependencies
+    );
+
+    expect(staged.type).toBe(ResultType.Ok);
+    if (staged.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(staged.value.paths).toEqual(["tracked.txt", "new-file.txt"]);
+
+    const unstaged = await executeGitPathOperation(
+      {
+        projectId: opened.value.id,
+        paths: ["tracked.txt"]
+      },
+      "unstage",
+      dependencies
+    );
+
+    expect(unstaged.type).toBe(ResultType.Ok);
+    if (unstaged.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(unstaged.value.paths).toEqual(["tracked.txt"]);
+
+    const reverted = await executeGitPathOperation(
+      {
+        projectId: opened.value.id,
+        paths: ["tracked.txt"]
+      },
+      "revert",
+      dependencies
+    );
+
+    expect(reverted.type).toBe(ResultType.Ok);
+    if (reverted.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(reverted.value.paths).toEqual(["tracked.txt"]);
+
+    const status = await executeGitStatus(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(status.type).toBe(ResultType.Ok);
+    if (status.type === ResultType.Ok) {
+      expect(status.value.stagedCount).toBe(1);
+      expect(status.value.unstagedCount).toBe(0);
+      expect(status.value.entries.some((entry) => entry.path === "new-file.txt" && entry.staged)).toBe(true);
     }
   });
 

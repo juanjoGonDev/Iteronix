@@ -16,10 +16,13 @@ import { createQualityGatesClient } from "../shared/quality-gates-client.js";
 import { readServerConnection } from "../shared/server-config.js";
 import {
   DefaultSelectedGates,
+  GitStatusSection,
+  GitWorkspaceAction,
   groupGitStatusEntries,
   mergeRunEvents,
   readGateExecutionState,
   readGitCommitValidationMessage,
+  readGitSectionActions,
   readSelectedRun,
   readStreamingRunId,
   resolveGitDiffScope,
@@ -63,18 +66,13 @@ type StreamState = typeof StreamState[keyof typeof StreamState];
 const GitPendingAction = {
   Refresh: "refresh",
   Diff: "diff",
-  Commit: "commit"
+  Commit: "commit",
+  Stage: GitWorkspaceAction.Stage,
+  Unstage: GitWorkspaceAction.Unstage,
+  Revert: GitWorkspaceAction.Revert
 } as const;
 
 type GitPendingAction = typeof GitPendingAction[keyof typeof GitPendingAction];
-
-const GitStatusSection = {
-  Staged: "staged",
-  Unstaged: "unstaged",
-  Untracked: "untracked"
-} as const;
-
-type GitStatusSection = typeof GitStatusSection[keyof typeof GitStatusSection];
 
 interface GitDiffState {
   staged: GitDiffRecord | null;
@@ -97,6 +95,7 @@ interface ProjectsScreenState {
   selectedGitDiffScope: GitDiffScopeValue;
   gitCommitMessage: string;
   gitPendingAction: GitPendingAction | null;
+  gitPendingPath: string | null;
   lastGitCommit: GitCommitRecord | null;
   errorMessage: string | null;
   noticeMessage: string | null;
@@ -132,6 +131,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       selectedGitDiffScope: GitDiffScope.Staged,
       gitCommitMessage: "",
       gitPendingAction: null,
+      gitPendingPath: null,
       lastGitCommit: null,
       errorMessage: null,
       noticeMessage: null
@@ -317,7 +317,14 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
           ? createElement("div", { className: "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary" }, [
               "Git status will load as soon as the project is opened."
             ])
-          : renderGitWorkspaceContent(repository)
+          : renderGitWorkspaceContent({
+              repository,
+              pendingAction: this.state.gitPendingAction,
+              pendingPath: this.state.gitPendingPath,
+              onAction: (action, path) => {
+                void this.handleGitWorkspaceAction(action, path);
+              }
+            })
     });
   }
 
@@ -692,6 +699,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         selectedGitDiffScope: GitDiffScope.Staged,
         gitCommitMessage: "",
         gitPendingAction: null,
+        gitPendingPath: null,
         lastGitCommit: null,
         errorMessage: null,
         ...(silent ? {} : { noticeMessage: `Project ${project.name} opened.` })
@@ -720,6 +728,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         selectedGitDiffScope: GitDiffScope.Staged,
         gitCommitMessage: "",
         gitPendingAction: null,
+        gitPendingPath: null,
         lastGitCommit: null,
         errorMessage: error instanceof Error ? error.message : "Could not open the project.",
         ...(silent ? {} : { noticeMessage: null })
@@ -750,6 +759,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       selectedGitDiffScope: GitDiffScope.Staged,
       gitCommitMessage: "",
       gitPendingAction: null,
+      gitPendingPath: null,
       lastGitCommit: null,
       errorMessage: null,
       noticeMessage: "Project selection cleared."
@@ -878,6 +888,65 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     }
   }
 
+  private async handleGitWorkspaceAction(
+    action: GitWorkspaceAction,
+    path: string
+  ): Promise<void> {
+    const currentProject = this.state.currentProject;
+    if (!currentProject || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    if (
+      action === GitWorkspaceAction.Revert &&
+      !window.confirm(readGitActionConfirmMessage(path))
+    ) {
+      return;
+    }
+
+    this.setState({
+      gitPendingAction: action,
+      gitPendingPath: path,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      if (action === GitWorkspaceAction.Stage) {
+        await this.gitClient.stagePaths({
+          projectId: currentProject.id,
+          paths: [path]
+        });
+      } else if (action === GitWorkspaceAction.Unstage) {
+        await this.gitClient.unstagePaths({
+          projectId: currentProject.id,
+          paths: [path]
+        });
+      } else {
+        await this.gitClient.revertPaths({
+          projectId: currentProject.id,
+          paths: [path]
+        });
+      }
+
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: readGitActionSuccessMessage(action, path),
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not update the Git workspace.",
+        noticeMessage: null
+      });
+    }
+  }
+
   private async refreshGitWorkspace(
     projectIdOverride?: string,
     manual = false
@@ -890,6 +959,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     if (manual) {
       this.setState({
         gitPendingAction: GitPendingAction.Refresh,
+        gitPendingPath: null,
         errorMessage: null
       });
     }
@@ -911,6 +981,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         gitRepository: repository,
         gitDiffs: nextDiffs,
         selectedGitDiffScope,
+        gitPendingPath: null,
         gitPendingAction: manual ? null : this.state.gitPendingAction,
         ...(manual
           ? {
@@ -926,6 +997,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     } catch (error) {
       this.setState({
         gitPendingAction: null,
+        gitPendingPath: null,
         errorMessage: error instanceof Error ? error.message : "Could not load Git status.",
         noticeMessage: null
       });
@@ -959,6 +1031,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     this.setState({
       selectedGitDiffScope: scope,
       gitPendingAction: GitPendingAction.Diff,
+      gitPendingPath: null,
       errorMessage: null
     });
 
@@ -981,6 +1054,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     } catch (error) {
       this.setState({
         gitPendingAction: null,
+        gitPendingPath: null,
         errorMessage: error instanceof Error ? error.message : "Could not load the Git diff.",
         noticeMessage: null
       });
@@ -999,6 +1073,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
     this.setState({
       gitPendingAction: GitPendingAction.Commit,
+      gitPendingPath: null,
       errorMessage: null,
       noticeMessage: null
     });
@@ -1012,6 +1087,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       this.setState({
         gitCommitMessage: "",
         gitPendingAction: null,
+        gitPendingPath: null,
         lastGitCommit: commit,
         noticeMessage: `Commit ${commit.hash.slice(0, 8)} created.`,
         errorMessage: null
@@ -1021,6 +1097,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     } catch (error) {
       this.setState({
         gitPendingAction: null,
+        gitPendingPath: null,
         errorMessage: error instanceof Error ? error.message : "Could not create the Git commit.",
         noticeMessage: null
       });
@@ -1260,44 +1337,58 @@ const renderMetaCell = (label: string, value: string): HTMLElement =>
     createElement("p", { className: "mt-2 text-sm font-medium text-white" }, [value])
   ]);
 
-const renderGitWorkspaceContent = (repository: GitRepositoryRecord): HTMLElement => {
-  const groups = groupGitStatusEntries(repository);
+const renderGitWorkspaceContent = (input: {
+  repository: GitRepositoryRecord;
+  pendingAction: GitPendingAction | null;
+  pendingPath: string | null;
+  onAction: (action: GitWorkspaceAction, path: string) => void;
+}): HTMLElement => {
+  const groups = groupGitStatusEntries(input.repository);
 
   return createElement("div", { className: "flex flex-col gap-4" }, [
     createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
       createElement("div", { className: "flex items-center justify-between gap-3" }, [
         createElement("div", { className: "flex flex-col gap-1" }, [
-          createElement("p", { className: "text-sm font-semibold text-white" }, [repository.branch ?? "Detached HEAD"]),
-          createElement("p", { className: "text-xs text-text-secondary" }, [repository.upstream ?? "No upstream configured"])
+          createElement("p", { className: "text-sm font-semibold text-white" }, [input.repository.branch ?? "Detached HEAD"]),
+          createElement("p", { className: "text-xs text-text-secondary" }, [input.repository.upstream ?? "No upstream configured"])
         ]),
         createElement(StatusBadge, {
-          status: repository.clean ? "success" : "warning"
-        }, [repository.clean ? "clean" : "dirty"])
+          status: input.repository.clean ? "success" : "warning"
+        }, [input.repository.clean ? "clean" : "dirty"])
       ]),
       createElement("dl", { className: "mt-3 grid gap-3 sm:grid-cols-4" }, [
-        renderMetaCell("Staged", String(repository.stagedCount)),
-        renderMetaCell("Unstaged", String(repository.unstagedCount)),
-        renderMetaCell("Untracked", String(repository.untrackedCount)),
-        renderMetaCell("Ahead/Behind", `${repository.ahead}/${repository.behind}`)
+        renderMetaCell("Staged", String(input.repository.stagedCount)),
+        renderMetaCell("Unstaged", String(input.repository.unstagedCount)),
+        renderMetaCell("Untracked", String(input.repository.untrackedCount)),
+        renderMetaCell("Ahead/Behind", `${input.repository.ahead}/${input.repository.behind}`)
       ])
     ]),
     renderGitEntryGroup({
       title: "Staged changes",
       section: GitStatusSection.Staged,
       entries: groups.staged,
-      emptyLabel: "No staged files."
+      emptyLabel: "No staged files.",
+      pendingAction: input.pendingAction,
+      pendingPath: input.pendingPath,
+      onAction: input.onAction
     }),
     renderGitEntryGroup({
       title: "Unstaged changes",
       section: GitStatusSection.Unstaged,
       entries: groups.unstaged,
-      emptyLabel: "No unstaged tracked files."
+      emptyLabel: "No unstaged tracked files.",
+      pendingAction: input.pendingAction,
+      pendingPath: input.pendingPath,
+      onAction: input.onAction
     }),
     renderGitEntryGroup({
       title: "Untracked files",
       section: GitStatusSection.Untracked,
       entries: groups.untracked,
-      emptyLabel: "No untracked files."
+      emptyLabel: "No untracked files.",
+      pendingAction: input.pendingAction,
+      pendingPath: input.pendingPath,
+      onAction: input.onAction
     })
   ]);
 };
@@ -1307,6 +1398,9 @@ const renderGitEntryGroup = (input: {
   section: GitStatusSection;
   entries: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
   emptyLabel: string;
+  pendingAction: GitPendingAction | null;
+  pendingPath: string | null;
+  onAction: (action: GitWorkspaceAction, path: string) => void;
 }): HTMLElement =>
   createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
     createElement("div", { className: "flex items-center justify-between gap-3" }, [
@@ -1337,6 +1431,23 @@ const renderGitEntryGroup = (input: {
                 createElement("span", {
                   className: "rounded-md border border-border-dark px-2 py-1 font-mono text-xs text-text-secondary"
                 }, [`${entry.indexStatus}${entry.workingTreeStatus}`])
+              ]),
+              createElement("div", { className: "mt-3 flex flex-wrap items-center gap-2" }, [
+                readGitSectionActions(input.section).map((action) =>
+                  createElement(Button, {
+                    key: `${input.section}-${entry.path}-${action}`,
+                    variant: readGitActionButtonVariant(action),
+                    size: "sm",
+                    disabled: input.pendingAction !== null,
+                    onClick: () => input.onAction(action, entry.path),
+                    children: readGitActionButtonLabel({
+                      action,
+                      path: entry.path,
+                      pendingAction: input.pendingAction,
+                      pendingPath: input.pendingPath
+                    })
+                  })
+                )
               ])
             ])
           )
@@ -1434,6 +1545,74 @@ const readGitSectionBadgeStatus = (
   }
 
   return "warning";
+};
+
+const readGitActionButtonVariant = (
+  action: GitWorkspaceAction
+): "primary" | "secondary" | "ghost" | "danger" => {
+  if (action === GitWorkspaceAction.Revert) {
+    return "danger";
+  }
+
+  if (action === GitWorkspaceAction.Stage) {
+    return "secondary";
+  }
+
+  return "ghost";
+};
+
+const readGitActionButtonLabel = (input: {
+  action: GitWorkspaceAction;
+  path: string;
+  pendingAction: GitPendingAction | null;
+  pendingPath: string | null;
+}): string => {
+  const isPending =
+    input.pendingAction === input.action &&
+    input.pendingPath === input.path;
+  if (!isPending) {
+    return readGitActionLabel(input.action);
+  }
+
+  if (input.action === GitWorkspaceAction.Stage) {
+    return "Staging";
+  }
+
+  if (input.action === GitWorkspaceAction.Unstage) {
+    return "Unstaging";
+  }
+
+  return "Reverting";
+};
+
+const readGitActionLabel = (action: GitWorkspaceAction): string => {
+  if (action === GitWorkspaceAction.Stage) {
+    return "Stage";
+  }
+
+  if (action === GitWorkspaceAction.Unstage) {
+    return "Unstage";
+  }
+
+  return "Revert";
+};
+
+const readGitActionConfirmMessage = (path: string): string =>
+  `Revert unstaged changes for ${path}?`;
+
+const readGitActionSuccessMessage = (
+  action: GitWorkspaceAction,
+  path: string
+): string => {
+  if (action === GitWorkspaceAction.Stage) {
+    return `${path} staged.`;
+  }
+
+  if (action === GitWorkspaceAction.Unstage) {
+    return `${path} moved out of the index.`;
+  }
+
+  return `Unstaged changes reverted for ${path}.`;
 };
 
 const readGitDiffHeading = (scope: GitDiffScopeValue): string =>
