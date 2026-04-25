@@ -405,6 +405,7 @@ Acceptance:
 - [x] Add deterministic Puppeteer validation for the `Projects` quality-gates flow using a stub API server and local browser storage seeding
 - [x] Integrate the `Projects` quality-gates browser validation into CI with the same Puppeteer prerequisites and failure-only screenshot artifacts
 - [x] Document in `docs/RUNNING.md` that CI executes both browser validations, with `docs/AI_WORKBENCH.md` linking back to the canonical command reference
+- [x] Document the `validate:quality-gates` command in `README.md` as a short summary that links back to `docs/RUNNING.md`
 
 Acceptance:
 

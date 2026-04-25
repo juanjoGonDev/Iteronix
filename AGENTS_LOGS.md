@@ -1010,3 +1010,25 @@
   - Ninguno nuevo; la documentación queda alineada con el workflow CI actual sin tocar código de producto
 - Next:
   - Si se quiere seguir reduciendo duplicación, reflejar la misma referencia canónica desde `README.md` sin añadir más prosa operativa
+
+### 2026-04-25 01:44 (Europe/Madrid) — README Browser Validation Summary
+
+- Summary: Añadido al `README.md` un resumen corto del nuevo comando `validate:quality-gates`, manteniendo `docs/RUNNING.md` como referencia operativa canónica y dejando sólo una mención breve de la cobertura CI.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `repo-invariants-guardian`, `minimal-diff-mode` y `quality-gates-enforcer`
+  - Limitar el cambio a `README.md`, `PLAN.md` y `AGENTS_LOGS.md`, sin duplicar reglas de screenshot-retention ya documentadas en `docs/RUNNING.md`
+  - Mencionar en el README que CI ejecuta ambos validadores browser tras `pnpm build`, pero remitir el detalle operativo completo a `docs/RUNNING.md`
+- Changes:
+  - **Updated README.md**: tabla breve de comandos browser con `validate:quality-gates` y nota corta de cobertura CI
+  - **Updated PLAN.md**: checkbox documental del README marcado como completado
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+- Issues/Risks:
+  - Ninguno nuevo; el README sigue siendo un resumen y `docs/RUNNING.md` conserva el detalle operativo canónico
+- Next:
+  - Si se quiere mantener total consistencia documental, revisar que otras referencias a browser validation en el repo apunten también al ancla de `docs/RUNNING.md`
