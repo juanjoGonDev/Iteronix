@@ -550,6 +550,7 @@ Acceptance:
   - [x] Raspberry Pi notes
   - [x] Nginx reverse proxy example
   - [x] Required environment variables (`AUTH_TOKEN`, ports, workspace root)
+  - [x] Align browser-validation wording across `README.md`, `docs/RUNNING.md`, and `docs/AI_WORKBENCH.md`
 
 Acceptance:
 

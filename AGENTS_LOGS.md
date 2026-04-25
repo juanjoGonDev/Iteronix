@@ -1032,3 +1032,26 @@
   - Ninguno nuevo; el README sigue siendo un resumen y `docs/RUNNING.md` conserva el detalle operativo canónico
 - Next:
   - Si se quiere mantener total consistencia documental, revisar que otras referencias a browser validation en el repo apunten también al ancla de `docs/RUNNING.md`
+
+### 2026-04-25 01:58 (Europe/Madrid) — Browser Validation Wording Alignment
+
+- Summary: Ajustado el wording mínimo restante entre `README.md`, `docs/RUNNING.md` y `docs/AI_WORKBENCH.md` para que los nombres de comandos y la descripción de CI queden consistentes, manteniendo `docs/RUNNING.md` como fuente operativa canónica.
+- Decisions:
+  - Aplicar `strict-acceptance-criteria`, `minimal-diff-mode`, `repo-invariants-guardian` y `quality-gates-enforcer`
+  - Limitar el cambio a frases cortas en `README.md` y `docs/AI_WORKBENCH.md`, sin mover detalle operativo fuera de `docs/RUNNING.md`
+  - Usar la misma formulación de CI en los documentos resumen: GitHub Actions ejecuta `validate:source-linking` y `validate:quality-gates` después de `pnpm build`
+- Changes:
+  - **Updated README.md**: alineado el texto corto de `validate:source-linking`, `validate:source-linking:preserve` y la nota de CI con `docs/RUNNING.md`
+  - **Updated docs/AI_WORKBENCH.md**: alineada la frase de cobertura CI con la referencia canónica
+  - **Updated PLAN.md**: marcado el ajuste de consistencia documental
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+- Issues/Risks:
+  - Ninguno nuevo; el cambio es documental y deja `docs/RUNNING.md` como única referencia operativa detallada
+- Next:
+  - Cortar la cadena de prompts documentales repetitivos y reanclar el siguiente paso en una capacidad funcional pendiente del plan

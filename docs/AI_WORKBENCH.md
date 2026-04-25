@@ -45,4 +45,4 @@
 
 ## Browser validation workflows
 
-The canonical browser-validation command reference lives in [`docs/RUNNING.md`](./RUNNING.md#browser-validation). CI now runs both `pnpm -C apps/web-ui validate:source-linking` and `pnpm -C apps/web-ui validate:quality-gates` after `pnpm build`, while screenshot retention and manual-debug variants remain documented only in `docs/RUNNING.md`.
+The canonical browser-validation command reference lives in [`docs/RUNNING.md`](./RUNNING.md#browser-validation). GitHub Actions runs `pnpm -C apps/web-ui validate:source-linking` and `pnpm -C apps/web-ui validate:quality-gates` after `pnpm build`, while screenshot retention and manual-debug variants remain documented only in `docs/RUNNING.md`.
