@@ -1109,3 +1109,29 @@
   - El validador adapter en Windows necesitó tolerar CRLF al comprobar `git restore`; la cobertura relevante quedó en restauración de contenido y flujo API/UI, no en los metadatos de line endings del working tree local
 - Next:
   - El siguiente paso con más valor ya no es documental: exponer staging/unstaging masivo por selección y diff file-switching fino desde `Projects` para repositorios con muchos cambios
+### 2026-04-26 01:56 (Europe/Madrid) — Projects Git Workspace Bulk Selection
+
+- Summary: Cerrada la ampliación del workspace Git en `Projects` con selección múltiple por fichero, acciones bulk server-first para stage/unstage y navegación de diff enfocada por path, manteniendo `revert` limitado a cambios tracked unstaged con confirmación.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `ui-implementations`, `uncodixfy`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `minimal-diff-mode` y `quality-gates-enforcer`
+  - Mantener la lógica de selección y foco de diff en `projects-state.ts` para fijarla con tests puros antes de tocar el screen
+  - Reutilizar los endpoints `paths[]` ya existentes para bulk stage/unstage, sin introducir nuevos contratos HTTP ni estado Git duplicado en cliente
+  - Extender el validador browser existente con un stub Git más rico en lugar de crear un script paralelo o una vía de testing distinta
+- Changes:
+  - **Updated apps/web-ui/src/screens/projects-state.test.ts** y **projects-state.ts**: helpers puros para bulk action por sección, selección múltiple, retención de selección y filtrado/foco de diff por fichero
+  - **Updated apps/web-ui/src/screens/Projects.ts**: checkboxes por fila, bulk `Stage selected` / `Unstage selected`, foco de diff por fichero, limpieza controlada del foco y render filtrado del patch
+  - **Updated apps/web-ui/scripts/validate-projects-git-workspace.ts**: fixture browser ampliada para bulk stage/unstage, foco de diff staged/unstaged y verificación determinista del panel Git
+  - **Updated PLAN.md**: milestone 6 marcado con soporte UI de multi-select Git y file-focused diff navigation
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - El validador browser de Git depende de recompilar `apps/web-ui` antes de ejecutarse porque consume el preview built; quedó cubierto por `pnpm build` dentro del cierre de gates
+- Next:
+  - El siguiente paso útil ya no es refinar textos ni validadores: toca integrar el flujo Git UI en CI o ampliar capacidades Git server-first de mayor valor, como selección por lotes en diff grandes o acciones de commit/push reviewadas

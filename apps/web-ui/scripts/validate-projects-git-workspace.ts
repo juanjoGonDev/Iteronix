@@ -51,16 +51,18 @@ const ResponseHeader = {
 const ValidationText = {
   ScreenTitle: "Projects",
   OpenProject: "Open project",
-  StagedDiffButton: "Staged diff (1)",
+  StagedDiffButton: "Staged diff (2)",
+  UnstagedDiffButton: "Unstaged diff (1)",
   CreateCommit: "Create commit",
   InvalidCommit: "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
-  GitDetailsStaged: "apps/web-ui/src/screens/GitDetails.ts staged.",
-  GitDetailsUnstaged: "apps/web-ui/src/screens/GitDetails.ts moved out of the index.",
+  BulkStageSuccess: "2 files staged.",
+  BulkUnstageSuccess: "2 files moved out of the index.",
   QualityGatesReverted: "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
   CommitCreated: "Commit 9f3c2ad1 created.",
   StagedDiffZero: "Staged diff (0)",
   UnstagedDiffZero: "Unstaged diff (0)",
   StagedDiffMarker: "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
+  ProjectsStateDiffMarker: "diff --git a/apps/web-ui/src/screens/projects-state.ts b/apps/web-ui/src/screens/projects-state.ts",
   UnstagedDiffMarker: "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts"
 } as const;
 
@@ -79,8 +81,10 @@ const FixtureProject: ProjectRecord = {
 
 const FixtureFilePath = {
   Projects: "apps/web-ui/src/screens/Projects.ts",
+  ProjectsState: "apps/web-ui/src/screens/projects-state.ts",
   QualityGatesClient: "apps/web-ui/src/shared/quality-gates-client.ts",
-  GitDetails: "apps/web-ui/src/screens/GitDetails.ts"
+  GitDetails: "apps/web-ui/src/screens/GitDetails.ts",
+  GitSummary: "apps/web-ui/src/screens/GitSummary.ts"
 } as const;
 
 const StubFileStatus = {
@@ -100,6 +104,14 @@ const FixtureDiff = {
     "@@ -12,6 +12,9 @@",
     "+import { createGitClient } from \"../shared/git-client.js\";"
   ].join("\n"),
+  ProjectsStateStaged: [
+    "diff --git a/apps/web-ui/src/screens/projects-state.ts b/apps/web-ui/src/screens/projects-state.ts",
+    "index 1234567..89abcde 100644",
+    "--- a/apps/web-ui/src/screens/projects-state.ts",
+    "+++ b/apps/web-ui/src/screens/projects-state.ts",
+    "@@ -1,5 +1,12 @@",
+    "+export const readGitSelectionCount = () => 2;"
+  ].join("\n"),
   GitDetailsStaged: [
     "diff --git a/apps/web-ui/src/screens/GitDetails.ts b/apps/web-ui/src/screens/GitDetails.ts",
     "new file mode 100644",
@@ -107,6 +119,14 @@ const FixtureDiff = {
     "+++ b/apps/web-ui/src/screens/GitDetails.ts",
     "@@ -0,0 +1,5 @@",
     "+export const GitDetails = \"ready\";"
+  ].join("\n"),
+  GitSummaryStaged: [
+    "diff --git a/apps/web-ui/src/screens/GitSummary.ts b/apps/web-ui/src/screens/GitSummary.ts",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/apps/web-ui/src/screens/GitSummary.ts",
+    "@@ -0,0 +1,5 @@",
+    "+export const GitSummary = \"ready\";"
   ].join("\n"),
   QualityGatesUnstaged: [
     "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts",
@@ -193,8 +213,10 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       FixtureProject.name,
       "feature/git-ui",
       FixtureFilePath.Projects,
+      FixtureFilePath.ProjectsState,
       FixtureFilePath.QualityGatesClient,
-      FixtureFilePath.GitDetails
+      FixtureFilePath.GitDetails,
+      FixtureFilePath.GitSummary
     ]);
     await captureBrowserValidationScreenshot({
       page,
@@ -203,25 +225,59 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       artifactName: "projects-git-workspace"
     });
 
-    await clickGitRowAction(page, FixtureFilePath.GitDetails, "Stage");
+    await toggleGitPathSelection(page, FixtureFilePath.GitDetails);
+    await toggleGitPathSelection(page, FixtureFilePath.GitSummary);
+    await waitForPageText(page, "Stage selected (2)");
+    await clickNamedButton(page, "Stage selected (2)");
     await waitForPageTexts(page, [
-      ValidationText.GitDetailsStaged,
+      ValidationText.BulkStageSuccess,
       "Staged changes",
-      FixtureFilePath.GitDetails
+      FixtureFilePath.GitDetails,
+      FixtureFilePath.GitSummary,
+      "Staged diff (4)"
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
-      suffix: "after-stage",
+      suffix: "after-bulk-stage",
       artifactName: "projects-git-workspace"
     });
 
-    await clickGitRowAction(page, FixtureFilePath.GitDetails, "Unstage");
+    await clickGitRowAction(page, FixtureFilePath.Projects, "Focus diff");
+    await waitForFocusedPath(page, FixtureFilePath.Projects);
+    await waitForDiffOutput(page, {
+      includes: [ValidationText.StagedDiffMarker],
+      excludes: [ValidationText.ProjectsStateDiffMarker]
+    });
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-focus-staged-file",
+      artifactName: "projects-git-workspace"
+    });
+
+    await waitForPageText(page, "Unstage selected (2)");
+    await clickNamedButton(page, "Unstage selected (2)");
     await waitForPageTexts(page, [
-      ValidationText.GitDetailsUnstaged,
+      ValidationText.BulkUnstageSuccess,
       "Untracked files",
-      FixtureFilePath.GitDetails
+      FixtureFilePath.GitDetails,
+      FixtureFilePath.GitSummary,
+      "Staged diff (2)"
     ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-bulk-unstage",
+      artifactName: "projects-git-workspace"
+    });
+
+    await clickGitRowAction(page, FixtureFilePath.QualityGatesClient, "Focus diff");
+    await waitForFocusedPath(page, FixtureFilePath.QualityGatesClient);
+    await waitForDiffOutput(page, {
+      includes: [ValidationText.UnstagedDiffMarker],
+      excludes: [ValidationText.StagedDiffMarker]
+    });
 
     const revertDialog = waitForNextDialog(
       page,
@@ -243,6 +299,7 @@ async function validateProjectsGitWorkspace(): Promise<void> {
     await clickNamedButton(page, ValidationText.StagedDiffButton);
     await waitForPageTexts(page, [
       ValidationText.StagedDiffMarker,
+      ValidationText.ProjectsStateDiffMarker,
       "Create commit"
     ]);
     await captureBrowserValidationScreenshot({
@@ -470,28 +527,15 @@ async function handleGitPathMutation(
     return;
   }
 
-  if (paths.length !== 1) {
-    writeJson(response, 400, {
-      message: "Expected a single path"
-    });
-    return;
-  }
-
-  const path = paths[0];
-  if (!path) {
-    writeJson(response, 400, {
-      message: "Expected a single path"
-    });
-    return;
-  }
-
   try {
-    if (operation === "stage") {
-      applyGitStage(state, path);
-    } else if (operation === "unstage") {
-      applyGitUnstage(state, path);
-    } else {
-      applyGitRevert(state, path);
+    for (const path of paths) {
+      if (operation === "stage") {
+        applyGitStage(state, path);
+      } else if (operation === "unstage") {
+        applyGitUnstage(state, path);
+      } else {
+        applyGitRevert(state, path);
+      }
     }
   } catch (error) {
     writeJson(response, 400, {
@@ -543,6 +587,12 @@ function createInitialStubFiles(): Record<string, StubFile> {
       status: StubFileStatus.Staged,
       stagedDiff: FixtureDiff.ProjectsStaged
     },
+    [FixtureFilePath.ProjectsState]: {
+      path: FixtureFilePath.ProjectsState,
+      tracked: true,
+      status: StubFileStatus.Staged,
+      stagedDiff: FixtureDiff.ProjectsStateStaged
+    },
     [FixtureFilePath.QualityGatesClient]: {
       path: FixtureFilePath.QualityGatesClient,
       tracked: true,
@@ -554,6 +604,12 @@ function createInitialStubFiles(): Record<string, StubFile> {
       tracked: false,
       status: StubFileStatus.Untracked,
       stagedDiff: FixtureDiff.GitDetailsStaged
+    },
+    [FixtureFilePath.GitSummary]: {
+      path: FixtureFilePath.GitSummary,
+      tracked: false,
+      status: StubFileStatus.Untracked,
+      stagedDiff: FixtureDiff.GitSummaryStaged
     }
   };
 }
@@ -838,6 +894,37 @@ async function clickGitRowAction(
   }
 }
 
+async function toggleGitPathSelection(
+  page: Page,
+  path: string
+): Promise<void> {
+  const toggled = await page.evaluate((selectedPath: string) => {
+    const container = Array.from(document.querySelectorAll("div"))
+      .filter((element) => {
+        const text = element.textContent ?? "";
+        return text.includes(selectedPath);
+      })
+      .filter((element) =>
+        Array.from(element.querySelectorAll('input[type="checkbox"]')).length > 0
+      )
+      .sort(
+        (left, right) =>
+          (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+      )[0];
+    const input = container?.querySelector('input[type="checkbox"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return false;
+    }
+
+    input.click();
+    return true;
+  }, path);
+
+  if (!toggled) {
+    throw new Error(`Could not toggle selection for ${path}`);
+  }
+}
+
 function waitForNextDialog(page: Page, expectedMessage: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -891,6 +978,47 @@ async function waitForButtonEnabled(page: Page, label: string): Promise<void> {
       return button instanceof HTMLButtonElement && button.disabled === false;
     }, label);
   }, `button "${label}" enabled`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForFocusedPath(page: Page, path: string): Promise<void> {
+  await waitForCondition(async () => {
+    return page.evaluate((expectedPath: string) => {
+      const element = document.querySelector('[data-testid="git-focused-path"]');
+      return element instanceof HTMLElement && element.innerText.includes(expectedPath);
+    }, path);
+  }, `focused path "${path}"`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForDiffOutput(
+  page: Page,
+  input: {
+    includes: ReadonlyArray<string>;
+    excludes: ReadonlyArray<string>;
+  }
+): Promise<void> {
+  await waitForCondition(async () => {
+    return page.evaluate((expected: {
+      includes: ReadonlyArray<string>;
+      excludes: ReadonlyArray<string>;
+    }) => {
+      const element = document.querySelector('[data-testid="git-diff-output"]');
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+
+      const text = element.innerText;
+      return (
+        expected.includes.every((value) => text.includes(value)) &&
+        expected.excludes.every((value) => !text.includes(value))
+      );
+    }, input);
+  }, `diff output ${input.includes.join(", ")}`, {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });

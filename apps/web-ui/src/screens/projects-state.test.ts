@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  countSelectedGitEntries,
+  filterGitDiffByPath,
   GitStatusSection,
   GitWorkspaceAction,
   groupGitStatusEntries,
   isConventionalCommitMessage,
   mergeRunEvents,
+  readGitSectionBulkAction,
   readGitSectionActions,
   readGitCommitValidationMessage,
+  resolveGitFocusedPath,
   resolveGitDiffScope,
   readGateExecutionState,
   readSelectedRun,
   readStreamingRunId,
   resolveSelectedRunId,
-  sortQualityGates
+  retainGitPathSelection,
+  sortQualityGates,
+  toggleGitPathSelection
 } from "./projects-state.js";
 import {
   GitDiffScope,
@@ -162,6 +168,121 @@ describe("projects state helpers", () => {
     expect(readGitSectionActions(GitStatusSection.Untracked)).toEqual([
       GitWorkspaceAction.Stage
     ]);
+    expect(readGitSectionBulkAction(GitStatusSection.Staged)).toBe(
+      GitWorkspaceAction.Unstage
+    );
+    expect(readGitSectionBulkAction(GitStatusSection.Unstaged)).toBe(
+      GitWorkspaceAction.Stage
+    );
+    expect(readGitSectionBulkAction(GitStatusSection.Untracked)).toBe(
+      GitWorkspaceAction.Stage
+    );
+  });
+
+  it("toggles, counts and retains selected git paths against repository status", () => {
+    const repository = createRepository({
+      stagedCount: 2,
+      unstagedCount: 1,
+      untrackedCount: 1,
+      entries: [
+        createGitEntry({
+          path: "apps/web-ui/src/screens/Projects.ts",
+          staged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/shared/git-client.ts",
+          staged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/shared/quality-gates-client.ts",
+          unstaged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/screens/GitDetails.ts",
+          untracked: true
+        })
+      ]
+    });
+
+    const selected = toggleGitPathSelection(
+      toggleGitPathSelection(
+        toggleGitPathSelection([], "apps/web-ui/src/screens/Projects.ts"),
+        "apps/web-ui/src/shared/git-client.ts"
+      ),
+      "apps/web-ui/src/screens/GitDetails.ts"
+    );
+
+    expect(countSelectedGitEntries(groupGitStatusEntries(repository).staged, selected)).toBe(2);
+    expect(countSelectedGitEntries(groupGitStatusEntries(repository).untracked, selected)).toBe(1);
+    expect(
+      retainGitPathSelection(selected, createRepository({
+        stagedCount: 1,
+        untrackedCount: 1,
+        entries: [
+          createGitEntry({
+            path: "apps/web-ui/src/screens/Projects.ts",
+            staged: true
+          }),
+          createGitEntry({
+            path: "apps/web-ui/src/screens/GitDetails.ts",
+            untracked: true
+          })
+        ]
+      }))
+    ).toEqual([
+      "apps/web-ui/src/screens/Projects.ts",
+      "apps/web-ui/src/screens/GitDetails.ts"
+    ]);
+    expect(
+      toggleGitPathSelection(selected, "apps/web-ui/src/shared/git-client.ts")
+    ).toEqual([
+      "apps/web-ui/src/screens/Projects.ts",
+      "apps/web-ui/src/screens/GitDetails.ts"
+    ]);
+  });
+
+  it("filters a scope diff to the focused file and clears focus when the scope changes", () => {
+    const repository = createRepository({
+      stagedCount: 2,
+      unstagedCount: 1,
+      entries: [
+        createGitEntry({
+          path: "apps/web-ui/src/screens/Projects.ts",
+          staged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/screens/GitDetails.ts",
+          staged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/shared/quality-gates-client.ts",
+          unstaged: true
+        })
+      ]
+    });
+    const diff = [
+      "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+      "",
+      "diff --git a/apps/web-ui/src/screens/GitDetails.ts b/apps/web-ui/src/screens/GitDetails.ts",
+      "@@ -0,0 +1 @@",
+      "+export const ready = true;"
+    ].join("\n");
+
+    expect(
+      filterGitDiffByPath(diff, "apps/web-ui/src/screens/GitDetails.ts")
+    ).toContain("GitDetails.ts");
+    expect(
+      filterGitDiffByPath(diff, "apps/web-ui/src/screens/GitDetails.ts")
+    ).not.toContain("Projects.ts");
+    expect(
+      resolveGitFocusedPath(repository, GitDiffScope.Staged, "apps/web-ui/src/screens/GitDetails.ts")
+    ).toBe("apps/web-ui/src/screens/GitDetails.ts");
+    expect(
+      resolveGitFocusedPath(repository, GitDiffScope.Unstaged, "apps/web-ui/src/screens/GitDetails.ts")
+    ).toBe(null);
   });
 
   it("validates conventional commit messages for the git workspace form", () => {

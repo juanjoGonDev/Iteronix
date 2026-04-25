@@ -15,19 +15,25 @@ import { createGitClient } from "../shared/git-client.js";
 import { createQualityGatesClient } from "../shared/quality-gates-client.js";
 import { readServerConnection } from "../shared/server-config.js";
 import {
+  countSelectedGitEntries,
   DefaultSelectedGates,
+  filterGitDiffByPath,
   GitStatusSection,
   GitWorkspaceAction,
   groupGitStatusEntries,
   mergeRunEvents,
   readGateExecutionState,
   readGitCommitValidationMessage,
+  readGitSectionBulkAction,
   readGitSectionActions,
   readSelectedRun,
   readStreamingRunId,
+  resolveGitFocusedPath,
   resolveGitDiffScope,
   resolveSelectedRunId,
+  retainGitPathSelection,
   sortQualityGates,
+  toggleGitPathSelection,
   type GateExecutionState
 } from "./projects-state.js";
 import type {
@@ -93,6 +99,8 @@ interface ProjectsScreenState {
   gitRepository: GitRepositoryRecord | null;
   gitDiffs: GitDiffState;
   selectedGitDiffScope: GitDiffScopeValue;
+  selectedGitPaths: ReadonlyArray<string>;
+  focusedGitDiffPath: string | null;
   gitCommitMessage: string;
   gitPendingAction: GitPendingAction | null;
   gitPendingPath: string | null;
@@ -129,6 +137,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         unstaged: null
       },
       selectedGitDiffScope: GitDiffScope.Staged,
+      selectedGitPaths: [],
+      focusedGitDiffPath: null,
       gitCommitMessage: "",
       gitPendingAction: null,
       gitPendingPath: null,
@@ -319,8 +329,17 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
             ])
           : renderGitWorkspaceContent({
               repository,
+              selectedPaths: this.state.selectedGitPaths,
+              focusedPath: this.state.focusedGitDiffPath,
               pendingAction: this.state.gitPendingAction,
               pendingPath: this.state.gitPendingPath,
+              onToggleSelection: (path) => this.handleGitSelectionToggle(path),
+              onBulkAction: (section) => {
+                void this.handleGitBulkAction(section);
+              },
+              onFocusDiff: (path, scope) => {
+                void this.handleGitDiffFocus(path, scope);
+              },
               onAction: (action, path) => {
                 void this.handleGitWorkspaceAction(action, path);
               }
@@ -448,6 +467,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     const repository = this.state.gitRepository;
     const selectedScope = resolveGitDiffScope(repository, this.state.selectedGitDiffScope);
     const activeDiff = readGitDiff(this.state.gitDiffs, selectedScope);
+    const focusedPath = resolveGitFocusedPath(
+      repository,
+      selectedScope,
+      this.state.focusedGitDiffPath
+    );
     const validationMessage = readGitCommitValidationMessage(
       this.state.gitCommitMessage,
       repository
@@ -455,6 +479,9 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     const hasSelectedDiff =
       repository !== null &&
       readGitDiffCount(repository, selectedScope) > 0;
+    const visibleDiff = activeDiff
+      ? filterGitDiffByPath(activeDiff.diff, focusedPath)
+      : null;
 
     return createElement(SectionPanel, {
       title: "Git review",
@@ -481,11 +508,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
           })
         : createElement("div", { className: "flex flex-col gap-5" }, [
             createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
-              renderGitDiffScopeButton({
-                scope: GitDiffScope.Staged,
-                selected: selectedScope === GitDiffScope.Staged,
-                disabled: repository === null || repository.stagedCount === 0 || this.state.gitPendingAction === GitPendingAction.Diff,
-                count: repository?.stagedCount ?? 0,
+                renderGitDiffScopeButton({
+                  scope: GitDiffScope.Staged,
+                  selected: selectedScope === GitDiffScope.Staged,
+                  disabled: repository === null || repository.stagedCount === 0 || this.state.gitPendingAction === GitPendingAction.Diff,
+                  count: repository?.stagedCount ?? 0,
                 onClick: () => {
                   void this.loadGitDiff(GitDiffScope.Staged);
                 }
@@ -516,10 +543,34 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
                   status: this.state.gitPendingAction === GitPendingAction.Diff ? "running" : "info"
                 }, [this.state.gitPendingAction === GitPendingAction.Diff ? "loading" : "ready"])
               ]),
-              hasSelectedDiff && activeDiff
+              focusedPath
+                ? createElement("div", { className: "mt-4 flex flex-wrap items-center gap-2" }, [
+                    createElement(StatusBadge, {
+                      status: "info"
+                    }, ["file focus"]),
+                    createElement("p", {
+                      className: "text-xs text-text-secondary",
+                      dataset: {
+                        testid: "git-focused-path"
+                      }
+                    }, [
+                      focusedPath
+                    ]),
+                    createElement(Button, {
+                      variant: "ghost",
+                      size: "sm",
+                      onClick: () => this.setState({ focusedGitDiffPath: null }),
+                      children: "Show scope diff"
+                    })
+                  ])
+                : "",
+              hasSelectedDiff && visibleDiff
                 ? createElement("pre", {
-                    className: "mt-4 overflow-x-auto rounded-lg border border-border-dark bg-[#11161f] px-4 py-4 font-mono text-xs leading-6 text-slate-200"
-                  }, [activeDiff.diff])
+                    className: "mt-4 overflow-x-auto rounded-lg border border-border-dark bg-[#11161f] px-4 py-4 font-mono text-xs leading-6 text-slate-200",
+                    dataset: {
+                      testid: "git-diff-output"
+                    }
+                  }, [visibleDiff])
                 : createElement("div", {
                     className: "mt-4 rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary"
                   }, [
@@ -697,6 +748,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
           unstaged: null
         },
         selectedGitDiffScope: GitDiffScope.Staged,
+        selectedGitPaths: [],
+        focusedGitDiffPath: null,
         gitCommitMessage: "",
         gitPendingAction: null,
         gitPendingPath: null,
@@ -726,6 +779,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
           unstaged: null
         },
         selectedGitDiffScope: GitDiffScope.Staged,
+        selectedGitPaths: [],
+        focusedGitDiffPath: null,
         gitCommitMessage: "",
         gitPendingAction: null,
         gitPendingPath: null,
@@ -757,6 +812,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         unstaged: null
       },
       selectedGitDiffScope: GitDiffScope.Staged,
+      selectedGitPaths: [],
+      focusedGitDiffPath: null,
       gitCommitMessage: "",
       gitPendingAction: null,
       gitPendingPath: null,
@@ -947,6 +1004,89 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     }
   }
 
+  private handleGitSelectionToggle(path: string): void {
+    this.setState({
+      selectedGitPaths: toggleGitPathSelection(this.state.selectedGitPaths, path)
+    });
+  }
+
+  private async handleGitBulkAction(
+    section: GitStatusSection
+  ): Promise<void> {
+    const currentProject = this.state.currentProject;
+    const repository = this.state.gitRepository;
+    if (!currentProject || !repository || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    const groups = groupGitStatusEntries(repository);
+    const entries = readGitEntriesBySection(groups, section);
+    const paths = entries
+      .filter((entry) => this.state.selectedGitPaths.includes(entry.path))
+      .map((entry) => entry.path);
+    if (paths.length === 0) {
+      return;
+    }
+
+    const action = readGitSectionBulkAction(section);
+    this.setState({
+      gitPendingAction: action,
+      gitPendingPath: null,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      if (action === GitWorkspaceAction.Stage) {
+        await this.gitClient.stagePaths({
+          projectId: currentProject.id,
+          paths
+        });
+      } else {
+        await this.gitClient.unstagePaths({
+          projectId: currentProject.id,
+          paths
+        });
+      }
+
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: readGitBulkActionSuccessMessage(action, paths),
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not update the Git workspace.",
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handleGitDiffFocus(
+    path: string,
+    scope: GitDiffScopeValue
+  ): Promise<void> {
+    const repository = this.state.gitRepository;
+    if (!repository) {
+      return;
+    }
+
+    const focusedPath = resolveGitFocusedPath(repository, scope, path) ?? path;
+    this.setState({
+      focusedGitDiffPath: focusedPath
+    });
+
+    const diff = readGitDiff(this.state.gitDiffs, scope);
+    if (this.state.selectedGitDiffScope !== scope || diff === null) {
+      await this.loadGitDiff(scope);
+    }
+  }
+
   private async refreshGitWorkspace(
     projectIdOverride?: string,
     manual = false
@@ -972,6 +1112,15 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         repository,
         this.state.selectedGitDiffScope
       );
+      const selectedGitPaths = retainGitPathSelection(
+        this.state.selectedGitPaths,
+        repository
+      );
+      const focusedGitDiffPath = resolveGitFocusedPath(
+        repository,
+        selectedGitDiffScope,
+        this.state.focusedGitDiffPath
+      );
       const nextDiffs: GitDiffState = {
         staged: repository.stagedCount > 0 ? this.state.gitDiffs.staged : null,
         unstaged: repository.unstagedCount > 0 ? this.state.gitDiffs.unstaged : null
@@ -981,6 +1130,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         gitRepository: repository,
         gitDiffs: nextDiffs,
         selectedGitDiffScope,
+        selectedGitPaths,
+        focusedGitDiffPath,
         gitPendingPath: null,
         gitPendingAction: manual ? null : this.state.gitPendingAction,
         ...(manual
@@ -1018,6 +1169,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     if (!repository || readGitDiffCount(repository, scope) === 0) {
       this.setState({
         selectedGitDiffScope: scope,
+        focusedGitDiffPath: resolveGitFocusedPath(
+          repository,
+          scope,
+          this.state.focusedGitDiffPath
+        ),
         gitDiffs: writeGitDiff(this.state.gitDiffs, scope, null),
         ...(manual
           ? {
@@ -1030,6 +1186,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
     this.setState({
       selectedGitDiffScope: scope,
+      focusedGitDiffPath: resolveGitFocusedPath(
+        repository,
+        scope,
+        this.state.focusedGitDiffPath
+      ),
       gitPendingAction: GitPendingAction.Diff,
       gitPendingPath: null,
       errorMessage: null
@@ -1339,8 +1500,13 @@ const renderMetaCell = (label: string, value: string): HTMLElement =>
 
 const renderGitWorkspaceContent = (input: {
   repository: GitRepositoryRecord;
+  selectedPaths: ReadonlyArray<string>;
+  focusedPath: string | null;
   pendingAction: GitPendingAction | null;
   pendingPath: string | null;
+  onToggleSelection: (path: string) => void;
+  onBulkAction: (section: GitStatusSection) => void;
+  onFocusDiff: (path: string, scope: GitDiffScopeValue) => void;
   onAction: (action: GitWorkspaceAction, path: string) => void;
 }): HTMLElement => {
   const groups = groupGitStatusEntries(input.repository);
@@ -1368,8 +1534,13 @@ const renderGitWorkspaceContent = (input: {
       section: GitStatusSection.Staged,
       entries: groups.staged,
       emptyLabel: "No staged files.",
+      selectedPaths: input.selectedPaths,
+      focusedPath: input.focusedPath,
       pendingAction: input.pendingAction,
       pendingPath: input.pendingPath,
+      onToggleSelection: input.onToggleSelection,
+      onBulkAction: input.onBulkAction,
+      onFocusDiff: input.onFocusDiff,
       onAction: input.onAction
     }),
     renderGitEntryGroup({
@@ -1377,8 +1548,13 @@ const renderGitWorkspaceContent = (input: {
       section: GitStatusSection.Unstaged,
       entries: groups.unstaged,
       emptyLabel: "No unstaged tracked files.",
+      selectedPaths: input.selectedPaths,
+      focusedPath: input.focusedPath,
       pendingAction: input.pendingAction,
       pendingPath: input.pendingPath,
+      onToggleSelection: input.onToggleSelection,
+      onBulkAction: input.onBulkAction,
+      onFocusDiff: input.onFocusDiff,
       onAction: input.onAction
     }),
     renderGitEntryGroup({
@@ -1386,8 +1562,13 @@ const renderGitWorkspaceContent = (input: {
       section: GitStatusSection.Untracked,
       entries: groups.untracked,
       emptyLabel: "No untracked files.",
+      selectedPaths: input.selectedPaths,
+      focusedPath: input.focusedPath,
       pendingAction: input.pendingAction,
       pendingPath: input.pendingPath,
+      onToggleSelection: input.onToggleSelection,
+      onBulkAction: input.onBulkAction,
+      onFocusDiff: input.onFocusDiff,
       onAction: input.onAction
     })
   ]);
@@ -1398,16 +1579,42 @@ const renderGitEntryGroup = (input: {
   section: GitStatusSection;
   entries: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
   emptyLabel: string;
+  selectedPaths: ReadonlyArray<string>;
+  focusedPath: string | null;
   pendingAction: GitPendingAction | null;
   pendingPath: string | null;
+  onToggleSelection: (path: string) => void;
+  onBulkAction: (section: GitStatusSection) => void;
+  onFocusDiff: (path: string, scope: GitDiffScopeValue) => void;
   onAction: (action: GitWorkspaceAction, path: string) => void;
-}): HTMLElement =>
-  createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
+}): HTMLElement => {
+  const bulkAction = readGitSectionBulkAction(input.section);
+  const selectedCount = countSelectedGitEntries(input.entries, input.selectedPaths);
+
+  return createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
     createElement("div", { className: "flex items-center justify-between gap-3" }, [
-      createElement("h3", { className: "text-sm font-semibold text-white" }, [input.title]),
-      createElement(StatusBadge, {
-        status: readGitSectionBadgeStatus(input.section)
-      }, [`${input.entries.length}`])
+      createElement("div", { className: "flex items-center gap-3" }, [
+        createElement("h3", { className: "text-sm font-semibold text-white" }, [input.title]),
+        createElement(StatusBadge, {
+          status: readGitSectionBadgeStatus(input.section)
+        }, [`${input.entries.length}`]),
+        selectedCount > 0
+          ? createElement(StatusBadge, {
+              status: "info"
+            }, [`${selectedCount} selected`])
+          : ""
+      ]),
+      createElement(Button, {
+        variant: "secondary",
+        size: "sm",
+        disabled: selectedCount === 0 || input.pendingAction !== null,
+        onClick: () => input.onBulkAction(input.section),
+        children: readGitBulkActionButtonLabel(
+          bulkAction,
+          selectedCount,
+          input.pendingAction
+        )
+      })
     ]),
     input.entries.length === 0
       ? createElement("p", { className: "mt-3 text-sm text-text-secondary" }, [input.emptyLabel])
@@ -1415,24 +1622,46 @@ const renderGitEntryGroup = (input: {
           input.entries.map((entry) =>
             createElement("div", {
               key: `${input.section}-${entry.path}`,
-              className: "rounded-md border border-border-dark px-3 py-3"
+              className: `rounded-md border px-3 py-3 ${input.selectedPaths.includes(entry.path) ? "border-primary/60 bg-primary/5" : "border-border-dark"}`
             }, [
               createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                createElement("div", { className: "min-w-0" }, [
-                  createElement("p", { className: "truncate text-sm font-medium text-white" }, [
-                    entry.path
-                  ]),
-                  entry.originalPath
-                    ? createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-                        `from ${entry.originalPath}`
-                      ])
-                    : ""
+                createElement("div", { className: "flex min-w-0 items-start gap-3" }, [
+                  createElement("input", {
+                    type: "checkbox",
+                    checked: input.selectedPaths.includes(entry.path),
+                    dataset: {
+                      gitSection: input.section,
+                      gitPath: entry.path,
+                      gitSelection: "toggle"
+                    },
+                    onChange: () => input.onToggleSelection(entry.path)
+                  }),
+                  createElement("div", { className: "min-w-0" }, [
+                    createElement("p", { className: "truncate text-sm font-medium text-white" }, [
+                      entry.path
+                    ]),
+                    entry.originalPath
+                      ? createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                          `from ${entry.originalPath}`
+                        ])
+                      : ""
+                  ])
                 ]),
                 createElement("span", {
                   className: "rounded-md border border-border-dark px-2 py-1 font-mono text-xs text-text-secondary"
                 }, [`${entry.indexStatus}${entry.workingTreeStatus}`])
               ]),
               createElement("div", { className: "mt-3 flex flex-wrap items-center gap-2" }, [
+                readGitDiffFocusScope(input.section, entry.untracked).map((scope) =>
+                  createElement(Button, {
+                    key: `${input.section}-${entry.path}-${scope}`,
+                    variant: input.focusedPath === entry.path ? "secondary" : "ghost",
+                    size: "sm",
+                    disabled: input.pendingAction !== null,
+                    onClick: () => input.onFocusDiff(entry.path, scope),
+                    children: input.focusedPath === entry.path ? "Focused diff" : "Focus diff"
+                  })
+                ),
                 readGitSectionActions(input.section).map((action) =>
                   createElement(Button, {
                     key: `${input.section}-${entry.path}-${action}`,
@@ -1453,6 +1682,7 @@ const renderGitEntryGroup = (input: {
           )
         ])
   ]);
+};
 
 const renderGitDiffScopeButton = (input: {
   scope: GitDiffScopeValue;
@@ -1615,6 +1845,32 @@ const readGitActionSuccessMessage = (
   return `Unstaged changes reverted for ${path}.`;
 };
 
+const readGitBulkActionButtonLabel = (
+  action: typeof GitWorkspaceAction.Stage | typeof GitWorkspaceAction.Unstage,
+  count: number,
+  pendingAction: GitPendingAction | null
+): string => {
+  if (pendingAction === action) {
+    return action === GitWorkspaceAction.Stage ? "Staging selected" : "Unstaging selected";
+  }
+
+  return `${readGitActionLabel(action)} selected (${count})`;
+};
+
+const readGitBulkActionSuccessMessage = (
+  action: typeof GitWorkspaceAction.Stage | typeof GitWorkspaceAction.Unstage,
+  paths: ReadonlyArray<string>
+): string => {
+  const count = paths.length;
+  if (count === 1) {
+    return readGitActionSuccessMessage(action, paths[0] ?? "");
+  }
+
+  return action === GitWorkspaceAction.Stage
+    ? `${count} files staged.`
+    : `${count} files moved out of the index.`;
+};
+
 const readGitDiffHeading = (scope: GitDiffScopeValue): string =>
   scope === GitDiffScope.Staged ? "Staged diff" : "Unstaged diff";
 
@@ -1651,3 +1907,33 @@ const writeGitDiff = (
         ...diffs,
         unstaged: diff
       };
+
+const readGitEntriesBySection = (
+  groups: ReturnType<typeof groupGitStatusEntries>,
+  section: GitStatusSection
+): ReadonlyArray<GitRepositoryRecord["entries"][number]> => {
+  if (section === GitStatusSection.Staged) {
+    return groups.staged;
+  }
+
+  if (section === GitStatusSection.Unstaged) {
+    return groups.unstaged;
+  }
+
+  return groups.untracked;
+};
+
+const readGitDiffFocusScope = (
+  section: GitStatusSection,
+  untracked: boolean
+): ReadonlyArray<GitDiffScopeValue> => {
+  if (untracked) {
+    return [];
+  }
+
+  return [
+    section === GitStatusSection.Staged
+      ? GitDiffScope.Staged
+      : GitDiffScope.Unstaged
+  ];
+};

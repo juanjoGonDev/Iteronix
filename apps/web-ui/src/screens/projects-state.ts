@@ -143,6 +143,39 @@ export const readGitSectionActions = (
   return [GitWorkspaceAction.Stage];
 };
 
+export const readGitSectionBulkAction = (
+  section: GitStatusSection
+): typeof GitWorkspaceAction.Stage | typeof GitWorkspaceAction.Unstage =>
+  section === GitStatusSection.Staged
+    ? GitWorkspaceAction.Unstage
+    : GitWorkspaceAction.Stage;
+
+export const toggleGitPathSelection = (
+  selectedPaths: ReadonlyArray<string>,
+  path: string
+): ReadonlyArray<string> =>
+  selectedPaths.includes(path)
+    ? selectedPaths.filter((item) => item !== path)
+    : [...selectedPaths, path];
+
+export const countSelectedGitEntries = (
+  entries: ReadonlyArray<GitRepositoryRecord["entries"][number]>,
+  selectedPaths: ReadonlyArray<string>
+): number =>
+  entries.filter((entry) => selectedPaths.includes(entry.path)).length;
+
+export const retainGitPathSelection = (
+  selectedPaths: ReadonlyArray<string>,
+  repository: GitRepositoryRecord | null
+): ReadonlyArray<string> => {
+  if (!repository) {
+    return [];
+  }
+
+  const validPaths = new Set(repository.entries.map((entry) => entry.path));
+  return selectedPaths.filter((path) => validPaths.has(path));
+};
+
 export const resolveGitDiffScope = (
   repository: GitRepositoryRecord | null,
   selectedScope: GitDiffScope
@@ -160,6 +193,37 @@ export const resolveGitDiffScope = (
   }
 
   return GitDiffScope.Staged;
+};
+
+export const resolveGitFocusedPath = (
+  repository: GitRepositoryRecord | null,
+  scope: GitDiffScope,
+  focusedPath: string | null
+): string | null => {
+  if (!repository || !focusedPath) {
+    return null;
+  }
+
+  const group = scope === GitDiffScope.Staged
+    ? repository.entries.filter((entry) => entry.staged)
+    : repository.entries.filter((entry) => entry.unstaged);
+
+  return group.some((entry) => entry.path === focusedPath)
+    ? focusedPath
+    : null;
+};
+
+export const filterGitDiffByPath = (
+  diff: string,
+  path: string | null
+): string => {
+  if (!path || diff.trim().length === 0) {
+    return diff;
+  }
+
+  const sections = splitGitDiffSections(diff);
+  const match = sections.find((section) => section.path === path);
+  return match?.content ?? diff;
 };
 
 export const readGitCommitValidationMessage = (
@@ -245,3 +309,33 @@ const isAllowedConventionalCommitType = (value: string): boolean =>
   value === ConventionalCommitType.Revert ||
   value === ConventionalCommitType.Style ||
   value === ConventionalCommitType.Test;
+
+const splitGitDiffSections = (
+  diff: string
+): ReadonlyArray<{ path: string; content: string }> => {
+  const trimmed = diff.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  const parts = trimmed.split("\ndiff --git ");
+  return parts
+    .map((part, index) => index === 0 ? part : `diff --git ${part}`)
+    .map(readGitDiffSection)
+    .filter((section): section is { path: string; content: string } => section !== null);
+};
+
+const readGitDiffSection = (
+  value: string
+): { path: string; content: string } | null => {
+  const firstLine = value.split("\n", 1)[0] ?? "";
+  const match = /^diff --git a\/(.+?) b\/(.+)$/u.exec(firstLine);
+  if (!match?.[2]) {
+    return null;
+  }
+
+  return {
+    path: match[2],
+    content: value
+  };
+};
