@@ -1,4 +1,6 @@
 import {
+  GitDiffScope,
+  type GitRepositoryRecord,
   QualityGateId,
   type QualityGateEventRecord,
   type QualityGateId as QualityGateKey,
@@ -97,5 +99,117 @@ export const sortQualityGates = (
       DefaultSelectedGates.indexOf(left) - DefaultSelectedGates.indexOf(right)
   );
 
+export const groupGitStatusEntries = (
+  repository: GitRepositoryRecord
+): {
+  staged: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
+  unstaged: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
+  untracked: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
+} => ({
+  staged: repository.entries.filter((entry) => entry.staged),
+  unstaged: repository.entries.filter((entry) => entry.unstaged),
+  untracked: repository.entries.filter((entry) => entry.untracked)
+});
+
+export const resolveGitDiffScope = (
+  repository: GitRepositoryRecord | null,
+  selectedScope: GitDiffScope
+): GitDiffScope => {
+  if (!repository) {
+    return selectedScope;
+  }
+
+  if (selectedScope === GitDiffScope.Staged && repository.stagedCount > 0) {
+    return GitDiffScope.Staged;
+  }
+
+  if (repository.unstagedCount > 0) {
+    return GitDiffScope.Unstaged;
+  }
+
+  return GitDiffScope.Staged;
+};
+
+export const readGitCommitValidationMessage = (
+  message: string,
+  repository: GitRepositoryRecord | null
+): string | null => {
+  const trimmed = message.trim();
+
+  if (trimmed.length === 0) {
+    return "Commit message is required.";
+  }
+
+  if (!isConventionalCommitMessage(trimmed)) {
+    return "Use a Conventional Commit message such as feat(projects): add git workspace panel.";
+  }
+
+  if (!repository || repository.stagedCount === 0) {
+    return "Stage changes before creating a commit.";
+  }
+
+  return null;
+};
+
+export const isConventionalCommitMessage = (value: string): boolean => {
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex <= 0) {
+    return false;
+  }
+
+  const header = value.slice(0, separatorIndex).trim();
+  const description = value.slice(separatorIndex + 1).trim();
+  if (description.length === 0) {
+    return false;
+  }
+
+  const breaking = header.endsWith("!");
+  const normalizedHeader = breaking ? header.slice(0, -1) : header;
+  const scopeStart = normalizedHeader.indexOf("(");
+
+  if (scopeStart < 0) {
+    return isAllowedConventionalCommitType(normalizedHeader);
+  }
+
+  if (!normalizedHeader.endsWith(")")) {
+    return false;
+  }
+
+  const type = normalizedHeader.slice(0, scopeStart);
+  const scope = normalizedHeader.slice(scopeStart + 1, -1);
+
+  return (
+    isAllowedConventionalCommitType(type) &&
+    /^[a-z0-9./_-]+$/u.test(scope)
+  );
+};
+
 const isRunActive = (status: QualityGateRunRecord["status"]): boolean =>
   status === "pending" || status === "running";
+
+const ConventionalCommitType = {
+  Build: "build",
+  Chore: "chore",
+  Ci: "ci",
+  Docs: "docs",
+  Feat: "feat",
+  Fix: "fix",
+  Perf: "perf",
+  Refactor: "refactor",
+  Revert: "revert",
+  Style: "style",
+  Test: "test"
+} as const;
+
+const isAllowedConventionalCommitType = (value: string): boolean =>
+  value === ConventionalCommitType.Build ||
+  value === ConventionalCommitType.Chore ||
+  value === ConventionalCommitType.Ci ||
+  value === ConventionalCommitType.Docs ||
+  value === ConventionalCommitType.Feat ||
+  value === ConventionalCommitType.Fix ||
+  value === ConventionalCommitType.Perf ||
+  value === ConventionalCommitType.Refactor ||
+  value === ConventionalCommitType.Revert ||
+  value === ConventionalCommitType.Style ||
+  value === ConventionalCommitType.Test;

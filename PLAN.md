@@ -370,6 +370,8 @@ Acceptance:
 - [x] Expose git status/diff/commit endpoints
 - [x] Quality gates runnable by server with typed run/list/events/stream endpoints
 - [x] UI displays quality gate results
+- [x] UI displays Git repository status, staged/unstaged diffs, and Conventional Commit creation in the `Projects` screen
+- [x] Add deterministic Puppeteer validation for the `Projects` Git workspace flow using a stub API server and local browser storage seeding
 - [ ] Optional: auto-commit with Conventional Commits
 
 Acceptance:

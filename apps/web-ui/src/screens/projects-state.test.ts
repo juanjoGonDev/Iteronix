@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  groupGitStatusEntries,
+  isConventionalCommitMessage,
   mergeRunEvents,
+  readGitCommitValidationMessage,
+  resolveGitDiffScope,
   readGateExecutionState,
   readSelectedRun,
   readStreamingRunId,
@@ -8,7 +12,9 @@ import {
   sortQualityGates
 } from "./projects-state.js";
 import {
+  GitDiffScope,
   QualityGateId,
+  type GitRepositoryRecord,
   type QualityGateEventRecord,
   type QualityGateRunRecord
 } from "../shared/workbench-types.js";
@@ -105,6 +111,66 @@ describe("projects state helpers", () => {
       QualityGateId.Build
     ]);
   });
+
+  it("groups git status entries and resolves the active diff scope", () => {
+    const repository = createRepository({
+      stagedCount: 1,
+      unstagedCount: 1,
+      untrackedCount: 1,
+      entries: [
+        createGitEntry({
+          path: "apps/web-ui/src/screens/Projects.ts",
+          staged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/shared/git-client.ts",
+          unstaged: true
+        }),
+        createGitEntry({
+          path: "apps/web-ui/src/screens/Git.ts",
+          untracked: true
+        })
+      ]
+    });
+
+    expect(groupGitStatusEntries(repository).staged).toHaveLength(1);
+    expect(groupGitStatusEntries(repository).unstaged).toHaveLength(1);
+    expect(groupGitStatusEntries(repository).untracked).toHaveLength(1);
+    expect(resolveGitDiffScope(repository, GitDiffScope.Staged)).toBe(GitDiffScope.Staged);
+    expect(
+      resolveGitDiffScope(
+        createRepository({
+          stagedCount: 0,
+          unstagedCount: 1
+        }),
+        GitDiffScope.Staged
+      )
+    ).toBe(GitDiffScope.Unstaged);
+  });
+
+  it("validates conventional commit messages for the git workspace form", () => {
+    const repository = createRepository({
+      stagedCount: 1
+    });
+
+    expect(isConventionalCommitMessage("feat(projects): add git workspace panel")).toBe(true);
+    expect(isConventionalCommitMessage("refactor(ui)!: change git layout")).toBe(true);
+    expect(isConventionalCommitMessage("ship it")).toBe(false);
+    expect(
+      readGitCommitValidationMessage("", repository)
+    ).toBe("Commit message is required.");
+    expect(
+      readGitCommitValidationMessage("ship it", repository)
+    ).toBe("Use a Conventional Commit message such as feat(projects): add git workspace panel.");
+    expect(
+      readGitCommitValidationMessage(
+        "feat(projects): add git workspace panel",
+        createRepository({
+          stagedCount: 0
+        })
+      )
+    ).toBe("Stage changes before creating a commit.");
+  });
 });
 
 const createRun = (input: {
@@ -144,4 +210,40 @@ const createEvent = (input: {
   data: {
     text: input.text
   }
+});
+
+const createRepository = (input: {
+  stagedCount?: number;
+  unstagedCount?: number;
+  untrackedCount?: number;
+  entries?: GitRepositoryRecord["entries"];
+}): GitRepositoryRecord => ({
+  branch: "feature/git-ui",
+  upstream: "origin/feature/git-ui",
+  ahead: 1,
+  behind: 0,
+  clean: false,
+  stagedCount: input.stagedCount ?? 1,
+  unstagedCount: input.unstagedCount ?? 0,
+  untrackedCount: input.untrackedCount ?? 0,
+  entries: input.entries ?? [
+    createGitEntry({
+      path: "apps/web-ui/src/screens/Projects.ts",
+      staged: true
+    })
+  ]
+});
+
+const createGitEntry = (input: {
+  path: string;
+  staged?: boolean;
+  unstaged?: boolean;
+  untracked?: boolean;
+}): GitRepositoryRecord["entries"][number] => ({
+  path: input.path,
+  indexStatus: input.untracked ? "?" : input.staged ? "M" : " ",
+  workingTreeStatus: input.untracked ? "?" : input.unstaged ? "M" : " ",
+  staged: input.staged ?? false,
+  unstaged: input.unstaged ?? false,
+  untracked: input.untracked ?? false
 });

@@ -30,6 +30,45 @@ export type ProjectRecord = {
   updatedAt: string;
 };
 
+export const GitDiffScope = {
+  Staged: "staged",
+  Unstaged: "unstaged"
+} as const;
+
+export type GitDiffScope = typeof GitDiffScope[keyof typeof GitDiffScope];
+
+export type GitStatusEntryRecord = {
+  path: string;
+  originalPath?: string;
+  indexStatus: string;
+  workingTreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+};
+
+export type GitRepositoryRecord = {
+  branch?: string;
+  upstream?: string;
+  ahead: number;
+  behind: number;
+  clean: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  entries: ReadonlyArray<GitStatusEntryRecord>;
+};
+
+export type GitDiffRecord = {
+  staged: boolean;
+  diff: string;
+};
+
+export type GitCommitRecord = {
+  hash: string;
+  message: string;
+};
+
 export type QualityGateRunRecord = {
   id: string;
   projectId: string;

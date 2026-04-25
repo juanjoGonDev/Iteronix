@@ -1055,3 +1055,31 @@
   - Ninguno nuevo; el cambio es documental y deja `docs/RUNNING.md` como única referencia operativa detallada
 - Next:
   - Cortar la cadena de prompts documentales repetitivos y reanclar el siguiente paso en una capacidad funcional pendiente del plan
+
+### 2026-04-25 21:57 (Europe/Madrid) — Projects Git Workspace UI
+
+- Summary: Integrada la UI de Git en `apps/web-ui` dentro del screen `Projects`, reutilizando el shell existente para mostrar estado de repositorio, diffs staged/unstaged y creación de Conventional Commits contra los endpoints server-first ya expuestos.
+- Decisions:
+  - Aplicar `ui-implementations`, `uncodixfy`, `strict-acceptance-criteria`, `repo-invariants-guardian`, `minimal-diff-mode` y `quality-gates-enforcer`
+  - Mantener Git dentro de `Projects` para no romper invariantes de navegación ni abrir otra pantalla para una capacidad ya ligada al proyecto activo
+  - Añadir contratos Git propios en `apps/web-ui/src/shared`, helpers puros en `projects-state.ts` y una validación browser determinista con stub HTTP local, sin cambiar todavía CI ni el backend Git
+- Changes:
+  - **Added apps/web-ui/src/shared/git-client.ts** y **git-client.test.ts**: cliente tipado para `/git/status`, `/git/diff` y `/git/commit`
+  - **Updated apps/web-ui/src/shared/workbench-types.ts** y **apps/web-ui/src/screens/projects-state.ts**: tipos Git, agrupado de cambios, selección de diff y validación de Conventional Commits
+  - **Rebuilt apps/web-ui/src/screens/Projects.ts**: panel `Git workspace` con estado staged/unstaged/untracked y panel `Git review` con diffs y commit inline
+  - **Added apps/web-ui/scripts/validate-projects-git-workspace.ts** y script npm `validate:git-workspace`
+  - **Updated PLAN.md**: hitos UI/validación de Git marcados como completados
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/shared/git-client.test.ts apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - La UI de commit depende de cambios ya staged porque el backend actual sólo expone status/diff/commit; no hay stage/unstage server-first todavía
+  - El nuevo validador browser queda local por ahora; aún no está integrado en CI
+- Next:
+  - El siguiente paso con más valor es completar el flujo Git server-first con stage/unstage/discard controlados y luego exponerlo en la misma pantalla `Projects`
