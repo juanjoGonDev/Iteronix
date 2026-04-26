@@ -30,6 +30,7 @@ jobs:
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:source-linking
       - run: pnpm -C apps/web-ui validate:quality-gates
+      - run: pnpm -C apps/web-ui validate:git-workspace
       - run: pnpm eval:min
       - if: failure()
         uses: actions/upload-artifact@v4

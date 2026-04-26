@@ -1135,3 +1135,26 @@
   - El validador browser de Git depende de recompilar `apps/web-ui` antes de ejecutarse porque consume el preview built; quedó cubierto por `pnpm build` dentro del cierre de gates
 - Next:
   - El siguiente paso útil ya no es refinar textos ni validadores: toca integrar el flujo Git UI en CI o ampliar capacidades Git server-first de mayor valor, como selección por lotes en diff grandes o acciones de commit/push reviewadas
+### 2026-04-26 02:33 (Europe/Madrid) — CI Git Browser Validation
+
+- Summary: Integrada la validación browser `validate:git-workspace` en GitHub Actions reutilizando exactamente el mismo setup de Puppeteer/Chrome y la misma política de screenshots sólo en fallo que ya usaban las otras validaciones de `apps/web-ui`.
+- Decisions:
+  - Aplicar `minimal-diff-mode`, `strict-acceptance-criteria`, `quality-gates-enforcer` y `ci-parity-finalizer`
+  - Mantener un único job `build` y añadir sólo el paso faltante después de `pnpm build`, sin tocar el orden de `validate:source-linking`, `validate:quality-gates` ni `pnpm eval:min`
+  - No cambiar el artefacto de screenshots: ya cubre `apps/web-ui/screenshots/` y sólo se publica cuando el job falla
+- Changes:
+  - **Updated .github/workflows/ci.yml**: nuevo paso `pnpm -C apps/web-ui validate:git-workspace` tras `pnpm build` y antes de `pnpm eval:min`
+  - **Updated PLAN.md**: milestone 6 actualizado con la integración CI de la validación browser del workspace Git
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm eval:min`
+- Issues/Risks:
+  - Ninguno nuevo; la paridad local cubre el orden y los comandos del workflow actualizado
+- Next:
+  - El siguiente paso con más valor ya no es añadir más validadores, sino completar la superficie Git server-first con operaciones de branch/push o revisión previa al commit desde la misma pantalla `Projects`
