@@ -1,5 +1,7 @@
 import { requestJson } from "./server-api-client.js";
 import type {
+  GitBranchListRecord,
+  GitBranchOperationRecord,
   GitCommitRecord,
   GitDiffRecord,
   GitPathOperationRecord,
@@ -12,7 +14,10 @@ const EndpointPath = {
   GitStage: "/git/stage",
   GitUnstage: "/git/unstage",
   GitRevert: "/git/revert",
-  GitCommit: "/git/commit"
+  GitCommit: "/git/commit",
+  GitBranchesList: "/git/branches/list",
+  GitBranchesCreate: "/git/branches/create",
+  GitBranchesCheckout: "/git/branches/checkout"
 } as const;
 
 export type GitClient = {
@@ -23,6 +28,17 @@ export type GitClient = {
     projectId: string;
     staged: boolean;
   }) => Promise<GitDiffRecord>;
+  listBranches: (input: {
+    projectId: string;
+  }) => Promise<GitBranchListRecord>;
+  createBranch: (input: {
+    projectId: string;
+    branchName: string;
+  }) => Promise<GitBranchOperationRecord>;
+  checkoutBranch: (input: {
+    projectId: string;
+    branchName: string;
+  }) => Promise<GitBranchOperationRecord>;
   stagePaths: (input: {
     projectId: string;
     paths: ReadonlyArray<string>;
@@ -58,6 +74,32 @@ export const createGitClient = (): GitClient => ({
         staged: input.staged
       },
       parse: parseGitDiffResponse
+    }),
+  listBranches: (input) =>
+    requestJson({
+      path: EndpointPath.GitBranchesList,
+      body: {
+        projectId: input.projectId
+      },
+      parse: parseGitBranchListResponse
+    }),
+  createBranch: (input) =>
+    requestJson({
+      path: EndpointPath.GitBranchesCreate,
+      body: {
+        projectId: input.projectId,
+        branchName: input.branchName
+      },
+      parse: parseGitBranchOperationResponse
+    }),
+  checkoutBranch: (input) =>
+    requestJson({
+      path: EndpointPath.GitBranchesCheckout,
+      body: {
+        projectId: input.projectId,
+        branchName: input.branchName
+      },
+      parse: parseGitBranchOperationResponse
     }),
   stagePaths: (input) =>
     requestJson({
@@ -109,6 +151,27 @@ export const parseGitDiffResponse = (value: unknown): GitDiffRecord => {
   };
 };
 
+export const parseGitBranchListResponse = (
+  value: unknown
+): GitBranchListRecord => {
+  const record = ensureRecord(value, "gitBranchListResponse");
+  const branches = readRequiredRecord(record, "gitBranchListResponse", "branches");
+
+  return {
+    local: readRequiredArray(branches, "gitBranchListResponse.branches", "local").map((branch) =>
+      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord"))
+    ),
+    remote: readRequiredArray(branches, "gitBranchListResponse.branches", "remote").map((branch) =>
+      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord"))
+    )
+  };
+};
+
+export const parseGitBranchOperationResponse = (
+  value: unknown
+): GitBranchOperationRecord =>
+  parseGitBranchOperationRecord(readRequiredRecord(value, "gitBranchOperationResponse", "branch"));
+
 export const parseGitPathOperationResponse = (
   value: unknown
 ): GitPathOperationRecord => {
@@ -157,6 +220,21 @@ const parseGitCommitRecord = (
 ): GitCommitRecord => ({
   hash: readRequiredString(value, "gitCommitRecord", "hash"),
   message: readRequiredString(value, "gitCommitRecord", "message")
+});
+
+const parseGitBranchRecord = (
+  value: Record<string, unknown>
+): GitBranchListRecord["local"][number] => ({
+  name: readRequiredString(value, "gitBranchRecord", "name"),
+  current: readRequiredBoolean(value, "gitBranchRecord", "current"),
+  remote: readRequiredBoolean(value, "gitBranchRecord", "remote"),
+  ...readOptionalString(value, "upstream")
+});
+
+const parseGitBranchOperationRecord = (
+  value: Record<string, unknown>
+): GitBranchOperationRecord => ({
+  name: readRequiredString(value, "gitBranchOperationRecord", "name")
 });
 
 const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {

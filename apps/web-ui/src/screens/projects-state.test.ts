@@ -7,6 +7,7 @@ import {
   groupGitStatusEntries,
   isConventionalCommitMessage,
   mergeRunEvents,
+  readGitBranchValidationMessage,
   readGitSectionBulkAction,
   readGitSectionActions,
   readGitCommitValidationMessage,
@@ -22,6 +23,7 @@ import {
 } from "./projects-state.js";
 import {
   GitDiffScope,
+  type GitBranchListRecord,
   QualityGateId,
   type GitRepositoryRecord,
   type QualityGateEventRecord,
@@ -289,6 +291,7 @@ describe("projects state helpers", () => {
     const repository = createRepository({
       stagedCount: 1
     });
+    const branches = createBranches();
 
     expect(isConventionalCommitMessage("feat(projects): add git workspace panel")).toBe(true);
     expect(isConventionalCommitMessage("refactor(ui)!: change git layout")).toBe(true);
@@ -307,6 +310,10 @@ describe("projects state helpers", () => {
         })
       )
     ).toBe("Stage changes before creating a commit.");
+    expect(readGitBranchValidationMessage("", branches)).toBe("Branch name is required.");
+    expect(readGitBranchValidationMessage("bad branch", branches)).toBe("Use a valid Git branch name such as feature/projects-branching.");
+    expect(readGitBranchValidationMessage("develop", branches)).toBe("A local branch named develop already exists.");
+    expect(readGitBranchValidationMessage("feature/projects-branching", branches)).toBe(null);
   });
 });
 
@@ -383,4 +390,27 @@ const createGitEntry = (input: {
   staged: input.staged ?? false,
   unstaged: input.unstaged ?? false,
   untracked: input.untracked ?? false
+});
+
+const createBranches = (): GitBranchListRecord => ({
+  local: [
+    {
+      name: "feature/git-ui",
+      current: true,
+      remote: false,
+      upstream: "origin/feature/git-ui"
+    },
+    {
+      name: "develop",
+      current: false,
+      remote: false
+    }
+  ],
+  remote: [
+    {
+      name: "origin/release/next",
+      current: false,
+      remote: true
+    }
+  ]
 });

@@ -6,7 +6,10 @@ export const GitCommandName = "git";
 export const GitErrorCode = {
   CommandFailed: "command_failed",
   NotRepository: "not_repository",
-  NoChangesToCommit: "no_changes_to_commit"
+  NoChangesToCommit: "no_changes_to_commit",
+  BranchExists: "branch_exists",
+  BranchMissing: "branch_missing",
+  InvalidBranchName: "invalid_branch_name"
 } as const;
 
 export type GitErrorCode = typeof GitErrorCode[keyof typeof GitErrorCode];
@@ -56,6 +59,22 @@ export type GitCommitResult = {
   message: string;
 };
 
+export type GitBranch = {
+  name: string;
+  current: boolean;
+  remote: boolean;
+  upstream?: string;
+};
+
+export type GitBranchListResult = {
+  local: ReadonlyArray<GitBranch>;
+  remote: ReadonlyArray<GitBranch>;
+};
+
+export type GitBranchOperationResult = {
+  name: string;
+};
+
 export type GitRepository = {
   getStatus: (
     input: {
@@ -92,6 +111,23 @@ export type GitRepository = {
       message: string;
     }
   ) => Promise<Result<GitCommitResult, GitAdapterError>>;
+  listBranches: (
+    input: {
+      rootPath: string;
+    }
+  ) => Promise<Result<GitBranchListResult, GitAdapterError>>;
+  createBranch: (
+    input: {
+      rootPath: string;
+      name: string;
+    }
+  ) => Promise<Result<GitBranchOperationResult, GitAdapterError>>;
+  checkoutBranch: (
+    input: {
+      rootPath: string;
+      name: string;
+    }
+  ) => Promise<Result<GitBranchOperationResult, GitAdapterError>>;
 };
 
 export const createGitCliAdapter = (
@@ -220,13 +256,94 @@ export const createGitCliAdapter = (
     };
   };
 
+  const listBranches = async (
+    branchInput: {
+      rootPath: string;
+    }
+  ): Promise<Result<GitBranchListResult, GitAdapterError>> => {
+    const localBranches = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["for-each-ref", "--format=%(refname:short)%09%(HEAD)%09%(upstream:short)", "refs/heads"]
+    });
+    if (localBranches.type === ResultType.Err) {
+      return localBranches;
+    }
+
+    const remoteBranches = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["for-each-ref", "--format=%(refname:short)", "refs/remotes"]
+    });
+    if (remoteBranches.type === ResultType.Err) {
+      return remoteBranches;
+    }
+
+    return {
+      type: ResultType.Ok,
+      value: {
+        local: parseLocalBranchOutput(localBranches.value.stdout),
+        remote: parseRemoteBranchOutput(remoteBranches.value.stdout)
+      }
+    };
+  };
+
+  const createBranch = async (
+    branchInput: {
+      rootPath: string;
+      name: string;
+    }
+  ): Promise<Result<GitBranchOperationResult, GitAdapterError>> => {
+    const result = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["branch", branchInput.name]
+    });
+    if (result.type === ResultType.Err) {
+      return result;
+    }
+
+    return {
+      type: ResultType.Ok,
+      value: {
+        name: branchInput.name
+      }
+    };
+  };
+
+  const checkoutBranch = async (
+    branchInput: {
+      rootPath: string;
+      name: string;
+    }
+  ): Promise<Result<GitBranchOperationResult, GitAdapterError>> => {
+    const result = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["switch", branchInput.name]
+    });
+    if (result.type === ResultType.Err) {
+      return result;
+    }
+
+    return {
+      type: ResultType.Ok,
+      value: {
+        name: branchInput.name
+      }
+    };
+  };
+
   return {
     getStatus,
     getDiff,
     stagePaths,
     unstagePaths,
     revertPaths,
-    createCommit
+    createCommit,
+    listBranches,
+    createBranch,
+    checkoutBranch
   };
 };
 
@@ -438,6 +555,35 @@ const parseStatusEntry = (line: string): GitStatusEntry => {
   };
 };
 
+const parseLocalBranchOutput = (stdout: string): ReadonlyArray<GitBranch> =>
+  stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map(parseLocalBranchLine);
+
+const parseLocalBranchLine = (line: string): GitBranch => {
+  const [namePart = "", currentPart = "", upstreamPart = ""] = line.split("\t");
+
+  return {
+    name: namePart.trim(),
+    current: currentPart.trim() === "*",
+    remote: false,
+    ...(upstreamPart.trim().length > 0 ? { upstream: upstreamPart.trim() } : {})
+  };
+};
+
+const parseRemoteBranchOutput = (stdout: string): ReadonlyArray<GitBranch> =>
+  stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.endsWith("/HEAD"))
+    .map((name) => ({
+      name,
+      current: false,
+      remote: true
+    }));
+
 const mapGitExecutionFailure = (
   input: {
     command: string;
@@ -463,6 +609,49 @@ const mapGitExecutionFailure = (
       code: GitErrorCode.NoChangesToCommit,
       command: input.command,
       message: "No staged changes to commit",
+      exitCode: input.exitCode,
+      stdout: input.stdout,
+      stderr: input.stderr
+    };
+  }
+
+  if (combinedOutput.includes("already exists")) {
+    return {
+      code: GitErrorCode.BranchExists,
+      command: input.command,
+      message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Branch already exists",
+      exitCode: input.exitCode,
+      stdout: input.stdout,
+      stderr: input.stderr
+    };
+  }
+
+  if (
+    combinedOutput.includes("not a valid branch name") ||
+    combinedOutput.includes("invalid branch name")
+  ) {
+    return {
+      code: GitErrorCode.InvalidBranchName,
+      command: input.command,
+      message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Invalid branch name",
+      exitCode: input.exitCode,
+      stdout: input.stdout,
+      stderr: input.stderr
+    };
+  }
+
+  if (
+    combinedOutput.includes("unknown revision") ||
+    combinedOutput.includes("invalid reference") ||
+    combinedOutput.includes("not a commit") ||
+    combinedOutput.includes("did not match any file") ||
+    combinedOutput.includes("invalid reference:") ||
+    combinedOutput.includes("invalid reference")
+  ) {
+    return {
+      code: GitErrorCode.BranchMissing,
+      command: input.command,
+      message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Branch not found",
       exitCode: input.exitCode,
       stdout: input.stdout,
       stderr: input.stderr

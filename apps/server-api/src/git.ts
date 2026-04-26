@@ -1,5 +1,7 @@
 import type {
   GitAdapterError,
+  GitBranchListResult,
+  GitBranchOperationResult,
   GitCommitResult,
   GitDiffResult,
   GitPathOperationResult,
@@ -151,6 +153,44 @@ export const parseGitCommitRequest = (
   });
 };
 
+export const parseGitBranchMutationRequest = (
+  value: unknown
+): Result<{ projectId: string; branchName: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(
+    value,
+    GitField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const branchName = readRequiredString(
+    value,
+    GitField.BranchName,
+    ErrorMessage.MissingBranchName
+  );
+  if (branchName.type === ResultType.Err) {
+    return branchName;
+  }
+
+  if (!isValidGitBranchName(branchName.value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBranchName
+    });
+  }
+
+  return ok({
+    projectId: projectId.value,
+    branchName: branchName.value
+  });
+};
+
 export const executeGitStatus = async (
   input: { projectId: string },
   dependencies: GitApiDependencies
@@ -219,6 +259,56 @@ export const executeGitCommit = async (
   return mapGitResult(result);
 };
 
+export const executeGitBranchList = async (
+  input: { projectId: string },
+  dependencies: GitApiDependencies
+): Promise<Result<GitBranchListResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await dependencies.git.listBranches({
+    rootPath: root.value
+  });
+
+  return mapGitResult(result);
+};
+
+export const executeGitBranchCreate = async (
+  input: { projectId: string; branchName: string },
+  dependencies: GitApiDependencies
+): Promise<Result<GitBranchOperationResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await dependencies.git.createBranch({
+    rootPath: root.value,
+    name: input.branchName
+  });
+
+  return mapGitResult(result);
+};
+
+export const executeGitBranchCheckout = async (
+  input: { projectId: string; branchName: string },
+  dependencies: GitApiDependencies
+): Promise<Result<GitBranchOperationResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await dependencies.git.checkoutBranch({
+    rootPath: root.value,
+    name: input.branchName
+  });
+
+  return mapGitResult(result);
+};
+
 const resolveGitRoot = (
   projectId: string,
   dependencies: GitApiDependencies
@@ -258,7 +348,10 @@ const mapGitResult = <T>(
 const mapGitAdapterError = (error: GitAdapterError): ApiError => {
   if (
     error.code === GitErrorCode.NotRepository ||
-    error.code === GitErrorCode.NoChangesToCommit
+    error.code === GitErrorCode.NoChangesToCommit ||
+    error.code === GitErrorCode.BranchExists ||
+    error.code === GitErrorCode.BranchMissing ||
+    error.code === GitErrorCode.InvalidBranchName
   ) {
     return {
       status: HttpStatus.BadRequest,
@@ -290,6 +383,41 @@ const isConventionalCommitMessage = (value: string): boolean =>
   /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9./_-]+\))?!?: .+/u.test(
     value
   );
+
+export const isValidGitBranchName = (value: string): boolean => {
+  if (value.length === 0) {
+    return false;
+  }
+
+  if (
+    value.startsWith("-") ||
+    value.startsWith(".") ||
+    value.endsWith(".") ||
+    value.endsWith("/") ||
+    value.endsWith(".lock")
+  ) {
+    return false;
+  }
+
+  if (
+    value.includes("..") ||
+    value.includes("@{") ||
+    value.includes("\\") ||
+    value.includes(" ") ||
+    value.includes("~") ||
+    value.includes("^") ||
+    value.includes(":") ||
+    value.includes("?") ||
+    value.includes("*") ||
+    value.includes("[")
+  ) {
+    return false;
+  }
+
+  return value
+    .split("/")
+    .every((segment) => segment.length > 0 && !segment.endsWith("."));
+};
 
 const invalidBody = (): Result<never, ApiError> =>
   err({

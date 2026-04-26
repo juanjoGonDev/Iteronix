@@ -23,6 +23,7 @@ import {
   groupGitStatusEntries,
   mergeRunEvents,
   readGateExecutionState,
+  readGitBranchValidationMessage,
   readGitCommitValidationMessage,
   readGitSectionBulkAction,
   readGitSectionActions,
@@ -37,6 +38,7 @@ import {
   type GateExecutionState
 } from "./projects-state.js";
 import type {
+  GitBranchListRecord,
   GitCommitRecord,
   GitDiffRecord,
   GitDiffScope as GitDiffScopeValue,
@@ -73,6 +75,8 @@ const GitPendingAction = {
   Refresh: "refresh",
   Diff: "diff",
   Commit: "commit",
+  BranchCreate: "branch-create",
+  BranchCheckout: "branch-checkout",
   Stage: GitWorkspaceAction.Stage,
   Unstage: GitWorkspaceAction.Unstage,
   Revert: GitWorkspaceAction.Revert
@@ -97,10 +101,12 @@ interface ProjectsScreenState {
   pendingAction: PendingAction | null;
   streamState: StreamState;
   gitRepository: GitRepositoryRecord | null;
+  gitBranches: GitBranchListRecord | null;
   gitDiffs: GitDiffState;
   selectedGitDiffScope: GitDiffScopeValue;
   selectedGitPaths: ReadonlyArray<string>;
   focusedGitDiffPath: string | null;
+  gitBranchName: string;
   gitCommitMessage: string;
   gitPendingAction: GitPendingAction | null;
   gitPendingPath: string | null;
@@ -132,6 +138,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       pendingAction: null,
       streamState: StreamState.Idle,
       gitRepository: null,
+      gitBranches: null,
       gitDiffs: {
         staged: null,
         unstaged: null
@@ -139,6 +146,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       selectedGitDiffScope: GitDiffScope.Staged,
       selectedGitPaths: [],
       focusedGitDiffPath: null,
+      gitBranchName: "",
       gitCommitMessage: "",
       gitPendingAction: null,
       gitPendingPath: null,
@@ -295,6 +303,10 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
   private renderGitWorkspacePanel(): HTMLElement {
     const currentProject = this.state.currentProject;
     const repository = this.state.gitRepository;
+    const branchValidationMessage = readGitBranchValidationMessage(
+      this.state.gitBranchName,
+      this.state.gitBranches
+    );
 
     return createElement(SectionPanel, {
       title: "Git workspace",
@@ -329,10 +341,24 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
             ])
           : renderGitWorkspaceContent({
               repository,
+              branches: this.state.gitBranches,
+              branchName: this.state.gitBranchName,
+              branchValidationMessage,
               selectedPaths: this.state.selectedGitPaths,
               focusedPath: this.state.focusedGitDiffPath,
               pendingAction: this.state.gitPendingAction,
               pendingPath: this.state.gitPendingPath,
+              onBranchNameChange: (value) => {
+                this.setState({
+                  gitBranchName: value
+                });
+              },
+              onCreateBranch: () => {
+                void this.handleCreateGitBranch();
+              },
+              onCheckoutBranch: (branchName) => {
+                void this.handleCheckoutGitBranch(branchName);
+              },
               onToggleSelection: (path) => this.handleGitSelectionToggle(path),
               onBulkAction: (section) => {
                 void this.handleGitBulkAction(section);
@@ -743,6 +769,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         pendingAction: null,
         streamState: StreamState.Idle,
         gitRepository: null,
+        gitBranches: null,
         gitDiffs: {
           staged: null,
           unstaged: null
@@ -750,6 +777,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         selectedGitDiffScope: GitDiffScope.Staged,
         selectedGitPaths: [],
         focusedGitDiffPath: null,
+        gitBranchName: "",
         gitCommitMessage: "",
         gitPendingAction: null,
         gitPendingPath: null,
@@ -774,6 +802,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         pendingAction: null,
         streamState: StreamState.Idle,
         gitRepository: null,
+        gitBranches: null,
         gitDiffs: {
           staged: null,
           unstaged: null
@@ -781,6 +810,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         selectedGitDiffScope: GitDiffScope.Staged,
         selectedGitPaths: [],
         focusedGitDiffPath: null,
+        gitBranchName: "",
         gitCommitMessage: "",
         gitPendingAction: null,
         gitPendingPath: null,
@@ -807,6 +837,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       pendingAction: null,
       streamState: StreamState.Idle,
       gitRepository: null,
+      gitBranches: null,
       gitDiffs: {
         staged: null,
         unstaged: null
@@ -814,6 +845,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       selectedGitDiffScope: GitDiffScope.Staged,
       selectedGitPaths: [],
       focusedGitDiffPath: null,
+      gitBranchName: "",
       gitCommitMessage: "",
       gitPendingAction: null,
       gitPendingPath: null,
@@ -1010,6 +1042,86 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     });
   }
 
+  private async handleCreateGitBranch(): Promise<void> {
+    const currentProject = this.state.currentProject;
+    const validationMessage = readGitBranchValidationMessage(
+      this.state.gitBranchName,
+      this.state.gitBranches
+    );
+    if (!currentProject || validationMessage !== null || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    const branchName = this.state.gitBranchName.trim();
+    this.setState({
+      gitPendingAction: GitPendingAction.BranchCreate,
+      gitPendingPath: branchName,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const branch = await this.gitClient.createBranch({
+        projectId: currentProject.id,
+        branchName
+      });
+
+      this.setState({
+        gitBranchName: "",
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: `Branch ${branch.name} created.`,
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not create the branch.",
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handleCheckoutGitBranch(branchName: string): Promise<void> {
+    const currentProject = this.state.currentProject;
+    if (!currentProject || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    this.setState({
+      gitPendingAction: GitPendingAction.BranchCheckout,
+      gitPendingPath: branchName,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const branch = await this.gitClient.checkoutBranch({
+        projectId: currentProject.id,
+        branchName
+      });
+
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: `Switched to branch ${branch.name}.`,
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not checkout the branch.",
+        noticeMessage: null
+      });
+    }
+  }
+
   private async handleGitBulkAction(
     section: GitStatusSection
   ): Promise<void> {
@@ -1105,9 +1217,14 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     }
 
     try {
-      const repository = await this.gitClient.getStatus({
-        projectId
-      });
+      const [repository, branches] = await Promise.all([
+        this.gitClient.getStatus({
+          projectId
+        }),
+        this.gitClient.listBranches({
+          projectId
+        })
+      ]);
       const selectedGitDiffScope = resolveGitDiffScope(
         repository,
         this.state.selectedGitDiffScope
@@ -1128,6 +1245,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
       this.setState({
         gitRepository: repository,
+        gitBranches: branches,
         gitDiffs: nextDiffs,
         selectedGitDiffScope,
         selectedGitPaths,
@@ -1500,10 +1618,16 @@ const renderMetaCell = (label: string, value: string): HTMLElement =>
 
 const renderGitWorkspaceContent = (input: {
   repository: GitRepositoryRecord;
+  branches: GitBranchListRecord | null;
+  branchName: string;
+  branchValidationMessage: string | null;
   selectedPaths: ReadonlyArray<string>;
   focusedPath: string | null;
   pendingAction: GitPendingAction | null;
   pendingPath: string | null;
+  onBranchNameChange: (value: string) => void;
+  onCreateBranch: () => void;
+  onCheckoutBranch: (branchName: string) => void;
   onToggleSelection: (path: string) => void;
   onBulkAction: (section: GitStatusSection) => void;
   onFocusDiff: (path: string, scope: GitDiffScopeValue) => void;
@@ -1515,7 +1639,12 @@ const renderGitWorkspaceContent = (input: {
     createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
       createElement("div", { className: "flex items-center justify-between gap-3" }, [
         createElement("div", { className: "flex flex-col gap-1" }, [
-          createElement("p", { className: "text-sm font-semibold text-white" }, [input.repository.branch ?? "Detached HEAD"]),
+          createElement("p", {
+            className: "text-sm font-semibold text-white",
+            dataset: {
+              testid: "git-current-branch"
+            }
+          }, [input.repository.branch ?? "Detached HEAD"]),
           createElement("p", { className: "text-xs text-text-secondary" }, [input.repository.upstream ?? "No upstream configured"])
         ]),
         createElement(StatusBadge, {
@@ -1529,6 +1658,16 @@ const renderGitWorkspaceContent = (input: {
         renderMetaCell("Ahead/Behind", `${input.repository.ahead}/${input.repository.behind}`)
       ])
     ]),
+    renderGitBranchesPanel({
+      branches: input.branches,
+      branchName: input.branchName,
+      branchValidationMessage: input.branchValidationMessage,
+      pendingAction: input.pendingAction,
+      pendingPath: input.pendingPath,
+      onBranchNameChange: input.onBranchNameChange,
+      onCreateBranch: input.onCreateBranch,
+      onCheckoutBranch: input.onCheckoutBranch
+    }),
     renderGitEntryGroup({
       title: "Staged changes",
       section: GitStatusSection.Staged,
@@ -1573,6 +1712,141 @@ const renderGitWorkspaceContent = (input: {
     })
   ]);
 };
+
+const renderGitBranchesPanel = (input: {
+  branches: GitBranchListRecord | null;
+  branchName: string;
+  branchValidationMessage: string | null;
+  pendingAction: GitPendingAction | null;
+  pendingPath: string | null;
+  onBranchNameChange: (value: string) => void;
+  onCreateBranch: () => void;
+  onCheckoutBranch: (branchName: string) => void;
+}): HTMLElement =>
+  createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
+    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+      createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("h3", { className: "text-sm font-semibold text-white" }, ["Branches"]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Create a local branch or switch to another local branch without leaving the server-first workspace."
+        ])
+      ]),
+      createElement(StatusBadge, {
+        status: "info"
+      }, [
+        `${input.branches?.local.length ?? 0} local / ${input.branches?.remote.length ?? 0} remote`
+      ])
+    ]),
+    createElement("div", { className: "mt-4 grid gap-4 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]" }, [
+      createElement("div", { className: "flex flex-col gap-3" }, [
+        createElement("label", { className: "flex flex-col gap-2" }, [
+          createElement("span", { className: "text-sm font-medium text-white" }, ["New branch"]),
+          createElement("input", {
+            type: "text",
+            value: input.branchName,
+            placeholder: "feature/projects-branching",
+            className: "h-11 rounded-lg border border-border-dark bg-background-dark/40 px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none",
+            dataset: {
+              testid: "git-branch-name"
+            },
+            onChange: (event: Event) => {
+              const target = event.target;
+              if (target instanceof HTMLInputElement) {
+                input.onBranchNameChange(target.value);
+              }
+            }
+          })
+        ]),
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled: input.branchValidationMessage !== null || input.pendingAction !== null,
+          onClick: input.onCreateBranch,
+          children: input.pendingAction === GitPendingAction.BranchCreate ? "Creating branch" : "Create branch"
+        }),
+        createElement("p", {
+          className: `text-sm ${input.branchValidationMessage ? "text-amber-300" : "text-text-secondary"}`
+        }, [
+          input.branchValidationMessage ?? "Create first, then checkout when you are ready to switch."
+        ])
+      ]),
+      createElement("div", { className: "grid gap-4 md:grid-cols-2" }, [
+        createElement("div", { className: "flex flex-col gap-3" }, [
+          createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, ["Local branches"]),
+          input.branches && input.branches.local.length > 0
+            ? createElement("div", { className: "flex flex-col gap-2" }, [
+                input.branches.local.map((branch) =>
+                  renderGitBranchRow({
+                    branch,
+                    pendingAction: input.pendingAction,
+                    pendingPath: input.pendingPath,
+                    onCheckout: input.onCheckoutBranch
+                  })
+                )
+              ])
+            : createElement("p", { className: "text-sm text-text-secondary" }, ["No local branches available."])
+        ]),
+        createElement("div", { className: "flex flex-col gap-3" }, [
+          createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, ["Remote branches"]),
+          input.branches && input.branches.remote.length > 0
+            ? createElement("div", { className: "flex flex-col gap-2" }, [
+                input.branches.remote.map((branch) =>
+                  createElement("div", {
+                    key: `remote-${branch.name}`,
+                    className: "rounded-md border border-border-dark px-3 py-3"
+                  }, [
+                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                      createElement("div", { className: "min-w-0" }, [
+                        createElement("p", { className: "truncate text-sm font-medium text-white" }, [branch.name]),
+                        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, ["Remote reference"])
+                      ]),
+                      createElement(StatusBadge, {
+                        status: "info"
+                      }, ["remote"])
+                    ])
+                  ])
+                )
+              ])
+            : createElement("p", { className: "text-sm text-text-secondary" }, ["No remote branches available."])
+        ])
+      ])
+    ])
+  ]);
+
+const renderGitBranchRow = (input: {
+  branch: GitBranchListRecord["local"][number];
+  pendingAction: GitPendingAction | null;
+  pendingPath: string | null;
+  onCheckout: (branchName: string) => void;
+}): HTMLElement =>
+  createElement("div", {
+    key: `local-${input.branch.name}`,
+    className: `rounded-md border px-3 py-3 ${input.branch.current ? "border-primary/60 bg-primary/5" : "border-border-dark"}`
+  }, [
+    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+      createElement("div", { className: "min-w-0" }, [
+        createElement("p", { className: "truncate text-sm font-medium text-white" }, [input.branch.name]),
+        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+          input.branch.upstream ?? "No upstream configured"
+        ])
+      ]),
+      input.branch.current
+        ? createElement(StatusBadge, {
+            status: "running"
+          }, ["current"])
+        : createElement(Button, {
+            variant: "ghost",
+            size: "sm",
+            disabled: input.pendingAction !== null,
+            onClick: () => input.onCheckout(input.branch.name),
+            children:
+              input.pendingAction === GitPendingAction.BranchCheckout &&
+              input.pendingPath === input.branch.name
+                ? "Checking out"
+                : "Checkout"
+          })
+    ])
+  ]);
 
 const renderGitEntryGroup = (input: {
   title: string;

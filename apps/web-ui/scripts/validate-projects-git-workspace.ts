@@ -38,7 +38,10 @@ const RequestPath = {
   GitStage: "/git/stage",
   GitUnstage: "/git/unstage",
   GitRevert: "/git/revert",
-  GitCommit: "/git/commit"
+  GitCommit: "/git/commit",
+  GitBranchesList: "/git/branches/list",
+  GitBranchesCreate: "/git/branches/create",
+  GitBranchesCheckout: "/git/branches/checkout"
 } as const;
 
 const ResponseHeader = {
@@ -55,6 +58,8 @@ const ValidationText = {
   UnstagedDiffButton: "Unstaged diff (1)",
   CreateCommit: "Create commit",
   InvalidCommit: "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
+  BranchCreated: "Branch feature/browser-validation created.",
+  BranchSwitched: "Switched to branch feature/browser-validation.",
   BulkStageSuccess: "2 files staged.",
   BulkUnstageSuccess: "2 files moved out of the index.",
   QualityGatesReverted: "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
@@ -145,6 +150,9 @@ const FixtureCommit = {
 
 type StubState = {
   files: Record<string, StubFile>;
+  currentBranch: string;
+  localBranches: string[];
+  remoteBranches: string[];
   commitCount: number;
 };
 
@@ -212,6 +220,8 @@ async function validateProjectsGitWorkspace(): Promise<void> {
     await waitForPageTexts(page, [
       FixtureProject.name,
       "feature/git-ui",
+      "develop",
+      "origin/release/next",
       FixtureFilePath.Projects,
       FixtureFilePath.ProjectsState,
       FixtureFilePath.QualityGatesClient,
@@ -222,6 +232,23 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "after-open",
+      artifactName: "projects-git-workspace"
+    });
+
+    await typeIntoInputByTestId(page, "git-branch-name", "feature/browser-validation");
+    await waitForButtonEnabled(page, "Create branch");
+    await clickNamedButton(page, "Create branch");
+    await waitForPageTexts(page, [
+      ValidationText.BranchCreated,
+      "feature/browser-validation"
+    ]);
+    await clickGitBranchAction(page, "feature/browser-validation", "Checkout");
+    await waitForPageText(page, ValidationText.BranchSwitched);
+    await waitForCurrentBranch(page, "feature/browser-validation");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-branch-checkout",
       artifactName: "projects-git-workspace"
     });
 
@@ -343,6 +370,9 @@ async function startGitWorkspaceStubServer(): Promise<{
 }> {
   const state: StubState = {
     files: createInitialStubFiles(),
+    currentBranch: "feature/git-ui",
+    localBranches: ["feature/git-ui", "develop"],
+    remoteBranches: ["origin/feature/git-ui", "origin/release/next"],
     commitCount: 0
   };
   const server = createServer((request, response) => {
@@ -441,6 +471,21 @@ async function handleStubRequest(
 
   if (request.method === "POST" && requestUrl.pathname === RequestPath.GitCommit) {
     await handleGitCommit(request, response, state);
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesList) {
+    await handleGitBranchesList(request, response, state);
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesCreate) {
+    await handleGitBranchMutation(request, response, state, "create");
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesCheckout) {
+    await handleGitBranchMutation(request, response, state, "checkout");
     return;
   }
 
@@ -579,6 +624,88 @@ async function handleGitCommit(
   });
 }
 
+async function handleGitBranchesList(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: StubState
+): Promise<void> {
+  const body = await readJsonBody(request);
+  const projectId = readRequiredString(body, "projectId");
+
+  if (projectId !== FixtureProject.id) {
+    writeJson(response, 400, {
+      message: "Unexpected project id"
+    });
+    return;
+  }
+
+  writeJson(response, 200, {
+    branches: {
+      local: state.localBranches.map((name) => ({
+        name,
+        current: state.currentBranch === name,
+        remote: false,
+        ...(name === "feature/git-ui"
+          ? {
+              upstream: "origin/feature/git-ui"
+            }
+          : {})
+      })),
+      remote: state.remoteBranches.map((name) => ({
+        name,
+        current: false,
+        remote: true
+      }))
+    }
+  });
+}
+
+async function handleGitBranchMutation(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: StubState,
+  operation: "create" | "checkout"
+): Promise<void> {
+  const body = await readJsonBody(request);
+  const projectId = readRequiredString(body, "projectId");
+  const branchName = readRequiredString(body, "branchName");
+
+  if (projectId !== FixtureProject.id) {
+    writeJson(response, 400, {
+      message: "Unexpected project id"
+    });
+    return;
+  }
+
+  if (operation === "create") {
+    if (!state.localBranches.includes(branchName)) {
+      state.localBranches = [...state.localBranches, branchName];
+    }
+
+    writeJson(response, 201, {
+      branch: {
+        name: branchName
+      }
+    });
+    return;
+  }
+
+  if (!state.localBranches.includes(branchName)) {
+    writeJson(response, 400, {
+      message: "Unexpected branch"
+    });
+    return;
+  }
+
+  state.currentBranch = branchName;
+
+  writeJson(response, 200, {
+    branch: {
+      name: branchName
+    }
+  });
+}
+
 function createInitialStubFiles(): Record<string, StubFile> {
   return {
     [FixtureFilePath.Projects]: {
@@ -616,7 +743,7 @@ function createInitialStubFiles(): Record<string, StubFile> {
 
 function createGitRepositoryResponse(state: StubState): {
   branch: string;
-  upstream: string;
+  upstream?: string;
   ahead: number;
   behind: number;
   clean: boolean;
@@ -640,8 +767,12 @@ function createGitRepositoryResponse(state: StubState): {
   const untrackedCount = entries.filter((entry) => entry.untracked).length;
 
   return {
-    branch: "feature/git-ui",
-    upstream: "origin/feature/git-ui",
+    branch: state.currentBranch,
+    ...(state.currentBranch === "feature/git-ui"
+      ? {
+          upstream: "origin/feature/git-ui"
+        }
+      : {}),
     ahead: 2 + state.commitCount,
     behind: 0,
     clean: entries.length === 0,
@@ -894,6 +1025,54 @@ async function clickGitRowAction(
   }
 }
 
+async function clickGitBranchAction(
+  page: Page,
+  branchName: string,
+  label: string
+): Promise<void> {
+  const clicked = await page.evaluate(
+    (input: {
+      branchName: string;
+      label: string;
+    }) => {
+      const container = Array.from(document.querySelectorAll("div"))
+        .filter((element) => {
+          const text = element.textContent ?? "";
+          return (
+            text.includes(input.branchName) &&
+            Array.from(element.querySelectorAll("button")).some(
+              (button) => button.textContent?.trim() === input.label
+            )
+          );
+        })
+        .sort(
+          (left, right) =>
+            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+        )[0];
+      const button = container
+        ? Array.from(container.querySelectorAll("button")).find(
+            (element) => element.textContent?.trim() === input.label
+          )
+        : undefined;
+
+      if (!(button instanceof HTMLButtonElement)) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    },
+    {
+      branchName,
+      label
+    }
+  );
+
+  if (!clicked) {
+    throw new Error(`Could not click "${label}" for branch ${branchName}`);
+  }
+}
+
 async function toggleGitPathSelection(
   page: Page,
   path: string
@@ -990,6 +1169,18 @@ async function waitForFocusedPath(page: Page, path: string): Promise<void> {
       return element instanceof HTMLElement && element.innerText.includes(expectedPath);
     }, path);
   }, `focused path "${path}"`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForCurrentBranch(page: Page, branchName: string): Promise<void> {
+  await waitForCondition(async () => {
+    return page.evaluate((expectedBranch: string) => {
+      const element = document.querySelector('[data-testid="git-current-branch"]');
+      return element instanceof HTMLElement && element.innerText.includes(expectedBranch);
+    }, branchName);
+  }, `current branch "${branchName}"`, {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });

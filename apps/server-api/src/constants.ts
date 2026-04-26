@@ -31,6 +31,9 @@ export const RoutePath = {
   GitUnstage: "/git/unstage",
   GitRevert: "/git/revert",
   GitCommit: "/git/commit",
+  GitBranchesList: "/git/branches/list",
+  GitBranchesCreate: "/git/branches/create",
+  GitBranchesCheckout: "/git/branches/checkout",
   QualityGatesRun: "/quality-gates/run",
   QualityGatesList: "/quality-gates/list",
   QualityGatesEvents: "/quality-gates/events",
@@ -125,8 +128,10 @@ export const ErrorMessage = {
   MissingQuestion: "Missing question",
   MissingDatasetPath: "Missing datasetPath",
   MissingCommitMessage: "Missing commit message",
+  MissingBranchName: "Missing branchName",
   MissingPaths: "Missing paths",
-  InvalidCommitMessage: "Invalid Conventional Commit message"
+  InvalidCommitMessage: "Invalid Conventional Commit message",
+  InvalidBranchName: "Invalid Git branch name"
 } as const;
 
 export const MimeType = {
@@ -225,7 +230,8 @@ export const GitField = {
   ProjectId: "projectId",
   Paths: "paths",
   Staged: "staged",
-  Message: "message"
+  Message: "message",
+  BranchName: "branchName"
 } as const;
 
 export const QualityGateField = {

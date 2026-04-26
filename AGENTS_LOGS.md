@@ -1158,3 +1158,31 @@
   - Ninguno nuevo; la paridad local cubre el orden y los comandos del workflow actualizado
 - Next:
   - El siguiente paso con más valor ya no es añadir más validadores, sino completar la superficie Git server-first con operaciones de branch/push o revisión previa al commit desde la misma pantalla `Projects`
+### 2026-04-26 03:54 (Europe/Madrid) — Git Branch Operations Server-First
+
+- Summary: Implementadas operaciones server-first de ramas Git entre adapter, API y `Projects`, incluyendo listado local/remoto, creación de rama local y checkout de ramas existentes dentro del sandbox del workspace.
+- Decisions:
+  - Aplicar `minimal-diff-mode`, `strict-acceptance-criteria`, `quality-gates-enforcer`, `ci-parity-finalizer` y `uncodixfy`
+  - Mantener el contrato Git separado por operaciones claras: `/git/branches/list`, `/git/branches/create` y `/git/branches/checkout`, sin tocar los endpoints de status/diff/path ops ya existentes
+  - Reutilizar `refreshGitWorkspace()` para refrescar status y ramas a la vez, evitando estados Git duplicados en cliente
+  - Mostrar ramas remotas como referencias informativas y limitar el checkout UI a ramas locales existentes para mantener el slice estable y determinista
+- Changes:
+  - **Updated packages/adapters/src/git/git-adapter.ts** y **git-adapter.test.ts**: `listBranches`, `createBranch`, `checkoutBranch`, parseo local/remoto y errores tipados de ramas
+  - **Updated apps/server-api/src/constants.ts**, **git.ts**, **git.test.ts** y **server.ts**: campos/rutas nuevas, validación de `branchName`, ejecución sandboxed y handlers HTTP para listar/crear/cambiar de rama
+  - **Updated apps/web-ui/src/shared/workbench-types.ts**, **git-client.ts**, **git-client.test.ts**, **projects-state.ts** y **projects-state.test.ts**: tipos de ramas, codecs cliente y validación inline de nombres de rama
+  - **Updated apps/web-ui/src/screens/Projects.ts**: panel `Branches` con create local branch, listado local/remoto y checkout de ramas locales con estados deshabilitados claros
+  - **Updated apps/web-ui/scripts/validate-projects-git-workspace.ts**: stub HTTP extendido para ramas y validación browser determinista de create + checkout antes del flujo Git existente
+  - **Updated PLAN.md**: milestone 6 marcado con soporte server-first de branch operations en adapter/API/UI
+- Commands:
+  - `pnpm vitest run packages/adapters/src/git/git-adapter.test.ts apps/server-api/src/git.test.ts apps/web-ui/src/shared/git-client.test.ts apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - El slice actual lista ramas remotas pero no hace checkout directo de referencias remotas desde UI; queda como siguiente incremento natural si hace falta tracking branch automático
+- Next:
+  - El siguiente paso con más valor es completar operaciones Git de mayor impacto práctico, como push/branch publish o diff review previa a commit desde el mismo workspace

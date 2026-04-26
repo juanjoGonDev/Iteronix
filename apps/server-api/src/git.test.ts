@@ -6,10 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitCliAdapter, GitCommandName } from "../../../packages/adapters/src/git/git-adapter";
 import { ErrorMessage, HttpStatus } from "./constants";
 import {
+  executeGitBranchCheckout,
+  executeGitBranchCreate,
+  executeGitBranchList,
   executeGitPathOperation,
   executeGitCommit,
   executeGitDiff,
   executeGitStatus,
+  parseGitBranchMutationRequest,
   parseGitCommitRequest,
   parseGitPathRequest
 } from "./git";
@@ -141,6 +145,19 @@ describe("git api", () => {
     }
   });
 
+  it("rejects invalid branch names", () => {
+    const parsed = parseGitBranchMutationRequest({
+      projectId: "project-1",
+      branchName: "bad branch"
+    });
+
+    expect(parsed.type).toBe(ResultType.Err);
+    if (parsed.type === ResultType.Err) {
+      expect(parsed.error.status).toBe(HttpStatus.BadRequest);
+      expect(parsed.error.message).toBe(ErrorMessage.InvalidBranchName);
+    }
+  });
+
   it("parses git path operation requests with one or more paths", () => {
     const parsed = parseGitPathRequest({
       projectId: "project-1",
@@ -243,6 +260,87 @@ describe("git api", () => {
     }
   });
 
+  it("lists branches, creates one and checks it out through the api contract", async () => {
+    const repo = await createTempGitRepository({
+      withRemote: true
+    });
+    const store = createProjectStore();
+    const opened = store.open({
+      rootPath: repo.path
+    });
+
+    if (opened.type !== ResultType.Ok) {
+      throw new Error("Expected opened project");
+    }
+
+    const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
+    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const adapter = createGitCliAdapter();
+    const dependencies = {
+      projectStore: store,
+      workspacePolicy,
+      commandPolicy,
+      git: adapter
+    };
+
+    const branches = await executeGitBranchList(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(branches.type).toBe(ResultType.Ok);
+    if (branches.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(branches.value.local.some((branch) => branch.name === repo.defaultBranch && branch.current)).toBe(true);
+    expect(branches.value.remote.some((branch) => branch.name === "origin/feature/remote-only")).toBe(true);
+
+    const created = await executeGitBranchCreate(
+      {
+        projectId: opened.value.id,
+        branchName: "feature/server-first"
+      },
+      dependencies
+    );
+
+    expect(created.type).toBe(ResultType.Ok);
+    if (created.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(created.value.name).toBe("feature/server-first");
+
+    const checkedOut = await executeGitBranchCheckout(
+      {
+        projectId: opened.value.id,
+        branchName: "feature/server-first"
+      },
+      dependencies
+    );
+
+    expect(checkedOut.type).toBe(ResultType.Ok);
+    if (checkedOut.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(checkedOut.value.name).toBe("feature/server-first");
+
+    const status = await executeGitStatus(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(status.type).toBe(ResultType.Ok);
+    if (status.type === ResultType.Ok) {
+      expect(status.value.branch).toBe("feature/server-first");
+    }
+  });
+
   it("rejects repositories outside the configured workspace root", async () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
@@ -278,9 +376,14 @@ describe("git api", () => {
   });
 });
 
-const createTempGitRepository = async (): Promise<{
+const createTempGitRepository = async (
+  input: {
+    withRemote?: boolean;
+  } = {}
+): Promise<{
   path: string;
   workspaceRoot: string;
+  defaultBranch: string;
 }> => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "iteronix-server-git-"));
   const repoPath = join(workspaceRoot, "repo");
@@ -296,10 +399,24 @@ const createTempGitRepository = async (): Promise<{
   await writeFile(join(repoPath, "tracked.txt"), "initial\n", "utf8");
   runGit(repoPath, ["add", "tracked.txt"]);
   runGit(repoPath, ["commit", "-m", "chore(test): seed repository"]);
+  const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  runGit(repoPath, ["branch", "feature/local-only"]);
+
+  if (input.withRemote === true) {
+    const remotePath = join(workspaceRoot, "remote.git");
+    runGit(workspaceRoot, ["init", "--bare", remotePath]);
+    runGit(repoPath, ["remote", "add", "origin", remotePath]);
+    runGit(repoPath, ["push", "-u", "origin", defaultBranch]);
+    runGit(repoPath, ["checkout", "-b", "feature/remote-only"]);
+    runGit(repoPath, ["push", "-u", "origin", "feature/remote-only"]);
+    runGit(repoPath, ["checkout", defaultBranch]);
+    runGit(repoPath, ["branch", "-D", "feature/remote-only"]);
+  }
 
   return {
     path: repoPath,
-    workspaceRoot
+    workspaceRoot,
+    defaultBranch
   };
 };
 

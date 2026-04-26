@@ -1,5 +1,6 @@
 import {
   GitDiffScope,
+  type GitBranchListRecord,
   type GitRepositoryRecord,
   QualityGateId,
   type QualityGateEventRecord,
@@ -247,6 +248,27 @@ export const readGitCommitValidationMessage = (
   return null;
 };
 
+export const readGitBranchValidationMessage = (
+  branchName: string,
+  branches: GitBranchListRecord | null
+): string | null => {
+  const trimmed = branchName.trim();
+
+  if (trimmed.length === 0) {
+    return "Branch name is required.";
+  }
+
+  if (!isValidGitBranchName(trimmed)) {
+    return "Use a valid Git branch name such as feature/projects-branching.";
+  }
+
+  if (branches?.local.some((branch) => branch.name === trimmed)) {
+    return `A local branch named ${trimmed} already exists.`;
+  }
+
+  return null;
+};
+
 export const isConventionalCommitMessage = (value: string): boolean => {
   const separatorIndex = value.indexOf(":");
   if (separatorIndex <= 0) {
@@ -278,6 +300,41 @@ export const isConventionalCommitMessage = (value: string): boolean => {
     isAllowedConventionalCommitType(type) &&
     /^[a-z0-9./_-]+$/u.test(scope)
   );
+};
+
+export const isValidGitBranchName = (value: string): boolean => {
+  if (value.length === 0) {
+    return false;
+  }
+
+  if (
+    value.startsWith("-") ||
+    value.startsWith(".") ||
+    value.endsWith(".") ||
+    value.endsWith("/") ||
+    value.endsWith(".lock")
+  ) {
+    return false;
+  }
+
+  if (
+    value.includes("..") ||
+    value.includes("@{") ||
+    value.includes("\\") ||
+    value.includes(" ") ||
+    value.includes("~") ||
+    value.includes("^") ||
+    value.includes(":") ||
+    value.includes("?") ||
+    value.includes("*") ||
+    value.includes("[")
+  ) {
+    return false;
+  }
+
+  return value
+    .split("/")
+    .every((segment) => segment.length > 0 && !segment.endsWith("."));
 };
 
 const isRunActive = (status: QualityGateRunRecord["status"]): boolean =>

@@ -73,6 +73,22 @@ export type GitPathOperationRecord = {
   paths: ReadonlyArray<string>;
 };
 
+export type GitBranchRecord = {
+  name: string;
+  current: boolean;
+  remote: boolean;
+  upstream?: string;
+};
+
+export type GitBranchListRecord = {
+  local: ReadonlyArray<GitBranchRecord>;
+  remote: ReadonlyArray<GitBranchRecord>;
+};
+
+export type GitBranchOperationRecord = {
+  name: string;
+};
+
 export type QualityGateRunRecord = {
   id: string;
   projectId: string;

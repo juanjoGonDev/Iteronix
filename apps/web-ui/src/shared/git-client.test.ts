@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseGitBranchListResponse,
+  parseGitBranchOperationResponse,
   parseGitCommitResponse,
   parseGitDiffResponse,
   parseGitPathOperationResponse,
@@ -56,6 +58,35 @@ describe("git client codecs", () => {
         "apps/web-ui/src/screens/Projects.ts"
       ]
     });
+    const branches = parseGitBranchListResponse({
+      branches: {
+        local: [
+          {
+            name: "feature/git-ui",
+            current: true,
+            remote: false,
+            upstream: "origin/feature/git-ui"
+          },
+          {
+            name: "develop",
+            current: false,
+            remote: false
+          }
+        ],
+        remote: [
+          {
+            name: "origin/release/next",
+            current: false,
+            remote: true
+          }
+        ]
+      }
+    });
+    const branchOperation = parseGitBranchOperationResponse({
+      branch: {
+        name: "feature/git-ui"
+      }
+    });
     const commit = parseGitCommitResponse({
       commit: {
         hash: "9f3c2ad1",
@@ -72,6 +103,9 @@ describe("git client codecs", () => {
       "apps/web-ui/src/shared/git-client.ts",
       "apps/web-ui/src/screens/Projects.ts"
     ]);
+    expect(branches.local[0]?.current).toBe(true);
+    expect(branches.remote[0]?.name).toBe("origin/release/next");
+    expect(branchOperation.name).toBe("feature/git-ui");
     expect(commit.hash).toBe("9f3c2ad1");
   });
 });

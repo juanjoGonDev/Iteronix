@@ -202,9 +202,58 @@ describe("git cli adapter", () => {
 
     expect(normalizeLineEndings(content)).toBe("initial\n");
   });
+
+  it("lists branches, creates a branch and checks out an existing branch", async () => {
+    const repo = await createTempGitRepository({
+      withRemote: true
+    });
+    const adapter = createGitCliAdapter();
+
+    const initialBranches = await adapter.listBranches({
+      rootPath: repo.path
+    });
+
+    expect(initialBranches.type).toBe(ResultType.Ok);
+    if (initialBranches.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(initialBranches.value.local.some((branch) => branch.name === repo.defaultBranch && branch.current)).toBe(true);
+    expect(initialBranches.value.local.some((branch) => branch.name === "feature/local-only")).toBe(true);
+    expect(initialBranches.value.remote.some((branch) => branch.name === "origin/feature/remote-only")).toBe(true);
+
+    const created = await adapter.createBranch({
+      rootPath: repo.path,
+      name: "feature/server-first"
+    });
+
+    expect(created.type).toBe(ResultType.Ok);
+    if (created.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(created.value.name).toBe("feature/server-first");
+
+    const checkedOut = await adapter.checkoutBranch({
+      rootPath: repo.path,
+      name: "feature/server-first"
+    });
+
+    expect(checkedOut.type).toBe(ResultType.Ok);
+    if (checkedOut.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(checkedOut.value.name).toBe("feature/server-first");
+    expect(runGit(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe("feature/server-first");
+  });
 });
 
-const createTempGitRepository = async (): Promise<{ path: string }> => {
+const createTempGitRepository = async (
+  input: {
+    withRemote?: boolean;
+  } = {}
+): Promise<{ path: string; defaultBranch: string }> => {
   const root = await mkdtemp(join(tmpdir(), "iteronix-git-adapter-"));
   const repoPath = join(root, "repo");
   tempRoots.push(root);
@@ -219,9 +268,23 @@ const createTempGitRepository = async (): Promise<{ path: string }> => {
   await writeFile(join(repoPath, "tracked.txt"), "initial\n", "utf8");
   runGit(repoPath, ["add", "tracked.txt"]);
   runGit(repoPath, ["commit", "-m", "chore(test): seed repository"]);
+  const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  runGit(repoPath, ["branch", "feature/local-only"]);
+
+  if (input.withRemote === true) {
+    const remotePath = join(root, "remote.git");
+    runGit(root, ["init", "--bare", remotePath]);
+    runGit(repoPath, ["remote", "add", "origin", remotePath]);
+    runGit(repoPath, ["push", "-u", "origin", defaultBranch]);
+    runGit(repoPath, ["checkout", "-b", "feature/remote-only"]);
+    runGit(repoPath, ["push", "-u", "origin", "feature/remote-only"]);
+    runGit(repoPath, ["checkout", defaultBranch]);
+    runGit(repoPath, ["branch", "-D", "feature/remote-only"]);
+  }
 
   return {
-    path: repoPath
+    path: repoPath,
+    defaultBranch
   };
 };
 

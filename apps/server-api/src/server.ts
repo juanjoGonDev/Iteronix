@@ -34,11 +34,15 @@ import {
   writeFileContent
 } from "./files";
 import {
+  executeGitBranchCheckout,
+  executeGitBranchCreate,
+  executeGitBranchList,
   GitPathOperationKind,
   executeGitPathOperation,
   executeGitCommit,
   executeGitDiff,
   executeGitStatus,
+  parseGitBranchMutationRequest,
   parseGitPathRequest,
   parseGitCommitRequest,
   parseGitDiffRequest,
@@ -539,6 +543,59 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchListRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchMutationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "create"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesCheckout) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchMutationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "checkout"
     );
     return;
   }
@@ -3312,6 +3369,86 @@ const handleGitCommitRequest = async (
 
   respondJson(res, HttpStatus.Created, {
     commit: result.value
+  });
+};
+
+const handleGitBranchListRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitBranchList(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    branches: result.value
+  });
+};
+
+const handleGitBranchMutationRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: "create" | "checkout"
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitBranchMutationRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = operation === "create"
+    ? await executeGitBranchCreate(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      })
+    : await executeGitBranchCheckout(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, operation === "create" ? HttpStatus.Created : HttpStatus.Ok, {
+    branch: result.value
   });
 };
 
