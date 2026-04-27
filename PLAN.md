@@ -565,6 +565,34 @@ Acceptance:
 - A new machine can be fully set up and running using only documented commands.
 - No manual steps beyond environment variables are required.
 
+### Current focus — screen stabilization order
+
+Goal:
+Stop cross-screen churn and finish the PWA one screen at a time with browser validation and no dead controls.
+
+- [ ] Browser validation baseline:
+  - [ ] Keep one canonical browser-validation path during stabilization
+  - [ ] Document whether the repo standard remains Stagehand/Puppeteer or moves to Playwright
+- [ ] Explorer:
+  - [ ] Replace hardcoded tree/content in `apps/web-ui/src/screens/Explorer.ts`
+  - [ ] Connect to `/files/tree` and `/files/read`
+  - [ ] Validate the route with a deterministic browser flow
+- [ ] Settings:
+  - [ ] Remove `coming soon` and `console.log` actions from active controls
+  - [ ] Persist supported settings through existing server and local storage contracts
+  - [ ] Validate load/edit/save/reload with browser automation
+- [ ] Kanban:
+  - [ ] Replace local seed board state with `/kanban/*` persistence
+  - [ ] Persist create/edit/move/delete flows
+  - [ ] Validate the board with a deterministic browser flow
+- [ ] Dashboard:
+  - [ ] Replace showcase metrics and rows with real overview data
+  - [ ] Remove dead quick actions
+  - [ ] Validate overview navigation and one real action in browser automation
+- [ ] Regression lock:
+  - [ ] Keep `Projects`, `Workflows`, and `History` green while unfinished screens are completed
+  - [ ] Avoid reopening mature screens for cosmetic churn during stabilization
+
 ---
 
 ## Deferred (explicitly out of scope)

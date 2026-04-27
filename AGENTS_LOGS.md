@@ -1210,3 +1210,30 @@
   - El slice actual publica siempre contra `origin`; si en el futuro hay múltiples remotes hará falta añadir selección explícita o política por proyecto
 - Next:
   - El siguiente paso con más valor ya no es más Git superficial: toca revisión/diff server-first más profunda o PR/remote review workflow sobre la misma base Git ya consolidada
+### 2026-04-27 11:41 (Europe/Madrid) — Screen Stabilization Audit
+
+- Summary: Revisión del estado real del proyecto para cortar el bucle de tareas superficiales y redefinir el plan por pantalla con validación browser y backlog en Notion.
+- Decisions:
+  - Mantener `Projects`, `Workflows` y `History` como superficies maduras ya protegidas por validaciones browser existentes
+  - Priorizar pantallas todavía incompletas en este orden: `Explorer`, `Settings`, `Kanban`, `Dashboard`
+  - No reabrir más trabajo cosmético o documental sobre pantallas maduras mientras existan mocks y controles muertos en otras rutas
+  - Dejar explícita la tensión entre la preferencia actual del usuario por Playwright y el estándar vigente del repo basado en Stagehand/Puppeteer, registrando una tarea de baseline antes de cambiar de runner
+- Changes:
+  - **Updated PLAN.md**: añadida la estrategia `Current focus — screen stabilization order`
+  - **Created Notion tasks** en el tablero `Iteronix` para baseline browser, Explorer, Settings, Kanban, Dashboard y regression lock
+- Commands:
+  - `git status --short`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - `Explorer` sigue en mock duro con árbol y contenido hardcoded
+  - `Settings` mantiene placeholders y acciones `console.log`
+  - `Kanban` sigue en seed local sin persistencia real
+  - `Dashboard` sigue siendo una showcase estática con quick actions muertas
+- Next:
+  - El siguiente prompt correcto es cerrar `Explorer` end-to-end sobre `/files/tree` y `/files/read`, con validación browser real y sin tocar otras pantallas
