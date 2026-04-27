@@ -90,7 +90,7 @@ describe("explorer state helpers", () => {
       ]
     );
 
-    const filtered = filterExplorerTreeNodes(tree, "explorer");
+    const filtered = filterExplorerTreeNodes(tree, "EXPLORER");
 
     expect(flattenExplorerTreeNodes(filtered).map((item) => item.node.path)).toEqual([
       "src",

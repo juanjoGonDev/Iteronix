@@ -1356,3 +1356,30 @@
   - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la interacción real ya es correcta
 - Next:
   - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+### 2026-04-27 18:50 (Europe/Madrid) — Explorer Recursive Search Discovery
+
+- Summary: Corregido el bug restante del buscador de `Explorer`: ahora puede encontrar archivos dentro de directorios todavía no abiertos manualmente.
+- Decisions:
+  - Mantener la búsqueda case-insensitive como comportamiento fijo del slice
+  - Resolver la visibilidad de resultados cargando el árbol completo solo cuando el usuario entra en modo búsqueda, para no romper la carga lazy de la navegación normal
+  - Mantener la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta confirmación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: la prueba browser ya no expande carpetas antes de buscar y exige que `Explorer.ts` aparezca desde un árbol inicialmente colapsado
+  - **Updated apps/web-ui/src/screens/explorer-state.test.ts**: la búsqueda helper queda fijada explícitamente como case-insensitive
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: el debounce ahora, antes de filtrar, carga directorios no descubiertos de forma recursiva cuando hay término de búsqueda activo y descarta resultados obsoletos si el usuario sigue escribiendo
+  - **Updated PLAN.md**: registrada la corrección de descubrimiento recursivo en búsquedas
+- Commands:
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - La primera búsqueda sobre un árbol grande puede tardar algo más porque completa la carga recursiva antes de filtrar
+  - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la UX real ya es correcta
+- Next:
+  - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`

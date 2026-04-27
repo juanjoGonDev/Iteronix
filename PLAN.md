@@ -581,6 +581,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Dev-runtime fix completed on `2026-04-27`: web UI remains on `http://localhost:4000`, while `pnpm dev` and `pnpm dev:server` now run the backend watcher on `http://localhost:4001` and the client auto-corrects stale self-pointing local server URLs
   - UX refinement completed on `2026-04-27`: global project selector moved to the sidebar, the local `Project session` block was removed, the explorer now renders as a single integrated VS Code-style workspace, search applies with debounce while typing, and preview coloring is language-aware for `txt`, `json`, `ts`, and `js`
   - Search focus fix completed on `2026-04-27`: the Explorer search now keeps focus across debounce-driven filtering, restarts the debounce on new typing, and remains case-insensitive
+  - Recursive search discovery fix completed on `2026-04-27`: searching now loads undiscovered nested directories before filtering so matches are not limited to folders already opened manually
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts

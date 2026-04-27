@@ -60,6 +60,7 @@ interface ExplorerProps extends ComponentProps {
 export class Explorer extends Component<ExplorerProps, ExplorerState> {
   private readonly explorerClient = createExplorerClient();
   private searchDebounceId: number | null = null;
+  private searchRevision = 0;
   private searchDraftValue = "";
   private searchSelectionStart: number | null = null;
   private searchSelectionEnd: number | null = null;
@@ -542,24 +543,101 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
   }
 
   private handleSearchInput(input: SearchInputState): void {
+    this.searchRevision += 1;
     this.searchDraftValue = input.value;
     this.searchSelectionStart = input.selectionStart;
     this.searchSelectionEnd = input.selectionEnd;
     this.clearSearchDebounce();
+    const revision = this.searchRevision;
     this.searchDebounceId = window.setTimeout(() => {
-      const shouldRestoreFocus = this.isSearchInputFocused();
-      const selectionStart = this.searchSelectionStart;
-      const selectionEnd = this.searchSelectionEnd;
-      this.setState({
-        searchTerm: input.value.toLowerCase()
-      });
-      if (shouldRestoreFocus) {
-        requestAnimationFrame(() => {
-          this.restoreSearchInputFocus(selectionStart, selectionEnd);
-        });
-      }
-      this.searchDebounceId = null;
+      void this.applySearchDebounce(input.value, revision);
     }, SearchDebounceMs);
+  }
+
+  private async applySearchDebounce(
+    value: string,
+    revision: number
+  ): Promise<void> {
+    const shouldRestoreFocus = this.isSearchInputFocused();
+    const selectionStart = this.searchSelectionStart;
+    const selectionEnd = this.searchSelectionEnd;
+    const normalizedSearchTerm = value.trim().toLowerCase();
+    let nextTreeNodes = this.state.treeNodes;
+
+    if (normalizedSearchTerm.length > 0 && this.state.currentProject !== null) {
+      nextTreeNodes = await this.loadSearchableTree(
+        this.state.currentProject.id,
+        this.state.treeNodes,
+        revision
+      );
+    }
+
+    if (revision !== this.searchRevision) {
+      return;
+    }
+
+    this.setState({
+      treeNodes: nextTreeNodes,
+      searchTerm: normalizedSearchTerm
+    });
+    if (shouldRestoreFocus) {
+      requestAnimationFrame(() => {
+        this.restoreSearchInputFocus(selectionStart, selectionEnd);
+      });
+    }
+    this.searchDebounceId = null;
+  }
+
+  private async loadSearchableTree(
+    projectId: string,
+    nodes: ReadonlyArray<ExplorerTreeNode>,
+    revision: number
+  ): Promise<ReadonlyArray<ExplorerTreeNode>> {
+    const loadedNodes: ExplorerTreeNode[] = [];
+
+    for (const node of nodes) {
+      if (revision !== this.searchRevision) {
+        return nodes;
+      }
+
+      loadedNodes.push(await this.loadSearchableNode(projectId, node, revision));
+    }
+
+    return loadedNodes;
+  }
+
+  private async loadSearchableNode(
+    projectId: string,
+    node: ExplorerTreeNode,
+    revision: number
+  ): Promise<ExplorerTreeNode> {
+    if (node.kind !== ExplorerFileEntryKind.Directory) {
+      return node;
+    }
+
+    if (revision !== this.searchRevision) {
+      return node;
+    }
+
+    const entries = node.loaded
+      ? node.children
+      : buildExplorerTreeNodes(
+          await this.explorerClient.listFileTree({
+            projectId,
+            path: node.path
+          })
+        );
+    const loadedChildren: ExplorerTreeNode[] = [];
+
+    for (const child of entries) {
+      loadedChildren.push(await this.loadSearchableNode(projectId, child, revision));
+    }
+
+    return {
+      ...node,
+      loaded: true,
+      children: loadedChildren
+    };
   }
 
   private async handleDirectorySelect(node: ExplorerTreeNode): Promise<void> {

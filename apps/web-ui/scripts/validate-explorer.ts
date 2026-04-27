@@ -186,11 +186,6 @@ async function validateExplorerScreen(): Promise<void> {
       artifactName: "explorer"
     });
 
-    await page.click('[data-testid="explorer-node-src"]');
-    await waitForSelector(page, '[data-testid="explorer-node-src-screens"]');
-    await page.click('[data-testid="explorer-node-src-screens"]');
-    await waitForSelector(page, '[data-testid="explorer-node-src-screens-explorer-ts"]');
-
     await page.click('[data-testid="explorer-search-input"]');
     await page.keyboard.type(ValidationText.SearchPrefix, {
       delay: 30
@@ -242,6 +237,7 @@ async function validateExplorerScreen(): Promise<void> {
       intervalMs: ValidationConfig.UiPollingIntervalMs
     });
 
+    await waitForSelector(page, '[data-testid="explorer-node-src-screens-explorer-ts"]');
     await page.click('[data-testid="explorer-node-src-screens-explorer-ts"]');
     await waitForPageText(page, ValidationText.FileContentMarker);
     await waitForCondition(async () => {
