@@ -1330,3 +1330,29 @@
   - La tarea queda funcionalmente lista, pero la tarjeta no debe moverse a `Listo` hasta confirmación explícita del usuario
 - Next:
   - Esperar validación visual del usuario sobre el nuevo `Explorer`; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+### 2026-04-27 18:44 (Europe/Madrid) — Explorer Search Debounce Focus Fix
+
+- Summary: Corregido el bug del buscador de `Explorer` que perdía el foco al aplicar el debounce y bloqueaba la escritura continua.
+- Decisions:
+  - Mantener el fix local a `apps/web-ui/src/screens/Explorer.ts` para no introducir un cambio global de comportamiento en el runtime de componentes
+  - Usar la validación browser de `Explorer` como prueba roja/verde principal porque el bug es de interacción real y no de lógica pura
+  - Mantener la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta confirmación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: ahora exige debounce real, foco persistente tras aplicar el filtro y búsqueda case-insensitive con escritura continuada
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: el buscador guarda selección/caret, reaplica foco tras el rerender del debounce y reinicia el temporizador en cada nueva pulsación
+  - **Updated PLAN.md**: añadida la nota del fix de foco/debounce del buscador
+- Commands:
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El filtrado sigue siendo sobre el árbol ya cargado; no amplía el alcance a búsqueda recursiva remota del repositorio
+  - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la interacción real ya es correcta
+- Next:
+  - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`

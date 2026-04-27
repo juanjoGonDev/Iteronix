@@ -33,7 +33,11 @@ const ExplorerPendingAction = {
 type ExplorerPendingAction =
   typeof ExplorerPendingAction[keyof typeof ExplorerPendingAction];
 
-const SearchDebounceMs = 180;
+const ExplorerSelector = {
+  SearchInputTestId: "explorer-search-input"
+} as const;
+
+const SearchDebounceMs = 320;
 
 interface ExplorerState {
   sessionRootPath: string;
@@ -57,6 +61,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
   private readonly explorerClient = createExplorerClient();
   private searchDebounceId: number | null = null;
   private searchDraftValue = "";
+  private searchSelectionStart: number | null = null;
+  private searchSelectionEnd: number | null = null;
 
   constructor(props: ExplorerProps = {}) {
     const session = readProjectSession();
@@ -199,9 +205,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           value: this.searchDraftValue,
           placeholder: hasProject ? "Search loaded files and folders" : "Open a project to search",
           disabled: !hasProject,
-          "data-testid": "explorer-search-input",
+          "data-testid": ExplorerSelector.SearchInputTestId,
           className: "h-11 rounded-xl border border-border-dark bg-[#0f141b] px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-          onInput: (event: Event) => this.handleSearchInput(readInputValue(event))
+          onInput: (event: Event) => this.handleSearchInput(readSearchInputState(event))
         })
       ])
     ]);
@@ -535,13 +541,23 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
   }
 
-  private handleSearchInput(value: string): void {
-    this.searchDraftValue = value;
+  private handleSearchInput(input: SearchInputState): void {
+    this.searchDraftValue = input.value;
+    this.searchSelectionStart = input.selectionStart;
+    this.searchSelectionEnd = input.selectionEnd;
     this.clearSearchDebounce();
     this.searchDebounceId = window.setTimeout(() => {
+      const shouldRestoreFocus = this.isSearchInputFocused();
+      const selectionStart = this.searchSelectionStart;
+      const selectionEnd = this.searchSelectionEnd;
       this.setState({
-        searchTerm: value
+        searchTerm: input.value.toLowerCase()
       });
+      if (shouldRestoreFocus) {
+        requestAnimationFrame(() => {
+          this.restoreSearchInputFocus(selectionStart, selectionEnd);
+        });
+      }
       this.searchDebounceId = null;
     }, SearchDebounceMs);
   }
@@ -653,6 +669,29 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.searchDebounceId = null;
     }
   }
+
+  private isSearchInputFocused(): boolean {
+    const activeElement = document.activeElement;
+    return activeElement instanceof HTMLInputElement &&
+      activeElement.dataset["testid"] === ExplorerSelector.SearchInputTestId;
+  }
+
+  private restoreSearchInputFocus(
+    selectionStart: number | null,
+    selectionEnd: number | null
+  ): void {
+    const input = document.querySelector(
+      `[data-testid="${ExplorerSelector.SearchInputTestId}"]`
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    input.focus();
+    if (selectionStart !== null && selectionEnd !== null) {
+      input.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
 }
 
 const readNodeIcon = (node: ExplorerTreeNode, isLoading: boolean): string => {
@@ -689,12 +728,26 @@ const findExplorerNodeByPath = (
   return null;
 };
 
-const readInputValue = (event: Event): string => {
+type SearchInputState = {
+  value: string;
+  selectionStart: number | null;
+  selectionEnd: number | null;
+};
+
+const readSearchInputState = (event: Event): SearchInputState => {
   if (event.target instanceof HTMLInputElement) {
-    return event.target.value;
+    return {
+      value: event.target.value,
+      selectionStart: event.target.selectionStart,
+      selectionEnd: event.target.selectionEnd
+    };
   }
 
-  return "";
+  return {
+    value: "",
+    selectionStart: null,
+    selectionEnd: null
+  };
 };
 
 const readErrorMessage = (error: unknown, fallback: string): string => {

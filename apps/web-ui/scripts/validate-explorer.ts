@@ -6,6 +6,7 @@ import { DefaultServerConnection, LocalStorageKey } from "../src/shared/server-c
 import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
+  delay,
   parseBrowserValidationRuntimeOptions,
   prepareBrowserValidationDirectory,
   startPreviewServer,
@@ -23,6 +24,7 @@ const ValidationConfig = {
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
+  SearchDebounceWaitMs: 260,
   ViewportWidth: 1440,
   ViewportHeight: 1600
 } as const;
@@ -48,7 +50,8 @@ const ValidationText = {
   ScreenTitle: "Explorer",
   ProjectLoaded: "Iteronix",
   FileContentMarker: "export class Explorer",
-  SearchValue: "explorer",
+  SearchValue: "EXPLORER",
+  SearchPrefix: "EXP",
   RemovedPanelLabel: "Project session",
   LanguageBadge: "TypeScript"
 } as const;
@@ -189,7 +192,42 @@ async function validateExplorerScreen(): Promise<void> {
     await waitForSelector(page, '[data-testid="explorer-node-src-screens-explorer-ts"]');
 
     await page.click('[data-testid="explorer-search-input"]');
-    await page.keyboard.type(ValidationText.SearchValue, {
+    await page.keyboard.type(ValidationText.SearchPrefix, {
+      delay: 30
+    });
+    await waitForCondition(async () => {
+      const labels = await page.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
+        elements.map((element) => element.textContent ?? "")
+      );
+
+      return labels.some((label) => label.includes("README.md"));
+    }, "tree unchanged before debounce", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await page.waitForFunction(
+      (value) => {
+        const element = document.querySelector('[data-testid="explorer-search-input"]');
+        return element instanceof HTMLInputElement && element.value === value;
+      },
+      {},
+      ValidationText.SearchPrefix
+    );
+    await delay(ValidationConfig.SearchDebounceWaitMs);
+    await waitForCondition(async () => {
+      const activeTestId = await page.evaluate(() => {
+        const activeElement = document.activeElement;
+        return activeElement instanceof HTMLElement
+          ? activeElement.dataset["testid"] ?? null
+          : null;
+      });
+
+      return activeTestId === "explorer-search-input";
+    }, "search input retains focus after debounce", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await page.keyboard.type("LORER", {
       delay: 30
     });
     await waitForCondition(async () => {
