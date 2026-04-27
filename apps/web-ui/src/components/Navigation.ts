@@ -42,6 +42,11 @@ interface SidebarProps extends ComponentProps {
     avatar?: string | null;
     role?: string;
   } | null;
+  project?: {
+    label: string;
+    rootPath: string;
+  } | null;
+  onProjectClick?: () => void;
   onToggle?: () => void;
   collapsed?: boolean;
   className?: string;
@@ -130,6 +135,8 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
       brand = { name: 'Iteronix', icon: 'terminal', version: null },
       navigation = [],
       user = null,
+      project = null,
+      onProjectClick,
       onToggle,
       collapsed = false,
       className = ''
@@ -167,6 +174,42 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
               className: 'material-symbols-outlined text-[18px] transition-all duration-300'
             }, [collapsed ? 'arrow_forward_ios' : 'arrow_back_ios'])
           ])
+        ])
+      ]),
+
+      createElement('div', {
+        className: collapsed ? 'px-2 pb-2' : 'px-4 pb-2'
+      }, [
+        createElement('button', {
+          type: 'button',
+          className: `flex w-full items-center rounded-xl border border-border-dark bg-surface-dark/60 transition-colors hover:bg-surface-dark-hover ${
+            collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-3 text-left'
+          }`,
+          'data-testid': 'sidebar-project-button',
+          onClick: onProjectClick
+        }, [
+          createElement('span', {
+            className: `material-symbols-outlined shrink-0 text-[20px] ${
+              project ? 'text-primary' : 'text-text-secondary'
+            }`
+          }, [project ? 'folder_open' : 'folder']),
+          !collapsed && createElement('div', {
+            className: 'flex min-w-0 flex-1 flex-col'
+          }, [
+            createElement('span', {
+              className: 'text-xs font-semibold uppercase tracking-wide text-text-secondary'
+            }, [project ? 'Active project' : 'Workspace']),
+            createElement('span', {
+              className: 'truncate text-sm font-medium text-white',
+              'data-testid': 'sidebar-project-label'
+            }, [project?.label ?? 'Select project']),
+            createElement('span', {
+              className: 'truncate text-xs text-text-secondary'
+            }, [project?.rootPath || 'Open a project from the Projects screen'])
+          ]),
+          !collapsed && createElement('span', {
+            className: 'material-symbols-outlined ml-auto text-[18px] text-text-secondary'
+          }, ['chevron_right'])
         ])
       ]),
 

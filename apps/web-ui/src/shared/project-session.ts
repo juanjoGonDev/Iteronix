@@ -6,6 +6,10 @@ const LocalStorageKey = {
 
 const RecentProjectsLimit = 6;
 
+export const ProjectSessionEventName = {
+  Changed: "iteronix:project-session-changed"
+} as const;
+
 export type RecentProjectEntry = {
   rootPath: string;
   name: string;
@@ -75,6 +79,7 @@ export const writeProjectSession = (
   };
 
   storage.setItem(LocalStorageKey.ProjectSession, JSON.stringify(nextState));
+  notifyProjectSessionChanged();
   return nextState;
 };
 
@@ -89,6 +94,17 @@ export const clearProjectSession = (
     },
     storage
   );
+
+export const readActiveProjectSessionLabel = (
+  session: ProjectSessionState
+): string => {
+  const explicitName = normalizeText(session.projectName);
+  if (explicitName.length > 0) {
+    return explicitName;
+  }
+
+  return readProjectRootName(session.projectRootPath);
+};
 
 const parseProjectSession = (value: unknown): ProjectSessionState => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -151,3 +167,21 @@ const createEmptyProjectSession = (): ProjectSessionState => ({
   projectName: "",
   recentProjects: []
 });
+
+const readProjectRootName = (value: string): string => {
+  const normalized = normalizeText(value).replace(/\\/g, "/");
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+  return segments.at(-1) ?? normalized;
+};
+
+const notifyProjectSessionChanged = (): void => {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return;
+  }
+
+  window.dispatchEvent(new Event(ProjectSessionEventName.Changed));
+};

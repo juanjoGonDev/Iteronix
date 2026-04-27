@@ -48,7 +48,9 @@ const ValidationText = {
   ScreenTitle: "Explorer",
   ProjectLoaded: "Iteronix",
   FileContentMarker: "export class Explorer",
-  SearchValue: "explorer"
+  SearchValue: "explorer",
+  RemovedPanelLabel: "Project session",
+  LanguageBadge: "TypeScript"
 } as const;
 
 const FixtureProject = {
@@ -156,6 +158,23 @@ async function validateExplorerScreen(): Promise<void> {
       artifactName: "explorer"
     });
     await waitForPageText(page, ValidationText.ProjectLoaded);
+    await waitForCondition(async () => {
+      const label = await page.evaluate(() => {
+        const element = document.querySelector('[data-testid="sidebar-project-label"]');
+        return element?.textContent ?? "";
+      });
+      return label.includes(ValidationText.ProjectLoaded);
+    }, "sidebar project label", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await waitForCondition(async () => {
+      const text = await page.evaluate(() => document.body.textContent ?? "");
+      return !text.includes(ValidationText.RemovedPanelLabel);
+    }, "removed project session panel", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
     await waitForSelector(page, '[data-testid="explorer-node-src"]');
     await captureBrowserValidationScreenshot({
       page,
@@ -169,20 +188,10 @@ async function validateExplorerScreen(): Promise<void> {
     await page.click('[data-testid="explorer-node-src-screens"]');
     await waitForSelector(page, '[data-testid="explorer-node-src-screens-explorer-ts"]');
 
-    await page.$eval(
-      '[data-testid="explorer-search-input"]',
-      (element, value) => {
-        if (!(element instanceof HTMLInputElement) || typeof value !== "string") {
-          throw new Error("Explorer search input is unavailable.");
-        }
-
-        element.value = value;
-        element.dispatchEvent(new Event("change", {
-          bubbles: true
-        }));
-      },
-      ValidationText.SearchValue
-    );
+    await page.click('[data-testid="explorer-search-input"]');
+    await page.keyboard.type(ValidationText.SearchValue, {
+      delay: 30
+    });
     await waitForCondition(async () => {
       const labels = await page.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
         elements.map((element) => element.textContent ?? "")
@@ -197,6 +206,18 @@ async function validateExplorerScreen(): Promise<void> {
 
     await page.click('[data-testid="explorer-node-src-screens-explorer-ts"]');
     await waitForPageText(page, ValidationText.FileContentMarker);
+    await waitForCondition(async () => {
+      const badge = await page.evaluate(() => {
+        const element = document.querySelector('[data-testid="explorer-language-badge"]');
+        return element?.textContent ?? "";
+      });
+      return badge.includes(ValidationText.LanguageBadge);
+    }, "language badge", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await waitForSelector(page, '[data-token-kind="keyword"]');
+    await waitForSelector(page, '[data-token-kind="string"]');
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,

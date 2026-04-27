@@ -4,8 +4,12 @@ import {
   buildExplorerTreeNodes,
   filterExplorerTreeNodes,
   flattenExplorerTreeNodes,
+  highlightExplorerFileContent,
+  readExplorerFileIcon,
   mergeExplorerDirectoryChildren,
   readExplorerFileLanguage,
+  readExplorerLanguageTheme,
+  readExplorerTokenClassName,
   toggleExplorerDirectory
 } from "./explorer-state.js";
 
@@ -94,5 +98,57 @@ describe("explorer state helpers", () => {
     ]);
     expect(readExplorerFileLanguage("src/Explorer.ts")).toBe("TypeScript");
     expect(readExplorerFileLanguage("README.md")).toBe("Markdown");
+  });
+
+  it("derives deterministic language themes for txt, json, ts and js files", () => {
+    expect(readExplorerLanguageTheme("notes.txt")).toMatchObject({
+      label: "Plain text",
+      accentClassName: "text-slate-300"
+    });
+    expect(readExplorerLanguageTheme("package.json")).toMatchObject({
+      label: "JSON",
+      accentClassName: "text-amber-300"
+    });
+    expect(readExplorerLanguageTheme("src/app.ts")).toMatchObject({
+      label: "TypeScript",
+      accentClassName: "text-sky-300"
+    });
+    expect(readExplorerLanguageTheme("src/app.js")).toMatchObject({
+      label: "JavaScript",
+      accentClassName: "text-yellow-300"
+    });
+    expect(readExplorerFileIcon("notes.txt")).toBe("description");
+    expect(readExplorerFileIcon("package.json")).toBe("data_object");
+    expect(readExplorerFileIcon("src/app.ts")).toBe("code");
+    expect(readExplorerFileIcon("src/app.js")).toBe("code");
+  });
+
+  it("produces highlighted tokens for json and typescript previews", () => {
+    const jsonLines = highlightExplorerFileContent(
+      "package.json",
+      '{\n  "name": "iteronix",\n  "private": true\n}'
+    );
+    const tsLines = highlightExplorerFileContent(
+      "src/Explorer.ts",
+      [
+        "export class Explorer {",
+        "  private readonly name = \"Iteronix\";",
+        "}"
+      ].join("\n")
+    );
+
+    expect(jsonLines[1]?.map((token) => token.kind)).toEqual([
+      "plain",
+      "property",
+      "punctuation",
+      "plain",
+      "string",
+      "punctuation"
+    ]);
+    expect(tsLines[0]?.map((token) => token.kind)).toContain("keyword");
+    expect(tsLines[1]?.map((token) => token.kind)).toContain("string");
+    expect(readExplorerTokenClassName("keyword")).toBe("text-sky-300");
+    expect(readExplorerTokenClassName("property")).toBe("text-rose-300");
+    expect(readExplorerTokenClassName("string")).toBe("text-emerald-300");
   });
 });

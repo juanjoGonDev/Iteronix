@@ -84,6 +84,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
   
   // Set attributes
   Object.entries(attributes).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
     if (key === 'className') {
       element.className = value as string;
     } else if (key === 'textContent') {
@@ -97,6 +101,8 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       });
     } else if (key === 'onClick' && typeof value === 'function') {
       element.addEventListener('click', value as EventListener);
+    } else if (key === 'onInput' && typeof value === 'function') {
+      element.addEventListener('input', value as EventListener);
     } else if (key === 'onChange' && typeof value === 'function') {
       element.addEventListener('change', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {

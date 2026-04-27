@@ -4,6 +4,12 @@ import { Sidebar } from "./components/Navigation.js";
 import { APP_VERSION, ROUTES } from "./shared/constants.js";
 import { router } from "./shared/Router.js";
 import { installClientLogForwarder } from "./shared/logger-impl.js";
+import {
+  ProjectSessionEventName,
+  readActiveProjectSessionLabel,
+  readProjectSession,
+  type ProjectSessionState
+} from "./shared/project-session.js";
 import { DashboardScreen } from "./screens/Dashboard.js";
 import { Explorer } from "./screens/Explorer.js";
 import { KanbanBoard } from "./screens/Kanban.js";
@@ -39,6 +45,7 @@ const ScreenLabel: Record<ScreenId, string> = {
 interface AppState {
   currentScreen: ScreenId;
   sidebarCollapsed: boolean;
+  projectSession: ProjectSessionState;
 }
 
 interface AppProps extends ComponentProps {
@@ -49,7 +56,8 @@ export class App extends Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props, {
       currentScreen: ScreenId.Overview,
-      sidebarCollapsed: false
+      sidebarCollapsed: false,
+      projectSession: readProjectSession()
     });
 
     installClientLogForwarder();
@@ -62,6 +70,9 @@ export class App extends Component<AppProps, AppState> {
   }
 
   override render(): HTMLElement {
+    const projectLabel = readActiveProjectSessionLabel(this.state.projectSession);
+    const hasProject = this.state.projectSession.projectRootPath.length > 0;
+
     return createElement(MainLayout, {
       sidebar: createElement(Sidebar, {
         brand: {
@@ -69,6 +80,13 @@ export class App extends Component<AppProps, AppState> {
           icon: "terminal",
           version: `v${APP_VERSION}`
         },
+        project: hasProject
+          ? {
+              label: projectLabel,
+              rootPath: this.state.projectSession.projectRootPath
+            }
+          : null,
+        onProjectClick: () => router.navigate(ROUTES.PROJECTS),
         navigation: this.buildNavigationItems(),
         user: {
           name: "John Doe",
@@ -83,6 +101,14 @@ export class App extends Component<AppProps, AppState> {
       sidebarCollapsed: this.state.sidebarCollapsed,
       children: this.renderCurrentScreen()
     });
+  }
+
+  override onMount(): void {
+    window.addEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
   }
 
   private setupRouter(): void {
@@ -195,6 +221,21 @@ export class App extends Component<AppProps, AppState> {
       this.setState({ currentScreen: screen });
     }
   }
+
+  private readonly handleProjectSessionChanged = (): void => {
+    const nextSession = readProjectSession();
+    if (
+      nextSession.projectRootPath === this.state.projectSession.projectRootPath &&
+      nextSession.projectName === this.state.projectSession.projectName &&
+      JSON.stringify(nextSession.recentProjects) === JSON.stringify(this.state.projectSession.recentProjects)
+    ) {
+      return;
+    }
+
+    this.setState({
+      projectSession: nextSession
+    });
+  };
 }
 
 const renderPlaceholderScreen = (input: {

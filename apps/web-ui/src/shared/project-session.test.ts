@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  ProjectSessionEventName,
   clearProjectSession,
   createProjectSessionStorage,
+  readActiveProjectSessionLabel,
   readProjectSession,
   writeProjectSession
 } from "./project-session.js";
@@ -80,6 +82,62 @@ describe("project session storage", () => {
         }
       ]
     });
+  });
+
+  it("dispatches a browser event when the active project session changes", () => {
+    const storage = createMemoryStorage();
+    const dispatched: string[] = [];
+    const originalWindow = globalThis.window;
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: storage,
+        dispatchEvent: (event: Event) => {
+          dispatched.push(event.type);
+          return true;
+        }
+      }
+    });
+
+    try {
+      writeProjectSession(
+        {
+          projectRootPath: "D:/projects/Iteronix",
+          projectName: "Iteronix"
+        },
+        storage
+      );
+    } finally {
+      if (originalWindow === undefined) {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow
+        });
+      }
+    }
+
+    expect(dispatched).toEqual([ProjectSessionEventName.Changed]);
+  });
+
+  it("derives the sidebar label from the active project session", () => {
+    expect(
+      readActiveProjectSessionLabel({
+        projectRootPath: "D:\\projects\\Iteronix",
+        projectName: "",
+        recentProjects: []
+      })
+    ).toBe("Iteronix");
+
+    expect(
+      readActiveProjectSessionLabel({
+        projectRootPath: "D:\\projects\\Iteronix",
+        projectName: "Workbench",
+        recentProjects: []
+      })
+    ).toBe("Workbench");
   });
 });
 

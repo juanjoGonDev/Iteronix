@@ -1299,3 +1299,34 @@
   - La tarea funcional de `Explorer` sigue pendiente de confirmación del usuario antes de mover la tarjeta de Notion a `Listo`
 - Next:
   - Esperar confirmación del usuario de que `Projects` y `Explorer` ya abren correctamente con el reparto `UI :4000 / API :4001`; si falla algo más, seguir dentro de la misma tarjeta antes de pasar a `Settings`
+### 2026-04-27 18:18 (Europe/Madrid) — Explorer Integrated UX Revision
+
+- Summary: Refinado `Explorer` tras feedback visual del usuario para convertirlo en una vista única tipo editor, con selector global de proyecto en la sidebar, búsqueda con debounce al teclear y preview con color por lenguaje.
+- Decisions:
+  - Mantener la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta confirmación explícita del usuario
+  - Mover la selección de proyecto a `App` + `Sidebar` como contexto global en vez de dejarla duplicada dentro de `Explorer`
+  - Mantener el browser harness canónico actual del repo para esta tarea, aunque el usuario mencionó Playwright, porque `AGENTS.md` prioriza `@browserbasehq/stagehand` y la validación determinista existente del repo
+  - Corregir el runtime base de `createElement` para ignorar atributos `undefined`, porque estaba afectando al nuevo selector global del sidebar
+- Changes:
+  - **Updated apps/web-ui/src/shared/project-session.ts** y **project-session.test.ts**: evento de sesión ya integrado con etiqueta derivada para el sidebar
+  - **Updated apps/web-ui/src/shared/Component.ts** y **Component.test.ts**: `onInput` soportado y atributos `undefined` ignorados en el runtime DOM
+  - **Updated apps/web-ui/src/components/Navigation.ts** y **apps/web-ui/src/index.ts**: selector global de proyecto visible en la sidebar y sincronizado con la sesión activa
+  - **Reworked apps/web-ui/src/screens/Explorer.ts**: eliminación del bloque `Project session`, layout único integrado, búsqueda con debounce y preview read-only con resaltado y badges por lenguaje
+  - **Updated apps/web-ui/src/screens/explorer-state.ts** y **explorer-state.test.ts**: helpers puros para iconos, temas y tokens de `txt`, `json`, `ts` y `js`
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: cobertura browser para selector global visible, desaparición del panel anterior, búsqueda viva y preview coloreada
+  - **Updated PLAN.md**: registrada la revisión UX del `Explorer`
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/shared/project-session.test.ts apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm lint`
+  - `pnpm test`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - La búsqueda del árbol sigue operando sobre nodos ya cargados desde el servidor; no hace búsqueda remota global de repositorio en este slice
+  - La tarea queda funcionalmente lista, pero la tarjeta no debe moverse a `Listo` hasta confirmación explícita del usuario
+- Next:
+  - Esperar validación visual del usuario sobre el nuevo `Explorer`; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
