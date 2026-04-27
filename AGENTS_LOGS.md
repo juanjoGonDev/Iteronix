@@ -1237,3 +1237,33 @@
   - `Dashboard` sigue siendo una showcase estática con quick actions muertas
 - Next:
   - El siguiente prompt correcto es cerrar `Explorer` end-to-end sobre `/files/tree` y `/files/read`, con validación browser real y sin tocar otras pantallas
+### 2026-04-27 12:05 (Europe/Madrid) — Explorer End-to-End
+
+- Summary: `Explorer` ya funciona sobre la API real de archivos, reutiliza la sesión de proyecto abierta en `Projects` y quedó protegida por una validación browser determinista propia.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `ui-implementations`, `quality-gates-enforcer` y `uncodixfy`
+  - Reutilizar la sesión de proyecto persistida por `Projects` en lugar de introducir un segundo flujo de selección de repositorio
+  - Mantener el slice en modo lectura intencional, con copy explícito, para evitar controles de edición a medias
+  - Mantener la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta confirmación explícita del usuario
+- Changes:
+  - **Added apps/web-ui/src/shared/explorer-client.ts** y **explorer-client.test.ts**: cliente tipado para `/projects/open`, `/files/tree` y `/files/read`
+  - **Added apps/web-ui/src/screens/explorer-state.ts** y **explorer-state.test.ts**: helpers puros para árbol, expansión, filtrado y lenguaje de archivo
+  - **Replaced apps/web-ui/src/screens/Explorer.ts**: pantalla conectada a backend real, árbol lazy-loaded, búsqueda sobre árbol cargado y preview read-only
+  - **Added apps/web-ui/scripts/validate-explorer.ts** y **updated apps/web-ui/package.json**: validación browser determinista `validate:explorer`
+  - **Updated PLAN.md**: nota de implementación completada con cierre pendiente de confirmación en Notion
+  - **Updated Notion task** `01. Explorer screen end-to-end`: progreso y validaciones registradas, estado mantenido en `En progreso`
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/shared/explorer-client.test.ts apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - La búsqueda de `Explorer` sigue el contrato actual del runtime base y se dispara con evento `change`; el flujo browser lo cubre de forma determinista
+  - No se ha abierto edición de archivos en esta tarea; la pantalla comunica explícitamente que el slice es read-only
+- Next:
+  - Esperar confirmación del usuario para mover la tarjeta de Notion a `Listo`; después, la siguiente pantalla correcta es `Settings`

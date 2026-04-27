@@ -577,6 +577,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - [ ] Replace hardcoded tree/content in `apps/web-ui/src/screens/Explorer.ts`
   - [ ] Connect to `/files/tree` and `/files/read`
   - [ ] Validate the route with a deterministic browser flow
+  - Implementation completed on `2026-04-27`; keep the Notion card in `En progreso` until explicit user confirmation
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts

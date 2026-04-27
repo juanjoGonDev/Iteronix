@@ -14,7 +14,8 @@
     "validate:source-linking": "tsx scripts/validate-workbench-source-linking.ts",
     "validate:source-linking:preserve": "tsx scripts/validate-workbench-source-linking.ts --preserve-screenshots",
     "validate:quality-gates": "tsx scripts/validate-quality-gates-projects.ts",
-    "validate:git-workspace": "tsx scripts/validate-projects-git-workspace.ts"
+    "validate:git-workspace": "tsx scripts/validate-projects-git-workspace.ts",
+    "validate:explorer": "tsx scripts/validate-explorer.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
