@@ -578,6 +578,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - [ ] Connect to `/files/tree` and `/files/read`
   - [ ] Validate the route with a deterministic browser flow
   - Implementation completed on `2026-04-27`; keep the Notion card in `En progreso` until explicit user confirmation
+  - Dev-runtime fix completed on `2026-04-27`: web UI remains on `http://localhost:4000`, while `pnpm dev` and `pnpm dev:server` now run the backend watcher on `http://localhost:4001` and the client auto-corrects stale self-pointing local server URLs
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts

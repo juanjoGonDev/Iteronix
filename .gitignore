@@ -42,6 +42,7 @@ screenshots/
 # No JavaScript files in source (except allowed patterns)
 *.js
 !scripts/*.js
+!apps/server-api/scripts/*.js
 !*.config.js
 !test-server.js
 

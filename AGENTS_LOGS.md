@@ -1267,3 +1267,35 @@
   - No se ha abierto edición de archivos en esta tarea; la pantalla comunica explícitamente que el slice es read-only
 - Next:
   - Esperar confirmación del usuario para mover la tarjeta de Notion a `Listo`; después, la siguiente pantalla correcta es `Settings`
+### 2026-04-27 12:30 (Europe/Madrid) — Explorer / Projects Dev Port Conflict
+
+- Summary: Corregido el `404` real al abrir proyecto desde `Projects` y `Explorer` en desarrollo; la UI en `:4000` estaba llamando a su propio servidor estático en vez de al backend.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor` sobre la configuración cliente con una prueba roja en `apps/web-ui/src/shared/server-config.test.ts`
+  - Mantener la web UI en `http://localhost:4000` para no romper el hábito actual de uso durante estabilización
+  - Mover solo el backend en modo watch a `http://localhost:4001` y hacer que el cliente corrija automáticamente un `serverUrl` local que apunte al mismo origen de la UI
+  - Mantener la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta validación explícita del usuario
+- Changes:
+  - **Added apps/web-ui/src/shared/server-config.test.ts**: cobertura roja/verde para derivar `:4001` desde el origen local `:4000` y migrar valores guardados que apuntaban a la propia UI
+  - **Updated apps/web-ui/src/shared/server-config.ts**: derivación automática de backend dev y saneamiento de URLs locales autorefenciales
+  - **Updated apps/server-api/package.json** y **added apps/server-api/scripts/start-watch-dev.js**: `pnpm dev` y `pnpm dev:server` arrancan el backend watcher en `:4001`
+  - **Updated docs/RUNNING.md** y **PLAN.md**: documentado el reparto de puertos durante desarrollo
+  - **Updated Notion task** `01. Explorer screen end-to-end`: añadida la incidencia real del 404 y su resolución, manteniendo el estado en `En progreso`
+- Commands:
+  - `pnpm vitest run apps/web-ui/src/shared/server-config.test.ts`
+  - `pnpm build`
+  - `Invoke-WebRequest http://localhost:4001/projects/open` con `Authorization: Bearer dev-token`
+  - Validación browser real con Puppeteer sobre `http://127.0.0.1:4000/projects` comprobando que `Open project` deja de mostrar `404` y resuelve contra `http://127.0.0.1:4001`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El backend dev adicional en `:4001` solo aplica a modo watch; `pnpm start` y el runtime empaquetado siguen usando su puerto configurado o el default del servidor
+  - La tarea funcional de `Explorer` sigue pendiente de confirmación del usuario antes de mover la tarjeta de Notion a `Listo`
+- Next:
+  - Esperar confirmación del usuario de que `Projects` y `Explorer` ya abren correctamente con el reparto `UI :4000 / API :4001`; si falla algo más, seguir dentro de la misma tarjeta antes de pasar a `Settings`

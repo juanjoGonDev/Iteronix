@@ -15,6 +15,7 @@
 Notes:
 
 - Web UI dev server serves `apps/web-ui` and reloads when `apps/web-ui/dist` changes.
+- `pnpm dev` and `pnpm dev:server` run the backend watcher on `http://localhost:4001` so the web UI can stay on `http://localhost:4000` without port conflicts.
 - Desktop dev mode defaults to `http://localhost:5173`.
 
 ## Production
