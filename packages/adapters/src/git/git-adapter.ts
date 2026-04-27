@@ -9,7 +9,9 @@ export const GitErrorCode = {
   NoChangesToCommit: "no_changes_to_commit",
   BranchExists: "branch_exists",
   BranchMissing: "branch_missing",
-  InvalidBranchName: "invalid_branch_name"
+  InvalidBranchName: "invalid_branch_name",
+  UpstreamMissing: "upstream_missing",
+  RemoteMissing: "remote_missing"
 } as const;
 
 export type GitErrorCode = typeof GitErrorCode[keyof typeof GitErrorCode];
@@ -73,6 +75,7 @@ export type GitBranchListResult = {
 
 export type GitBranchOperationResult = {
   name: string;
+  upstream?: string;
 };
 
 export type GitRepository = {
@@ -126,6 +129,16 @@ export type GitRepository = {
     input: {
       rootPath: string;
       name: string;
+    }
+  ) => Promise<Result<GitBranchOperationResult, GitAdapterError>>;
+  pushCurrentBranch: (
+    input: {
+      rootPath: string;
+    }
+  ) => Promise<Result<GitBranchOperationResult, GitAdapterError>>;
+  publishCurrentBranch: (
+    input: {
+      rootPath: string;
     }
   ) => Promise<Result<GitBranchOperationResult, GitAdapterError>>;
 };
@@ -334,6 +347,87 @@ export const createGitCliAdapter = (
     };
   };
 
+  const pushCurrentBranch = async (
+    branchInput: {
+      rootPath: string;
+    }
+  ): Promise<Result<GitBranchOperationResult, GitAdapterError>> => {
+    const branchState = await readCurrentBranchState({
+      command,
+      rootPath: branchInput.rootPath
+    });
+    if (branchState.type === ResultType.Err) {
+      return branchState;
+    }
+
+    if (!branchState.value.upstream) {
+      return {
+        type: ResultType.Err,
+        error: {
+          code: GitErrorCode.UpstreamMissing,
+          command,
+          message: `Current branch ${branchState.value.name} has no upstream configured.`
+        }
+      };
+    }
+
+    const result = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["push"]
+    });
+    if (result.type === ResultType.Err) {
+      return result;
+    }
+
+    return {
+      type: ResultType.Ok,
+      value: {
+        name: branchState.value.name,
+        upstream: branchState.value.upstream
+      }
+    };
+  };
+
+  const publishCurrentBranch = async (
+    branchInput: {
+      rootPath: string;
+    }
+  ): Promise<Result<GitBranchOperationResult, GitAdapterError>> => {
+    const branchState = await readCurrentBranchState({
+      command,
+      rootPath: branchInput.rootPath
+    });
+    if (branchState.type === ResultType.Err) {
+      return branchState;
+    }
+
+    const result = await runGitCommand({
+      command,
+      rootPath: branchInput.rootPath,
+      args: ["push", "-u", "origin", branchState.value.name]
+    });
+    if (result.type === ResultType.Err) {
+      return result;
+    }
+
+    const refreshedState = await readCurrentBranchState({
+      command,
+      rootPath: branchInput.rootPath
+    });
+    if (refreshedState.type === ResultType.Err) {
+      return refreshedState;
+    }
+
+    return {
+      type: ResultType.Ok,
+      value: {
+        name: refreshedState.value.name,
+        upstream: refreshedState.value.upstream ?? `origin/${refreshedState.value.name}`
+      }
+    };
+  };
+
   return {
     getStatus,
     getDiff,
@@ -343,7 +437,9 @@ export const createGitCliAdapter = (
     createCommit,
     listBranches,
     createBranch,
-    checkoutBranch
+    checkoutBranch,
+    pushCurrentBranch,
+    publishCurrentBranch
   };
 };
 
@@ -404,6 +500,42 @@ const runGitPathOperation = async (
     type: ResultType.Ok,
     value: {
       paths: [...input.paths]
+    }
+  };
+};
+
+const readCurrentBranchState = async (
+  input: {
+    command: string;
+    rootPath: string;
+  }
+): Promise<Result<{ name: string; upstream?: string }, GitAdapterError>> => {
+  const status = await runGitCommand({
+    command: input.command,
+    rootPath: input.rootPath,
+    args: ["status", "--porcelain=1", "-b"]
+  });
+  if (status.type === ResultType.Err) {
+    return status;
+  }
+
+  const parsedStatus = parseGitStatusOutput(status.value.stdout);
+  if (!parsedStatus.branch) {
+    return {
+      type: ResultType.Err,
+      error: {
+        code: GitErrorCode.BranchMissing,
+        command: input.command,
+        message: "Current branch not found"
+      }
+    };
+  }
+
+  return {
+    type: ResultType.Ok,
+    value: {
+      name: parsedStatus.branch,
+      ...(parsedStatus.upstream ? { upstream: parsedStatus.upstream } : {})
     }
   };
 };
@@ -634,6 +766,36 @@ const mapGitExecutionFailure = (
       code: GitErrorCode.InvalidBranchName,
       command: input.command,
       message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Invalid branch name",
+      exitCode: input.exitCode,
+      stdout: input.stdout,
+      stderr: input.stderr
+    };
+  }
+
+  if (
+    combinedOutput.includes("has no upstream branch") ||
+    combinedOutput.includes("no upstream configured")
+  ) {
+    return {
+      code: GitErrorCode.UpstreamMissing,
+      command: input.command,
+      message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Current branch has no upstream configured",
+      exitCode: input.exitCode,
+      stdout: input.stdout,
+      stderr: input.stderr
+    };
+  }
+
+  if (
+    combinedOutput.includes("no configured push destination") ||
+    combinedOutput.includes("no such remote") ||
+    combinedOutput.includes("unknown remote") ||
+    combinedOutput.includes("could not read from remote repository")
+  ) {
+    return {
+      code: GitErrorCode.RemoteMissing,
+      command: input.command,
+      message: input.stderr.trim().length > 0 ? input.stderr.trim() : "Remote repository is not configured",
       exitCode: input.exitCode,
       stdout: input.stdout,
       stderr: input.stderr

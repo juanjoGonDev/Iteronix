@@ -34,6 +34,8 @@ export const RoutePath = {
   GitBranchesList: "/git/branches/list",
   GitBranchesCreate: "/git/branches/create",
   GitBranchesCheckout: "/git/branches/checkout",
+  GitBranchesPush: "/git/branches/push",
+  GitBranchesPublish: "/git/branches/publish",
   QualityGatesRun: "/quality-gates/run",
   QualityGatesList: "/quality-gates/list",
   QualityGatesEvents: "/quality-gates/events",

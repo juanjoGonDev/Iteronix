@@ -25,6 +25,8 @@ import {
   readGateExecutionState,
   readGitBranchValidationMessage,
   readGitCommitValidationMessage,
+  readGitPublishValidationMessage,
+  readGitPushValidationMessage,
   readGitSectionBulkAction,
   readGitSectionActions,
   readSelectedRun,
@@ -77,6 +79,8 @@ const GitPendingAction = {
   Commit: "commit",
   BranchCreate: "branch-create",
   BranchCheckout: "branch-checkout",
+  BranchPublish: "branch-publish",
+  BranchPush: "branch-push",
   Stage: GitWorkspaceAction.Stage,
   Unstage: GitWorkspaceAction.Unstage,
   Revert: GitWorkspaceAction.Revert
@@ -307,6 +311,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       this.state.gitBranchName,
       this.state.gitBranches
     );
+    const pushValidationMessage = readGitPushValidationMessage(repository);
+    const publishValidationMessage = readGitPublishValidationMessage(repository);
 
     return createElement(SectionPanel, {
       title: "Git workspace",
@@ -344,6 +350,8 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
               branches: this.state.gitBranches,
               branchName: this.state.gitBranchName,
               branchValidationMessage,
+              pushValidationMessage,
+              publishValidationMessage,
               selectedPaths: this.state.selectedGitPaths,
               focusedPath: this.state.focusedGitDiffPath,
               pendingAction: this.state.gitPendingAction,
@@ -358,6 +366,12 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
               },
               onCheckoutBranch: (branchName) => {
                 void this.handleCheckoutGitBranch(branchName);
+              },
+              onPublishBranch: () => {
+                void this.handlePublishGitBranch();
+              },
+              onPushBranch: () => {
+                void this.handlePushGitBranch();
               },
               onToggleSelection: (path) => this.handleGitSelectionToggle(path),
               onBulkAction: (section) => {
@@ -1122,6 +1136,82 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     }
   }
 
+  private async handlePublishGitBranch(): Promise<void> {
+    const currentProject = this.state.currentProject;
+    const repository = this.state.gitRepository;
+    const validationMessage = readGitPublishValidationMessage(repository);
+    if (!currentProject || !repository?.branch || validationMessage !== null || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    this.setState({
+      gitPendingAction: GitPendingAction.BranchPublish,
+      gitPendingPath: repository.branch,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const branch = await this.gitClient.publishCurrentBranch({
+        projectId: currentProject.id
+      });
+
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: `Published branch ${branch.name} to ${branch.upstream ?? `origin/${branch.name}`}.`,
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not publish the current branch.",
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handlePushGitBranch(): Promise<void> {
+    const currentProject = this.state.currentProject;
+    const repository = this.state.gitRepository;
+    const validationMessage = readGitPushValidationMessage(repository);
+    if (!currentProject || !repository?.branch || validationMessage !== null || this.state.gitPendingAction !== null) {
+      return;
+    }
+
+    this.setState({
+      gitPendingAction: GitPendingAction.BranchPush,
+      gitPendingPath: repository.branch,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const branch = await this.gitClient.pushCurrentBranch({
+        projectId: currentProject.id
+      });
+
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        noticeMessage: `Pushed branch ${branch.name} to ${branch.upstream ?? repository.upstream ?? `origin/${branch.name}`}.`,
+        errorMessage: null
+      });
+
+      await this.refreshGitWorkspace(currentProject.id, false);
+    } catch (error) {
+      this.setState({
+        gitPendingAction: null,
+        gitPendingPath: null,
+        errorMessage: error instanceof Error ? error.message : "Could not push the current branch.",
+        noticeMessage: null
+      });
+    }
+  }
+
   private async handleGitBulkAction(
     section: GitStatusSection
   ): Promise<void> {
@@ -1621,6 +1711,8 @@ const renderGitWorkspaceContent = (input: {
   branches: GitBranchListRecord | null;
   branchName: string;
   branchValidationMessage: string | null;
+  pushValidationMessage: string | null;
+  publishValidationMessage: string | null;
   selectedPaths: ReadonlyArray<string>;
   focusedPath: string | null;
   pendingAction: GitPendingAction | null;
@@ -1628,6 +1720,8 @@ const renderGitWorkspaceContent = (input: {
   onBranchNameChange: (value: string) => void;
   onCreateBranch: () => void;
   onCheckoutBranch: (branchName: string) => void;
+  onPublishBranch: () => void;
+  onPushBranch: () => void;
   onToggleSelection: (path: string) => void;
   onBulkAction: (section: GitStatusSection) => void;
   onFocusDiff: (path: string, scope: GitDiffScopeValue) => void;
@@ -1659,14 +1753,19 @@ const renderGitWorkspaceContent = (input: {
       ])
     ]),
     renderGitBranchesPanel({
+      repository: input.repository,
       branches: input.branches,
       branchName: input.branchName,
       branchValidationMessage: input.branchValidationMessage,
+      pushValidationMessage: input.pushValidationMessage,
+      publishValidationMessage: input.publishValidationMessage,
       pendingAction: input.pendingAction,
       pendingPath: input.pendingPath,
       onBranchNameChange: input.onBranchNameChange,
       onCreateBranch: input.onCreateBranch,
-      onCheckoutBranch: input.onCheckoutBranch
+      onCheckoutBranch: input.onCheckoutBranch,
+      onPublishBranch: input.onPublishBranch,
+      onPushBranch: input.onPushBranch
     }),
     renderGitEntryGroup({
       title: "Staged changes",
@@ -1714,14 +1813,19 @@ const renderGitWorkspaceContent = (input: {
 };
 
 const renderGitBranchesPanel = (input: {
+  repository: GitRepositoryRecord;
   branches: GitBranchListRecord | null;
   branchName: string;
   branchValidationMessage: string | null;
+  pushValidationMessage: string | null;
+  publishValidationMessage: string | null;
   pendingAction: GitPendingAction | null;
   pendingPath: string | null;
   onBranchNameChange: (value: string) => void;
   onCreateBranch: () => void;
   onCheckoutBranch: (branchName: string) => void;
+  onPublishBranch: () => void;
+  onPushBranch: () => void;
 }): HTMLElement =>
   createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
     createElement("div", { className: "flex items-center justify-between gap-3" }, [
@@ -1768,6 +1872,46 @@ const renderGitBranchesPanel = (input: {
           className: `text-sm ${input.branchValidationMessage ? "text-amber-300" : "text-text-secondary"}`
         }, [
           input.branchValidationMessage ?? "Create first, then checkout when you are ready to switch."
+        ]),
+        createElement("div", { className: "rounded-md border border-border-dark px-3 py-3" }, [
+          createElement("div", { className: "flex flex-col gap-1" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Remote sync"]),
+            createElement("p", { className: "text-xs text-text-secondary" }, [
+              input.repository.upstream ?? "No upstream configured for the current branch."
+            ])
+          ]),
+          createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled: input.pushValidationMessage !== null || input.pendingAction !== null,
+              onClick: input.onPushBranch,
+              children:
+                input.pendingAction === GitPendingAction.BranchPush
+                  ? "Pushing upstream"
+                  : "Push upstream"
+            }),
+            createElement("p", {
+              className: `text-sm ${input.pushValidationMessage ? "text-amber-300" : "text-text-secondary"}`
+            }, [
+              input.pushValidationMessage ?? `Push ${input.repository.branch ?? "the current branch"} to ${input.repository.upstream ?? "its upstream"}.`
+            ]),
+            createElement(Button, {
+              variant: "ghost",
+              size: "sm",
+              disabled: input.publishValidationMessage !== null || input.pendingAction !== null,
+              onClick: input.onPublishBranch,
+              children:
+                input.pendingAction === GitPendingAction.BranchPublish
+                  ? "Publishing branch"
+                  : "Publish branch"
+            }),
+            createElement("p", {
+              className: `text-sm ${input.publishValidationMessage ? "text-amber-300" : "text-text-secondary"}`
+            }, [
+              input.publishValidationMessage ?? `Publish ${input.repository.branch ?? "the current branch"} to origin and set upstream tracking.`
+            ])
+          ])
         ])
       ]),
       createElement("div", { className: "grid gap-4 md:grid-cols-2" }, [

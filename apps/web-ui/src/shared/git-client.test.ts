@@ -84,7 +84,8 @@ describe("git client codecs", () => {
     });
     const branchOperation = parseGitBranchOperationResponse({
       branch: {
-        name: "feature/git-ui"
+        name: "feature/git-ui",
+        upstream: "origin/feature/git-ui"
       }
     });
     const commit = parseGitCommitResponse({
@@ -106,6 +107,7 @@ describe("git client codecs", () => {
     expect(branches.local[0]?.current).toBe(true);
     expect(branches.remote[0]?.name).toBe("origin/release/next");
     expect(branchOperation.name).toBe("feature/git-ui");
+    expect(branchOperation.upstream).toBe("origin/feature/git-ui");
     expect(commit.hash).toBe("9f3c2ad1");
   });
 });

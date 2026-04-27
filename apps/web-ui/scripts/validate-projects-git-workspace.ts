@@ -41,7 +41,9 @@ const RequestPath = {
   GitCommit: "/git/commit",
   GitBranchesList: "/git/branches/list",
   GitBranchesCreate: "/git/branches/create",
-  GitBranchesCheckout: "/git/branches/checkout"
+  GitBranchesCheckout: "/git/branches/checkout",
+  GitBranchesPush: "/git/branches/push",
+  GitBranchesPublish: "/git/branches/publish"
 } as const;
 
 const ResponseHeader = {
@@ -60,6 +62,9 @@ const ValidationText = {
   InvalidCommit: "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
   BranchCreated: "Branch feature/browser-validation created.",
   BranchSwitched: "Switched to branch feature/browser-validation.",
+  BranchPublished: "Published branch feature/browser-validation to origin/feature/browser-validation.",
+  BranchPushed: "Pushed branch feature/browser-validation to origin/feature/browser-validation.",
+  BranchSynced: "Current branch is already synced with origin/feature/browser-validation.",
   BulkStageSuccess: "2 files staged.",
   BulkUnstageSuccess: "2 files moved out of the index.",
   QualityGatesReverted: "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
@@ -153,7 +158,8 @@ type StubState = {
   currentBranch: string;
   localBranches: string[];
   remoteBranches: string[];
-  commitCount: number;
+  trackedUpstreams: Record<string, string>;
+  aheadCount: number;
 };
 
 type StubFile = {
@@ -249,6 +255,19 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "after-branch-checkout",
+      artifactName: "projects-git-workspace"
+    });
+
+    await waitForButtonEnabled(page, "Publish branch");
+    await clickNamedButton(page, "Publish branch");
+    await waitForPageTexts(page, [
+      ValidationText.BranchPublished,
+      "origin/feature/browser-validation"
+    ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-branch-publish",
       artifactName: "projects-git-workspace"
     });
 
@@ -355,6 +374,19 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       artifactName: "projects-git-workspace"
     });
 
+    await waitForButtonEnabled(page, "Push upstream");
+    await clickNamedButton(page, "Push upstream");
+    await waitForPageTexts(page, [
+      ValidationText.BranchPushed,
+      ValidationText.BranchSynced
+    ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-push",
+      artifactName: "projects-git-workspace"
+    });
+
     console.log("Browser validation passed for the Projects git workspace flow.");
   } finally {
     if (browser) {
@@ -373,7 +405,10 @@ async function startGitWorkspaceStubServer(): Promise<{
     currentBranch: "feature/git-ui",
     localBranches: ["feature/git-ui", "develop"],
     remoteBranches: ["origin/feature/git-ui", "origin/release/next"],
-    commitCount: 0
+    trackedUpstreams: {
+      "feature/git-ui": "origin/feature/git-ui"
+    },
+    aheadCount: 2
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -486,6 +521,16 @@ async function handleStubRequest(
 
   if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesCheckout) {
     await handleGitBranchMutation(request, response, state, "checkout");
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesPublish) {
+    await handleGitBranchRemoteMutation(request, response, state, "publish");
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesPush) {
+    await handleGitBranchRemoteMutation(request, response, state, "push");
     return;
   }
 
@@ -645,9 +690,9 @@ async function handleGitBranchesList(
         name,
         current: state.currentBranch === name,
         remote: false,
-        ...(name === "feature/git-ui"
+        ...(state.trackedUpstreams[name]
           ? {
-              upstream: "origin/feature/git-ui"
+              upstream: state.trackedUpstreams[name]
             }
           : {})
       })),
@@ -656,6 +701,57 @@ async function handleGitBranchesList(
         current: false,
         remote: true
       }))
+    }
+  });
+}
+
+async function handleGitBranchRemoteMutation(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: StubState,
+  operation: "publish" | "push"
+): Promise<void> {
+  const body = await readJsonBody(request);
+  const projectId = readRequiredString(body, "projectId");
+
+  if (projectId !== FixtureProject.id) {
+    writeJson(response, 400, {
+      message: "Unexpected project id"
+    });
+    return;
+  }
+
+  const branchName = state.currentBranch;
+  const upstream = `origin/${branchName}`;
+
+  if (operation === "publish") {
+    state.trackedUpstreams[branchName] = upstream;
+    if (!state.remoteBranches.includes(upstream)) {
+      state.remoteBranches = [...state.remoteBranches, upstream];
+    }
+
+    writeJson(response, 201, {
+      branch: {
+        name: branchName,
+        upstream
+      }
+    });
+    return;
+  }
+
+  if (!state.trackedUpstreams[branchName]) {
+    writeJson(response, 400, {
+      message: "Current branch has no upstream configured."
+    });
+    return;
+  }
+
+  state.aheadCount = 0;
+
+  writeJson(response, 200, {
+    branch: {
+      name: branchName,
+      upstream
     }
   });
 }
@@ -768,12 +864,12 @@ function createGitRepositoryResponse(state: StubState): {
 
   return {
     branch: state.currentBranch,
-    ...(state.currentBranch === "feature/git-ui"
+    ...(state.trackedUpstreams[state.currentBranch]
       ? {
-          upstream: "origin/feature/git-ui"
+          upstream: state.trackedUpstreams[state.currentBranch]
         }
       : {}),
-    ahead: 2 + state.commitCount,
+    ahead: state.aheadCount,
     behind: 0,
     clean: entries.length === 0,
     stagedCount,
@@ -875,7 +971,7 @@ function applyGitCommit(state: StubState): void {
     }
   }
 
-  state.commitCount += 1;
+  state.aheadCount += 1;
 }
 
 function readStubFile(state: StubState, path: string): StubFile {

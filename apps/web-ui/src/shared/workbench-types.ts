@@ -87,6 +87,7 @@ export type GitBranchListRecord = {
 
 export type GitBranchOperationRecord = {
   name: string;
+  upstream?: string;
 };
 
 export type QualityGateRunRecord = {

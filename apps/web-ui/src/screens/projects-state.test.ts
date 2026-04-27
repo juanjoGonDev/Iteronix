@@ -8,6 +8,8 @@ import {
   isConventionalCommitMessage,
   mergeRunEvents,
   readGitBranchValidationMessage,
+  readGitPublishValidationMessage,
+  readGitPushValidationMessage,
   readGitSectionBulkAction,
   readGitSectionActions,
   readGitCommitValidationMessage,
@@ -314,6 +316,30 @@ describe("projects state helpers", () => {
     expect(readGitBranchValidationMessage("bad branch", branches)).toBe("Use a valid Git branch name such as feature/projects-branching.");
     expect(readGitBranchValidationMessage("develop", branches)).toBe("A local branch named develop already exists.");
     expect(readGitBranchValidationMessage("feature/projects-branching", branches)).toBe(null);
+    expect(readGitPushValidationMessage(repository)).toBe(null);
+    expect(
+      readGitPushValidationMessage(
+        createRepository({
+          ahead: 0,
+          upstream: "origin/feature/git-ui"
+        })
+      )
+    ).toBe("Current branch is already synced with origin/feature/git-ui.");
+    expect(
+      readGitPushValidationMessage(
+        createRepository({
+          upstream: null
+        })
+      )
+    ).toBe("Publish the current branch to origin before pushing.");
+    expect(readGitPublishValidationMessage(repository)).toBe("Current branch already tracks origin/feature/git-ui.");
+    expect(
+      readGitPublishValidationMessage(
+        createRepository({
+          upstream: null
+        })
+      )
+    ).toBe(null);
   });
 });
 
@@ -357,15 +383,23 @@ const createEvent = (input: {
 });
 
 const createRepository = (input: {
+  branch?: string;
+  upstream?: string | null;
+  ahead?: number;
+  behind?: number;
   stagedCount?: number;
   unstagedCount?: number;
   untrackedCount?: number;
   entries?: GitRepositoryRecord["entries"];
 }): GitRepositoryRecord => ({
-  branch: "feature/git-ui",
-  upstream: "origin/feature/git-ui",
-  ahead: 1,
-  behind: 0,
+  ...(input.branch === undefined ? { branch: "feature/git-ui" } : { branch: input.branch }),
+  ...(input.upstream === undefined
+    ? { upstream: "origin/feature/git-ui" }
+    : input.upstream
+      ? { upstream: input.upstream }
+      : {}),
+  ahead: input.ahead ?? 1,
+  behind: input.behind ?? 0,
   clean: false,
   stagedCount: input.stagedCount ?? 1,
   unstagedCount: input.unstagedCount ?? 0,

@@ -309,6 +309,38 @@ export const executeGitBranchCheckout = async (
   return mapGitResult(result);
 };
 
+export const executeGitBranchPush = async (
+  input: { projectId: string },
+  dependencies: GitApiDependencies
+): Promise<Result<GitBranchOperationResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await dependencies.git.pushCurrentBranch({
+    rootPath: root.value
+  });
+
+  return mapGitResult(result);
+};
+
+export const executeGitBranchPublish = async (
+  input: { projectId: string },
+  dependencies: GitApiDependencies
+): Promise<Result<GitBranchOperationResult, ApiError>> => {
+  const root = resolveGitRoot(input.projectId, dependencies);
+  if (root.type === ResultType.Err) {
+    return root;
+  }
+
+  const result = await dependencies.git.publishCurrentBranch({
+    rootPath: root.value
+  });
+
+  return mapGitResult(result);
+};
+
 const resolveGitRoot = (
   projectId: string,
   dependencies: GitApiDependencies
@@ -351,7 +383,9 @@ const mapGitAdapterError = (error: GitAdapterError): ApiError => {
     error.code === GitErrorCode.NoChangesToCommit ||
     error.code === GitErrorCode.BranchExists ||
     error.code === GitErrorCode.BranchMissing ||
-    error.code === GitErrorCode.InvalidBranchName
+    error.code === GitErrorCode.InvalidBranchName ||
+    error.code === GitErrorCode.UpstreamMissing ||
+    error.code === GitErrorCode.RemoteMissing
   ) {
     return {
       status: HttpStatus.BadRequest,

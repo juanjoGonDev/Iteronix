@@ -247,13 +247,60 @@ describe("git cli adapter", () => {
     expect(checkedOut.value.name).toBe("feature/server-first");
     expect(runGit(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe("feature/server-first");
   });
+
+  it("publishes the current local branch and pushes it to the configured upstream", async () => {
+    const repo = await createTempGitRepository({
+      withRemote: true
+    });
+    const adapter = createGitCliAdapter();
+
+    runGit(repo.path, ["checkout", "feature/local-only"]);
+
+    const published = await adapter.publishCurrentBranch({
+      rootPath: repo.path
+    });
+
+    expect(published.type).toBe(ResultType.Ok);
+    if (published.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(published.value.name).toBe("feature/local-only");
+    expect(published.value.upstream).toBe("origin/feature/local-only");
+    expect(
+      runGit(repo.path, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).trim()
+    ).toBe("origin/feature/local-only");
+
+    await writeFile(join(repo.path, "tracked.txt"), "publish update\n", "utf8");
+    runGit(repo.path, ["add", "tracked.txt"]);
+    runGit(repo.path, ["commit", "-m", "feat(test): publish branch"]);
+
+    const pushed = await adapter.pushCurrentBranch({
+      rootPath: repo.path
+    });
+
+    expect(pushed.type).toBe(ResultType.Ok);
+    if (pushed.type !== ResultType.Ok) {
+      return;
+    }
+
+    if (!repo.remotePath) {
+      throw new Error("Expected remote repository");
+    }
+
+    expect(pushed.value.name).toBe("feature/local-only");
+    expect(pushed.value.upstream).toBe("origin/feature/local-only");
+    expect(runGit(repo.path, ["rev-parse", "HEAD"]).trim()).toBe(
+      runGit(repo.remotePath, ["rev-parse", "refs/heads/feature/local-only"]).trim()
+    );
+  });
 });
 
 const createTempGitRepository = async (
   input: {
     withRemote?: boolean;
   } = {}
-): Promise<{ path: string; defaultBranch: string }> => {
+): Promise<{ path: string; defaultBranch: string; remotePath?: string }> => {
   const root = await mkdtemp(join(tmpdir(), "iteronix-git-adapter-"));
   const repoPath = join(root, "repo");
   tempRoots.push(root);
@@ -271,8 +318,10 @@ const createTempGitRepository = async (
   const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
   runGit(repoPath, ["branch", "feature/local-only"]);
 
+  let remotePath: string | undefined;
+
   if (input.withRemote === true) {
-    const remotePath = join(root, "remote.git");
+    remotePath = join(root, "remote.git");
     runGit(root, ["init", "--bare", remotePath]);
     runGit(repoPath, ["remote", "add", "origin", remotePath]);
     runGit(repoPath, ["push", "-u", "origin", defaultBranch]);
@@ -284,7 +333,8 @@ const createTempGitRepository = async (
 
   return {
     path: repoPath,
-    defaultBranch
+    defaultBranch,
+    ...(remotePath ? { remotePath } : {})
   };
 };
 

@@ -269,6 +269,42 @@ export const readGitBranchValidationMessage = (
   return null;
 };
 
+export const readGitPushValidationMessage = (
+  repository: GitRepositoryRecord | null
+): string | null => {
+  if (!repository?.branch) {
+    return "Current branch is unavailable.";
+  }
+
+  if (!repository.upstream) {
+    return "Publish the current branch to origin before pushing.";
+  }
+
+  if (repository.behind > 0) {
+    return `Current branch is behind ${repository.upstream}. Pull before pushing.`;
+  }
+
+  if (repository.ahead === 0) {
+    return `Current branch is already synced with ${repository.upstream}.`;
+  }
+
+  return null;
+};
+
+export const readGitPublishValidationMessage = (
+  repository: GitRepositoryRecord | null
+): string | null => {
+  if (!repository?.branch) {
+    return "Current branch is unavailable.";
+  }
+
+  if (repository.upstream) {
+    return `Current branch already tracks ${repository.upstream}.`;
+  }
+
+  return null;
+};
+
 export const isConventionalCommitMessage = (value: string): boolean => {
   const separatorIndex = value.indexOf(":");
   if (separatorIndex <= 0) {

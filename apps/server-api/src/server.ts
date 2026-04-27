@@ -37,6 +37,8 @@ import {
   executeGitBranchCheckout,
   executeGitBranchCreate,
   executeGitBranchList,
+  executeGitBranchPublish,
+  executeGitBranchPush,
   GitPathOperationKind,
   executeGitPathOperation,
   executeGitCommit,
@@ -596,6 +598,42 @@ const handleRequest = async (
       commandPolicy,
       git,
       "checkout"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesPush) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchRemoteRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "push"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesPublish) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchRemoteRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "publish"
     );
     return;
   }
@@ -3448,6 +3486,50 @@ const handleGitBranchMutationRequest = async (
   }
 
   respondJson(res, operation === "create" ? HttpStatus.Created : HttpStatus.Ok, {
+    branch: result.value
+  });
+};
+
+const handleGitBranchRemoteRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: "push" | "publish"
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = operation === "push"
+    ? await executeGitBranchPush(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      })
+    : await executeGitBranchPublish(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, operation === "publish" ? HttpStatus.Created : HttpStatus.Ok, {
     branch: result.value
   });
 };

@@ -1186,3 +1186,27 @@
   - El slice actual lista ramas remotas pero no hace checkout directo de referencias remotas desde UI; queda como siguiente incremento natural si hace falta tracking branch automático
 - Next:
   - El siguiente paso con más valor es completar operaciones Git de mayor impacto práctico, como push/branch publish o diff review previa a commit desde el mismo workspace
+### 2026-04-27 11:17 (Europe/Madrid) — Git Publish Operations Server-First
+
+- Summary: Cerrado el flujo server-first de publish/push Git entre adapter, API y `Projects`, reutilizando el panel de ramas existente y el mismo validador browser stateful del workspace Git.
+- Decisions:
+  - Aplicar `tdd-red-green-refactor`, `strict-acceptance-criteria`, `minimal-diff-mode`, `quality-gates-enforcer` y `uncodixfy`
+  - Mantener el contrato de ramas separado por operaciones explícitas `/git/branches/publish` y `/git/branches/push`, ambas actuando sobre la rama actual del proyecto abierto
+  - Reutilizar `GitBranchOperationResult` con `upstream?` opcional en vez de introducir un segundo shape para remote operations
+  - Resolver los estados deshabilitados en UI con helpers puros (`readGitPushValidationMessage`, `readGitPublishValidationMessage`) y extender el mismo stub Puppeteer del workspace Git para publish + push
+- Changes:
+  - **Updated packages/adapters/src/git/git-adapter.ts** y **git-adapter.test.ts**: `publishCurrentBranch`, `pushCurrentBranch`, errores tipados de upstream/remoto y cobertura sobre remote bare real
+  - **Updated apps/server-api/src/constants.ts**, **git.ts**, **git.test.ts** y **server.ts**: rutas nuevas, ejecución sandboxed sobre la rama actual y respuestas tipadas con upstream
+  - **Updated apps/web-ui/src/shared/workbench-types.ts**, **git-client.ts**, **git-client.test.ts**, **projects-state.ts** y **projects-state.test.ts**: contrato cliente para publish/push y validación inline de remote sync
+  - **Updated apps/web-ui/src/screens/Projects.ts**: bloque `Remote sync` con `Publish branch` y `Push upstream`, estados deshabilitados claros y mensajes de éxito integrados en el panel Git existente
+  - **Updated apps/web-ui/scripts/validate-projects-git-workspace.ts**: stub stateful extendido con upstream tracking y validación browser determinista de publish + push dentro del mismo flujo Git
+  - **Updated PLAN.md**: milestone 6 marcado con soporte Git publish/push desde `Projects`
+- Commands:
+  - `pnpm vitest run packages/adapters/src/git/git-adapter.test.ts apps/server-api/src/git.test.ts apps/web-ui/src/shared/git-client.test.ts apps/web-ui/src/screens/projects-state.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - El slice actual publica siempre contra `origin`; si en el futuro hay múltiples remotes hará falta añadir selección explícita o política por proyecto
+- Next:
+  - El siguiente paso con más valor ya no es más Git superficial: toca revisión/diff server-first más profunda o PR/remote review workflow sobre la misma base Git ya consolidada

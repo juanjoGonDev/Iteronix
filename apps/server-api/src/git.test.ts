@@ -9,6 +9,8 @@ import {
   executeGitBranchCheckout,
   executeGitBranchCreate,
   executeGitBranchList,
+  executeGitBranchPublish,
+  executeGitBranchPush,
   executeGitPathOperation,
   executeGitCommit,
   executeGitDiff,
@@ -341,6 +343,87 @@ describe("git api", () => {
     }
   });
 
+  it("publishes the current branch to origin and pushes the upstream through the api contract", async () => {
+    const repo = await createTempGitRepository({
+      withRemote: true
+    });
+    const store = createProjectStore();
+    const opened = store.open({
+      rootPath: repo.path
+    });
+
+    if (opened.type !== ResultType.Ok) {
+      throw new Error("Expected opened project");
+    }
+
+    runGit(repo.path, ["checkout", "feature/local-only"]);
+
+    const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
+    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const adapter = createGitCliAdapter();
+    const dependencies = {
+      projectStore: store,
+      workspacePolicy,
+      commandPolicy,
+      git: adapter
+    };
+
+    const published = await executeGitBranchPublish(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(published.type).toBe(ResultType.Ok);
+    if (published.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(published.value.name).toBe("feature/local-only");
+    expect(published.value.upstream).toBe("origin/feature/local-only");
+
+    const publishedStatus = await executeGitStatus(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(publishedStatus.type).toBe(ResultType.Ok);
+    if (publishedStatus.type !== ResultType.Ok) {
+      return;
+    }
+
+    expect(publishedStatus.value.upstream).toBe("origin/feature/local-only");
+
+    await writeFile(join(repo.path, "tracked.txt"), "push update\n", "utf8");
+    runGit(repo.path, ["add", "tracked.txt"]);
+    runGit(repo.path, ["commit", "-m", "feat(test): push upstream"]);
+
+    const pushed = await executeGitBranchPush(
+      {
+        projectId: opened.value.id
+      },
+      dependencies
+    );
+
+    expect(pushed.type).toBe(ResultType.Ok);
+    if (pushed.type !== ResultType.Ok) {
+      return;
+    }
+
+    if (!repo.remotePath) {
+      throw new Error("Expected remote repository");
+    }
+
+    expect(pushed.value.name).toBe("feature/local-only");
+    expect(pushed.value.upstream).toBe("origin/feature/local-only");
+    expect(runGit(repo.path, ["rev-parse", "HEAD"]).trim()).toBe(
+      runGit(repo.remotePath, ["rev-parse", "refs/heads/feature/local-only"]).trim()
+    );
+  });
+
   it("rejects repositories outside the configured workspace root", async () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
@@ -384,6 +467,7 @@ const createTempGitRepository = async (
   path: string;
   workspaceRoot: string;
   defaultBranch: string;
+  remotePath?: string;
 }> => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "iteronix-server-git-"));
   const repoPath = join(workspaceRoot, "repo");
@@ -402,8 +486,10 @@ const createTempGitRepository = async (
   const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
   runGit(repoPath, ["branch", "feature/local-only"]);
 
+  let remotePath: string | undefined;
+
   if (input.withRemote === true) {
-    const remotePath = join(workspaceRoot, "remote.git");
+    remotePath = join(workspaceRoot, "remote.git");
     runGit(workspaceRoot, ["init", "--bare", remotePath]);
     runGit(repoPath, ["remote", "add", "origin", remotePath]);
     runGit(repoPath, ["push", "-u", "origin", defaultBranch]);
@@ -416,7 +502,8 @@ const createTempGitRepository = async (
   return {
     path: repoPath,
     workspaceRoot,
-    defaultBranch
+    defaultBranch,
+    ...(remotePath ? { remotePath } : {})
   };
 };
 

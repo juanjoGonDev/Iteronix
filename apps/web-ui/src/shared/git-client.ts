@@ -17,7 +17,9 @@ const EndpointPath = {
   GitCommit: "/git/commit",
   GitBranchesList: "/git/branches/list",
   GitBranchesCreate: "/git/branches/create",
-  GitBranchesCheckout: "/git/branches/checkout"
+  GitBranchesCheckout: "/git/branches/checkout",
+  GitBranchesPush: "/git/branches/push",
+  GitBranchesPublish: "/git/branches/publish"
 } as const;
 
 export type GitClient = {
@@ -38,6 +40,12 @@ export type GitClient = {
   checkoutBranch: (input: {
     projectId: string;
     branchName: string;
+  }) => Promise<GitBranchOperationRecord>;
+  pushCurrentBranch: (input: {
+    projectId: string;
+  }) => Promise<GitBranchOperationRecord>;
+  publishCurrentBranch: (input: {
+    projectId: string;
   }) => Promise<GitBranchOperationRecord>;
   stagePaths: (input: {
     projectId: string;
@@ -98,6 +106,22 @@ export const createGitClient = (): GitClient => ({
       body: {
         projectId: input.projectId,
         branchName: input.branchName
+      },
+      parse: parseGitBranchOperationResponse
+    }),
+  pushCurrentBranch: (input) =>
+    requestJson({
+      path: EndpointPath.GitBranchesPush,
+      body: {
+        projectId: input.projectId
+      },
+      parse: parseGitBranchOperationResponse
+    }),
+  publishCurrentBranch: (input) =>
+    requestJson({
+      path: EndpointPath.GitBranchesPublish,
+      body: {
+        projectId: input.projectId
       },
       parse: parseGitBranchOperationResponse
     }),
@@ -234,7 +258,8 @@ const parseGitBranchRecord = (
 const parseGitBranchOperationRecord = (
   value: Record<string, unknown>
 ): GitBranchOperationRecord => ({
-  name: readRequiredString(value, "gitBranchOperationRecord", "name")
+  name: readRequiredString(value, "gitBranchOperationRecord", "name"),
+  ...readOptionalString(value, "upstream")
 });
 
 const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {

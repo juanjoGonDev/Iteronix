@@ -375,6 +375,7 @@ Acceptance:
 - [x] UI exposes server-first stage/unstage/revert controls with confirmation for destructive revert actions
 - [x] UI supports multi-select Git workspace actions and file-focused diff navigation in the `Projects` screen
 - [x] Git adapter/API/UI support branch listing, local branch creation, and branch checkout inside the `Projects` workspace
+- [x] Git adapter/API/UI support publishing the current branch to `origin` and pushing tracked upstreams from the `Projects` workspace
 - [x] Add deterministic Puppeteer validation for the `Projects` Git workspace flow using a stub API server and local browser storage seeding
 - [x] Integrate the `Projects` Git workspace browser validation into CI with the same Puppeteer prerequisites and failure-only screenshot artifacts
 - [ ] Optional: auto-commit with Conventional Commits
