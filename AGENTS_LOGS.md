@@ -1582,3 +1582,22 @@
   - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
 - Next:
   - Ejecutar gates completos, dejar el árbol limpio con commit manual y esperar confirmación del usuario sobre el Explorer antes de abrir `Settings`
+### 2026-04-28 21:44 (Europe/Madrid) — Explorer Preview Threshold and Wrapping
+
+- Summary: Ajustado el lazy loading inferior del `Explorer` para arrancar cuando el usuario supera aproximadamente el 60% del scroll disponible, y habilitado el wrap automático de líneas largas dentro del preview del editor.
+- Decisions:
+  - Sustituir el trigger inferior basado en distancia al borde por uno basado en progreso de scroll para acercarlo al comportamiento pedido por el usuario
+  - Mantener el trigger superior por proximidad al inicio, ya que ese caso sigue siendo correcto para cargar bloques previos
+  - Mantener la tarjeta `01. Explorer screen end-to-end` en `En progreso` hasta validación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: carga inferior disparada por ratio de scroll (`>= 60%`) y contenido del preview con `white-space: pre-wrap` + `overflow-wrap: anywhere` para no cortar líneas largas
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: el harness ahora valida la expansión del preview al superar el 60% del scroll y comprueba que el contenido renderizado usa wrap real
+  - **Updated PLAN.md** y comentario en Notion: progreso registrado sin cerrar aún la tarea
+- Commands:
+  - `pnpm -C apps/web-ui build`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El wrap mejora legibilidad de JSON y blobs largos, pero en archivos extremadamente anchos puede hacer crecer la altura visual de cada línea más de lo deseado; si molesta al usuario habrá que añadir un toggle de word wrap más adelante
+  - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
+- Next:
+  - Pasar gates completos, dejar el árbol limpio con commit manual y esperar validación del usuario antes de mover Explorer a `Listo`

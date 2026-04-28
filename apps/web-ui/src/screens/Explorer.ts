@@ -126,7 +126,8 @@ const SearchDebounceMs = 320;
 const ExplorerLineHighlightDurationMs = 1400;
 const ExplorerPreviewLineCount = 240;
 const ExplorerPreviewContextRadius = 80;
-const ExplorerPreviewLoadThresholdPx = 280;
+const ExplorerPreviewLoadThresholdPx = 120;
+const ExplorerPreviewBottomLoadProgressRatio = 0.6;
 
 interface ExplorerState {
   sessionRootPath: string;
@@ -1190,7 +1191,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
                 className: `w-14 select-none border-r border-white/5 bg-black/10 px-3 text-right text-xs ${isHighlighted ? "text-amber-200" : "text-slate-500"}`
               }, [String(lineNumber)]),
               createElement("td", {
-                className: `px-4 py-0.5 whitespace-pre ${isHighlighted ? "bg-amber-300/[0.08]" : ""}`
+                className: `px-4 py-0.5 ${isHighlighted ? "bg-amber-300/[0.08]" : ""}`,
+                style: "white-space: pre-wrap; overflow-wrap: anywhere;"
               }, [
                 line.map((token, tokenIndex) =>
                   createElement("span", {
@@ -2058,14 +2060,17 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
 
     const distanceToTop = surface.scrollTop;
-    const distanceToBottom = surface.scrollHeight - surface.clientHeight - surface.scrollTop;
+    const maxScrollTop = Math.max(0, surface.scrollHeight - surface.clientHeight);
+    const scrollProgress = maxScrollTop > 0
+      ? surface.scrollTop / maxScrollTop
+      : 0;
 
     if (distanceToTop <= ExplorerPreviewLoadThresholdPx) {
       await this.loadPreviewWindow(ExplorerPreviewLoadDirection.Previous);
       return;
     }
 
-    if (distanceToBottom <= ExplorerPreviewLoadThresholdPx) {
+    if (scrollProgress >= ExplorerPreviewBottomLoadProgressRatio) {
       await this.loadPreviewWindow(ExplorerPreviewLoadDirection.Next);
     }
   }

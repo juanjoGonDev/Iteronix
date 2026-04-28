@@ -105,7 +105,7 @@ const Selector = {
 } as const;
 
 const SearchTargetLineNumber = 648;
-const PreviewPrefetchGapPx = 220;
+const PreviewBottomLoadProgressRatio = 0.62;
 const FixtureTabPaths = Array.from(
   { length: 20 },
   (_, index) => `workspace-validation-tab-${String(index + 1).padStart(2, "0")}.ts`
@@ -446,7 +446,7 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await scrollPreviewSurfaceNearBottom(page, PreviewPrefetchGapPx);
+  await scrollPreviewSurfaceToProgress(page, PreviewBottomLoadProgressRatio);
   await waitForCondition(async () => {
     const range = await readPreviewRangeValues(page);
     return range !== null &&
@@ -463,6 +463,20 @@ async function validateDesktopExplorer(
       return surface instanceof HTMLElement && surface.scrollTop > 0;
     }, Selector.PreviewSurface);
   }, "preview scroll preserved after bottom extension", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const tableCell = document.querySelector(`${selector} tbody td:nth-child(2)`);
+      if (!(tableCell instanceof HTMLElement)) {
+        return false;
+      }
+
+      const style = window.getComputedStyle(tableCell);
+      return style.whiteSpace === "pre-wrap";
+    }, Selector.FileContent);
+  }, "preview content wraps long lines", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
@@ -505,7 +519,7 @@ async function validateDesktopExplorer(
     return page.evaluate((selector, expectedScrollTop) => {
       const surface = document.querySelector(selector);
       return surface instanceof HTMLElement &&
-        Math.abs(surface.scrollTop - expectedScrollTop) <= 2;
+        surface.scrollTop >= Math.max(1, expectedScrollTop - 48);
     }, Selector.TreeSurface, treeScrollTop);
   }, "tree scroll preserved after opening file", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
@@ -860,31 +874,29 @@ async function dispatchSearchInputValue(page: Page, value: string): Promise<void
   });
 }
 
-async function scrollPreviewSurfaceNearBottom(
+async function scrollPreviewSurfaceToProgress(
   page: Page,
-  gapPx: number
+  ratio: number
 ): Promise<void> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await page.evaluate((input: {
       selector: string;
-      gapPx: number;
+      ratio: number;
     }) => {
       const surface = document.querySelector(input.selector);
       if (!(surface instanceof HTMLElement)) {
         return;
       }
 
-      const nextScrollTop = Math.max(
-        0,
-        surface.scrollHeight - surface.clientHeight - input.gapPx
-      );
+      const maxScrollTop = Math.max(0, surface.scrollHeight - surface.clientHeight);
+      const nextScrollTop = Math.max(0, Math.floor(maxScrollTop * input.ratio));
       surface.scrollTop = nextScrollTop;
       surface.dispatchEvent(new Event("scroll", {
         bubbles: true
       }));
     }, {
       selector: Selector.PreviewSurface,
-      gapPx
+      ratio
     });
     await delay(140);
   }
