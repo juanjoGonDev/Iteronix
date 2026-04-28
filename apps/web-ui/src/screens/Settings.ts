@@ -113,20 +113,28 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   override render(): HTMLElement {
     return createElement("div", {
-      className: "mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-6 md:px-6 lg:px-8"
+      className: "min-h-full w-full bg-[#eef2f6]"
     }, [
-      this.renderHeader(),
-      this.renderMessages(),
-      this.renderTabs(),
-      this.renderActiveTab(),
-      this.renderSaveBar()
+      createElement("div", {
+        className: "mx-auto flex w-full max-w-[1380px] flex-col gap-7 px-4 py-6 pb-28 md:px-8 md:py-8 md:pb-10 lg:px-10"
+      }, [
+        this.renderHeader(),
+        this.renderMessages(),
+        this.renderTabs(),
+        this.renderActiveTab(),
+        this.renderSaveBar()
+      ])
     ]);
   }
 
   private renderHeader(): HTMLElement {
-    return createElement("div", { className: "flex flex-col gap-2" }, [
-      createElement("h1", { className: "text-3xl font-semibold text-white" }, ["Settings"]),
-      createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [
+    return createElement("div", { className: "flex flex-col gap-3 pt-2" }, [
+      createElement("h1", {
+        className: "text-[2rem] font-semibold tracking-tight text-slate-900 md:text-[2.35rem]"
+      }, ["Settings"]),
+      createElement("p", {
+        className: "max-w-3xl text-sm leading-7 text-slate-600 md:text-[15px]"
+      }, [
         "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
       ])
     ]);
@@ -152,8 +160,10 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   private renderTabs(): HTMLElement {
-    return createElement("div", { className: "border-b border-border-dark" }, [
-      createElement("div", { className: "flex gap-6 overflow-x-auto pb-1" }, [
+    return createElement("div", {
+      className: "sticky top-0 z-10 -mx-1 border-b border-slate-300 bg-[#eef2f6]/95 px-1 backdrop-blur"
+    }, [
+      createElement("div", { className: "scrollbar-hide flex gap-8 overflow-x-auto pb-1" }, [
         this.renderTab("general"),
         this.renderTab("provider"),
         this.renderTab("limits"),
@@ -168,8 +178,10 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
     return createElement("button", {
       type: "button",
-      className: `border-b-2 pb-3 text-sm font-semibold whitespace-nowrap transition-colors ${
-        isActive ? "border-white text-white" : "border-transparent text-text-secondary hover:text-white"
+      className: `border-b-2 px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap transition-colors ${
+        isActive
+          ? "border-slate-900 text-slate-900"
+          : "border-transparent text-slate-500 hover:text-slate-800"
       }`,
       onClick: () => this.setState({ activeTab: tab })
     }, [TabLabel[tab]]);
@@ -201,7 +213,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
     return createElement("div", { className: "grid gap-6 lg:grid-cols-2" }, [
       createElement("section", {
-        className: "rounded-xl border border-border-dark bg-surface-dark p-5"
+        className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
       }, [
         createElement("div", { className: "flex items-start justify-between gap-3" }, [
           createElement("div", { className: "flex flex-col gap-1" }, [
@@ -241,7 +253,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         ])
       ]),
       createElement("section", {
-        className: "rounded-xl border border-border-dark bg-surface-dark p-5"
+        className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
       }, [
         createElement("div", { className: "flex items-start justify-between gap-3" }, [
           createElement("div", { className: "flex flex-col gap-1" }, [
@@ -272,7 +284,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
     return createElement("div", { className: "grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" }, [
       createElement("section", {
-        className: "flex flex-col gap-4 rounded-xl border border-border-dark bg-surface-dark p-5"
+        className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
       }, [
         createElement("div", { className: "flex items-start justify-between gap-3" }, [
           createElement("div", { className: "flex flex-col gap-1" }, [
@@ -281,7 +293,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
               "Create multiple reusable provider profiles. Workflows will choose among them later instead of activating a single global provider here."
             ])
           ]),
-          createElement(StatusBadge, { status: "info" }, [`${this.state.providerProfiles.length} configured`])
+        createElement(StatusBadge, { status: "info" }, [`${this.state.providerProfiles.length} configured`])
         ]),
         this.renderAddProfileButtons(),
         createElement("div", { className: "flex flex-col gap-2" }, [
@@ -295,7 +307,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       selectedProfile
         ? this.renderProviderProfileEditor(selectedProfile)
         : createElement("section", {
-            className: "rounded-xl border border-border-dark bg-surface-dark p-5"
+            className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
           }, [
             createElement("h2", { className: "text-lg font-semibold text-white" }, ["Select a profile"]),
             createElement("p", { className: "mt-2 text-sm text-text-secondary" }, [
@@ -306,7 +318,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   private renderAddProfileButtons(): HTMLElement {
-    return createElement("div", { className: "flex flex-wrap gap-2" }, [
+    return createElement("div", { className: "grid gap-2 sm:grid-cols-2" }, [
       this.renderAddProfileButton(ProviderKind.CodexCli),
       this.renderAddProfileButton(ProviderKind.OpenAI),
       this.renderAddProfileButton(ProviderKind.Anthropic),
@@ -318,6 +330,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     return createElement(Button, {
       variant: "secondary",
       size: "sm",
+      className: "justify-center",
       onClick: () => this.handleAddProviderProfile(kind),
       children: `Add ${ProviderKindLabel[kind]}`
     });
@@ -327,10 +340,10 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     const isSelected = this.state.selectedProviderId === profile.id;
 
     return createElement("div", {
-      className: `rounded-lg border px-3 py-3 transition-colors ${
+      className: `rounded-xl border px-3 py-3 transition-colors ${
         isSelected
-          ? "border-primary bg-primary/10"
-          : "border-border-dark bg-background-dark/40"
+          ? "border-primary bg-[#0f243b] shadow-[inset_0_0_0_1px_rgba(19,127,236,0.18)]"
+          : "border-[#2b3644] bg-[#1a2129]"
       }`
     }, [
       createElement("div", { className: "flex items-start gap-3" }, [
@@ -350,6 +363,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         createElement(Button, {
           variant: "ghost",
           size: "sm",
+          className: "self-start",
           onClick: () => this.handleRemoveProviderProfile(profile.id),
           children: "Remove"
         })
@@ -364,7 +378,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     );
 
     return createElement("section", {
-      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
     }, [
       createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, [
         createElement("div", { className: "flex flex-col gap-1" }, [
@@ -444,7 +458,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             })
       ]),
       createElement("div", {
-        className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4 text-sm text-text-secondary"
+        className: "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4 text-sm leading-6 text-text-secondary"
       }, [
         profile.providerKind === ProviderKind.CodexCli
           ? this.state.currentProject
@@ -457,7 +471,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private renderLimitsTab(): HTMLElement {
     return createElement("section", {
-      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
     }, [
       createElement("div", { className: "flex flex-col gap-1" }, [
         createElement("h2", { className: "text-lg font-semibold text-white" }, ["Workflow limits"]),
@@ -505,7 +519,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private renderNotificationsTab(): HTMLElement {
     return createElement("section", {
-      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
     }, [
       createElement("div", { className: "flex flex-col gap-1" }, [
         createElement("h2", { className: "text-lg font-semibold text-white" }, ["Notifications"]),
@@ -560,7 +574,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private renderApiTab(): HTMLElement {
     return createElement("section", {
-      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
     }, [
       createElement("div", { className: "flex flex-col gap-1" }, [
         createElement("h2", { className: "text-lg font-semibold text-white" }, ["API access"]),
@@ -624,10 +638,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private renderSaveBar(): HTMLElement {
     return createElement("div", {
-      className: "sticky bottom-0 z-20 flex flex-wrap justify-end gap-3 border-t border-border-dark bg-background-dark/95 px-0 py-4 backdrop-blur"
+      className: "sticky bottom-4 z-20 mt-1 flex flex-col gap-3 rounded-2xl border border-[#202832] bg-[#171c22]/96 px-4 py-4 shadow-[0_16px_34px_rgba(15,23,32,0.16)] backdrop-blur md:flex-row md:items-center md:justify-end md:px-6"
+        + " self-stretch md:self-end md:min-w-[420px]"
     }, [
       createElement(Button, {
         variant: "secondary",
+        className: "justify-center",
         onClick: () => this.handleResetDefaults(),
         children: "Reset defaults"
       }),
@@ -635,6 +651,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         variant: "primary",
         icon: "save",
         disabled: this.state.isSaving,
+        className: "justify-center",
         onClick: () => {
           void this.handleSave();
         },
@@ -651,7 +668,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     onChange: (checked: boolean) => void;
   }): HTMLElement {
     return createElement("label", {
-      className: "flex items-center justify-between gap-4 rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4"
+      className: "flex items-center justify-between gap-4 rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4"
     }, [
       createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
         createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
@@ -959,7 +976,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
 const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
   createElement("div", {
-    className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3"
+    className: "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-3.5"
   }, [
     createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
     createElement("dd", { className: "mt-2 text-sm font-medium text-white break-all" }, [value])
@@ -973,13 +990,13 @@ const renderTextField = (input: {
   onChange: (value: string) => void;
 }): HTMLElement =>
   createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
     createElement("input", {
       type: "text",
       value: input.value,
       placeholder: input.placeholder,
       "data-testid": input.testId,
-      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
       onChange: (event: Event) => {
         const target = event.target;
         if (target instanceof HTMLInputElement) {
@@ -998,7 +1015,7 @@ const renderSessionSecretField = (input: {
 }): HTMLElement =>
   createElement("label", { className: "flex flex-col gap-2" }, [
     createElement("div", { className: "flex items-center justify-between gap-3" }, [
-      createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+      createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
       createElement(StatusBadge, { status: "warning" }, ["session only"])
     ]),
     createElement("input", {
@@ -1006,7 +1023,7 @@ const renderSessionSecretField = (input: {
       value: input.value,
       placeholder: input.placeholder,
       "data-testid": input.testId,
-      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
       onChange: (event: Event) => {
         const target = event.target;
         if (target instanceof HTMLInputElement) {
@@ -1027,13 +1044,13 @@ const renderNumberField = (input: {
   onChange: (value: string) => void;
 }): HTMLElement =>
   createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
     createElement("input", {
       type: "number",
       value: input.value.toString(),
       disabled: input.disabled,
       "data-testid": input.testId,
-      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50",
+      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50",
       onChange: (event: Event) => {
         const target = event.target;
         if (target instanceof HTMLInputElement) {
@@ -1051,11 +1068,11 @@ const renderSelectField = (input: {
   onChange: (value: string) => void;
 }): HTMLElement =>
   createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
     createElement("select", {
       value: input.value,
       "data-testid": input.testId,
-      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
       onChange: (event: Event) => {
         const target = event.target;
         if (target instanceof HTMLSelectElement) {

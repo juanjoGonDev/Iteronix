@@ -1650,3 +1650,23 @@
   - El backend real sólo expone `codex-cli` como runtime provider hoy; la pantalla ya soporta perfilar OpenAI/Anthropic/Ollama, pero su activación efectiva en flujos dependerá de registrar esos adapters en iteraciones posteriores
 - Next:
   - Esperar la validación explícita del usuario sobre `Settings`; sólo después se podrá mover la tarea a `Listo` y abrir la siguiente pantalla
+### 2026-04-28 23:08 (Europe/Madrid) — Settings Visual Hierarchy and Responsive Polish
+
+- Summary: Refinado el diseño visual de `Settings` para corregir el bajo contraste sobre el fondo claro, el espaciado de tabs y botones, y la presencia excesiva de la barra de acciones, con validación directa mediante capturas Playwright en desktop y móvil.
+- Decisions:
+  - Mantener el shell general actual, pero adaptar `Settings` a un layout claro-oscuro coherente: cabecera y tabs oscuras sobre fondo claro, paneles de trabajo oscuros y barra de acciones compacta
+  - Validar visualmente con Playwright sobre la app viva en `localhost:4000`, no sólo con el harness funcional existente
+  - Mantener la tarea `02. Settings screen end-to-end` en `En progreso`; esta iteración corrige UX y responsive, pero sigue pendiente la aceptación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/src/screens/Settings.ts**: nueva jerarquía tipográfica para título/subtítulo, tabs con contraste correcto, paneles con mejor padding y bordes, botones con mejor ritmo, barra de acciones compacta en desktop y estable en mobile, y padding inferior suficiente para evitar solapes del sticky footer
+  - **Playwright validation**: capturas manuales `settings-before-desktop.png`, `settings-after-desktop.png`, `settings-after-desktop-v3.png` y `settings-after-mobile.png` para comparar contraste y responsive sobre la app viva
+  - **Updated PLAN.md** y comentario de Notion en la tarjeta `02. Settings screen end-to-end`: reflejado el avance visual sin cerrar aún la tarea
+- Commands:
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - La barra de acciones móvil sigue siendo sticky y prioriza accesibilidad operativa sobre pureza visual; si el usuario la quiere menos dominante habrá que decidir entre footer fijo, barra contextual o acciones embebidas por sección
+  - La validación Playwright fue manual/visual en esta iteración; la cobertura automatizada funcional del screen sigue viniendo del harness `validate:settings`
+- Next:
+  - Cerrar gates completos, mantener `Settings` como única tarea activa y esperar feedback del usuario sobre el diseño antes de mover la tarjeta a `Listo`
