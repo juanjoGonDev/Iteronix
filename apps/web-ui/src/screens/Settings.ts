@@ -357,7 +357,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           ])
         ]),
         createElement(Button, {
-          variant: "ghost",
+          variant: "danger",
           size: "sm",
           className: "self-start",
           onClick: () => this.handleRemoveProviderProfile(profile.id),
@@ -633,7 +633,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         + " self-stretch md:self-end md:min-w-[420px]"
     }, [
       createElement(Button, {
-        variant: "secondary",
+        variant: "danger",
         className: "justify-center",
         onClick: () => this.handleResetDefaults(),
         children: "Reset defaults"

@@ -605,6 +605,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Browser validation progress on `2026-04-28`: deterministic Puppeteer coverage now exercises load -> edit -> save -> reload, including local-only Anthropic profile persistence, Codex CLI backend sync, webhook test, and API connection check
   - Visual refinement progress on `2026-04-28`: contrast and spacing of `Settings` were reworked for the live shell, and Playwright desktop/mobile screenshots now validate the responsive layout before user acceptance
   - UI cleanup progress on `2026-04-28`: residual empty status chips were traced to the shared component renderer, fixed at the helper level, and removed from `Settings` where they added no value
+  - Button semantics progress on `2026-04-28`: destructive actions in `Settings` now use the shared rose danger variant, and the shared button token was tightened so destructive intent is visible and consistent across screens
 - [ ] Kanban:
   - [ ] Replace local seed board state with `/kanban/*` persistence
   - [ ] Persist create/edit/move/delete flows

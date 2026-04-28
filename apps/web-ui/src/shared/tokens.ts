@@ -164,7 +164,7 @@ export const css: CSSClasses = {
     primary: 'bg-primary hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors',
     secondary: 'bg-surface-dark hover:bg-surface-dark-hover border border-border-dark text-white font-medium py-2 px-4 rounded-lg transition-colors',
     ghost: 'text-text-secondary hover:text-white hover:bg-surface-dark-hover py-2 px-3 rounded-lg transition-colors',
-    danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 border border-red-500/30 font-medium py-2 px-4 rounded-lg transition-colors',
+    danger: 'bg-rose-500/15 hover:bg-rose-500/20 text-rose-100 hover:text-white border border-rose-500/40 hover:border-rose-400/60 font-medium py-2 px-4 rounded-lg transition-colors',
     icon: 'w-9 h-9 flex items-center justify-center rounded-lg bg-surface-dark hover:bg-surface-dark-hover border border-border-dark text-text-secondary hover:text-white transition-colors',
   },
   

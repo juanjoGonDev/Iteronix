@@ -1699,3 +1699,32 @@
   - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque el bug visual ya está corregido
 - Next:
   - Esperar confirmación visual del usuario sobre `Settings`; si aparece otro detalle de UX, seguir sólo en esta pantalla antes de abrir la siguiente
+### 2026-04-28 23:36 (Europe/Madrid) — Settings Button Semantics
+
+- Summary: Normalizada la semántica visual de acciones destructivas en `Settings` para que `Remove` y `Reset defaults` usen un rojo explícito y coherente con el sistema de botones compartido.
+- Decisions:
+  - Tratar el problema como ajuste de design system, no como parche local: la variante `danger` del botón compartido debe comunicar destrucción de forma consistente
+  - Mantener acciones neutras (`secondary`, `ghost`) y primarias (`primary`) como estaban; sólo las destructivas cambian a rojo
+  - Validar el color real con Playwright sobre la app viva porque una clase Tailwind inválida puede pasar tests pero no renderizar el fondo esperado
+- Changes:
+  - **Updated apps/web-ui/src/components/Button.test.ts**: nuevo test rápido para asegurar que la variante `danger` conserva clases rosas destructivas
+  - **Updated apps/web-ui/src/shared/tokens.ts**: corregida la variante `danger` a clases Tailwind válidas (`bg-rose-500/15`, `hover:bg-rose-500/20`) con borde y texto destructivos claros
+  - **Updated apps/web-ui/src/screens/Settings.ts**: `Remove` y `Reset defaults` ahora usan la variante `danger`
+  - **Playwright visual check**: verificados `Remove` y `Reset defaults` en `/settings` desktop y mobile, confirmando color rojo real en fondo, borde y texto
+  - **Updated PLAN.md** y comentario de Notion en `02. Settings screen end-to-end`: progreso documentado sin cerrar aún la tarea
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/Button.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Este cambio toca el token compartido `danger`, así que también afecta a acciones destructivas ya existentes en otras pantallas como `Revert` o `Request changes`
+  - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque la semántica visual ya esté corregida
+- Next:
+  - Esperar validación visual del usuario sobre `Settings`; si aparece otra incoherencia de color o jerarquía, seguir sólo en esta pantalla antes de abrir la siguiente
