@@ -22,6 +22,8 @@ export type ExplorerOpenFile = {
   pinned: boolean;
 };
 
+export type ExplorerSearchResultPath = string;
+
 export const ExplorerTokenKind = {
   Plain: "plain",
   Keyword: "keyword",
@@ -299,6 +301,81 @@ export const resolveNextExplorerActiveFilePath = (
   }
 
   return openFiles.at(-1)?.path ?? null;
+};
+
+export const collapseExplorerSearchResultPath = (
+  collapsedPaths: ReadonlyArray<ExplorerSearchResultPath>,
+  path: string
+): ReadonlyArray<ExplorerSearchResultPath> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  if (normalizedPath.length === 0) {
+    return collapsedPaths;
+  }
+
+  if (collapsedPaths.includes(normalizedPath)) {
+    return collapsedPaths.filter((entry) => entry !== normalizedPath);
+  }
+
+  return [...collapsedPaths, normalizedPath];
+};
+
+export const isExplorerSearchResultCollapsed = (
+  collapsedPaths: ReadonlyArray<ExplorerSearchResultPath>,
+  path: string
+): boolean => collapsedPaths.includes(normalizeExplorerPath(path));
+
+export const hideExplorerSearchResultPath = (
+  hiddenPaths: ReadonlyArray<ExplorerSearchResultPath>,
+  path: string
+): ReadonlyArray<ExplorerSearchResultPath> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  if (normalizedPath.length === 0 || hiddenPaths.includes(normalizedPath)) {
+    return hiddenPaths;
+  }
+
+  return [...hiddenPaths, normalizedPath];
+};
+
+export const showExplorerSearchResultPath = (
+  hiddenPaths: ReadonlyArray<ExplorerSearchResultPath>,
+  path: string
+): ReadonlyArray<ExplorerSearchResultPath> =>
+  hiddenPaths.filter((entry) => entry !== normalizeExplorerPath(path));
+
+export const filterHiddenExplorerSearchResults = <
+  TResult extends { path: string }
+>(
+  results: ReadonlyArray<TResult>,
+  hiddenPaths: ReadonlyArray<ExplorerSearchResultPath>
+): ReadonlyArray<TResult> => {
+  if (hiddenPaths.length === 0) {
+    return results;
+  }
+
+  return results.filter(
+    (entry) => !hiddenPaths.includes(normalizeExplorerPath(entry.path))
+  );
+};
+
+export const reconcileExplorerSearchResultPaths = (
+  paths: ReadonlyArray<ExplorerSearchResultPath>,
+  results: ReadonlyArray<{ path: string }>
+): ReadonlyArray<ExplorerSearchResultPath> => {
+  const resultPaths = new Set(results.map((entry) => normalizeExplorerPath(entry.path)));
+  const uniquePaths: ExplorerSearchResultPath[] = [];
+
+  for (const path of paths) {
+    const normalizedPath = normalizeExplorerPath(path);
+    if (
+      normalizedPath.length > 0 &&
+      resultPaths.has(normalizedPath) &&
+      !uniquePaths.includes(normalizedPath)
+    ) {
+      uniquePaths.push(normalizedPath);
+    }
+  }
+
+  return uniquePaths;
 };
 
 export const readExplorerFileLanguage = (path: string): string =>

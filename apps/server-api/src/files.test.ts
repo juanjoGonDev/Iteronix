@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveSandboxPath, searchFiles } from "./files";
+import { readFileContent, resolveSandboxPath, searchFiles } from "./files";
 import { ResultType } from "./result";
 
 describe("resolveSandboxPath", () => {
@@ -144,6 +144,33 @@ describe("resolveSandboxPath", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("reads a bounded line window for large file previews", async () => {
+    const root = await createSearchFixture();
+
+    try {
+      const result = await readFileContent(root, "src/large.ts", {
+        startLine: 3,
+        lineCount: 2
+      });
+
+      expect(result.type).toBe(ResultType.Ok);
+      if (result.type === ResultType.Ok) {
+        expect(result.value).toEqual({
+          content: [
+            "export const line03 = 3;",
+            "export const line04 = 4;"
+          ].join("\n"),
+          startLine: 3,
+          endLine: 4,
+          totalLines: 8,
+          truncated: true
+        });
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 const createSearchFixture = async (): Promise<string> => {
@@ -168,6 +195,11 @@ const createSearchFixture = async (): Promise<string> => {
   await writeFile(
     resolve(root, "src", "ignore.ts"),
     "export const label = \"settings\";\n",
+    "utf8"
+  );
+  await writeFile(
+    resolve(root, "src", "large.ts"),
+    Array.from({ length: 8 }, (_, index) => `export const line${String(index + 1).padStart(2, "0")} = ${index + 1};`).join("\n"),
     "utf8"
   );
   await mkdir(resolve(root, "node_modules", "demo"), { recursive: true });

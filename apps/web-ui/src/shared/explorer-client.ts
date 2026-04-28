@@ -25,6 +25,10 @@ export type ExplorerFileEntryRecord = {
 
 export type ExplorerFileContentRecord = {
   content: string;
+  startLine: number;
+  endLine: number;
+  totalLines: number;
+  truncated: boolean;
 };
 
 export type ExplorerFileSearchMatchRangeRecord = {
@@ -56,6 +60,8 @@ export type ExplorerClient = {
   readFile: (input: {
     projectId: string;
     path: string;
+    startLine?: number;
+    lineCount?: number;
   }) => Promise<ExplorerFileContentRecord>;
   searchFiles: (input: {
     projectId: string;
@@ -90,7 +96,9 @@ export const createExplorerClient = (): ExplorerClient => ({
       path: EndpointPath.FilesRead,
       body: {
         projectId: input.projectId,
-        path: input.path
+        path: input.path,
+        ...(input.startLine !== undefined ? { startLine: input.startLine } : {}),
+        ...(input.lineCount !== undefined ? { lineCount: input.lineCount } : {})
       },
       parse: parseExplorerFileReadResponse
     }),
@@ -119,9 +127,34 @@ export const parseExplorerFileReadResponse = (
   value: unknown
 ): ExplorerFileContentRecord => {
   const record = ensureRecord(value, "explorerFileReadResponse");
+  const content = readRequiredString(record, "explorerFileReadResponse", "content");
+  const totalLines = readOptionalNumber(
+    record,
+    "explorerFileReadResponse",
+    "totalLines"
+  ) ?? countExplorerContentLines(content);
+  const startLine = readOptionalNumber(
+    record,
+    "explorerFileReadResponse",
+    "startLine"
+  ) ?? 1;
+  const endLine = readOptionalNumber(
+    record,
+    "explorerFileReadResponse",
+    "endLine"
+  ) ?? startLine + countExplorerContentLines(content) - 1;
+  const truncated = readOptionalBoolean(
+    record,
+    "explorerFileReadResponse",
+    "truncated"
+  ) ?? false;
 
   return {
-    content: readRequiredString(record, "explorerFileReadResponse", "content")
+    content,
+    startLine,
+    endLine,
+    totalLines,
+    truncated
   };
 };
 
@@ -257,3 +290,40 @@ const readRequiredNumber = (
 
   return entry;
 };
+
+const readOptionalNumber = (
+  value: Record<string, unknown>,
+  label: string,
+  key: string
+): number | undefined => {
+  const entry = value[key];
+  if (entry === undefined) {
+    return undefined;
+  }
+
+  if (typeof entry !== "number" || !Number.isFinite(entry)) {
+    throw new Error(`Invalid ${label}.${key}`);
+  }
+
+  return entry;
+};
+
+const readOptionalBoolean = (
+  value: Record<string, unknown>,
+  label: string,
+  key: string
+): boolean | undefined => {
+  const entry = value[key];
+  if (entry === undefined) {
+    return undefined;
+  }
+
+  if (typeof entry !== "boolean") {
+    throw new Error(`Invalid ${label}.${key}`);
+  }
+
+  return entry;
+};
+
+const countExplorerContentLines = (content: string): number =>
+  content.length === 0 ? 1 : content.split(/\r?\n/).length;

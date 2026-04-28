@@ -22,7 +22,11 @@ describe("explorer client codecs", () => {
       ]
     });
     const file = parseExplorerFileReadResponse({
-      content: "# Iteronix"
+      content: "# Iteronix",
+      startLine: 1,
+      endLine: 1,
+      totalLines: 12,
+      truncated: true
     });
     const search = parseExplorerFileSearchResponse({
       results: [
@@ -57,7 +61,13 @@ describe("explorer client codecs", () => {
         kind: "file"
       }
     ]);
-    expect(file.content).toBe("# Iteronix");
+    expect(file).toEqual({
+      content: "# Iteronix",
+      startLine: 1,
+      endLine: 1,
+      totalLines: 12,
+      truncated: true
+    });
     expect(search).toEqual([
       {
         path: "src/screens/Explorer.ts",
@@ -76,5 +86,17 @@ describe("explorer client codecs", () => {
         ]
       }
     ]);
+  });
+
+  it("defaults file read metadata when the server returns the legacy shape", () => {
+    expect(parseExplorerFileReadResponse({
+      content: "line 1\nline 2"
+    })).toEqual({
+      content: "line 1\nline 2",
+      startLine: 1,
+      endLine: 2,
+      totalLines: 2,
+      truncated: false
+    });
   });
 });

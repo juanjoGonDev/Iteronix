@@ -6,19 +6,25 @@ import {
   closeExplorerFileTabsToLeft,
   closeExplorerFileTabsToRight,
   closeExplorerOpenFile,
+  collapseExplorerSearchResultPath,
   filterExplorerTreeNodes,
+  filterHiddenExplorerSearchResults,
   flattenExplorerTreeNodes,
   highlightExplorerFileContent,
+  hideExplorerSearchResultPath,
+  isExplorerSearchResultCollapsed,
   openExplorerFile,
   resolveNextExplorerActiveFilePath,
   readExplorerFileIcon,
   mergeExplorerDirectoryChildren,
+  reconcileExplorerSearchResultPaths,
   readExplorerFileLanguage,
   readExplorerLanguageTheme,
   readExplorerTokenClassName,
   setExplorerFilePinned,
   setExplorerDirectoryExpanded,
   setExplorerTreeExpansion,
+  showExplorerSearchResultPath,
   toggleExplorerDirectory
 } from "./explorer-state.js";
 
@@ -298,5 +304,40 @@ describe("explorer state helpers", () => {
       )
     ).toBe("src/index.ts");
     expect(resolveNextExplorerActiveFilePath([], "README.md")).toBeNull();
+  });
+
+  it("manages collapsed and hidden search result groups per file", () => {
+    const results = [
+      {
+        path: "src/screens/Explorer.ts",
+        name: "Explorer.ts",
+        matches: []
+      },
+      {
+        path: "README.md",
+        name: "README.md",
+        matches: []
+      }
+    ] as const;
+    const collapsed = collapseExplorerSearchResultPath([], "src/screens/Explorer.ts");
+    const expanded = collapseExplorerSearchResultPath(collapsed, "src/screens/Explorer.ts");
+    const hidden = hideExplorerSearchResultPath([], "README.md");
+    const visibleAgain = showExplorerSearchResultPath(hidden, "README.md");
+
+    expect(isExplorerSearchResultCollapsed(collapsed, "src/screens/Explorer.ts")).toBe(true);
+    expect(isExplorerSearchResultCollapsed(expanded, "src/screens/Explorer.ts")).toBe(false);
+    expect(filterHiddenExplorerSearchResults(results, hidden).map((entry) => entry.path)).toEqual([
+      "src/screens/Explorer.ts"
+    ]);
+    expect(filterHiddenExplorerSearchResults(results, visibleAgain).map((entry) => entry.path)).toEqual([
+      "src/screens/Explorer.ts",
+      "README.md"
+    ]);
+    expect(
+      reconcileExplorerSearchResultPaths(
+        ["src/screens/Explorer.ts", "missing.ts"],
+        results
+      )
+    ).toEqual(["src/screens/Explorer.ts"]);
   });
 });

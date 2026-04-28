@@ -27,6 +27,19 @@ export type FileSearchResult = {
   matches: ReadonlyArray<FileSearchMatch>;
 };
 
+export type FileReadWindow = {
+  startLine?: number;
+  lineCount?: number;
+};
+
+export type FileReadContent = {
+  content: string;
+  startLine: number;
+  endLine: number;
+  totalLines: number;
+  truncated: boolean;
+};
+
 type FileError = {
   status: number;
   message: string;
@@ -130,8 +143,9 @@ export const listFileTree = async (
 
 export const readFileContent = async (
   rootPath: string,
-  targetPath: string
-): Promise<Result<{ content: string }, FileError>> => {
+  targetPath: string,
+  window: FileReadWindow = {}
+): Promise<Result<FileReadContent, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
     return resolved;
@@ -139,7 +153,7 @@ export const readFileContent = async (
 
   try {
     const content = await fs.readFile(resolved.value.target, TextEncoding);
-    return ok({ content });
+    return ok(createFileReadContent(content, window));
   } catch (error: unknown) {
     return err(mapFsError(error));
   }
@@ -258,6 +272,29 @@ const toFileEntry = (
     path: normalizeRelativePath(relativePath),
     name: entry.name,
     kind
+  };
+};
+
+const createFileReadContent = (
+  content: string,
+  window: FileReadWindow
+): FileReadContent => {
+  const lines = content.split(/\r?\n/);
+  const totalLines = lines.length;
+  const boundedStartLine = clampFileReadLine(window.startLine ?? 1, totalLines);
+  const boundedLineCount = clampFileReadLineCount(window.lineCount, totalLines);
+  const endLine = Math.min(
+    totalLines,
+    boundedStartLine + boundedLineCount - 1
+  );
+  const contentLines = lines.slice(boundedStartLine - 1, endLine);
+
+  return {
+    content: contentLines.join("\n"),
+    startLine: boundedStartLine,
+    endLine,
+    totalLines,
+    truncated: boundedStartLine > 1 || endLine < totalLines
   };
 };
 
@@ -395,6 +432,29 @@ const normalizeRootPath = (value: string): string | undefined => {
 
 const normalizeRelativePath = (value: string): string =>
   value.split(sep).join("/");
+
+const clampFileReadLine = (value: number, totalLines: number): number => {
+  if (totalLines <= 0) {
+    return 1;
+  }
+
+  return Math.min(Math.max(value, 1), totalLines);
+};
+
+const clampFileReadLineCount = (
+  value: number | undefined,
+  totalLines: number
+): number => {
+  if (totalLines <= 0) {
+    return 1;
+  }
+
+  if (value === undefined) {
+    return totalLines;
+  }
+
+  return Math.min(Math.max(value, 1), totalLines);
+};
 
 const sortSearchDirectoryEntries = (
   entries: ReadonlyArray<Dirent>

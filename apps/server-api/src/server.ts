@@ -1006,7 +1006,15 @@ const handleFileRead = async (
 
   const readResult = await readFileContent(
     projectResult.value.rootPath,
-    parsed.value.path
+    parsed.value.path,
+    {
+      ...(parsed.value.startLine !== undefined
+        ? { startLine: parsed.value.startLine }
+        : {}),
+      ...(parsed.value.lineCount !== undefined
+        ? { lineCount: parsed.value.lineCount }
+        : {})
+    }
   );
   if (readResult.type === ResultType.Err) {
     respondError(res, readResult.error);
@@ -1014,7 +1022,11 @@ const handleFileRead = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    content: readResult.value.content
+    content: readResult.value.content,
+    startLine: readResult.value.startLine,
+    endLine: readResult.value.endLine,
+    totalLines: readResult.value.totalLines,
+    truncated: readResult.value.truncated
   });
 };
 
@@ -2354,7 +2366,15 @@ const parseFileSearchRequest = (
 
 const parseFileReadRequest = (
   value: unknown
-): Result<{ projectId: string; path: string }, ApiError> => {
+): Result<
+  {
+    projectId: string;
+    path: string;
+    startLine?: number;
+    lineCount?: number;
+  },
+  ApiError
+> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
@@ -2380,9 +2400,21 @@ const parseFileReadRequest = (
     return path;
   }
 
+  const startLine = readOptionalPositiveIntegerField(value, FileField.StartLine);
+  if (startLine.type === ResultType.Err) {
+    return startLine;
+  }
+
+  const lineCount = readOptionalPositiveIntegerField(value, FileField.LineCount);
+  if (lineCount.type === ResultType.Err) {
+    return lineCount;
+  }
+
   return ok({
     projectId: projectId.value,
-    path: path.value
+    path: path.value,
+    ...(startLine.value !== undefined ? { startLine: startLine.value } : {}),
+    ...(lineCount.value !== undefined ? { lineCount: lineCount.value } : {})
   });
 };
 
@@ -4542,6 +4574,29 @@ const readOptionalNumberField = (
   }
 
   if (typeof value !== "number" || !Number.isFinite(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(value);
+};
+
+const readOptionalPositiveIntegerField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<number | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1
+  ) {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody

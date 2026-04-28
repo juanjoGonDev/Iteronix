@@ -159,7 +159,9 @@ export const ProjectField = {
 export const FileField = {
   ProjectId: "projectId",
   Path: "path",
-  Content: "content"
+  Content: "content",
+  StartLine: "startLine",
+  LineCount: "lineCount"
 } as const;
 
 export const FileSearchField = {

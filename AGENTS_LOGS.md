@@ -1488,3 +1488,34 @@
   - Ningún gate abierto; la única condición pendiente es la validación visual del usuario para cerrar la tarea de Explorer
 - Next:
   - Esperar confirmación del usuario sobre el Explorer antes de mover la tarjeta a `Listo` y abrir `Settings`
+### 2026-04-28 16:57 (Europe/Madrid) — Explorer Performance and Search Controls
+
+- Summary: Cerrada la iteración del `Explorer` centrada en estabilidad de árbol y pestañas, resultados de búsqueda más parecidos a VS Code y apertura perezosa de archivos grandes para evitar bloqueos al cargar contenido pesado.
+- Decisions:
+  - Mantener `01. Explorer screen end-to-end` como única tarea activa y dejar la tarjeta de Notion en `En progreso` hasta validación explícita del usuario
+  - Resolver la carga de ficheros pesados sin cambiar todavía a streams o SSE: el contrato de `/files/read` pasa a ventanas de líneas acotadas y el editor pide más contenido bajo demanda
+  - Mantener el validador browser como fuente de verdad de UX para esta pantalla, ampliándolo con scroll del árbol, overflow horizontal de tabs, resultados colapsables/ocultables y paginación del preview
+- Changes:
+  - **Updated apps/server-api/src/constants.ts**, **apps/server-api/src/files.ts**, **apps/server-api/src/files.test.ts** y **apps/server-api/src/server.ts**: `/files/read` ahora acepta `startLine` y `lineCount` y devuelve `startLine`, `endLine`, `totalLines` y `truncated` para previews grandes
+  - **Updated apps/web-ui/src/shared/explorer-client.ts** y **apps/web-ui/src/shared/explorer-client.test.ts**: contrato tipado del cliente de Explorer alineado con los previews parciales y compatibilidad hacia atrás con la forma legacy
+  - **Updated apps/web-ui/src/screens/explorer-state.ts** y **apps/web-ui/src/screens/explorer-state.test.ts**: estado puro para colapsar, ocultar y reconciliar grupos de resultados de búsqueda por archivo
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: preview lazy por ventanas, controles `Load previous` / `Load next` / `Load full file`, conservación del scroll del árbol al abrir archivos y barra de tabs con overflow horizontal real
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: el harness ahora valida búsqueda en archivos pesados, salto a línea con preview parcial, paginación del preview, preservación del scroll del árbol, overflow horizontal de pestañas y reset limpio de resultados ocultos/colapsados
+  - **Updated PLAN.md** y comentario en Notion: progreso registrado sin mover la tarea a `Listo`
+- Commands:
+  - `pnpm exec vitest run apps/server-api/src/files.test.ts apps/web-ui/src/shared/explorer-client.test.ts apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm exec tsc -p apps/server-api/tsconfig.json --noEmit`
+  - `pnpm exec tsc -p apps/web-ui/tsconfig.json --noEmit`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - La apertura de archivos pesados ya no bloquea por lectura completa inicial, pero sigue siendo una carga HTTP por ventanas, no streaming incremental; si el usuario exige edición o previews enormes continuos, habrá que evaluar SSE o un modelo de virtualización más profundo
+  - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente que la UX del Explorer le convence
+- Next:
+  - Esperar validación visual del usuario sobre el nuevo comportamiento de árbol, tabs y previews grandes antes de abrir `Settings`

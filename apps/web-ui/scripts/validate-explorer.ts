@@ -28,7 +28,7 @@ const ValidationConfig = {
   SearchDebounceIntermediateWaitMs: 180,
   SearchHighlightWaitMs: 1550,
   ViewportWidth: 1440,
-  ViewportHeight: 1600,
+  ViewportHeight: 900,
   CompactViewportWidth: 390,
   CompactViewportHeight: 844,
   CompactSidebarMaxWidth: 96,
@@ -60,7 +60,10 @@ const ValidationText = {
   SearchRegexValue: "RENDER\\(\\)",
   RemovedPanelLabel: "Project session",
   LanguageBadge: "TypeScript",
-  SearchResultLineNumber: "48"
+  SearchResultLineNumber: "648",
+  PreviewSearchRange: "568-807 / 1200",
+  PreviewNextRange: "808-1047 / 1200",
+  PreviewFullRange: "1-1200 / 1200"
 } as const;
 
 const Selector = {
@@ -71,12 +74,13 @@ const Selector = {
   SearchToggleRegex: '[data-testid="explorer-search-toggle-regex"]',
   SearchResults: '[data-testid="explorer-search-results"]',
   SearchResultFile: '[data-testid="explorer-search-result-file-src-screens-explorer-ts"]',
-  SearchResultMatch: '[data-testid="explorer-search-result-match-src-screens-explorer-ts-48"]',
+  SearchResultMatch: '[data-testid="explorer-search-result-match-src-screens-explorer-ts-648"]',
   ExpandAll: '[data-testid="explorer-expand-all"]',
   CollapseAll: '[data-testid="explorer-collapse-all"]',
   SidebarHide: '[data-testid="explorer-sidebar-hide"]',
   SidebarPanel: '[data-testid="explorer-sidebar-panel"]',
   SearchInputTestId: "explorer-search-input",
+  TreeSurface: '[data-testid="explorer-tree-surface"]',
   ExplorerNodeSrc: '[data-testid="explorer-node-src"]',
   ExplorerNodeNestedFile: '[data-testid="explorer-node-src-screens-explorer-ts"]',
   ExplorerNodeReadme: '[data-testid="explorer-node-readme-md"]',
@@ -85,6 +89,11 @@ const Selector = {
   FileContent: '[data-testid="explorer-file-content"]',
   HighlightedLine: '[data-testid="explorer-highlighted-line"]',
   PreviewSurface: '[data-testid="explorer-preview-surface"]',
+  PreviewRange: '[data-testid="explorer-preview-range"]',
+  PreviewActionNext: '[data-testid="explorer-preview-action-next"]',
+  PreviewActionPrevious: '[data-testid="explorer-preview-action-previous"]',
+  PreviewActionFull: '[data-testid="explorer-preview-action-full"]',
+  TabsScrollSurface: '[data-testid="explorer-tabs-scroll-surface"]',
   TabReadme: '[data-testid="explorer-tab-readme-md"]',
   TabExplorer: '[data-testid="explorer-tab-src-screens-explorer-ts"]',
   TabIndex: '[data-testid="explorer-tab-src-index-ts"]',
@@ -99,7 +108,15 @@ const Selector = {
   AppSidebarShell: '[data-testid="app-sidebar-shell"]'
 } as const;
 
-const SearchTargetLineNumber = 48;
+const SearchTargetLineNumber = 648;
+const FixtureTabPaths = Array.from(
+  { length: 20 },
+  (_, index) => `workspace-validation-tab-${String(index + 1).padStart(2, "0")}.ts`
+) as ReadonlyArray<string>;
+const FixtureTreeFillerPaths = Array.from(
+  { length: 24 },
+  (_, index) => `notes-${String(index + 1).padStart(2, "0")}.md`
+) as ReadonlyArray<string>;
 
 const FixtureProject = {
   id: "project-explorer-browser",
@@ -120,7 +137,17 @@ const FixtureFileTree = {
       path: "README.md",
       name: "README.md",
       kind: "file"
-    }
+    },
+    ...FixtureTabPaths.map((path) => ({
+      path,
+      name: path,
+      kind: "file" as const
+    })),
+    ...FixtureTreeFillerPaths.map((path) => ({
+      path,
+      name: path,
+      kind: "file" as const
+    }))
   ],
   src: [
     {
@@ -169,6 +196,22 @@ const FixtureSearchResults = {
     }
   ]
 } as const;
+
+function explorerNodeSelector(path: string): string {
+  return `[data-testid="explorer-node-${toTestIdSegment(path)}"]`;
+}
+
+function explorerTabSelector(path: string): string {
+  return `[data-testid="explorer-tab-${toTestIdSegment(path)}"]`;
+}
+
+function explorerSearchResultToggleSelector(path: string): string {
+  return `[data-testid="explorer-search-result-toggle-${toTestIdSegment(path)}"]`;
+}
+
+function explorerSearchResultHideSelector(path: string): string {
+  return `[data-testid="explorer-search-result-hide-${toTestIdSegment(path)}"]`;
+}
 
 const projectRoot = join(import.meta.dirname, "..");
 const screenshotDirectory = join(projectRoot, "screenshots");
@@ -223,6 +266,7 @@ async function validateExplorerScreen(): Promise<void> {
 async function validateDesktopExplorer(
   browser: Awaited<ReturnType<typeof puppeteer.launch>>
 ): Promise<void> {
+  stubState.searchRequestCount = 0;
   const page = await browser.newPage();
   await page.setViewport({
     width: ValidationConfig.ViewportWidth,
@@ -289,6 +333,41 @@ async function validateDesktopExplorer(
   await waitForSelector(page, Selector.SearchResults);
   await waitForSelector(page, Selector.SearchResultFile);
   await waitForSelector(page, Selector.SearchResultMatch);
+  await clickSelector(
+    page,
+    explorerSearchResultToggleSelector("src/screens/Explorer.ts")
+  );
+  await waitForCondition(async () => {
+    const match = await page.$(Selector.SearchResultMatch);
+    return match === null;
+  }, "search result group collapsed", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(
+    page,
+    explorerSearchResultToggleSelector("src/screens/Explorer.ts")
+  );
+  await waitForSelector(page, Selector.SearchResultMatch);
+  await clickSelector(
+    page,
+    explorerSearchResultHideSelector("src/screens/Explorer.ts")
+  );
+  await waitForCondition(async () => {
+    const result = await page.$(Selector.SearchResultFile);
+    return result === null;
+  }, "search result group hidden", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await dispatchSearchInputValue(page, "render\\(\\)|line648");
+  await delay(ValidationConfig.SearchDebounceWaitMs);
+  expectSearchRequestCount(2);
+  await waitForSelector(page, Selector.SearchResultFile);
+  await dispatchSearchInputValue(page, ValidationText.SearchRegexValue);
+  await delay(ValidationConfig.SearchDebounceWaitMs);
+  expectSearchRequestCount(3);
+  await waitForSelector(page, Selector.SearchResultMatch);
   await captureBrowserValidationScreenshot({
     page,
     directory: screenshotDirectory,
@@ -331,6 +410,16 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+  await waitForCondition(async () => {
+    const range = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.PreviewRange);
+    return range.includes(ValidationText.PreviewSearchRange);
+  }, "preview range centered on search match", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
   await waitForSelector(page, '[data-token-kind="keyword"]');
   await waitForSelector(page, '[data-token-kind="string"]');
   await delay(ValidationConfig.SearchHighlightWaitMs);
@@ -352,17 +441,100 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+  await clickSelector(page, Selector.PreviewActionNext);
+  await waitForCondition(async () => {
+    const range = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.PreviewRange);
+    return range.includes(ValidationText.PreviewNextRange);
+  }, "preview next window", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(page, Selector.PreviewActionPrevious);
+  await waitForCondition(async () => {
+    const range = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.PreviewRange);
+    return range.includes(ValidationText.PreviewSearchRange);
+  }, "preview previous window", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(page, Selector.PreviewActionFull);
+  await waitForCondition(async () => {
+    const range = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.PreviewRange);
+    return range.includes(ValidationText.PreviewFullRange);
+  }, "full file preview", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 
   await clickSelector(page, Selector.ActivityExplorer);
   await waitForSelector(page, Selector.ExpandAll);
   await clickSelector(page, Selector.ExpandAll);
   await waitForSelector(page, Selector.ExplorerNodeNestedFile);
   await waitForSelector(page, Selector.ExplorerNodeReadme);
+  const treeScrollTop = await page.evaluate((selector) => {
+    const surface = document.querySelector(selector);
+    if (surface instanceof HTMLElement) {
+      surface.scrollTop = surface.scrollHeight;
+      return surface.scrollTop;
+    }
+    return 0;
+  }, Selector.TreeSurface);
+  if (treeScrollTop <= 0) {
+    throw new Error("Explorer tree surface did not become scrollable during validation.");
+  }
+  await clickSelector(page, explorerNodeSelector(FixtureTabPaths.at(-1) ?? "tab-12.ts"));
+  await waitForSelector(page, explorerTabSelector(FixtureTabPaths.at(-1) ?? "tab-12.ts"));
+  await waitForCondition(async () => {
+    return page.evaluate((selector, expectedScrollTop) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement && surface.scrollTop === expectedScrollTop;
+    }, Selector.TreeSurface, treeScrollTop);
+  }, "tree scroll preserved after opening file", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
   await clickSelector(page, Selector.ExplorerNodeReadme);
   await waitForSelector(page, Selector.TabReadme);
   await clickSelector(page, Selector.ExplorerNodeIndex);
   await waitForSelector(page, Selector.TabIndex);
   await waitForSelector(page, Selector.TabExplorer);
+  for (const path of FixtureTabPaths) {
+    await clickSelector(page, explorerNodeSelector(path));
+    await waitForSelector(page, explorerTabSelector(path));
+  }
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement && surface.scrollWidth > surface.clientWidth;
+    }, Selector.TabsScrollSurface);
+  }, "tab strip overflows horizontally", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await page.evaluate((selector) => {
+    const surface = document.querySelector(selector);
+    if (surface instanceof HTMLElement) {
+      surface.scrollLeft = surface.scrollWidth;
+    }
+  }, Selector.TabsScrollSurface);
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement && surface.scrollLeft > 0;
+    }, Selector.TabsScrollSurface);
+  }, "tab strip scrolls horizontally", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
   await clickSelector(page, Selector.TabCloseIndex);
   await waitForCondition(async () => {
     const tab = await page.$(Selector.TabIndex);
@@ -410,6 +582,8 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+  await clickSelector(page, Selector.ExplorerNodeSrc);
+  await waitForSelector(page, Selector.ExplorerNodeIndex);
   await page.click(Selector.ExplorerNodeIndex);
   await waitForSelector(page, Selector.TabIndex);
   await rightClickTabAndSelectAction(page, Selector.TabIndex, "Close to the left");
@@ -741,24 +915,14 @@ async function handleExplorerStubRequest(
 
   if (url.pathname === RequestPath.FilesRead) {
     const path = readRequiredString(body, "path");
+    const content = readFixtureFileContent(path);
+    const startLine = readOptionalNumber(body, "startLine");
+    const lineCount = readOptionalNumber(body, "lineCount");
 
-    if (path === "README.md") {
-      respondJson(response, 200, {
-        content: FixtureFileContent.readme
-      });
-      return;
-    }
-
-    if (path === "src/index.ts") {
-      respondJson(response, 200, {
-        content: FixtureFileContent.index
-      });
-      return;
-    }
-
-    respondJson(response, 200, {
-      content: FixtureFileContent.explorer
-    });
+    respondJson(response, 200, createFixtureFileReadResponse(content, {
+      ...(startLine !== undefined ? { startLine } : {}),
+      ...(lineCount !== undefined ? { lineCount } : {})
+    }));
     return;
   }
 
@@ -836,8 +1000,17 @@ function readRequiredString(value: unknown, key: string): string {
   return entry;
 }
 
+function readOptionalNumber(value: unknown, key: string): number | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entry = (value as Record<string, unknown>)[key];
+  return typeof entry === "number" && Number.isFinite(entry) ? entry : undefined;
+}
+
 function buildFixtureExplorerContent(): string {
-  const lines = Array.from({ length: 80 }, (_, index) => {
+  const lines = Array.from({ length: 1200 }, (_, index) => {
     const lineNumber = index + 1;
     if (lineNumber === 1) {
       return "export class Explorer {";
@@ -855,7 +1028,7 @@ function buildFixtureExplorerContent(): string {
       return "  }";
     }
 
-    if (lineNumber === 80) {
+    if (lineNumber === 1200) {
       return "}";
     }
 
@@ -863,6 +1036,77 @@ function buildFixtureExplorerContent(): string {
   });
 
   return lines.join("\n");
+}
+
+function readFixtureFileContent(path: string): string {
+  if (path === "README.md") {
+    return FixtureFileContent.readme;
+  }
+
+  if (path === "src/index.ts") {
+    return FixtureFileContent.index;
+  }
+
+  if (path === "src/screens/Explorer.ts") {
+    return FixtureFileContent.explorer;
+  }
+
+  if (FixtureTabPaths.includes(path)) {
+    return `export const label = "${path}";\n`;
+  }
+
+  if (FixtureTreeFillerPaths.includes(path)) {
+    return `# ${path}\n\nGenerated filler content.\n`;
+  }
+
+  throw new Error(`Missing fixture file for ${path}.`);
+}
+
+function createFixtureFileReadResponse(
+  content: string,
+  window: {
+    startLine?: number;
+    lineCount?: number;
+  }
+): {
+  content: string;
+  startLine: number;
+  endLine: number;
+  totalLines: number;
+  truncated: boolean;
+} {
+  const lines = content.split(/\r?\n/);
+  const totalLines = lines.length;
+  const startLine = clampFixtureLine(window.startLine ?? 1, totalLines);
+  const lineCount = clampFixtureLineCount(window.lineCount, totalLines);
+  const endLine = Math.min(totalLines, startLine + lineCount - 1);
+
+  return {
+    content: lines.slice(startLine - 1, endLine).join("\n"),
+    startLine,
+    endLine,
+    totalLines,
+    truncated: startLine > 1 || endLine < totalLines
+  };
+}
+
+function clampFixtureLine(value: number, totalLines: number): number {
+  return Math.min(Math.max(value, 1), totalLines);
+}
+
+function clampFixtureLineCount(
+  value: number | undefined,
+  totalLines: number
+): number {
+  if (value === undefined) {
+    return totalLines;
+  }
+
+  return Math.min(Math.max(value, 1), totalLines);
+}
+
+function toTestIdSegment(path: string): string {
+  return path.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
 }
 
 function expectSearchRequestCount(expectedCount: number): void {

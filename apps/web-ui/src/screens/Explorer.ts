@@ -5,6 +5,7 @@ import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
 import {
   createExplorerClient,
   ExplorerFileEntryKind,
+  type ExplorerFileContentRecord,
   type ExplorerFileSearchMatchRangeRecord,
   type ExplorerFileSearchResultRecord
 } from "../shared/explorer-client.js";
@@ -18,11 +19,15 @@ import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   buildExplorerTreeNodes,
   closeAllExplorerOpenFiles,
+  collapseExplorerSearchResultPath,
   closeExplorerFileTabsToLeft,
   closeExplorerFileTabsToRight,
   closeExplorerOpenFile,
+  filterHiddenExplorerSearchResults,
   flattenExplorerTreeNodes,
   highlightExplorerFileContent,
+  hideExplorerSearchResultPath,
+  isExplorerSearchResultCollapsed,
   mergeExplorerDirectoryChildren,
   openExplorerFile,
   readExplorerFileIcon,
@@ -92,6 +97,15 @@ const ExplorerTabMenuAction = {
 type ExplorerTabMenuAction =
   typeof ExplorerTabMenuAction[keyof typeof ExplorerTabMenuAction];
 
+const ExplorerPreviewAction = {
+  Previous: "previous",
+  Next: "next",
+  Full: "full"
+} as const;
+
+type ExplorerPreviewAction =
+  typeof ExplorerPreviewAction[keyof typeof ExplorerPreviewAction];
+
 const ExplorerSelector = {
   WorkspaceTestId: "explorer-workspace",
   ActivityExplorerTestId: "explorer-activity-explorer",
@@ -103,7 +117,9 @@ const ExplorerSelector = {
   SearchToggleRegexTestId: "explorer-search-toggle-regex",
   SearchToggleMatchCaseTestId: "explorer-search-toggle-match-case",
   SearchToggleWholeWordTestId: "explorer-search-toggle-whole-word",
+  TreeSurfaceTestId: "explorer-tree-surface",
   TabsBarTestId: "explorer-tabs-bar",
+  TabsScrollSurfaceTestId: "explorer-tabs-scroll-surface",
   TabContextMenuTestId: "explorer-tab-context-menu",
   ExpandAllTestId: "explorer-expand-all",
   CollapseAllTestId: "explorer-collapse-all",
@@ -114,6 +130,8 @@ const ExplorerSelector = {
 
 const SearchDebounceMs = 320;
 const ExplorerLineHighlightDurationMs = 1400;
+const ExplorerPreviewLineCount = 240;
+const ExplorerPreviewContextRadius = 80;
 
 interface ExplorerState {
   sessionRootPath: string;
@@ -123,6 +141,10 @@ interface ExplorerState {
   openFiles: ReadonlyArray<ExplorerOpenFile>;
   selectedFilePath: string | null;
   selectedFileContent: string;
+  selectedFileStartLine: number;
+  selectedFileEndLine: number;
+  selectedFileTotalLines: number;
+  selectedFileTruncated: boolean;
   highlightedLineNumber: number | null;
   openTabContextMenuPath: string | null;
   pendingAction: ExplorerPendingAction | null;
@@ -137,6 +159,8 @@ interface ExplorerState {
   searchResults: ReadonlyArray<ExplorerFileSearchResultRecord>;
   searchIsLoading: boolean;
   searchSettings: ExplorerSearchSettings;
+  collapsedSearchResultPaths: ReadonlyArray<string>;
+  hiddenSearchResultPaths: ReadonlyArray<string>;
 }
 
 interface ExplorerProps extends ComponentProps {
@@ -164,7 +188,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       treeNodes: [],
       openFiles: workspaceState.openFiles,
       selectedFilePath: workspaceState.activeFilePath,
-      selectedFileContent: "",
+      ...createEmptyExplorerFileViewState(),
       highlightedLineNumber: null,
       openTabContextMenuPath: null,
       pendingAction: null,
@@ -182,7 +206,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         isRegex: false,
         matchCase: false,
         wholeWord: false
-      }
+      },
+      collapsedSearchResultPaths: [],
+      hiddenSearchResultPaths: []
     });
 
     if (session.projectRootPath.length > 0) {
@@ -519,7 +545,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
               className: "flex flex-1 items-center justify-center p-4 text-sm text-text-secondary"
             }, ["No files were returned by the server."])
           : createElement("div", {
-              className: "min-h-0 flex-1 overflow-y-auto py-1"
+              className: "min-h-0 flex-1 overflow-y-auto py-1",
+              "data-testid": ExplorerSelector.TreeSurfaceTestId
             }, [
               visibleNodes.map((item) => this.renderTreeNode(item.node, item.depth))
             ])
@@ -655,6 +682,11 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       ]);
     }
 
+    const visibleResults = filterHiddenExplorerSearchResults(
+      this.state.searchResults,
+      this.state.hiddenSearchResultPaths
+    );
+
     return createElement("div", {
       className: "flex min-h-0 flex-1 flex-col"
     }, [
@@ -700,7 +732,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       ]),
       createElement("div", {
         className: "border-b border-border-dark px-3 py-2 text-xs text-text-secondary"
-      }, [readSearchResultSummary(this.searchQueryOrDraft(), this.state.searchResults, this.state.searchIsLoading)]),
+      }, [readSearchResultSummary(this.searchQueryOrDraft(), visibleResults, this.state.searchIsLoading)]),
       this.renderSearchResults()
     ]);
   }
@@ -725,6 +757,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   private renderSearchResults(): HTMLElement {
     const query = this.searchQueryOrDraft().trim();
+    const visibleResults = filterHiddenExplorerSearchResults(
+      this.state.searchResults,
+      this.state.hiddenSearchResultPaths
+    );
 
     if (query.length === 0) {
       return createElement("div", {
@@ -752,42 +788,167 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       className: "min-h-0 flex-1 overflow-y-auto px-2 py-2",
       "data-testid": ExplorerSelector.SearchResultListTestId
     }, [
-      this.state.searchResults.map((result) =>
+      visibleResults.map((result) =>
         createElement("section", {
           key: result.path,
           className: "mb-3 overflow-hidden rounded border border-border-dark bg-[#11161d]"
         }, [
-          createElement("button", {
-            type: "button",
-            className: "flex w-full items-center gap-2 border-b border-border-dark px-3 py-2 text-left transition-colors hover:bg-[#242b34]",
-            "data-testid": `explorer-search-result-file-${toTestIdSegment(result.path)}`,
-            onClick: () => {
-              void this.handleFilePathSelect(result.path, true);
-            }
+          createElement("div", {
+            className: "flex items-center gap-2 border-b border-border-dark px-3 py-2"
           }, [
-            createElement("span", {
-              className: `material-symbols-outlined text-[18px] ${readExplorerLanguageTheme(result.path).accentClassName}`
-            }, [readExplorerFileIcon(result.path)]),
-            createElement("div", {
-              className: "min-w-0 flex-1"
+            createElement("button", {
+              type: "button",
+              className: "flex min-w-0 flex-1 items-center gap-2 text-left transition-colors hover:text-white",
+              "data-testid": `explorer-search-result-file-${toTestIdSegment(result.path)}`,
+              onClick: () => {
+                void this.handleFilePathSelect(result.path, true);
+              }
             }, [
-              createElement("p", {
-                className: "truncate text-sm font-medium text-white"
-              }, [result.name]),
-              createElement("p", {
-                className: "truncate text-xs text-text-secondary"
-              }, [result.path])
+              createElement("span", {
+                className: `material-symbols-outlined text-[18px] ${readExplorerLanguageTheme(result.path).accentClassName}`
+              }, [readExplorerFileIcon(result.path)]),
+              createElement("div", {
+                className: "min-w-0 flex-1"
+              }, [
+                createElement("p", {
+                  className: "truncate text-sm font-medium text-white"
+                }, [result.name]),
+                createElement("p", {
+                  className: "truncate text-xs text-text-secondary"
+                }, [result.path])
+              ]),
+              createElement("span", {
+                className: "rounded border border-border-dark bg-[#1d232c] px-2 py-0.5 text-[11px] text-text-secondary"
+              }, [`${countExplorerSearchMatches(result)} matches`])
             ]),
-            createElement("span", {
-              className: "rounded border border-border-dark bg-[#1d232c] px-2 py-0.5 text-[11px] text-text-secondary"
-            }, [`${countExplorerSearchMatches(result)} matches`])
+            this.renderSearchResultActionButton({
+              title: isExplorerSearchResultCollapsed(
+                this.state.collapsedSearchResultPaths,
+                result.path
+              )
+                ? "Expand result group"
+                : "Collapse result group",
+              icon: isExplorerSearchResultCollapsed(
+                this.state.collapsedSearchResultPaths,
+                result.path
+              )
+                ? "chevron_right"
+                : "expand_more",
+              testId: `explorer-search-result-toggle-${toTestIdSegment(result.path)}`,
+              onClick: (event: Event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.setState({
+                  collapsedSearchResultPaths: collapseExplorerSearchResultPath(
+                    this.state.collapsedSearchResultPaths,
+                    result.path
+                  )
+                });
+              }
+            }),
+            this.renderSearchResultActionButton({
+              title: "Hide result group",
+              icon: "close",
+              testId: `explorer-search-result-hide-${toTestIdSegment(result.path)}`,
+              onClick: (event: Event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.setState({
+                  hiddenSearchResultPaths: hideExplorerSearchResultPath(
+                    this.state.hiddenSearchResultPaths,
+                    result.path
+                  ),
+                  collapsedSearchResultPaths: this.state.collapsedSearchResultPaths.filter(
+                    (entry) => entry !== result.path
+                  )
+                });
+              }
+            })
           ]),
-          createElement("div", { className: "flex flex-col" }, [
-            result.matches.map((match) => this.renderSearchResultMatch(result, match))
-          ])
+          isExplorerSearchResultCollapsed(this.state.collapsedSearchResultPaths, result.path)
+            ? ""
+            : createElement("div", { className: "flex flex-col" }, [
+                result.matches.map((match) => this.renderSearchResultMatch(result, match))
+              ])
         ])
       )
     ]);
+  }
+
+  private renderSearchResultActionButton(input: {
+    title: string;
+    icon: string;
+    testId: string;
+    onClick: (event: Event) => void;
+  }): HTMLElement {
+    return createElement("button", {
+      type: "button",
+      title: input.title,
+      "data-testid": input.testId,
+      className: "flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors hover:bg-[#242b34] hover:text-white",
+      onClick: (event: Event) => input.onClick(event)
+    }, [
+      createElement("span", {
+        className: "material-symbols-outlined text-[16px]"
+      }, [input.icon])
+    ]);
+  }
+
+  private renderPreviewRangeStatus(): HTMLElement {
+    return createElement("span", {
+      className: "rounded border border-border-dark bg-[#11161d] px-2 py-1 text-xs text-text-secondary",
+      "data-testid": "explorer-preview-range"
+    }, [
+      `${this.state.selectedFileStartLine}-${this.state.selectedFileEndLine} / ${this.state.selectedFileTotalLines}`
+    ]);
+  }
+
+  private renderPreviewLoadActions(): HTMLElement {
+    if (!this.state.selectedFileTruncated) {
+      return createElement("div", {});
+    }
+
+    const canLoadPrevious = this.state.selectedFileStartLine > 1;
+    const canLoadNext = this.state.selectedFileEndLine < this.state.selectedFileTotalLines;
+
+    return createElement("div", {
+      className: "flex items-center gap-2 border-b border-border-dark bg-[#131922] px-4 py-2"
+    }, [
+      createElement("span", {
+        className: "text-xs text-text-secondary"
+      }, ["Large file preview"]),
+      this.renderPreviewActionButton({
+        action: ExplorerPreviewAction.Previous,
+        label: "Load previous",
+        disabled: !canLoadPrevious
+      }),
+      this.renderPreviewActionButton({
+        action: ExplorerPreviewAction.Next,
+        label: "Load next",
+        disabled: !canLoadNext
+      }),
+      this.renderPreviewActionButton({
+        action: ExplorerPreviewAction.Full,
+        label: "Load full file",
+        disabled: false
+      })
+    ]);
+  }
+
+  private renderPreviewActionButton(input: {
+    action: ExplorerPreviewAction;
+    label: string;
+    disabled: boolean;
+  }): HTMLElement {
+    return createElement("button", {
+      type: "button",
+      disabled: input.disabled,
+      className: "rounded border border-border-dark bg-[#11161d] px-2 py-1 text-xs text-slate-200 transition-colors hover:bg-[#202733] disabled:cursor-not-allowed disabled:opacity-50",
+      "data-testid": `explorer-preview-action-${input.action}`,
+      onClick: () => {
+        void this.handlePreviewAction(input.action);
+      }
+    }, [input.label]);
   }
 
   private renderSearchResultMatch(
@@ -888,6 +1049,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
             className: `rounded border px-2 py-1 text-xs ${theme.badgeClassName} ${theme.accentClassName}`,
             "data-testid": "explorer-language-badge"
           }, [theme.label]),
+          this.renderPreviewRangeStatus(),
           createElement("span", {
             className: "rounded border border-border-dark bg-[#11161d] px-2 py-1 text-xs text-text-secondary"
           }, ["Read only"])
@@ -904,14 +1066,19 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           ? createElement("div", {
               className: "flex h-full items-center justify-center px-6 py-10 text-sm text-text-secondary"
             }, ["Loading file content..."])
-          : this.renderHighlightedFileContent(highlightedLines)
+          : createElement("div", {
+              className: "flex min-h-full flex-col"
+            }, [
+              this.renderPreviewLoadActions(),
+              this.renderHighlightedFileContent(highlightedLines)
+            ])
       ])
     ]);
   }
 
   private renderEditorTabsBar(): HTMLElement {
     return createElement("div", {
-      className: "flex items-center gap-3 border-b border-border-dark bg-[#181c22] px-3 py-2",
+      className: "flex min-w-0 items-center gap-3 overflow-hidden border-b border-border-dark bg-[#181c22] px-3 py-2",
       "data-testid": ExplorerSelector.TabsBarTestId
     }, [
       this.state.isCompactViewport
@@ -927,7 +1094,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
             className: "rounded border border-border-dark bg-[#11161d] px-3 py-1 text-sm text-text-secondary"
           }, ["No file selected"])
         : createElement("div", {
-            className: "relative flex min-w-0 flex-1 overflow-x-auto"
+            className: "relative flex h-10 w-0 flex-1 overflow-x-auto overflow-y-hidden",
+            "data-testid": ExplorerSelector.TabsScrollSurfaceTestId
           }, [
             createElement("div", {
               className: "flex min-w-max items-stretch"
@@ -946,13 +1114,13 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
     return createElement("div", {
       key: `editor-tab-${openFile.path}`,
-      className: `relative flex items-center border-r border-border-dark ${
+      className: `relative flex shrink-0 items-center border-r border-border-dark ${
         selected ? "bg-[#0f141b]" : "bg-[#181c22]"
       }`
     }, [
       createElement("button", {
         type: "button",
-        className: `flex h-10 min-w-0 items-center gap-2 px-3 py-0 text-sm transition-colors ${
+        className: `flex h-10 min-w-0 shrink-0 items-center gap-2 px-3 py-0 text-sm transition-colors ${
           selected
             ? "text-white"
             : "text-slate-300 hover:bg-[#1f2630] hover:text-white"
@@ -978,7 +1146,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       createElement("button", {
         type: "button",
         title: "Close file",
-        className: "mr-2 flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors hover:bg-[#242b34] hover:text-white",
+        className: "mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-[#242b34] hover:text-white",
         "data-testid": `explorer-tab-close-${toTestIdSegment(openFile.path)}`,
         onClick: () => {
           void this.handleTabMenuAction(ExplorerTabMenuAction.Close, openFile.path);
@@ -1033,7 +1201,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       createElement("tbody", {}, [
         highlightedLines.map((line, index) =>
           {
-            const lineNumber = index + 1;
+            const lineNumber = this.state.selectedFileStartLine + index;
             const isHighlighted = this.state.highlightedLineNumber === lineNumber;
             return createElement("tr", {
               key: `explorer-line-${lineNumber}`,
@@ -1135,7 +1303,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         treeNodes: nextTreeNodes,
         openFiles: nextOpenFiles,
         selectedFilePath: nextActiveFilePath,
-        selectedFileContent: "",
+        ...createEmptyExplorerFileViewState(),
         highlightedLineNumber: null,
         openTabContextMenuPath: null,
         pendingAction: null,
@@ -1159,7 +1327,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         treeNodes: [],
         openFiles: [],
         selectedFilePath: null,
-        selectedFileContent: "",
+        ...createEmptyExplorerFileViewState(),
         highlightedLineNumber: null,
         openTabContextMenuPath: null,
         pendingAction: null,
@@ -1354,6 +1522,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         searchQuery: "",
         searchResults: [],
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
         searchIsLoading: false,
         errorMessage: null
       });
@@ -1384,6 +1554,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         searchQuery: "",
         searchResults: [],
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
         searchIsLoading: false,
         errorMessage: null
       });
@@ -1399,6 +1571,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         searchQuery: query,
         searchResults: [],
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
         searchIsLoading: false
       });
       this.searchDebounceId = null;
@@ -1426,6 +1600,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         searchQuery: query,
         searchResults: results,
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
         searchIsLoading: false,
         errorMessage: null
       });
@@ -1437,6 +1613,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         searchQuery: query,
         searchResults: [],
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
         searchIsLoading: false,
         errorMessage: readErrorMessage(error, "Unable to search the workspace.")
       });
@@ -1458,6 +1636,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       return;
     }
 
+    const treeScrollTop = this.readTreeScrollTop();
+
     if (node.loaded) {
       this.setState({
         treeNodes: toggleExplorerDirectory(this.state.treeNodes, node.path),
@@ -1468,6 +1648,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         compactView: this.state.isCompactViewport
           ? ExplorerCompactView.Panel
           : this.state.compactView
+      });
+      requestAnimationFrame(() => {
+        this.restoreTreeScrollTop(treeScrollTop);
       });
       return;
     }
@@ -1497,6 +1680,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         errorMessage: null,
         noticeMessage: null
       });
+      requestAnimationFrame(() => {
+        this.restoreTreeScrollTop(treeScrollTop);
+      });
     } catch (error: unknown) {
       this.setState({
         pendingAction: null,
@@ -1517,22 +1703,29 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
 
     const nextOpenFiles = openExplorerFile(this.state.openFiles, path);
+    const treeScrollTop = !revealInTree ? this.readTreeScrollTop() : null;
 
     this.setState({
       pendingAction: ExplorerPendingAction.File,
       activePath: path,
       openFiles: nextOpenFiles,
       selectedFilePath: path,
-      selectedFileContent: "",
+      ...createEmptyExplorerFileViewState(),
       openTabContextMenuPath: null,
       errorMessage: null,
       noticeMessage: null
     });
+    if (treeScrollTop !== null) {
+      requestAnimationFrame(() => {
+        this.restoreTreeScrollTop(treeScrollTop);
+      });
+    }
 
     try {
       const file = await this.explorerClient.readFile({
         projectId: this.state.currentProject.id,
-        path
+        path,
+        ...createExplorerFileReadWindow(targetLineNumber)
       });
 
       const nextTreeNodes = revealInTree
@@ -1543,7 +1736,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         treeNodes: nextTreeNodes,
         openFiles: nextOpenFiles,
         selectedFilePath: path,
-        selectedFileContent: file.content,
+        ...readExplorerFileViewState(file),
         highlightedLineNumber: targetLineNumber ?? null,
         pendingAction: null,
         activePath: null,
@@ -1554,6 +1747,12 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           : this.state.compactView
       });
       this.persistWorkspaceState(nextOpenFiles, path);
+      requestAnimationFrame(() => {
+        this.scrollEditorTabIntoView(path);
+        if (treeScrollTop !== null) {
+          this.restoreTreeScrollTop(treeScrollTop);
+        }
+      });
       this.scheduleLineHighlight(targetLineNumber);
       if (targetLineNumber) {
         requestAnimationFrame(() => {
@@ -1574,18 +1773,19 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     try {
       const file = await this.explorerClient.readFile({
         projectId,
-        path
+        path,
+        ...createExplorerTopPreviewWindow()
       });
 
       this.setState({
-        selectedFileContent: file.content,
+        ...readExplorerFileViewState(file),
         selectedFilePath: path,
         highlightedLineNumber: null
       });
     } catch {
       this.setState({
         selectedFilePath: null,
-        selectedFileContent: "",
+        ...createEmptyExplorerFileViewState(),
         highlightedLineNumber: null
       });
     }
@@ -1716,10 +1916,15 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     this.setState({
       openFiles: nextOpenFiles,
       selectedFilePath: nextActiveFilePath,
-      selectedFileContent:
-        nextActiveFilePath === this.state.selectedFilePath
-          ? this.state.selectedFileContent
-          : "",
+      ...(nextActiveFilePath === this.state.selectedFilePath
+        ? readExplorerFileViewState({
+            content: this.state.selectedFileContent,
+            startLine: this.state.selectedFileStartLine,
+            endLine: this.state.selectedFileEndLine,
+            totalLines: this.state.selectedFileTotalLines,
+            truncated: this.state.selectedFileTruncated
+          })
+        : createEmptyExplorerFileViewState()),
       highlightedLineNumber: null,
       openTabContextMenuPath: null
     });
@@ -1840,7 +2045,8 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     try {
       const file = await this.explorerClient.readFile({
         projectId: project.id,
-        path
+        path,
+        ...createExplorerTopPreviewWindow()
       });
       const nextTreeNodes = revealInTree
         ? await this.revealTreePath(project.id, baseTreeNodes ?? this.state.treeNodes, path)
@@ -1850,10 +2056,13 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         treeNodes: nextTreeNodes,
         openFiles,
         selectedFilePath: path,
-        selectedFileContent: file.content,
+        ...readExplorerFileViewState(file),
         highlightedLineNumber: null
       });
       this.persistWorkspaceState(openFiles, path);
+      requestAnimationFrame(() => {
+        this.scrollEditorTabIntoView(path);
+      });
     } catch {
       const nextOpenFiles = closeExplorerOpenFile(openFiles, path);
       const nextActiveFilePath = resolveNextExplorerActiveFilePath(nextOpenFiles, path);
@@ -1861,10 +2070,50 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         openFiles: nextOpenFiles,
         selectedFilePath: nextActiveFilePath,
-        selectedFileContent: "",
+        ...createEmptyExplorerFileViewState(),
         highlightedLineNumber: null
       });
       this.persistWorkspaceState(nextOpenFiles, nextActiveFilePath);
+    }
+  }
+
+  private async handlePreviewAction(action: ExplorerPreviewAction): Promise<void> {
+    if (this.state.currentProject === null || this.state.selectedFilePath === null) {
+      return;
+    }
+
+    const window = readPreviewWindowFromAction(this.state, action);
+    if (!window) {
+      return;
+    }
+
+    this.setState({
+      pendingAction: ExplorerPendingAction.File,
+      activePath: this.state.selectedFilePath,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const file = await this.explorerClient.readFile({
+        projectId: this.state.currentProject.id,
+        path: this.state.selectedFilePath,
+        ...window
+      });
+
+      this.setState({
+        ...readExplorerFileViewState(file),
+        highlightedLineNumber: null,
+        pendingAction: null,
+        activePath: null
+      });
+    } catch (error: unknown) {
+      this.setState({
+        pendingAction: null,
+        activePath: null,
+        errorMessage: readErrorMessage(error, `Unable to read ${this.state.selectedFilePath}.`),
+        noticeMessage: null
+      });
     }
   }
 
@@ -1898,6 +2147,54 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       block: "center",
       inline: "nearest"
     });
+  }
+
+  private scrollEditorTabIntoView(path: string): void {
+    const tab = document.querySelector(
+      `[data-testid="explorer-tab-${toTestIdSegment(path)}"]`
+    );
+    const surface = document.querySelector(
+      `[data-testid="${ExplorerSelector.TabsScrollSurfaceTestId}"]`
+    );
+    if (!(tab instanceof HTMLElement) || !(surface instanceof HTMLElement)) {
+      return;
+    }
+
+    const tabLeft = tab.offsetLeft;
+    const tabRight = tabLeft + tab.offsetWidth;
+    const surfaceLeft = surface.scrollLeft;
+    const surfaceRight = surfaceLeft + surface.clientWidth;
+
+    if (tabLeft < surfaceLeft) {
+      surface.scrollLeft = tabLeft;
+      return;
+    }
+
+    if (tabRight > surfaceRight) {
+      surface.scrollLeft = tabRight - surface.clientWidth;
+    }
+  }
+
+  private readTreeScrollTop(): number {
+    const treeSurface = document.querySelector(
+      `[data-testid="${ExplorerSelector.TreeSurfaceTestId}"]`
+    );
+    if (!(treeSurface instanceof HTMLElement)) {
+      return 0;
+    }
+
+    return treeSurface.scrollTop;
+  }
+
+  private restoreTreeScrollTop(scrollTop: number): void {
+    const treeSurface = document.querySelector(
+      `[data-testid="${ExplorerSelector.TreeSurfaceTestId}"]`
+    );
+    if (!(treeSurface instanceof HTMLElement)) {
+      return;
+    }
+
+    treeSurface.scrollTop = scrollTop;
   }
 
   private readPreviewScrollPosition(): {
@@ -1941,6 +2238,94 @@ type SearchInputState = {
   value: string;
   selectionStart: number | null;
   selectionEnd: number | null;
+};
+
+const createEmptyExplorerFileViewState = (): Pick<
+  ExplorerState,
+  | "selectedFileContent"
+  | "selectedFileStartLine"
+  | "selectedFileEndLine"
+  | "selectedFileTotalLines"
+  | "selectedFileTruncated"
+> => ({
+  selectedFileContent: "",
+  selectedFileStartLine: 1,
+  selectedFileEndLine: 1,
+  selectedFileTotalLines: 1,
+  selectedFileTruncated: false
+});
+
+const readExplorerFileViewState = (
+  file: ExplorerFileContentRecord
+): Pick<
+  ExplorerState,
+  | "selectedFileContent"
+  | "selectedFileStartLine"
+  | "selectedFileEndLine"
+  | "selectedFileTotalLines"
+  | "selectedFileTruncated"
+> => ({
+  selectedFileContent: file.content,
+  selectedFileStartLine: file.startLine,
+  selectedFileEndLine: file.endLine,
+  selectedFileTotalLines: file.totalLines,
+  selectedFileTruncated: file.truncated
+});
+
+const createExplorerTopPreviewWindow = (): {
+  startLine: number;
+  lineCount: number;
+} => ({
+  startLine: 1,
+  lineCount: ExplorerPreviewLineCount
+});
+
+const createExplorerFileReadWindow = (
+  targetLineNumber?: number
+): {
+  startLine: number;
+  lineCount: number;
+} => {
+  if (!targetLineNumber) {
+    return createExplorerTopPreviewWindow();
+  }
+
+  return {
+    startLine: Math.max(1, targetLineNumber - ExplorerPreviewContextRadius),
+    lineCount: ExplorerPreviewLineCount
+  };
+};
+
+const readPreviewWindowFromAction = (
+  state: ExplorerState,
+  action: ExplorerPreviewAction
+): {
+  startLine?: number;
+  lineCount?: number;
+} | null => {
+  if (action === ExplorerPreviewAction.Full) {
+    return {};
+  }
+
+  if (action === ExplorerPreviewAction.Previous) {
+    if (state.selectedFileStartLine <= 1) {
+      return null;
+    }
+
+    return {
+      startLine: Math.max(1, state.selectedFileStartLine - ExplorerPreviewLineCount),
+      lineCount: ExplorerPreviewLineCount
+    };
+  }
+
+  if (state.selectedFileEndLine >= state.selectedFileTotalLines) {
+    return null;
+  }
+
+  return {
+    startLine: state.selectedFileEndLine + 1,
+    lineCount: ExplorerPreviewLineCount
+  };
 };
 
 const shouldShowExplorerSidebar = (state: ExplorerState): boolean => {
