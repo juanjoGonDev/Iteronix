@@ -590,6 +590,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Large-file preview refinement completed on `2026-04-28`: `/files/read` now supports bounded line windows, the Explorer opens heavy files through lazy preview slices, and users can page backward, forward, or load the full file without blocking the workbench on first open
   - Tree and tabs stability refinement completed on `2026-04-28`: opening a file from the tree preserves the current tree scroll position, while the editor tab strip now overflows horizontally instead of clipping open files
   - Search results control refinement completed on `2026-04-28`: per-file search result groups can now collapse or hide independently, and those controls reset cleanly on each new search request so the flow stays close to VS Code semantics without adding replace mode
+  - Real-app validation completed on `2026-04-28`: the live `localhost` workbench confirms representative tab overflow, tree scroll preservation for visible file clicks, lazy preview paging for `apps/server-api/src/server.ts`, and collapse/hide/reset behavior for grouped search results; keep the Notion card in `En progreso` until explicit user acceptance
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts

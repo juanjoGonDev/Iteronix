@@ -1519,3 +1519,24 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente que la UX del Explorer le convence
 - Next:
   - Esperar validación visual del usuario sobre el nuevo comportamiento de árbol, tabs y previews grandes antes de abrir `Settings`
+### 2026-04-28 17:24 (Europe/Madrid) — Explorer Live Runtime Validation
+
+- Summary: Validado el `Explorer` contra la app real en `http://localhost:4000` con backend vivo en `http://localhost:4001`, descartando falsos negativos del harness y confirmando que el comportamiento clave del árbol, tabs, previews grandes y búsqueda agrupada se sostiene fuera del stub.
+- Decisions:
+  - Mantener `01. Explorer screen end-to-end` como única tarea activa y conservar la tarjeta de Notion en `En progreso` hasta aceptación explícita del usuario
+  - No tocar producto en esta iteración: la primera lectura de fallos provenía del método de prueba, no de una regresión reproducible en el runtime real
+  - Seguir usando Puppeteer/Stagehand-style harness como baseline operativa mientras la tarea de estandarización Playwright siga abierta en el plan
+- Changes:
+  - **Updated PLAN.md**: añadido el hito de validación sobre la app real
+  - **Updated AGENTS_LOGS.md** y comentario en Notion: evidencia de validación local viva registrada sin mover la tarjeta a `Listo`
+- Commands:
+  - `pnpm -C apps/web-ui exec node --input-type=module -` con sesión real (`iteronix_server_url=http://localhost:4001`, `iteronix_auth_token=dev-token`, proyecto `D:\\projects\\Iteronix`) para comprobar:
+    - preservación del scroll del árbol al abrir un fichero visible en una zona desplazada
+    - overflow horizontal real con 20+ pestañas abiertas
+    - preview parcial de `apps/server-api/src/server.ts` con `Load next`, `Load previous` y `Load full file`
+    - colapso, ocultación y reset por nueva búsqueda de grupos de resultados del panel `Search`
+- Issues/Risks:
+  - No se reprodujo un bug nuevo de producto en esta validación viva; los fallos iniciales eran del script ad hoc al hacer click sobre nodos fuera de viewport o usando selectores de stub no presentes en el DOM real
+  - La tarea sigue sin poder cerrarse porque la aceptación final del `Explorer` depende del usuario, no del harness
+- Next:
+  - Esperar la aceptación explícita del usuario sobre el `Explorer`; sólo entonces mover la tarjeta de Notion a `Listo` y abrir `Settings`
