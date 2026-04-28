@@ -10,6 +10,8 @@ import {
   readExplorerFileLanguage,
   readExplorerLanguageTheme,
   readExplorerTokenClassName,
+  setExplorerDirectoryExpanded,
+  setExplorerTreeExpansion,
   toggleExplorerDirectory
 } from "./explorer-state.js";
 
@@ -63,6 +65,84 @@ describe("explorer state helpers", () => {
     ]);
     expect(flattenExplorerTreeNodes(collapsedTree).map((item) => item.node.path)).toEqual([
       "src"
+    ]);
+  });
+
+  it("applies global collapse and expand states to a loaded tree", () => {
+    const tree = mergeExplorerDirectoryChildren(
+      buildExplorerTreeNodes([
+        {
+          path: "src",
+          name: "src",
+          kind: "directory"
+        }
+      ]),
+      "src",
+      [
+        {
+          path: "src/screens",
+          name: "screens",
+          kind: "directory"
+        }
+      ]
+    );
+    const loadedTree = mergeExplorerDirectoryChildren(tree, "src/screens", [
+      {
+        path: "src/screens/Explorer.ts",
+        name: "Explorer.ts",
+        kind: "file"
+      }
+    ]);
+
+    const collapsed = setExplorerTreeExpansion(loadedTree, false);
+    const expanded = setExplorerTreeExpansion(loadedTree, true);
+
+    expect(flattenExplorerTreeNodes(collapsed).map((item) => item.node.path)).toEqual([
+      "src"
+    ]);
+    expect(flattenExplorerTreeNodes(expanded).map((item) => item.node.path)).toEqual([
+      "src",
+      "src/screens",
+      "src/screens/Explorer.ts"
+    ]);
+  });
+
+  it("expands a specific loaded directory without toggling other nodes", () => {
+    const tree = mergeExplorerDirectoryChildren(
+      buildExplorerTreeNodes([
+        {
+          path: "src",
+          name: "src",
+          kind: "directory"
+        }
+      ]),
+      "src",
+      [
+        {
+          path: "src/screens",
+          name: "screens",
+          kind: "directory"
+        }
+      ]
+    );
+    const loadedTree = mergeExplorerDirectoryChildren(tree, "src/screens", [
+      {
+        path: "src/screens/Explorer.ts",
+        name: "Explorer.ts",
+        kind: "file"
+      }
+    ]);
+    const collapsed = setExplorerTreeExpansion(loadedTree, false);
+    const revealed = setExplorerDirectoryExpanded(
+      setExplorerDirectoryExpanded(collapsed, "src", true),
+      "src/screens",
+      true
+    );
+
+    expect(flattenExplorerTreeNodes(revealed).map((item) => item.node.path)).toEqual([
+      "src",
+      "src/screens",
+      "src/screens/Explorer.ts"
     ]);
   });
 

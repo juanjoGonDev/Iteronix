@@ -10,6 +10,7 @@ export const RoutePath = {
   ProjectsOpen: "/projects/open",
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
+  FilesSearch: "/files/search",
   FilesWrite: "/files/write",
   FilesDelete: "/files/delete",
   FilesCreate: "/files/create",
@@ -99,6 +100,7 @@ export const ErrorMessage = {
   MissingName: "Missing name",
   MissingProjectId: "Missing projectId",
   MissingPath: "Missing path",
+  MissingQuery: "Missing query",
   MissingContent: "Missing content",
   MissingRunId: "Missing runId",
   MissingSessionId: "Missing sessionId",
@@ -158,6 +160,14 @@ export const FileField = {
   ProjectId: "projectId",
   Path: "path",
   Content: "content"
+} as const;
+
+export const FileSearchField = {
+  ProjectId: "projectId",
+  Query: "query",
+  IsRegex: "isRegex",
+  MatchCase: "matchCase",
+  WholeWord: "wholeWord"
 } as const;
 
 export const FileMoveField = {

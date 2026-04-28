@@ -1406,3 +1406,39 @@
   - La investigación sobre incrustar Monaco o APIs de VS Code debe apoyarse en fuentes oficiales y no debe romper el requisito de responsive
 - Next:
   - Pasar gates completos del repo, validar visualmente el Explorer con el usuario y decidir después si la siguiente mejora del workbench es shell compartido o salto a `Settings`
+### 2026-04-28 12:03 (Europe/Madrid) — Explorer VS Code-Like Search Workbench
+
+- Summary: Reorientado `Explorer` hacia un workbench mucho más cercano a VS Code sin cambiar de pantalla ni incrustar un IDE remoto completo; ahora separa `Explorer` y `Search`, hace búsqueda real dentro de ficheros vía servidor y mantiene comportamiento responsive.
+- Decisions:
+  - Mantener `01. Explorer screen end-to-end` como única tarea activa y dejar la tarjeta de Notion en `En progreso` hasta validación explícita del usuario
+  - No incrustar `OpenVSCode Server` ni `code-server` en este paso: son soluciones de IDE remoto completas y demasiado pesadas para el shell PWA responsive actual
+  - No saltar aún a `monaco-vscode-api`: primero cerrar la UX/flujo del Explorer con el stack actual y después decidir si merece una migración controlada del editor
+  - Registrar el conflicto de fuentes: el usuario pidió una similitud máxima con VS Code, pero `ui-spec/` y los invariantes del shell siguen mandando sobre una copia literal; se empujó la interacción y la disposición hacia VS Code manteniendo el marco visual de Iteronix
+- Changes:
+  - **Updated apps/server-api/src/constants.ts**, **apps/server-api/src/files.ts**, **apps/server-api/src/files.test.ts** y **apps/server-api/src/server.ts**: añadido `/files/search` con búsqueda recursiva determinista, regex opcional, `matchCase`, `wholeWord` e ignorado de directorios pesados
+  - **Updated apps/web-ui/src/shared/explorer-client.ts** y **apps/web-ui/src/shared/explorer-client.test.ts**: cliente tipado para la nueva búsqueda de contenido
+  - **Updated apps/web-ui/src/screens/explorer-state.ts** y **apps/web-ui/src/screens/explorer-state.test.ts**: helpers para expandir/colapsar directorios individualmente o en bloque
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: workbench integrado con paneles `Explorer`/`Search`, ocultación del sidebar de herramienta, árbol con expand/collapse all, búsqueda separada con debounce y apertura directa de resultados en el editor
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: validación browser ampliada para búsqueda regex dentro de ficheros no abiertos, toggles de search, ocultación/restauración del panel lateral y flujo responsive compacto
+  - **Updated apps/web-ui/scripts/validate-projects-git-workspace.ts**: endurecida la validación de `Projects` para no depender de una persistencia concreta de selección tras `Stage`
+  - **Updated PLAN.md** y comentario en Notion: progreso registrado sin mover la tarea a `Listo`
+- Commands:
+  - `pnpm exec vitest run apps/server-api/src/files.test.ts`
+  - `pnpm exec vitest run apps/web-ui/src/shared/explorer-client.test.ts`
+  - `pnpm exec vitest run apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm exec tsc -p apps/server-api/tsconfig.json --noEmit`
+  - `pnpm exec tsc -p apps/web-ui/tsconfig.json --noEmit`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+- Issues/Risks:
+  - La UX está mucho más cerca de VS Code, pero aún no es una incrustación literal del core/editor de VS Code; una adopción de Monaco o `monaco-vscode-api` sigue siendo una decisión de infraestructura aparte
+  - La búsqueda de contenido ignora `.git`, `node_modules`, `dist`, `build` y `coverage` por rendimiento; si el usuario quiere incluir alguno habrá que volverlo una política configurable
+  - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente la nueva disposición del Explorer
+- Next:
+  - Esperar validación visual del usuario sobre el nuevo workbench del Explorer; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`

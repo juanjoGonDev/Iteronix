@@ -7,6 +7,7 @@ import {
   BearerScheme,
   ErrorMessage,
   FileField,
+  FileSearchField,
   FileMoveField,
   HeaderName,
   HttpMethod,
@@ -31,6 +32,7 @@ import {
   listFileTree,
   moveFile,
   readFileContent,
+  searchFiles,
   writeFileContent
 } from "./files";
 import {
@@ -261,6 +263,16 @@ const handleRequest = async (
     }
 
     await handleFileRead(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesSearch) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileSearch(req, res, projectStore);
     return;
   }
 
@@ -1003,6 +1015,45 @@ const handleFileRead = async (
 
   respondJson(res, HttpStatus.Ok, {
     content: readResult.value.content
+  });
+};
+
+const handleFileSearch = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileSearchRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+
+  const searchResult = await searchFiles(projectResult.value.rootPath, {
+    query: parsed.value.query,
+    isRegex: parsed.value.isRegex,
+    matchCase: parsed.value.matchCase,
+    wholeWord: parsed.value.wholeWord
+  });
+  if (searchResult.type === ResultType.Err) {
+    respondError(res, searchResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    results: searchResult.value
   });
 };
 
@@ -2237,6 +2288,67 @@ const parseFileTreeRequest = (
 
   return ok({
     projectId: projectId.value
+  });
+};
+
+const parseFileSearchRequest = (
+  value: unknown
+): Result<
+  {
+    projectId: string;
+    query: string;
+    isRegex: boolean;
+    matchCase: boolean;
+    wholeWord: boolean;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileSearchField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const query = readRequiredString(
+    value,
+    FileSearchField.Query,
+    ErrorMessage.MissingQuery
+  );
+  if (query.type === ResultType.Err) {
+    return query;
+  }
+
+  const isRegex = readOptionalBooleanField(value, FileSearchField.IsRegex);
+  if (isRegex.type === ResultType.Err) {
+    return isRegex;
+  }
+
+  const matchCase = readOptionalBooleanField(value, FileSearchField.MatchCase);
+  if (matchCase.type === ResultType.Err) {
+    return matchCase;
+  }
+
+  const wholeWord = readOptionalBooleanField(value, FileSearchField.WholeWord);
+  if (wholeWord.type === ResultType.Err) {
+    return wholeWord;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    query: query.value,
+    isRegex: isRegex.value ?? false,
+    matchCase: matchCase.value ?? false,
+    wholeWord: wholeWord.value ?? false
   });
 };
 

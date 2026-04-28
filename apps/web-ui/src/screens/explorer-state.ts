@@ -115,7 +115,42 @@ export const toggleExplorerDirectory = (
         }
       : {
           ...node,
-          children: toggleExplorerDirectory(node.children, directoryPath)
+        children: toggleExplorerDirectory(node.children, directoryPath)
+        }
+  );
+
+export const setExplorerTreeExpansion = (
+  nodes: ReadonlyArray<ExplorerTreeNode>,
+  expanded: boolean
+): ReadonlyArray<ExplorerTreeNode> =>
+  nodes.map((node) =>
+    node.kind === ExplorerFileEntryKind.Directory
+      ? {
+          ...node,
+          expanded,
+          children: setExplorerTreeExpansion(node.children, expanded)
+        }
+      : node
+  );
+
+export const setExplorerDirectoryExpanded = (
+  nodes: ReadonlyArray<ExplorerTreeNode>,
+  directoryPath: string,
+  expanded: boolean
+): ReadonlyArray<ExplorerTreeNode> =>
+  nodes.map((node) =>
+    node.path === directoryPath && node.kind === ExplorerFileEntryKind.Directory
+      ? {
+          ...node,
+          expanded
+        }
+      : {
+          ...node,
+          children: setExplorerDirectoryExpanded(
+            node.children,
+            directoryPath,
+            expanded
+          )
         }
   );
 

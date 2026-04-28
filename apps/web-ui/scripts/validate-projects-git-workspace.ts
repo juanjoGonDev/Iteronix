@@ -271,8 +271,8 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       artifactName: "projects-git-workspace"
     });
 
-    await toggleGitPathSelection(page, FixtureFilePath.GitDetails);
-    await toggleGitPathSelection(page, FixtureFilePath.GitSummary);
+    await setGitPathSelection(page, FixtureFilePath.GitDetails, true);
+    await setGitPathSelection(page, FixtureFilePath.GitSummary, true);
     await waitForPageText(page, "Stage selected (2)");
     await clickNamedButton(page, "Stage selected (2)");
     await waitForPageTexts(page, [
@@ -302,6 +302,8 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       artifactName: "projects-git-workspace"
     });
 
+    await setGitPathSelection(page, FixtureFilePath.GitDetails, true);
+    await setGitPathSelection(page, FixtureFilePath.GitSummary, true);
     await waitForPageText(page, "Unstage selected (2)");
     await clickNamedButton(page, "Unstage selected (2)");
     await waitForPageTexts(page, [
@@ -1169,35 +1171,49 @@ async function clickGitBranchAction(
   }
 }
 
-async function toggleGitPathSelection(
+async function setGitPathSelection(
   page: Page,
-  path: string
+  path: string,
+  selected: boolean
 ): Promise<void> {
-  const toggled = await page.evaluate((selectedPath: string) => {
-    const container = Array.from(document.querySelectorAll("div"))
-      .filter((element) => {
-        const text = element.textContent ?? "";
-        return text.includes(selectedPath);
-      })
-      .filter((element) =>
-        Array.from(element.querySelectorAll('input[type="checkbox"]')).length > 0
-      )
-      .sort(
-        (left, right) =>
-          (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
-      )[0];
-    const input = container?.querySelector('input[type="checkbox"]');
-    if (!(input instanceof HTMLInputElement)) {
-      return false;
-    }
+  await waitForCondition(async () => {
+    const result = await page.evaluate((input: {
+      path: string;
+      selected: boolean;
+    }) => {
+      const container = Array.from(document.querySelectorAll("div"))
+        .filter((element) => {
+          const text = element.textContent ?? "";
+          return text.includes(input.path);
+        })
+        .filter((element) =>
+          Array.from(element.querySelectorAll('input[type="checkbox"]')).length > 0
+        )
+        .sort(
+          (left, right) =>
+            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+        )[0];
+      const checkbox = container?.querySelector('input[type="checkbox"]');
+      if (!(checkbox instanceof HTMLInputElement)) {
+        return false;
+      }
 
-    input.click();
-    return true;
-  }, path);
+      if (checkbox.checked === input.selected) {
+        return true;
+      }
 
-  if (!toggled) {
-    throw new Error(`Could not toggle selection for ${path}`);
-  }
+      checkbox.click();
+      return checkbox.checked === input.selected;
+    }, {
+      path,
+      selected
+    });
+
+    return result;
+  }, `git selection ${selected ? "enable" : "disable"} for ${path}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 }
 
 function waitForNextDialog(page: Page, expectedMessage: string): Promise<void> {

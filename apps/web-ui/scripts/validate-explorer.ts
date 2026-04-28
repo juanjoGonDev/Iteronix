@@ -24,7 +24,7 @@ const ValidationConfig = {
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
-  SearchDebounceWaitMs: 260,
+  SearchDebounceWaitMs: 360,
   ViewportWidth: 1440,
   ViewportHeight: 1600,
   CompactViewportWidth: 390,
@@ -35,7 +35,8 @@ const ValidationConfig = {
 const RequestPath = {
   ProjectOpen: "/projects/open",
   FilesTree: "/files/tree",
-  FilesRead: "/files/read"
+  FilesRead: "/files/read",
+  FilesSearch: "/files/search"
 } as const;
 
 const ResponseHeader = {
@@ -50,21 +51,42 @@ const LocalStorageKeys = {
 } as const;
 
 const ValidationText = {
-  ScreenTitle: "Explorer",
   ProjectLoaded: "Iteronix",
-  FileContentMarker: "export class Explorer",
-  SearchValue: "EXPLORER",
-  SearchPrefix: "EXP",
+  FileContentMarker: "render(): string {",
+  SearchRegexValue: "RENDER\\(\\)",
   RemovedPanelLabel: "Project session",
   LanguageBadge: "TypeScript"
+} as const;
+
+const Selector = {
+  ActivityExplorer: '[data-testid="explorer-activity-explorer"]',
+  ActivitySearch: '[data-testid="explorer-activity-search"]',
+  SidebarProjectLabel: '[data-testid="sidebar-project-label"]',
+  SearchInput: '[data-testid="explorer-search-input"]',
+  SearchToggleRegex: '[data-testid="explorer-search-toggle-regex"]',
+  SearchResults: '[data-testid="explorer-search-results"]',
+  SearchResultFile: '[data-testid="explorer-search-result-file-src-screens-explorer-ts"]',
+  SearchResultMatch: '[data-testid="explorer-search-result-match-src-screens-explorer-ts-2"]',
+  ExpandAll: '[data-testid="explorer-expand-all"]',
+  CollapseAll: '[data-testid="explorer-collapse-all"]',
+  SidebarHide: '[data-testid="explorer-sidebar-hide"]',
+  SidebarPanel: '[data-testid="explorer-sidebar-panel"]',
+  SearchInputTestId: "explorer-search-input",
+  ExplorerNodeSrc: '[data-testid="explorer-node-src"]',
+  ExplorerNodeNestedFile: '[data-testid="explorer-node-src-screens-explorer-ts"]',
+  LanguageBadge: '[data-testid="explorer-language-badge"]',
+  FileContent: '[data-testid="explorer-file-content"]',
+  CompactExplorer: '[data-testid="explorer-compact-panel-explorer"]',
+  CompactSearch: '[data-testid="explorer-compact-panel-search"]',
+  CompactEditor: '[data-testid="explorer-compact-panel-editor"]'
 } as const;
 
 const FixtureProject = {
   id: "project-explorer-browser",
   name: "Iteronix",
   rootPath: "D:/projects/Iteronix",
-  createdAt: "2026-04-27T11:00:00.000Z",
-  updatedAt: "2026-04-27T11:05:00.000Z"
+  createdAt: "2026-04-28T10:00:00.000Z",
+  updatedAt: "2026-04-28T10:05:00.000Z"
 } as const;
 
 const FixtureFileTree = {
@@ -113,6 +135,27 @@ const FixtureFileContent = {
   ].join("\n")
 } as const;
 
+const FixtureSearchResults = {
+  regex: [
+    {
+      path: "src/screens/Explorer.ts",
+      name: "Explorer.ts",
+      matches: [
+        {
+          lineNumber: 2,
+          lineText: "  render(): string {",
+          ranges: [
+            {
+              start: 2,
+              end: 10
+            }
+          ]
+        }
+      ]
+    }
+  ]
+} as const;
+
 const projectRoot = join(import.meta.dirname, "..");
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
@@ -146,196 +189,8 @@ async function validateExplorerScreen(): Promise<void> {
       args: ["--no-sandbox"]
     });
 
-    const page = await browser.newPage();
-    await page.setViewport({
-      width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
-    });
-    await seedBrowserStorage(page);
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ExplorerRoute}`, {
-      waitUntil: "networkidle0"
-    });
-
-    await waitForPageText(page, ValidationText.ScreenTitle);
-    await captureBrowserValidationScreenshot({
-      page,
-      directory: screenshotDirectory,
-      suffix: "after-load",
-      artifactName: "explorer"
-    });
-    await waitForPageText(page, ValidationText.ProjectLoaded);
-    await waitForCondition(async () => {
-      const label = await page.evaluate(() => {
-        const element = document.querySelector('[data-testid="sidebar-project-label"]');
-        return element?.textContent ?? "";
-      });
-      return label.includes(ValidationText.ProjectLoaded);
-    }, "sidebar project label", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForCondition(async () => {
-      const text = await page.evaluate(() => document.body.textContent ?? "");
-      return !text.includes(ValidationText.RemovedPanelLabel);
-    }, "removed project session panel", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForSelector(page, '[data-testid="explorer-node-src"]');
-    await captureBrowserValidationScreenshot({
-      page,
-      directory: screenshotDirectory,
-      suffix: "before-search",
-      artifactName: "explorer"
-    });
-
-    await page.click('[data-testid="explorer-search-input"]');
-    await page.keyboard.type(ValidationText.SearchPrefix, {
-      delay: 30
-    });
-    await waitForCondition(async () => {
-      const labels = await page.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
-        elements.map((element) => element.textContent ?? "")
-      );
-
-      return labels.some((label) => label.includes("README.md"));
-    }, "tree unchanged before debounce", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await page.waitForFunction(
-      (value) => {
-        const element = document.querySelector('[data-testid="explorer-search-input"]');
-        return element instanceof HTMLInputElement && element.value === value;
-      },
-      {},
-      ValidationText.SearchPrefix
-    );
-    await delay(ValidationConfig.SearchDebounceWaitMs);
-    await waitForCondition(async () => {
-      const activeTestId = await page.evaluate(() => {
-        const activeElement = document.activeElement;
-        return activeElement instanceof HTMLElement
-          ? activeElement.dataset["testid"] ?? null
-          : null;
-      });
-
-      return activeTestId === "explorer-search-input";
-    }, "search input retains focus after debounce", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await page.keyboard.type("LORER", {
-      delay: 30
-    });
-    await waitForCondition(async () => {
-      const labels = await page.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
-        elements.map((element) => element.textContent ?? "")
-      );
-
-      return labels.some((label) => label.includes("Explorer.ts")) &&
-        !labels.some((label) => label.includes("README.md"));
-    }, "filtered explorer tree", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-
-    await waitForSelector(page, '[data-testid="explorer-node-src-screens-explorer-ts"]');
-    await page.click('[data-testid="explorer-node-src-screens-explorer-ts"]');
-    await waitForPageText(page, ValidationText.FileContentMarker);
-    await waitForCondition(async () => {
-      const badge = await page.evaluate(() => {
-        const element = document.querySelector('[data-testid="explorer-language-badge"]');
-        return element?.textContent ?? "";
-      });
-      return badge.includes(ValidationText.LanguageBadge);
-    }, "language badge", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForSelector(page, '[data-token-kind="keyword"]');
-    await waitForSelector(page, '[data-token-kind="string"]');
-    await captureBrowserValidationScreenshot({
-      page,
-      directory: screenshotDirectory,
-      suffix: "after-open",
-      artifactName: "explorer"
-    });
-
-    const compactPage = await browser.newPage();
-    await compactPage.setViewport({
-      width: ValidationConfig.CompactViewportWidth,
-      height: ValidationConfig.CompactViewportHeight
-    });
-    await seedBrowserStorage(compactPage);
-    await compactPage.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ExplorerRoute}`, {
-      waitUntil: "networkidle0"
-    });
-    await waitForCondition(async () => {
-      const sidebarWidth = await compactPage.evaluate(() => {
-        const element = document.querySelector('[data-testid="app-sidebar-shell"]');
-        return element instanceof HTMLElement ? element.getBoundingClientRect().width : null;
-      });
-
-      return sidebarWidth !== null && sidebarWidth <= ValidationConfig.CompactSidebarMaxWidth;
-    }, "compact sidebar rail width", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForSelector(compactPage, '[data-testid="explorer-search-input"]');
-    await compactPage.click('[data-testid="explorer-search-input"]');
-    await compactPage.keyboard.type(ValidationText.SearchValue, {
-      delay: 30
-    });
-    await waitForCondition(async () => {
-      const labels = await compactPage.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
-        elements.map((element) => element.textContent ?? "")
-      );
-
-      return labels.some((label) => label.includes("Explorer.ts"));
-    }, "compact filtered explorer tree", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await compactPage.click('[data-testid="explorer-node-src-screens-explorer-ts"]');
-    await waitForSelector(compactPage, '[data-testid="explorer-compact-toggle-files"]');
-    await waitForCondition(async () => {
-      const treePanel = await compactPage.evaluate(() => {
-        const element = document.querySelector('[data-testid="explorer-tree-panel"]');
-        if (!(element instanceof HTMLElement)) {
-          return null;
-        }
-
-        return window.getComputedStyle(element).display;
-      });
-
-      return treePanel === "none";
-    }, "compact tree hidden after selecting file", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await compactPage.click('[data-testid="explorer-compact-toggle-files"]');
-    await waitForCondition(async () => {
-      const treePanel = await compactPage.evaluate(() => {
-        const element = document.querySelector('[data-testid="explorer-tree-panel"]');
-        if (!(element instanceof HTMLElement)) {
-          return null;
-        }
-
-        return window.getComputedStyle(element).display;
-      });
-
-      return treePanel !== "none";
-    }, "compact tree shown after toggle", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await captureBrowserValidationScreenshot({
-      page: compactPage,
-      directory: screenshotDirectory,
-      suffix: "compact-after-toggle",
-      artifactName: "explorer"
-    });
+    await validateDesktopExplorer(browser);
+    await validateCompactExplorer(browser);
   } finally {
     if (browser) {
       await browser.close();
@@ -346,6 +201,184 @@ async function validateExplorerScreen(): Promise<void> {
   }
 
   console.log("Browser validation passed for the Explorer screen.");
+}
+
+async function validateDesktopExplorer(
+  browser: Awaited<ReturnType<typeof puppeteer.launch>>
+): Promise<void> {
+  const page = await browser.newPage();
+  await page.setViewport({
+    width: ValidationConfig.ViewportWidth,
+    height: ValidationConfig.ViewportHeight
+  });
+  await seedBrowserStorage(page);
+  await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ExplorerRoute}`, {
+    waitUntil: "networkidle0"
+  });
+
+  await waitForPageText(page, ValidationText.ProjectLoaded);
+  await waitForCondition(async () => {
+    const label = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.SidebarProjectLabel);
+    return label.includes(ValidationText.ProjectLoaded);
+  }, "sidebar project label", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    const text = await page.evaluate(() => document.body.textContent ?? "");
+    return !text.includes(ValidationText.RemovedPanelLabel);
+  }, "removed project session panel", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForSelector(page, Selector.ActivityExplorer);
+  await waitForSelector(page, Selector.ActivitySearch);
+  await captureBrowserValidationScreenshot({
+    page,
+    directory: screenshotDirectory,
+    suffix: "desktop-after-load",
+    artifactName: "explorer"
+  });
+
+  await page.click(Selector.ActivitySearch);
+  await waitForSelector(page, Selector.SearchInput);
+  await page.click(Selector.SearchToggleRegex);
+  await waitForSelector(page, Selector.SearchInput);
+  await focusSearchInput(page);
+  await page.keyboard.type(ValidationText.SearchRegexValue, {
+    delay: 30
+  });
+  await delay(ValidationConfig.SearchDebounceWaitMs);
+  await waitForCondition(async () => {
+    const activeTestId = await page.evaluate(() => {
+      const activeElement = document.activeElement;
+      return activeElement instanceof HTMLElement
+        ? activeElement.dataset["testid"] ?? null
+        : null;
+    });
+
+    return activeTestId === Selector.SearchInputTestId;
+  }, "search input retains focus after debounce", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForSelector(page, Selector.SearchResults);
+  await waitForSelector(page, Selector.SearchResultFile);
+  await waitForSelector(page, Selector.SearchResultMatch);
+  await captureBrowserValidationScreenshot({
+    page,
+    directory: screenshotDirectory,
+    suffix: "desktop-search-results",
+    artifactName: "explorer"
+  });
+
+  await page.click(Selector.SearchResultMatch);
+  await waitForPageText(page, ValidationText.FileContentMarker);
+  await waitForCondition(async () => {
+    const badge = await page.evaluate((selector) => {
+      const element = document.querySelector(selector);
+      return element?.textContent ?? "";
+    }, Selector.LanguageBadge);
+    return badge.includes(ValidationText.LanguageBadge);
+  }, "language badge", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForSelector(page, '[data-token-kind="keyword"]');
+  await waitForSelector(page, '[data-token-kind="string"]');
+
+  await page.click(Selector.ActivityExplorer);
+  await waitForSelector(page, Selector.ExpandAll);
+  await page.click(Selector.ExpandAll);
+  await waitForSelector(page, Selector.ExplorerNodeNestedFile);
+  await captureBrowserValidationScreenshot({
+    page,
+    directory: screenshotDirectory,
+    suffix: "desktop-tree-expanded",
+    artifactName: "explorer"
+  });
+  await page.click(Selector.CollapseAll);
+  await waitForSelector(page, Selector.ExplorerNodeSrc);
+  await waitForCondition(async () => {
+    const node = await page.$(Selector.ExplorerNodeNestedFile);
+    return node === null;
+  }, "nested node hidden after collapse all", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+
+  await page.click(Selector.SidebarHide);
+  await waitForCondition(async () => {
+    const panel = await page.$(Selector.SidebarPanel);
+    return panel === null;
+  }, "sidebar panel hidden", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await page.click(Selector.ActivityExplorer);
+  await waitForSelector(page, Selector.SidebarPanel);
+  await captureBrowserValidationScreenshot({
+    page,
+    directory: screenshotDirectory,
+    suffix: "desktop-sidebar-restored",
+    artifactName: "explorer"
+  });
+
+  await page.close();
+}
+
+async function validateCompactExplorer(
+  browser: Awaited<ReturnType<typeof puppeteer.launch>>
+): Promise<void> {
+  const page = await browser.newPage();
+  await page.setViewport({
+    width: ValidationConfig.CompactViewportWidth,
+    height: ValidationConfig.CompactViewportHeight
+  });
+  await seedBrowserStorage(page);
+  await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ExplorerRoute}`, {
+    waitUntil: "networkidle0"
+  });
+
+  await waitForCondition(async () => {
+    const sidebarWidth = await page.evaluate(() => {
+      const element = document.querySelector('[data-testid="app-sidebar-shell"]');
+      return element instanceof HTMLElement ? element.getBoundingClientRect().width : null;
+    });
+
+    return sidebarWidth !== null && sidebarWidth <= ValidationConfig.CompactSidebarMaxWidth;
+  }, "compact sidebar rail width", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+
+  await page.click(Selector.ActivitySearch);
+  await waitForSelector(page, Selector.SearchInput);
+  await page.click(Selector.SearchToggleRegex);
+  await waitForSelector(page, Selector.SearchInput);
+  await focusSearchInput(page);
+  await page.keyboard.type(ValidationText.SearchRegexValue, {
+    delay: 30
+  });
+  await delay(ValidationConfig.SearchDebounceWaitMs);
+  await waitForSelector(page, Selector.SearchResultMatch);
+  await page.click(Selector.SearchResultMatch);
+  await waitForSelector(page, Selector.FileContent);
+  await waitForSelector(page, Selector.CompactExplorer);
+  await page.click(Selector.CompactExplorer);
+  await waitForSelector(page, Selector.SidebarPanel);
+  await waitForSelector(page, Selector.ExplorerNodeSrc);
+  await captureBrowserValidationScreenshot({
+    page,
+    directory: screenshotDirectory,
+    suffix: "compact-panel-restored",
+    artifactName: "explorer"
+  });
+
+  await page.close();
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
@@ -407,6 +440,15 @@ async function waitForSelector(page: Page, selector: string): Promise<void> {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+}
+
+async function focusSearchInput(page: Page): Promise<void> {
+  await page.evaluate((selector) => {
+    const element = document.querySelector(selector);
+    if (element instanceof HTMLInputElement) {
+      element.focus();
+    }
+  }, Selector.SearchInput);
 }
 
 async function startExplorerStubServer(): Promise<ReturnType<typeof createServer>> {
@@ -507,6 +549,13 @@ async function handleExplorerStubRequest(
 
     respondJson(response, 200, {
       content: FixtureFileContent.explorer
+    });
+    return;
+  }
+
+  if (url.pathname === RequestPath.FilesSearch) {
+    respondJson(response, 200, {
+      results: FixtureSearchResults.regex
     });
     return;
   }

@@ -5,7 +5,8 @@ import type { ProjectRecord } from "./workbench-types.js";
 const EndpointPath = {
   ProjectOpen: "/projects/open",
   FilesTree: "/files/tree",
-  FilesRead: "/files/read"
+  FilesRead: "/files/read",
+  FilesSearch: "/files/search"
 } as const;
 
 export const ExplorerFileEntryKind = {
@@ -26,6 +27,23 @@ export type ExplorerFileContentRecord = {
   content: string;
 };
 
+export type ExplorerFileSearchMatchRangeRecord = {
+  start: number;
+  end: number;
+};
+
+export type ExplorerFileSearchMatchRecord = {
+  lineNumber: number;
+  lineText: string;
+  ranges: ReadonlyArray<ExplorerFileSearchMatchRangeRecord>;
+};
+
+export type ExplorerFileSearchResultRecord = {
+  path: string;
+  name: string;
+  matches: ReadonlyArray<ExplorerFileSearchMatchRecord>;
+};
+
 export type ExplorerClient = {
   openProject: (input: {
     rootPath: string;
@@ -39,6 +57,13 @@ export type ExplorerClient = {
     projectId: string;
     path: string;
   }) => Promise<ExplorerFileContentRecord>;
+  searchFiles: (input: {
+    projectId: string;
+    query: string;
+    isRegex?: boolean;
+    matchCase?: boolean;
+    wholeWord?: boolean;
+  }) => Promise<ReadonlyArray<ExplorerFileSearchResultRecord>>;
 };
 
 export const createExplorerClient = (): ExplorerClient => ({
@@ -68,6 +93,18 @@ export const createExplorerClient = (): ExplorerClient => ({
         path: input.path
       },
       parse: parseExplorerFileReadResponse
+    }),
+  searchFiles: (input) =>
+    requestJson({
+      path: EndpointPath.FilesSearch,
+      body: {
+        projectId: input.projectId,
+        query: input.query,
+        ...(input.isRegex ? { isRegex: true } : {}),
+        ...(input.matchCase ? { matchCase: true } : {}),
+        ...(input.wholeWord ? { wholeWord: true } : {})
+      },
+      parse: parseExplorerFileSearchResponse
     })
 });
 
@@ -88,12 +125,72 @@ export const parseExplorerFileReadResponse = (
   };
 };
 
+export const parseExplorerFileSearchResponse = (
+  value: unknown
+): ReadonlyArray<ExplorerFileSearchResultRecord> =>
+  readRequiredArray(value, "explorerFileSearchResponse", "results").map((entry) =>
+    parseExplorerFileSearchResultRecord(
+      ensureRecord(entry, "explorerFileSearchResultRecord")
+    )
+  );
+
 const parseExplorerFileEntryRecord = (
   value: Record<string, unknown>
 ): ExplorerFileEntryRecord => ({
   path: readRequiredString(value, "explorerFileEntryRecord", "path"),
   name: readRequiredString(value, "explorerFileEntryRecord", "name"),
   kind: readExplorerFileEntryKind(value, "explorerFileEntryRecord", "kind")
+});
+
+const parseExplorerFileSearchResultRecord = (
+  value: Record<string, unknown>
+): ExplorerFileSearchResultRecord => ({
+  path: readRequiredString(value, "explorerFileSearchResultRecord", "path"),
+  name: readRequiredString(value, "explorerFileSearchResultRecord", "name"),
+  matches: readRequiredArray(
+    value,
+    "explorerFileSearchResultRecord",
+    "matches"
+  ).map((match) =>
+    parseExplorerFileSearchMatchRecord(
+      ensureRecord(match, "explorerFileSearchMatchRecord")
+    )
+  )
+});
+
+const parseExplorerFileSearchMatchRecord = (
+  value: Record<string, unknown>
+): ExplorerFileSearchMatchRecord => ({
+  lineNumber: readRequiredNumber(
+    value,
+    "explorerFileSearchMatchRecord",
+    "lineNumber"
+  ),
+  lineText: readRequiredString(value, "explorerFileSearchMatchRecord", "lineText"),
+  ranges: readRequiredArray(
+    value,
+    "explorerFileSearchMatchRecord",
+    "ranges"
+  ).map((range) =>
+    parseExplorerFileSearchMatchRangeRecord(
+      ensureRecord(range, "explorerFileSearchMatchRangeRecord")
+    )
+  )
+});
+
+const parseExplorerFileSearchMatchRangeRecord = (
+  value: Record<string, unknown>
+): ExplorerFileSearchMatchRangeRecord => ({
+  start: readRequiredNumber(
+    value,
+    "explorerFileSearchMatchRangeRecord",
+    "start"
+  ),
+  end: readRequiredNumber(
+    value,
+    "explorerFileSearchMatchRangeRecord",
+    "end"
+  )
 });
 
 const readExplorerFileEntryKind = (
@@ -141,6 +238,20 @@ const readRequiredString = (
   const entry = value[key];
 
   if (typeof entry !== "string") {
+    throw new Error(`Invalid ${label}.${key}`);
+  }
+
+  return entry;
+};
+
+const readRequiredNumber = (
+  value: Record<string, unknown>,
+  label: string,
+  key: string
+): number => {
+  const entry = value[key];
+
+  if (typeof entry !== "number" || !Number.isFinite(entry)) {
     throw new Error(`Invalid ${label}.${key}`);
   }
 

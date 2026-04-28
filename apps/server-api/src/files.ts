@@ -10,6 +10,23 @@ export type FileEntry = {
   kind: FileEntryKind;
 };
 
+export type FileSearchMatchRange = {
+  start: number;
+  end: number;
+};
+
+export type FileSearchMatch = {
+  lineNumber: number;
+  lineText: string;
+  ranges: ReadonlyArray<FileSearchMatchRange>;
+};
+
+export type FileSearchResult = {
+  path: string;
+  name: string;
+  matches: ReadonlyArray<FileSearchMatch>;
+};
+
 type FileError = {
   status: number;
   message: string;
@@ -20,6 +37,18 @@ type ResolvedSandboxPath = {
   target: string;
 };
 
+type FileSearchOptions = {
+  query: string;
+  isRegex: boolean;
+  matchCase: boolean;
+  wholeWord: boolean;
+};
+
+type SearchPattern = {
+  expression: RegExp;
+  testExpression: RegExp;
+};
+
 const FsErrorCode = {
   NotFound: "ENOENT",
   PermissionDenied: "EACCES",
@@ -27,6 +56,27 @@ const FsErrorCode = {
   NotDirectory: "ENOTDIR",
   IsDirectory: "EISDIR"
 } as const;
+
+const SearchLimit = {
+  Files: 100,
+  MatchesPerFile: 50
+} as const;
+
+const IgnoredDirectoryName = {
+  Git: ".git",
+  NodeModules: "node_modules",
+  Dist: "dist",
+  Build: "build",
+  Coverage: "coverage"
+} as const;
+
+const IgnoredSearchDirectories = new Set<string>([
+  IgnoredDirectoryName.Git,
+  IgnoredDirectoryName.NodeModules,
+  IgnoredDirectoryName.Dist,
+  IgnoredDirectoryName.Build,
+  IgnoredDirectoryName.Coverage
+]);
 
 export const resolveSandboxPath = (
   rootPath: string,
@@ -90,6 +140,33 @@ export const readFileContent = async (
   try {
     const content = await fs.readFile(resolved.value.target, TextEncoding);
     return ok({ content });
+  } catch (error: unknown) {
+    return err(mapFsError(error));
+  }
+};
+
+export const searchFiles = async (
+  rootPath: string,
+  options: FileSearchOptions
+): Promise<Result<ReadonlyArray<FileSearchResult>, FileError>> => {
+  const resolved = resolveSandboxPath(rootPath, undefined);
+  if (resolved.type === ResultType.Err) {
+    return resolved;
+  }
+
+  const pattern = createSearchPattern(options);
+  if (pattern.type === ResultType.Err) {
+    return err(pattern.error);
+  }
+
+  try {
+    const results = await searchDirectoryEntries(
+      resolved.value.root,
+      resolved.value.root,
+      pattern.value
+    );
+
+    return ok(results);
   } catch (error: unknown) {
     return err(mapFsError(error));
   }
@@ -178,10 +255,133 @@ const toFileEntry = (
   const relativePath = relative(rootPath, targetPath);
   const kind = entry.isDirectory() ? FileEntryKind.Directory : FileEntryKind.File;
   return {
-    path: relativePath,
+    path: normalizeRelativePath(relativePath),
     name: entry.name,
     kind
   };
+};
+
+const searchDirectoryEntries = async (
+  rootPath: string,
+  directoryPath: string,
+  pattern: SearchPattern
+): Promise<ReadonlyArray<FileSearchResult>> => {
+  const entries = sortSearchDirectoryEntries(await fs.readdir(directoryPath, {
+    withFileTypes: true
+  }));
+  const results: FileSearchResult[] = [];
+
+  for (const entry of entries) {
+    if (results.length >= SearchLimit.Files) {
+      break;
+    }
+
+    const targetPath = resolve(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      if (IgnoredSearchDirectories.has(entry.name)) {
+        continue;
+      }
+
+      const childResults = await searchDirectoryEntries(rootPath, targetPath, pattern);
+      results.push(...childResults);
+      continue;
+    }
+
+    const content = await fs.readFile(targetPath, TextEncoding);
+    const matches = findSearchMatches(content, pattern);
+    if (matches.length === 0) {
+      continue;
+    }
+
+    results.push({
+      path: normalizeRelativePath(relative(rootPath, targetPath)),
+      name: entry.name,
+      matches
+    });
+  }
+
+  return results;
+};
+
+const findSearchMatches = (
+  content: string,
+  pattern: SearchPattern
+): ReadonlyArray<FileSearchMatch> => {
+  const lines = content.split(/\r?\n/);
+  const matches: FileSearchMatch[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (!pattern.testExpression.test(line)) {
+      pattern.testExpression.lastIndex = 0;
+      continue;
+    }
+
+    pattern.testExpression.lastIndex = 0;
+    const ranges = readSearchMatchRanges(line, pattern.expression);
+    if (ranges.length === 0) {
+      continue;
+    }
+
+    matches.push({
+      lineNumber: index + 1,
+      lineText: line,
+      ranges
+    });
+
+    if (matches.length >= SearchLimit.MatchesPerFile) {
+      break;
+    }
+  }
+
+  return matches;
+};
+
+const readSearchMatchRanges = (
+  line: string,
+  expression: RegExp
+): ReadonlyArray<FileSearchMatchRange> => {
+  const ranges: FileSearchMatchRange[] = [];
+
+  for (const match of line.matchAll(expression)) {
+    const text = match[0];
+    const start = match.index ?? 0;
+    ranges.push({
+      start,
+      end: start + text.length
+    });
+
+    if (ranges.length >= SearchLimit.MatchesPerFile) {
+      break;
+    }
+
+    if (text.length === 0) {
+      break;
+    }
+  }
+
+  return ranges;
+};
+
+const createSearchPattern = (
+  options: FileSearchOptions
+): Result<SearchPattern, FileError> => {
+  const source = options.isRegex
+    ? options.query
+    : escapeRegExp(options.query);
+  const boundedSource = options.wholeWord ? `\\b(?:${source})\\b` : source;
+  const flags = options.matchCase ? "g" : "gi";
+
+  try {
+    return ok({
+      expression: new RegExp(boundedSource, flags),
+      testExpression: new RegExp(boundedSource, options.matchCase ? "" : "i")
+    });
+  } catch {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidPath
+    });
+  }
 };
 
 const normalizeRootPath = (value: string): string | undefined => {
@@ -192,6 +392,23 @@ const normalizeRootPath = (value: string): string | undefined => {
 
   return resolve(trimmed);
 };
+
+const normalizeRelativePath = (value: string): string =>
+  value.split(sep).join("/");
+
+const sortSearchDirectoryEntries = (
+  entries: ReadonlyArray<Dirent>
+): ReadonlyArray<Dirent> =>
+  [...entries].sort((left, right) => {
+    if (left.isDirectory() !== right.isDirectory()) {
+      return left.isDirectory() ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const isOutsideRoot = (relativePath: string): boolean => {
   if (relativePath.length === 0) {
