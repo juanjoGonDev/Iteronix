@@ -53,11 +53,9 @@ export class DashboardScreen extends Component {
               }, [
                 createElement('span', { className: 'material-symbols-outlined' }, ['folder_open'])
               ]),
-              createElement(StatusBadge, {
-                status: 'success',
-                pulse: false,
-                className: '+2 this week'
-              })
+              createElement('span', {
+                className: 'text-xs font-medium text-emerald-400'
+              }, ['+2 this week'])
             ]),
             createElement('div', { className: 'flex flex-col gap-1' }, [
               createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Total Projects']),
@@ -73,10 +71,9 @@ export class DashboardScreen extends Component {
               }, [
                 createElement('span', { className: 'material-symbols-outlined' }, ['terminal'])
               ]),
-              createElement(StatusBadge, {
-                status: 'info',
-                className: '4 Idle'
-              })
+              createElement('span', {
+                className: 'text-xs font-medium text-text-secondary'
+              }, ['4 idle'])
             ]),
             createElement('div', { className: 'flex flex-col gap-1' }, [
               createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Active Runners']),
@@ -92,10 +89,9 @@ export class DashboardScreen extends Component {
               }, [
                 createElement('span', { className: 'material-symbols-outlined' }, ['api'])
               ]),
-              createElement(StatusBadge, {
-                status: 'success',
-                className: '99.9% Uptime'
-              })
+              createElement('span', {
+                className: 'text-xs font-medium text-emerald-400'
+              }, ['99.9% uptime'])
             ]),
             createElement('div', { className: 'flex flex-col gap-1' }, [
               createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['API Requests']),
@@ -111,10 +107,9 @@ export class DashboardScreen extends Component {
               }, [
                 createElement('span', { className: 'material-symbols-outlined' }, ['payments'])
               ]),
-              createElement(StatusBadge, {
-                status: 'info',
-                className: 'Current cycle'
-              })
+              createElement('span', {
+                className: 'text-xs font-medium text-text-secondary'
+              }, ['Current cycle'])
             ]),
             createElement('div', { className: 'flex flex-col gap-1' }, [
               createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Monthly Cost']),

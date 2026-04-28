@@ -1670,3 +1670,32 @@
   - La validación Playwright fue manual/visual en esta iteración; la cobertura automatizada funcional del screen sigue viniendo del harness `validate:settings`
 - Next:
   - Cerrar gates completos, mantener `Settings` como única tarea activa y esperar feedback del usuario sobre el diseño antes de mover la tarjeta a `Listo`
+### 2026-04-28 23:17 (Europe/Madrid) — Residual Status Chips Cleanup
+
+- Summary: Eliminados los chips vacíos residuales vistos en `Settings` y corregida la causa base en el helper compartido de componentes para que `StatusBadge` reciba correctamente su contenido cuando se instancia con `createElement`.
+- Decisions:
+  - Tratar el problema como bug de infraestructura UI, no sólo de una pantalla: `createElement` debe propagar `children` también al construir componentes
+  - Quitar en `Settings` los badges decorativos que no aportaban información suficiente y sustituirlos por texto simple o por nada
+  - Limpiar el mismo patrón residual en `Overview`, donde varias tarjetas estaban usando `StatusBadge` con `className` en lugar de contenido
+- Changes:
+  - **Updated apps/web-ui/src/shared/Component.ts** y **Component.test.ts**: nuevo test rojo/verde para propagar `children` a componentes y fix mínimo en `createElement`
+  - **Updated apps/web-ui/src/screens/Settings.ts**: eliminados los badges residuales de conteo/sync/runtime en la vista de providers, manteniendo sólo el estado realmente útil
+  - **Updated apps/web-ui/src/screens/Dashboard.ts**: sustituidos badges residuales de métricas por texto simple, evitando chips vacíos tras el fix del helper
+  - **Playwright visual check**: verificado manualmente `/settings` y `/overview` sobre la app viva para confirmar desaparición de chips vacíos y legibilidad del resultado
+  - **Updated PLAN.md** y comentario de Notion en `02. Settings screen end-to-end`: progreso documentado sin cerrar aún la tarea
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - El fix del helper afecta a cualquier componente invocado vía `createElement(Component, props, children)`; por eso se pasaron validaciones maduras de varias pantallas antes de cerrar esta iteración
+  - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque el bug visual ya está corregido
+- Next:
+  - Esperar confirmación visual del usuario sobre `Settings`; si aparece otro detalle de UX, seguir sólo en esta pantalla antes de abrir la siguiente

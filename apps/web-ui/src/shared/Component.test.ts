@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Component } from "./Component.js";
 import { createElement } from "./Component.js";
 
 describe("createElement", () => {
@@ -145,11 +146,54 @@ describe("createElement", () => {
 
     expect(recorded).toContain("listener:scroll");
   });
+
+  it("passes children into component props when using a component tag", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => createFakeElement(recorded),
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement(TestChildComponent, {}, ["visible child"]);
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("text:visible child");
+  });
 });
+
+class TestChildComponent extends Component<{ children?: unknown }> {
+  override render(): HTMLElement {
+    return createElement("div", {}, [this.props.children]);
+  }
+}
 
 const createFakeElement = (recorded: string[]) => ({
   dataset: {} as Record<string, string>,
-  appendChild: (_child: unknown) => undefined,
+  appendChild: (child: unknown) => {
+    const textContent = readNodeTextContent(child);
+    if (textContent !== null) {
+      recorded.push(`text:${textContent}`);
+    }
+    return undefined;
+  },
   addEventListener: (eventName: string, _listener: EventListener) => {
     recorded.push(`listener:${eventName}`);
   },
@@ -158,3 +202,12 @@ const createFakeElement = (recorded: string[]) => ({
   },
   style: {} as CSSStyleDeclaration
 });
+
+const readNodeTextContent = (value: unknown): string | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const node = value as { textContent?: unknown };
+  return typeof node.textContent === "string" ? node.textContent : null;
+};

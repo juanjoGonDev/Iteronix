@@ -71,8 +71,11 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
   let element: HTMLElement;
 
   if (typeof tag === 'function') {
-    // Create component instance
-    const component = new tag(attributes);
+    const componentAttributes = { ...attributes } as TProps & { children?: unknown };
+    if (componentAttributes.children === undefined && children.length > 0) {
+      componentAttributes.children = children.length === 1 ? children[0] : children;
+    }
+    const component = new tag(componentAttributes);
     const rendered = component.render();
     component.element = rendered;
     return rendered;

@@ -293,7 +293,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
               "Create multiple reusable provider profiles. Workflows will choose among them later instead of activating a single global provider here."
             ])
           ]),
-        createElement(StatusBadge, { status: "info" }, [`${this.state.providerProfiles.length} configured`])
         ]),
         this.renderAddProfileButtons(),
         createElement("div", { className: "flex flex-col gap-2" }, [
@@ -357,9 +356,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             `${ProviderKindLabel[profile.providerKind]}${profile.modelId ? ` · ${profile.modelId}` : ""}`
           ])
         ]),
-        createElement(StatusBadge, {
-          status: profile.providerKind === ProviderKind.CodexCli ? "success" : "info"
-        }, [profile.providerKind === ProviderKind.CodexCli ? "syncable" : "local"]),
         createElement(Button, {
           variant: "ghost",
           size: "sm",
@@ -387,13 +383,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             ProviderKindDescription[profile.providerKind]
           ])
         ]),
-        createElement("div", { className: "flex items-center gap-2" }, [
-          createElement(StatusBadge, {
-            status: runtimeAvailable ? "success" : "warning"
-          }, [runtimeAvailable ? "runtime available" : "local only"]),
-          profile.providerKind === ProviderKind.CodexCli && this.state.currentProject
-            ? createElement(StatusBadge, { status: "info" }, ["sync on save"])
-            : ""
+        createElement("div", { className: "text-xs font-medium uppercase tracking-[0.16em] text-slate-500" }, [
+          runtimeAvailable ? "Runtime available" : "Local profile"
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
