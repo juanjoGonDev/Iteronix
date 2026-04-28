@@ -26,7 +26,10 @@ const ValidationConfig = {
   UiPollingIntervalMs: 200,
   SearchDebounceWaitMs: 260,
   ViewportWidth: 1440,
-  ViewportHeight: 1600
+  ViewportHeight: 1600,
+  CompactViewportWidth: 390,
+  CompactViewportHeight: 844,
+  CompactSidebarMaxWidth: 96
 } as const;
 
 const RequestPath = {
@@ -256,6 +259,81 @@ async function validateExplorerScreen(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "after-open",
+      artifactName: "explorer"
+    });
+
+    const compactPage = await browser.newPage();
+    await compactPage.setViewport({
+      width: ValidationConfig.CompactViewportWidth,
+      height: ValidationConfig.CompactViewportHeight
+    });
+    await seedBrowserStorage(compactPage);
+    await compactPage.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ExplorerRoute}`, {
+      waitUntil: "networkidle0"
+    });
+    await waitForCondition(async () => {
+      const sidebarWidth = await compactPage.evaluate(() => {
+        const element = document.querySelector('[data-testid="app-sidebar-shell"]');
+        return element instanceof HTMLElement ? element.getBoundingClientRect().width : null;
+      });
+
+      return sidebarWidth !== null && sidebarWidth <= ValidationConfig.CompactSidebarMaxWidth;
+    }, "compact sidebar rail width", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await waitForSelector(compactPage, '[data-testid="explorer-search-input"]');
+    await compactPage.click('[data-testid="explorer-search-input"]');
+    await compactPage.keyboard.type(ValidationText.SearchValue, {
+      delay: 30
+    });
+    await waitForCondition(async () => {
+      const labels = await compactPage.$$eval('button[data-testid^="explorer-node-"]', (elements) =>
+        elements.map((element) => element.textContent ?? "")
+      );
+
+      return labels.some((label) => label.includes("Explorer.ts"));
+    }, "compact filtered explorer tree", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await compactPage.click('[data-testid="explorer-node-src-screens-explorer-ts"]');
+    await waitForSelector(compactPage, '[data-testid="explorer-compact-toggle-files"]');
+    await waitForCondition(async () => {
+      const treePanel = await compactPage.evaluate(() => {
+        const element = document.querySelector('[data-testid="explorer-tree-panel"]');
+        if (!(element instanceof HTMLElement)) {
+          return null;
+        }
+
+        return window.getComputedStyle(element).display;
+      });
+
+      return treePanel === "none";
+    }, "compact tree hidden after selecting file", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await compactPage.click('[data-testid="explorer-compact-toggle-files"]');
+    await waitForCondition(async () => {
+      const treePanel = await compactPage.evaluate(() => {
+        const element = document.querySelector('[data-testid="explorer-tree-panel"]');
+        if (!(element instanceof HTMLElement)) {
+          return null;
+        }
+
+        return window.getComputedStyle(element).display;
+      });
+
+      return treePanel !== "none";
+    }, "compact tree shown after toggle", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await captureBrowserValidationScreenshot({
+      page: compactPage,
+      directory: screenshotDirectory,
+      suffix: "compact-after-toggle",
       artifactName: "explorer"
     });
   } finally {

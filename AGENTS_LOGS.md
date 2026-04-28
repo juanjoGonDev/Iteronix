@@ -1383,3 +1383,26 @@
   - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la UX real ya es correcta
 - Next:
   - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+### 2026-04-28 11:09 (Europe/Madrid) — Explorer Responsive Shell Refinement
+
+- Summary: Ajustado el `Explorer` para viewport estrecho y corregido el componente compartido que impedía validar los toggles compactos; la vista móvil ahora usa rail lateral colapsado y workspace integrado.
+- Decisions:
+  - Mantener `Explorer` como única tarea activa y dejar la tarjeta de Notion `01. Explorer screen end-to-end` en `En progreso` hasta validación explícita del usuario
+  - No intentar incrustar VS Code completo en este paso: primero estabilizar el shell responsive y el flujo real del Explorer
+  - Hacer obligatoria la nota de responsive en todas las tareas del tablero de Notion y dejarlo reflejado también en `PLAN.md`
+- Changes:
+  - **Added apps/web-ui/src/components/Button.test.ts**: contrato para asegurar que `Button` reenvía atributos como `data-testid`
+  - **Updated apps/web-ui/src/components/Button.ts**: `Button` e `IconButton` ya propagan atributos adicionales al nodo nativo
+  - **Updated apps/web-ui/src/shared/constants.ts**, **apps/web-ui/src/shared/tokens.ts**, **apps/web-ui/src/components/Layout.ts** y **apps/web-ui/src/index.ts**: el shell ahora detecta viewport compacto, colapsa la sidebar a un rail estrecho y simplifica el header
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: layout compacto integrado, sin bloque introductorio en móvil, con árbol y preview conmutables tipo workbench
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: validación browser ampliada para exigir rail compacto y flujo files/editor en viewport estrecho
+  - **Updated PLAN.md** y comentario en Notion: progreso responsive registrado sin cerrar la tarea
+- Commands:
+  - `pnpm test -- --run apps/web-ui/src/components/Button.test.ts`
+  - `pnpm -C apps/web-ui build`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El shell responsive base ya mejora Explorer, pero otras pantallas siguen necesitando su propio cierre responsive cuando les toque como tarea activa
+  - La investigación sobre incrustar Monaco o APIs de VS Code debe apoyarse en fuentes oficiales y no debe romper el requisito de responsive
+- Next:
+  - Pasar gates completos del repo, validar visualmente el Explorer con el usuario y decidir después si la siguiente mejora del workbench es shell compartido o salto a `Settings`

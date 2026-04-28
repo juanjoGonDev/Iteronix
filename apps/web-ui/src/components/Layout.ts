@@ -129,25 +129,22 @@ export class MainLayout extends Component<MainLayoutProps> {
     } = this.props;
 
       return createElement('div', { className: `w-full h-full flex` }, [
-      // Sidebar
       sidebar && createElement('aside', {
-        className: sidebarCollapsed ? css.layout.sidebarCollapsed : css.layout.sidebar
+        className: sidebarCollapsed ? css.layout.sidebarCollapsed : css.layout.sidebar,
+        'data-testid': 'app-sidebar-shell'
       }, [
         typeof sidebar === 'function' ? sidebar : sidebar
       ]),
 
-      // Main Content
       createElement('main', {
         className: `${css.layout.main} ${className}`
       }, [
-        // Header
         header && createElement('div', {
           className: 'h-16 flex-shrink-0'
         }, [
           typeof header === 'function' ? (header as (() => unknown))() : header
         ]),
 
-        // Page Content
         createElement('div', {
           className: 'flex-1 overflow-y-auto scrollbar-hide'
         }, [children])

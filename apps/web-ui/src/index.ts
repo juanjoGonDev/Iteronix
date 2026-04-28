@@ -1,7 +1,7 @@
 import { Component, createElement, type ComponentProps } from "./shared/Component.js";
 import { MainLayout, Header } from "./components/Layout.js";
 import { Sidebar } from "./components/Navigation.js";
-import { APP_VERSION, ROUTES } from "./shared/constants.js";
+import { APP_VERSION, COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "./shared/constants.js";
 import { router } from "./shared/Router.js";
 import { installClientLogForwarder } from "./shared/logger-impl.js";
 import {
@@ -46,6 +46,7 @@ interface AppState {
   currentScreen: ScreenId;
   sidebarCollapsed: boolean;
   projectSession: ProjectSessionState;
+  isCompactViewport: boolean;
 }
 
 interface AppProps extends ComponentProps {
@@ -56,8 +57,9 @@ export class App extends Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props, {
       currentScreen: ScreenId.Overview,
-      sidebarCollapsed: false,
-      projectSession: readProjectSession()
+      sidebarCollapsed: readIsCompactViewport(),
+      projectSession: readProjectSession(),
+      isCompactViewport: readIsCompactViewport()
     });
 
     installClientLogForwarder();
@@ -105,10 +107,12 @@ export class App extends Component<AppProps, AppState> {
 
   override onMount(): void {
     window.addEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
+    window.addEventListener("resize", this.handleViewportResize);
   }
 
   override onUnmount(): void {
     window.removeEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
+    window.removeEventListener("resize", this.handleViewportResize);
   }
 
   private setupRouter(): void {
@@ -166,18 +170,24 @@ export class App extends Component<AppProps, AppState> {
   }
 
   private renderHeader(): HTMLElement {
-    const actions = buildHeaderActions(this.state.currentScreen);
+    const actions = buildHeaderActions(this.state.currentScreen, this.state.isCompactViewport);
 
     return createElement(Header, {
-      title: this.state.currentScreen === ScreenId.Overview ? null : ScreenLabel[this.state.currentScreen],
+      title:
+        this.state.currentScreen === ScreenId.Overview || this.state.isCompactViewport
+          ? null
+          : ScreenLabel[this.state.currentScreen],
       breadcrumbs:
         this.state.currentScreen === ScreenId.Overview
           ? []
-          : [
-              { label: "Iteronix", href: ROUTES.OVERVIEW },
-              { label: ScreenLabel[this.state.currentScreen] }
-            ],
-      actions
+          : this.state.isCompactViewport
+            ? [{ label: ScreenLabel[this.state.currentScreen] }]
+            : [
+                { label: "Iteronix", href: ROUTES.OVERVIEW },
+                { label: ScreenLabel[this.state.currentScreen] }
+              ],
+      actions,
+      className: this.state.isCompactViewport ? "px-3" : ""
     });
   }
 
@@ -236,6 +246,18 @@ export class App extends Component<AppProps, AppState> {
       projectSession: nextSession
     });
   };
+
+  private readonly handleViewportResize = (): void => {
+    const isCompactViewport = readIsCompactViewport();
+    if (isCompactViewport === this.state.isCompactViewport) {
+      return;
+    }
+
+    this.setState({
+      isCompactViewport,
+      sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed
+    });
+  };
 }
 
 const renderPlaceholderScreen = (input: {
@@ -253,7 +275,10 @@ const renderPlaceholderScreen = (input: {
     ])
   ]);
 
-const buildHeaderActions = (screen: ScreenId): {
+const buildHeaderActions = (
+  screen: ScreenId,
+  isCompactViewport: boolean
+): {
   notifications: {
     unread: number;
     onClick: () => void;
@@ -289,7 +314,7 @@ const buildHeaderActions = (screen: ScreenId): {
     }
   };
 
-  if (screen === ScreenId.Overview) {
+  if (screen === ScreenId.Overview && !isCompactViewport) {
     actions.status = {
       api: "API online",
       runners: "workbench ready"
@@ -303,6 +328,9 @@ const buildHeaderActions = (screen: ScreenId): {
 
   return actions;
 };
+
+const readIsCompactViewport = (): boolean =>
+  typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
 
 document.addEventListener("DOMContentLoaded", () => {
   const loadingScreen = document.getElementById("loading-screen");

@@ -1,7 +1,7 @@
 import { Button } from "../components/Button.js";
 import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
 import { Component, createElement, type ComponentProps } from "../shared/Component.js";
-import { ROUTES } from "../shared/constants.js";
+import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
 import {
   createExplorerClient,
   ExplorerFileEntryKind
@@ -33,8 +33,18 @@ const ExplorerPendingAction = {
 type ExplorerPendingAction =
   typeof ExplorerPendingAction[keyof typeof ExplorerPendingAction];
 
+const ExplorerPanel = {
+  Tree: "tree",
+  Preview: "preview"
+} as const;
+
+type ExplorerPanel = typeof ExplorerPanel[keyof typeof ExplorerPanel];
+
 const ExplorerSelector = {
-  SearchInputTestId: "explorer-search-input"
+  SearchInputTestId: "explorer-search-input",
+  TreePanelTestId: "explorer-tree-panel",
+  CompactFilesToggleTestId: "explorer-compact-toggle-files",
+  CompactPreviewToggleTestId: "explorer-compact-toggle-preview"
 } as const;
 
 const SearchDebounceMs = 320;
@@ -51,6 +61,8 @@ interface ExplorerState {
   activePath: string | null;
   errorMessage: string | null;
   noticeMessage: string | null;
+  isCompactViewport: boolean;
+  compactPanel: ExplorerPanel;
 }
 
 interface ExplorerProps extends ComponentProps {
@@ -79,7 +91,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       pendingAction: null,
       activePath: null,
       errorMessage: null,
-      noticeMessage: null
+      noticeMessage: null,
+      isCompactViewport: readIsCompactViewport(),
+      compactPanel: ExplorerPanel.Tree
     });
 
     if (session.projectRootPath.length > 0) {
@@ -103,14 +117,18 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     );
 
     return createElement("div", {
-      className: `mx-auto flex w-full max-w-[1580px] flex-col gap-6 p-6 ${this.props.className ?? ""}`
+      className: this.state.isCompactViewport
+        ? `flex h-full w-full flex-col gap-0 ${this.props.className ?? ""}`
+        : `mx-auto flex w-full max-w-[1580px] flex-col gap-6 p-6 ${this.props.className ?? ""}`
     }, [
-      createElement("div", { className: "flex flex-col gap-2" }, [
-        createElement("h1", { className: "text-3xl font-semibold text-white" }, ["Explorer"]),
-        createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [
-          "Browse the active workspace through the server sandbox from a single integrated view."
-        ])
-      ]),
+      this.state.isCompactViewport
+        ? ""
+        : createElement("div", { className: "flex flex-col gap-2" }, [
+            createElement("h1", { className: "text-3xl font-semibold text-white" }, ["Explorer"]),
+            createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [
+              "Browse the active workspace through the server sandbox from a single integrated view."
+            ])
+          ]),
       this.renderMessages(),
       this.renderWorkspace(visibleNodes, selectedNode)
     ]);
@@ -118,6 +136,11 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   override onUnmount(): void {
     this.clearSearchDebounce();
+    window.removeEventListener("resize", this.handleViewportResize);
+  }
+
+  override onMount(): void {
+    window.addEventListener("resize", this.handleViewportResize);
   }
 
   private renderMessages(): HTMLElement {
@@ -146,17 +169,31 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     selectedNode: ExplorerTreeNode | null
   ): HTMLElement {
     return createElement("div", {
-      className: "grid min-h-[820px] overflow-hidden rounded-2xl border border-border-dark bg-surface-dark shadow-[0_30px_80px_rgba(6,10,16,0.32)] xl:grid-cols-[360px_minmax(0,1fr)]",
+      className: `grid overflow-hidden border border-border-dark bg-surface-dark ${
+        this.state.isCompactViewport
+          ? "grid-cols-1 border-x-0 border-b-0 shadow-none"
+          : "min-h-[820px] rounded-2xl shadow-[0_30px_80px_rgba(6,10,16,0.32)] xl:grid-cols-[360px_minmax(0,1fr)]"
+      }`,
+      style: this.state.isCompactViewport ? "min-height: calc(100vh - 64px);" : undefined,
       "data-testid": "explorer-workspace"
     }, [
       createElement("aside", {
-        className: "flex min-h-0 flex-col border-r border-border-dark bg-[#171c23]"
+        className: readWorkspacePanelClassName({
+          isCompactViewport: this.state.isCompactViewport,
+          visible: !this.state.isCompactViewport || this.state.compactPanel === ExplorerPanel.Tree,
+          baseClassName: "flex min-h-0 flex-col border-r border-border-dark bg-[#171c23]"
+        }),
+        "data-testid": ExplorerSelector.TreePanelTestId
       }, [
         this.renderWorkspaceSidebarHeader(),
         this.renderTreeRegion(visibleNodes)
       ]),
       createElement("section", {
-        className: "flex min-h-0 flex-col bg-[#0f141b]"
+        className: readWorkspacePanelClassName({
+          isCompactViewport: this.state.isCompactViewport,
+          visible: !this.state.isCompactViewport || this.state.compactPanel === ExplorerPanel.Preview,
+          baseClassName: "flex min-h-0 flex-col bg-[#0f141b]"
+        })
       }, [
         this.renderPreviewRegion(selectedNode)
       ])
@@ -167,22 +204,27 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     const hasProject = this.state.currentProject !== null;
     const projectLabel = this.state.currentProject?.name ?? "No project selected";
     const projectPath = this.state.currentProject?.rootPath ?? "Use the global selector in the sidebar or open a project from Projects.";
+    const canShowPreview = this.state.selectedFilePath !== null && this.state.isCompactViewport;
 
     return createElement("div", {
-      className: "flex flex-col gap-4 border-b border-border-dark px-4 py-4"
+      className: this.state.isCompactViewport
+        ? "flex flex-col gap-3 border-b border-border-dark px-3 py-3"
+        : "flex flex-col gap-4 border-b border-border-dark px-4 py-4"
     }, [
       createElement("div", { className: "flex items-start justify-between gap-3" }, [
         createElement("div", { className: "min-w-0 flex-1" }, [
           createElement("p", {
             className: "text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary"
-          }, ["Workspace explorer"]),
+          }, [this.state.isCompactViewport ? "Explorer" : "Workspace explorer"]),
           createElement("p", {
             className: "mt-2 truncate text-sm font-semibold text-white",
             "data-testid": "explorer-project-name"
           }, [projectLabel]),
-          createElement("p", {
-            className: "mt-1 truncate text-xs text-text-secondary"
-          }, [projectPath])
+          this.state.isCompactViewport
+            ? ""
+            : createElement("p", {
+                className: "mt-1 truncate text-xs text-text-secondary"
+              }, [projectPath])
         ]),
         createElement(Button, {
           variant: "secondary",
@@ -210,7 +252,17 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           className: "h-11 rounded-xl border border-border-dark bg-[#0f141b] px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
           onInput: (event: Event) => this.handleSearchInput(readSearchInputState(event))
         })
-      ])
+      ]),
+      canShowPreview
+        ? createElement(Button, {
+            variant: "ghost",
+            size: "sm",
+            className: "self-start",
+            "data-testid": ExplorerSelector.CompactPreviewToggleTestId,
+            onClick: () => this.setState({ compactPanel: ExplorerPanel.Preview }),
+            children: "Show editor"
+          })
+        : ""
     ]);
   }
 
@@ -247,7 +299,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       className: "flex min-h-0 flex-1 flex-col"
     }, [
       createElement("div", {
-        className: "border-b border-border-dark px-4 py-3"
+        className: this.state.isCompactViewport
+          ? "border-b border-border-dark px-3 py-3"
+          : "border-b border-border-dark px-4 py-3"
       }, [
         createElement("p", {
           className: "text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary"
@@ -366,8 +420,20 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       className: "flex min-h-0 flex-1 flex-col"
     }, [
       createElement("div", {
-        className: "flex items-center gap-3 border-b border-border-dark bg-[#11161e] px-5 py-4"
+        className: this.state.isCompactViewport
+          ? "flex items-center gap-3 border-b border-border-dark bg-[#11161e] px-3 py-3"
+          : "flex items-center gap-3 border-b border-border-dark bg-[#11161e] px-5 py-4"
       }, [
+        this.state.isCompactViewport
+          ? createElement(Button, {
+              variant: "ghost",
+              size: "sm",
+              className: "shrink-0",
+              "data-testid": ExplorerSelector.CompactFilesToggleTestId,
+              onClick: () => this.setState({ compactPanel: ExplorerPanel.Tree }),
+              children: "Files"
+            })
+          : "",
         createElement("span", {
           className: `material-symbols-outlined text-[18px] ${theme.accentClassName}`
         }, [readExplorerFileIcon(selectedNode.path)]),
@@ -390,7 +456,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         }, ["Read only"])
       ]),
       createElement("div", {
-        className: "border-b border-border-dark bg-[#0d1219] px-5 py-3 text-sm text-text-secondary"
+        className: this.state.isCompactViewport
+          ? "border-b border-border-dark bg-[#0d1219] px-3 py-3 text-sm text-text-secondary"
+          : "border-b border-border-dark bg-[#0d1219] px-5 py-3 text-sm text-text-secondary"
       }, [
         "Editing is intentionally disabled in this slice. Explorer is focused on repository browsing and inspection."
       ]),
@@ -710,7 +778,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         pendingAction: null,
         activePath: null,
         errorMessage: null,
-        noticeMessage: null
+        noticeMessage: null,
+        compactPanel: this.state.isCompactViewport
+          ? ExplorerPanel.Preview
+          : this.state.compactPanel
       });
     } catch (error: unknown) {
       this.setState({
@@ -747,6 +818,22 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.searchDebounceId = null;
     }
   }
+
+  private readonly handleViewportResize = (): void => {
+    const isCompactViewport = readIsCompactViewport();
+    if (isCompactViewport === this.state.isCompactViewport) {
+      return;
+    }
+
+    this.setState({
+      isCompactViewport,
+      compactPanel: isCompactViewport
+        ? this.state.selectedFilePath
+          ? ExplorerPanel.Preview
+          : ExplorerPanel.Tree
+        : this.state.compactPanel
+    });
+  };
 
   private isSearchInputFocused(): boolean {
     const activeElement = document.activeElement;
@@ -838,3 +925,18 @@ const readErrorMessage = (error: unknown, fallback: string): string => {
 
 const toTestIdSegment = (path: string): string =>
   path.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
+
+const readWorkspacePanelClassName = (input: {
+  isCompactViewport: boolean;
+  visible: boolean;
+  baseClassName: string;
+}): string => {
+  if (!input.isCompactViewport) {
+    return input.baseClassName;
+  }
+
+  return `${input.baseClassName} ${input.visible ? "flex" : "hidden"}`;
+};
+
+const readIsCompactViewport = (): boolean =>
+  typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;

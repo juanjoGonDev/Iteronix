@@ -33,7 +33,8 @@ export class Button extends Component<ButtonProps> {
       disabled = false,
       onClick,
       type = 'button',
-      className = ''
+      className = '',
+      ...restProps
     } = this.props;
 
     const baseClasses = 'font-medium rounded-lg transition-all inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/50';
@@ -56,6 +57,7 @@ export class Button extends Component<ButtonProps> {
     ].filter(Boolean) as (string | HTMLElement)[];
 
     return createElement('button', {
+      ...restProps,
       type,
       className: finalClasses,
       disabled,
@@ -71,10 +73,12 @@ export class IconButton extends Component<IconButtonProps> {
       tooltip = null,
       disabled = false,
       onClick,
-      className = ''
+      className = '',
+      ...restProps
     } = this.props;
 
     return createElement('button', {
+      ...restProps,
       className: `${css.button.icon} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`,
       disabled,
       onClick: onClick ? (e: Event) => onClick(e as MouseEvent) : undefined,
