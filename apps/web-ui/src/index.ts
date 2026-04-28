@@ -53,7 +53,12 @@ interface AppProps extends ComponentProps {
   [key: string]: unknown;
 }
 
+const ScreenHostTestId = "app-screen-host";
+
 export class App extends Component<AppProps, AppState> {
+  private activeScreenInstance: Component<ComponentProps, unknown> | null = null;
+  private activeScreenId: ScreenId | null = null;
+
   constructor(props: AppProps) {
     super(props, {
       currentScreen: ScreenId.Overview,
@@ -68,6 +73,13 @@ export class App extends Component<AppProps, AppState> {
     console.info("Application started", {
       version: APP_VERSION,
       screen: ScreenId.Overview
+    });
+  }
+
+  override setState(newState: Partial<AppState>): void {
+    super.setState(newState);
+    requestAnimationFrame(() => {
+      this.mountActiveScreenInstance();
     });
   }
 
@@ -108,11 +120,15 @@ export class App extends Component<AppProps, AppState> {
   override onMount(): void {
     window.addEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
     window.addEventListener("resize", this.handleViewportResize);
+    this.mountActiveScreenInstance();
   }
 
   override onUnmount(): void {
     window.removeEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
     window.removeEventListener("resize", this.handleViewportResize);
+    this.activeScreenInstance?.unmount();
+    this.activeScreenInstance = null;
+    this.activeScreenId = null;
   }
 
   private setupRouter(): void {
@@ -192,37 +208,9 @@ export class App extends Component<AppProps, AppState> {
   }
 
   private renderCurrentScreen(): HTMLElement {
-    if (this.state.currentScreen === ScreenId.Overview) {
-      return createElement(DashboardScreen, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.Explorer) {
-      return createElement(Explorer, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.Kanban) {
-      return createElement(KanbanBoard, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.Workflows) {
-      return createElement(WorkflowsScreen, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.History) {
-      return createElement(HistoryScreen, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.Settings) {
-      return createElement(SettingsScreen, {});
-    }
-
-    if (this.state.currentScreen === ScreenId.Projects) {
-      return createElement(ProjectsScreen, {});
-    }
-
-    return renderPlaceholderScreen({
-      title: "Unavailable screen",
-      description: `The route for ${this.state.currentScreen} is not wired yet.`
+    return createElement("div", {
+      className: "h-full w-full",
+      "data-testid": ScreenHostTestId
     });
   }
 
@@ -258,22 +246,94 @@ export class App extends Component<AppProps, AppState> {
       sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed
     });
   };
+
+  private mountActiveScreenInstance(): void {
+    const screenHost = this.element?.querySelector(
+      `[data-testid="${ScreenHostTestId}"]`
+    );
+    if (!(screenHost instanceof HTMLElement)) {
+      return;
+    }
+
+    if (this.activeScreenId !== this.state.currentScreen) {
+      this.activeScreenInstance?.unmount();
+      this.activeScreenInstance = this.createScreenInstance(this.state.currentScreen);
+      this.activeScreenId = this.state.currentScreen;
+      screenHost.replaceChildren();
+      this.activeScreenInstance.mount(screenHost);
+      return;
+    }
+
+    if (this.activeScreenInstance?.element instanceof HTMLElement) {
+      if (this.activeScreenInstance.element.parentElement !== screenHost) {
+        screenHost.replaceChildren(this.activeScreenInstance.element);
+      }
+      return;
+    }
+
+    if (this.activeScreenInstance) {
+      screenHost.replaceChildren();
+      this.activeScreenInstance.mount(screenHost);
+    }
+  }
+
+  private createScreenInstance(screen: ScreenId): Component<ComponentProps, unknown> {
+    if (screen === ScreenId.Overview) {
+      return new DashboardScreen({});
+    }
+
+    if (screen === ScreenId.Explorer) {
+      return new Explorer({});
+    }
+
+    if (screen === ScreenId.Kanban) {
+      return new KanbanBoard({});
+    }
+
+    if (screen === ScreenId.Workflows) {
+      return new WorkflowsScreen({});
+    }
+
+    if (screen === ScreenId.History) {
+      return new HistoryScreen({});
+    }
+
+    if (screen === ScreenId.Settings) {
+      return new SettingsScreen({});
+    }
+
+    if (screen === ScreenId.Projects) {
+      return new ProjectsScreen({});
+    }
+
+    return new PlaceholderScreen({
+      title: "Unavailable screen",
+      description: `The route for ${screen} is not wired yet.`
+    });
+  }
 }
 
-const renderPlaceholderScreen = (input: {
+interface PlaceholderScreenProps extends ComponentProps {
   title: string;
   description: string;
-}): HTMLElement =>
-  createElement("div", {
-    className: "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8"
-  }, [
-    createElement("div", {
-      className: "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left"
+}
+
+class PlaceholderScreen extends Component<PlaceholderScreenProps> {
+  override render(): HTMLElement {
+    return createElement("div", {
+      className: "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8"
     }, [
-      createElement("h1", { className: "text-2xl font-semibold text-white" }, [input.title]),
-      createElement("p", { className: "mt-3 max-w-xl text-sm leading-6 text-text-secondary" }, [input.description])
-    ])
-  ]);
+      createElement("div", {
+        className: "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left"
+      }, [
+        createElement("h1", { className: "text-2xl font-semibold text-white" }, [this.props.title]),
+        createElement("p", { className: "mt-3 max-w-xl text-sm leading-6 text-text-secondary" }, [
+          this.props.description
+        ])
+      ])
+    ]);
+  }
+}
 
 const buildHeaderActions = (
   screen: ScreenId,

@@ -585,6 +585,8 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Recursive search discovery fix completed on `2026-04-27`: searching now loads undiscovered nested directories before filtering so matches are not limited to folders already opened manually
   - Responsive shell refinement completed on `2026-04-28`: the shared `Button` now forwards data attributes, the app shell auto-collapses to a compact rail on narrow viewports, and `Explorer` renders an integrated responsive workbench with file/editor toggles validated in browser automation
   - VS Code-like workbench refinement completed on `2026-04-28`: `Explorer` now splits `Explorer` and `Search` into separate activity panels, hides/restores the workbench sidebar, supports expand-all/collapse-all for the file tree, and runs server-backed content search through `/files/search` with debounce, regex, case-match and whole-word toggles; repository search ignores `.git`, `node_modules`, `dist`, `build`, and `coverage` for deterministic performance
+  - Editor workflow refinement completed on `2026-04-28`: `Explorer` now supports multiple open tabs, pinning, tab context actions (`close`, `close left`, `close right`, `close all`), persisted open files per workspace, and exact line reveal from search results with temporary visual highlighting
+  - Shell decoupling fix completed on `2026-04-28`: collapsing the global app sidebar no longer remounts the active Explorer screen, so the internal Explorer/Search panel state is independent from the main navigation shell
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts

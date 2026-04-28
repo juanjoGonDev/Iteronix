@@ -2,14 +2,21 @@ import { describe, expect, it } from "vitest";
 import type { ExplorerFileEntryRecord } from "../shared/explorer-client.js";
 import {
   buildExplorerTreeNodes,
+  closeAllExplorerOpenFiles,
+  closeExplorerFileTabsToLeft,
+  closeExplorerFileTabsToRight,
+  closeExplorerOpenFile,
   filterExplorerTreeNodes,
   flattenExplorerTreeNodes,
   highlightExplorerFileContent,
+  openExplorerFile,
+  resolveNextExplorerActiveFilePath,
   readExplorerFileIcon,
   mergeExplorerDirectoryChildren,
   readExplorerFileLanguage,
   readExplorerLanguageTheme,
   readExplorerTokenClassName,
+  setExplorerFilePinned,
   setExplorerDirectoryExpanded,
   setExplorerTreeExpansion,
   toggleExplorerDirectory
@@ -230,5 +237,66 @@ describe("explorer state helpers", () => {
     expect(readExplorerTokenClassName("keyword")).toBe("text-sky-300");
     expect(readExplorerTokenClassName("property")).toBe("text-rose-300");
     expect(readExplorerTokenClassName("string")).toBe("text-emerald-300");
+  });
+
+  it("manages open editor tabs, pinning and directional closing deterministically", () => {
+    const opened = openExplorerFile(
+      openExplorerFile(
+        openExplorerFile([], "README.md"),
+        "src/index.ts"
+      ),
+      "src/screens/Explorer.ts"
+    );
+    const pinned = setExplorerFilePinned(opened, "README.md", true);
+    const closedRight = closeExplorerFileTabsToRight(pinned, "README.md");
+    const closedLeft = closeExplorerFileTabsToLeft(pinned, "src/screens/Explorer.ts");
+    const removed = closeExplorerOpenFile(pinned, "src/index.ts");
+
+    expect(opened).toEqual([
+      { path: "README.md", pinned: false },
+      { path: "src/index.ts", pinned: false },
+      { path: "src/screens/Explorer.ts", pinned: false }
+    ]);
+    expect(pinned).toEqual([
+      { path: "README.md", pinned: true },
+      { path: "src/index.ts", pinned: false },
+      { path: "src/screens/Explorer.ts", pinned: false }
+    ]);
+    expect(closedRight).toEqual([
+      { path: "README.md", pinned: true }
+    ]);
+    expect(closedLeft).toEqual([
+      { path: "src/screens/Explorer.ts", pinned: false }
+    ]);
+    expect(removed).toEqual([
+      { path: "README.md", pinned: true },
+      { path: "src/screens/Explorer.ts", pinned: false }
+    ]);
+    expect(closeAllExplorerOpenFiles(pinned)).toEqual([]);
+  });
+
+  it("resolves the next active tab after closing or restoring persisted tabs", () => {
+    const openFiles = [
+      { path: "README.md", pinned: true },
+      { path: "src/index.ts", pinned: false },
+      { path: "src/screens/Explorer.ts", pinned: false }
+    ] as const;
+
+    expect(
+      resolveNextExplorerActiveFilePath(openFiles, null, "src/index.ts")
+    ).toBe("src/index.ts");
+    expect(
+      resolveNextExplorerActiveFilePath(
+        closeExplorerOpenFile(openFiles, "src/index.ts"),
+        "src/index.ts"
+      )
+    ).toBe("src/screens/Explorer.ts");
+    expect(
+      resolveNextExplorerActiveFilePath(
+        closeExplorerOpenFile(openFiles, "src/screens/Explorer.ts"),
+        "src/screens/Explorer.ts"
+      )
+    ).toBe("src/index.ts");
+    expect(resolveNextExplorerActiveFilePath([], "README.md")).toBeNull();
   });
 });

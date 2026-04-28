@@ -73,6 +73,42 @@ describe("createElement", () => {
     expect(recorded).not.toContain("attr:title=undefined");
     expect(recorded).not.toContain("attr:onClick=undefined");
   });
+
+  it("binds onContextMenu handlers to the native contextmenu event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("button", {
+        onContextMenu: () => {
+          recorded.push("handled");
+        }
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:contextmenu");
+  });
 });
 
 const createFakeElement = (recorded: string[]) => ({

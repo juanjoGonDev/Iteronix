@@ -17,6 +17,11 @@ export type FlattenedExplorerTreeNode = {
   depth: number;
 };
 
+export type ExplorerOpenFile = {
+  path: string;
+  pinned: boolean;
+};
+
 export const ExplorerTokenKind = {
   Plain: "plain",
   Keyword: "keyword",
@@ -191,6 +196,109 @@ export const flattenExplorerTreeNodes = (
   appendFlattenedExplorerNodes(flattened, nodes, 0, revealAll);
 
   return flattened;
+};
+
+export const openExplorerFile = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  path: string
+): ReadonlyArray<ExplorerOpenFile> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  if (normalizedPath.length === 0) {
+    return openFiles;
+  }
+
+  if (openFiles.some((entry) => entry.path === normalizedPath)) {
+    return openFiles;
+  }
+
+  return [...openFiles, {
+    path: normalizedPath,
+    pinned: false
+  }];
+};
+
+export const setExplorerFilePinned = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  path: string,
+  pinned: boolean
+): ReadonlyArray<ExplorerOpenFile> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  return reorderPinnedExplorerOpenFiles(
+    openFiles.map((entry) =>
+      entry.path === normalizedPath
+        ? {
+            ...entry,
+            pinned
+          }
+        : entry
+    )
+  );
+};
+
+export const closeExplorerOpenFile = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  path: string
+): ReadonlyArray<ExplorerOpenFile> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  return openFiles.filter((entry) => entry.path !== normalizedPath);
+};
+
+export const closeExplorerFileTabsToLeft = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  path: string
+): ReadonlyArray<ExplorerOpenFile> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  const pivotIndex = openFiles.findIndex((entry) => entry.path === normalizedPath);
+  if (pivotIndex < 0) {
+    return openFiles;
+  }
+
+  return openFiles.slice(pivotIndex);
+};
+
+export const closeExplorerFileTabsToRight = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  path: string
+): ReadonlyArray<ExplorerOpenFile> => {
+  const normalizedPath = normalizeExplorerPath(path);
+  const pivotIndex = openFiles.findIndex((entry) => entry.path === normalizedPath);
+  if (pivotIndex < 0) {
+    return openFiles;
+  }
+
+  return openFiles.slice(0, pivotIndex + 1);
+};
+
+export const closeAllExplorerOpenFiles = (
+  _openFiles?: ReadonlyArray<ExplorerOpenFile>
+): ReadonlyArray<ExplorerOpenFile> => [];
+
+export const resolveNextExplorerActiveFilePath = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  activePath: string | null,
+  preferredPath?: string
+): string | null => {
+  const preferred = normalizeExplorerPath(preferredPath ?? "");
+  if (preferred.length > 0 && openFiles.some((entry) => entry.path === preferred)) {
+    return preferred;
+  }
+
+  const normalizedActivePath = normalizeExplorerPath(activePath ?? "");
+  if (normalizedActivePath.length === 0) {
+    return openFiles[0]?.path ?? null;
+  }
+
+  const activeIndex = openFiles.findIndex((entry) => entry.path === normalizedActivePath);
+  if (activeIndex >= 0) {
+    return openFiles[activeIndex]?.path ?? null;
+  }
+
+  const insertionIndex = findExplorerOpenFileInsertionIndex(openFiles, normalizedActivePath);
+  if (insertionIndex < openFiles.length) {
+    return openFiles[insertionIndex]?.path ?? null;
+  }
+
+  return openFiles.at(-1)?.path ?? null;
 };
 
 export const readExplorerFileLanguage = (path: string): string =>
@@ -385,6 +493,32 @@ const sortExplorerEntries = (
     return left.name.localeCompare(right.name);
   });
 
+const reorderPinnedExplorerOpenFiles = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>
+): ReadonlyArray<ExplorerOpenFile> => {
+  const pinned = openFiles.filter((entry) => entry.pinned);
+  const unpinned = openFiles.filter((entry) => !entry.pinned);
+  return [...pinned, ...unpinned];
+};
+
+const findExplorerOpenFileInsertionIndex = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  activePath: string
+): number => {
+  const exactIndex = openFiles.findIndex((entry) => entry.path === activePath);
+  if (exactIndex >= 0) {
+    return exactIndex;
+  }
+
+  for (let index = 0; index < openFiles.length; index += 1) {
+    if (openFiles[index]!.path > activePath) {
+      return index;
+    }
+  }
+
+  return openFiles.length;
+};
+
 const readExplorerLanguageId = (path: string): ExplorerLanguageId => {
   const normalized = path.toLowerCase();
 
@@ -418,6 +552,8 @@ const readExplorerLanguageId = (path: string): ExplorerLanguageId => {
 
   return ExplorerLanguageId.PlainText;
 };
+
+const normalizeExplorerPath = (value: string): string => value.trim();
 
 const highlightJsonLine = (
   line: string

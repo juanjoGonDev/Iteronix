@@ -24,12 +24,16 @@ const ValidationConfig = {
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
-  SearchDebounceWaitMs: 360,
+  SearchDebounceWaitMs: 380,
+  SearchDebounceIntermediateWaitMs: 180,
+  SearchHighlightWaitMs: 1550,
   ViewportWidth: 1440,
   ViewportHeight: 1600,
   CompactViewportWidth: 390,
   CompactViewportHeight: 844,
-  CompactSidebarMaxWidth: 96
+  CompactSidebarMaxWidth: 96,
+  DesktopCollapsedSidebarMaxWidth: 96,
+  DesktopExpandedSidebarMinWidth: 220
 } as const;
 
 const RequestPath = {
@@ -55,7 +59,8 @@ const ValidationText = {
   FileContentMarker: "render(): string {",
   SearchRegexValue: "RENDER\\(\\)",
   RemovedPanelLabel: "Project session",
-  LanguageBadge: "TypeScript"
+  LanguageBadge: "TypeScript",
+  SearchResultLineNumber: "48"
 } as const;
 
 const Selector = {
@@ -66,7 +71,7 @@ const Selector = {
   SearchToggleRegex: '[data-testid="explorer-search-toggle-regex"]',
   SearchResults: '[data-testid="explorer-search-results"]',
   SearchResultFile: '[data-testid="explorer-search-result-file-src-screens-explorer-ts"]',
-  SearchResultMatch: '[data-testid="explorer-search-result-match-src-screens-explorer-ts-2"]',
+  SearchResultMatch: '[data-testid="explorer-search-result-match-src-screens-explorer-ts-48"]',
   ExpandAll: '[data-testid="explorer-expand-all"]',
   CollapseAll: '[data-testid="explorer-collapse-all"]',
   SidebarHide: '[data-testid="explorer-sidebar-hide"]',
@@ -74,12 +79,27 @@ const Selector = {
   SearchInputTestId: "explorer-search-input",
   ExplorerNodeSrc: '[data-testid="explorer-node-src"]',
   ExplorerNodeNestedFile: '[data-testid="explorer-node-src-screens-explorer-ts"]',
+  ExplorerNodeReadme: '[data-testid="explorer-node-readme-md"]',
+  ExplorerNodeIndex: '[data-testid="explorer-node-src-index-ts"]',
   LanguageBadge: '[data-testid="explorer-language-badge"]',
   FileContent: '[data-testid="explorer-file-content"]',
+  HighlightedLine: '[data-testid="explorer-highlighted-line"]',
+  PreviewSurface: '[data-testid="explorer-preview-surface"]',
+  TabReadme: '[data-testid="explorer-tab-readme-md"]',
+  TabExplorer: '[data-testid="explorer-tab-src-screens-explorer-ts"]',
+  TabIndex: '[data-testid="explorer-tab-src-index-ts"]',
+  TabCloseIndex: '[data-testid="explorer-tab-close-src-index-ts"]',
+  TabContextMenu: '[data-testid="explorer-tab-context-menu"]',
+  OpenEditorReadme: '[data-testid="explorer-open-editor-readme-md"]',
   CompactExplorer: '[data-testid="explorer-compact-panel-explorer"]',
   CompactSearch: '[data-testid="explorer-compact-panel-search"]',
   CompactEditor: '[data-testid="explorer-compact-panel-editor"]'
+  ,
+  AppSidebarToggle: '[data-testid="app-sidebar-toggle"]',
+  AppSidebarShell: '[data-testid="app-sidebar-shell"]'
 } as const;
+
+const SearchTargetLineNumber = 48;
 
 const FixtureProject = {
   id: "project-explorer-browser",
@@ -126,13 +146,7 @@ const FixtureFileTree = {
 const FixtureFileContent = {
   readme: "# Iteronix\n\nRepository overview.",
   index: "export const screen = \"Explorer\";\n",
-  explorer: [
-    "export class Explorer {",
-    "  render(): string {",
-    "    return \"Explorer\";",
-    "  }",
-    "}"
-  ].join("\n")
+  explorer: buildFixtureExplorerContent()
 } as const;
 
 const FixtureSearchResults = {
@@ -142,7 +156,7 @@ const FixtureSearchResults = {
       name: "Explorer.ts",
       matches: [
         {
-          lineNumber: 2,
+          lineNumber: SearchTargetLineNumber,
           lineText: "  render(): string {",
           ranges: [
             {
@@ -160,6 +174,9 @@ const projectRoot = join(import.meta.dirname, "..");
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
 const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
+const stubState = {
+  searchRequestCount: 0
+};
 
 await validateExplorerScreen();
 
@@ -248,10 +265,14 @@ async function validateDesktopExplorer(
   await page.click(Selector.SearchToggleRegex);
   await waitForSelector(page, Selector.SearchInput);
   await focusSearchInput(page);
-  await page.keyboard.type(ValidationText.SearchRegexValue, {
-    delay: 30
-  });
+  await dispatchSearchInputValue(page, "REND");
+  await delay(ValidationConfig.SearchDebounceIntermediateWaitMs);
+  expectSearchRequestCount(0);
+  await dispatchSearchInputValue(page, ValidationText.SearchRegexValue);
+  await delay(ValidationConfig.SearchDebounceIntermediateWaitMs);
+  expectSearchRequestCount(0);
   await delay(ValidationConfig.SearchDebounceWaitMs);
+  expectSearchRequestCount(1);
   await waitForCondition(async () => {
     const activeTestId = await page.evaluate(() => {
       const activeElement = document.activeElement;
@@ -277,6 +298,29 @@ async function validateDesktopExplorer(
 
   await page.click(Selector.SearchResultMatch);
   await waitForPageText(page, ValidationText.FileContentMarker);
+  await waitForSelector(page, Selector.HighlightedLine);
+  await waitForCondition(async () => {
+    return page.evaluate((selector, expectedLineNumber) => {
+      const highlightedLine = document.querySelector(selector);
+      if (!(highlightedLine instanceof HTMLElement)) {
+        return false;
+      }
+
+      return highlightedLine.dataset["lineNumber"] === expectedLineNumber;
+    }, Selector.HighlightedLine, ValidationText.SearchResultLineNumber);
+  }, "highlighted target line", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement && surface.scrollTop > 0;
+    }, Selector.PreviewSurface);
+  }, "preview surface scrolled to highlighted line", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
   await waitForCondition(async () => {
     const badge = await page.evaluate((selector) => {
       const element = document.querySelector(selector);
@@ -289,18 +333,105 @@ async function validateDesktopExplorer(
   });
   await waitForSelector(page, '[data-token-kind="keyword"]');
   await waitForSelector(page, '[data-token-kind="string"]');
+  await delay(ValidationConfig.SearchHighlightWaitMs);
+  await waitForCondition(async () => {
+    const highlightedLine = await page.$(Selector.HighlightedLine);
+    return highlightedLine === null;
+  }, "line highlight cleared", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement &&
+        surface.scrollTop > 0 &&
+        surface.scrollLeft === 0;
+    }, Selector.PreviewSurface);
+  }, "preview scroll preserved after highlight animation", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 
-  await page.click(Selector.ActivityExplorer);
+  await clickSelector(page, Selector.ActivityExplorer);
   await waitForSelector(page, Selector.ExpandAll);
-  await page.click(Selector.ExpandAll);
+  await clickSelector(page, Selector.ExpandAll);
   await waitForSelector(page, Selector.ExplorerNodeNestedFile);
+  await waitForSelector(page, Selector.ExplorerNodeReadme);
+  await clickSelector(page, Selector.ExplorerNodeReadme);
+  await waitForSelector(page, Selector.TabReadme);
+  await clickSelector(page, Selector.ExplorerNodeIndex);
+  await waitForSelector(page, Selector.TabIndex);
+  await waitForSelector(page, Selector.TabExplorer);
+  await clickSelector(page, Selector.TabCloseIndex);
+  await waitForCondition(async () => {
+    const tab = await page.$(Selector.TabIndex);
+    return tab === null;
+  }, "index tab closed from close button", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await rightClickTabAndSelectAction(page, Selector.TabReadme, "Pin");
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const tab = document.querySelector(selector);
+      return tab instanceof HTMLElement && tab.innerText.includes("keep");
+    }, Selector.TabReadme);
+  }, "README tab pinned", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
   await captureBrowserValidationScreenshot({
     page,
     directory: screenshotDirectory,
     suffix: "desktop-tree-expanded",
     artifactName: "explorer"
   });
-  await page.click(Selector.CollapseAll);
+  await page.reload({
+    waitUntil: "networkidle0"
+  });
+  await waitForSelector(page, Selector.TabReadme);
+  await waitForSelector(page, Selector.TabExplorer);
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const openEditor = document.querySelector(selector);
+      return openEditor instanceof HTMLElement;
+    }, Selector.OpenEditorReadme);
+  }, "persisted open editor row", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await rightClickTabAndSelectAction(page, Selector.TabReadme, "Close to the right");
+  await waitForSelector(page, Selector.TabReadme);
+  await waitForCondition(async () => {
+    const explorerTab = await page.$(Selector.TabExplorer);
+    return explorerTab === null;
+  }, "close tabs to the right", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await page.click(Selector.ExplorerNodeIndex);
+  await waitForSelector(page, Selector.TabIndex);
+  await rightClickTabAndSelectAction(page, Selector.TabIndex, "Close to the left");
+  await waitForSelector(page, Selector.TabIndex);
+  await waitForCondition(async () => {
+    const readmeTab = await page.$(Selector.TabReadme);
+    return readmeTab === null;
+  }, "close tabs to the left", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await rightClickTabAndSelectAction(page, Selector.TabIndex, "Close all");
+  await waitForCondition(async () => {
+    const tabs = await page.$$(
+      `${Selector.TabReadme}, ${Selector.TabExplorer}, ${Selector.TabIndex}`
+    );
+    return tabs.length === 0;
+  }, "close all tabs", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(page, Selector.CollapseAll);
   await waitForSelector(page, Selector.ExplorerNodeSrc);
   await waitForCondition(async () => {
     const node = await page.$(Selector.ExplorerNodeNestedFile);
@@ -310,7 +441,7 @@ async function validateDesktopExplorer(
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
 
-  await page.click(Selector.SidebarHide);
+  await clickSelector(page, Selector.SidebarHide);
   await waitForCondition(async () => {
     const panel = await page.$(Selector.SidebarPanel);
     return panel === null;
@@ -318,7 +449,43 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await page.click(Selector.ActivityExplorer);
+  await clickSelector(page, Selector.AppSidebarToggle);
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const shell = document.querySelector(selector);
+      return shell instanceof HTMLElement &&
+        shell.getBoundingClientRect().width <= 96;
+    }, Selector.AppSidebarShell);
+  }, "app sidebar collapsed without reopening explorer panel", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    const panel = await page.$(Selector.SidebarPanel);
+    return panel === null;
+  }, "explorer panel remains hidden after app sidebar collapse", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(page, Selector.AppSidebarToggle);
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const shell = document.querySelector(selector);
+      return shell instanceof HTMLElement &&
+        shell.getBoundingClientRect().width >= 220;
+    }, Selector.AppSidebarShell);
+  }, "app sidebar expanded without reopening explorer panel", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    const panel = await page.$(Selector.SidebarPanel);
+    return panel === null;
+  }, "explorer panel remains hidden after app sidebar expand", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await clickSelector(page, Selector.ActivityExplorer);
   await waitForSelector(page, Selector.SidebarPanel);
   await captureBrowserValidationScreenshot({
     page,
@@ -355,20 +522,19 @@ async function validateCompactExplorer(
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
 
-  await page.click(Selector.ActivitySearch);
+  await clickSelector(page, Selector.ActivitySearch);
   await waitForSelector(page, Selector.SearchInput);
-  await page.click(Selector.SearchToggleRegex);
+  await clickSelector(page, Selector.SearchToggleRegex);
   await waitForSelector(page, Selector.SearchInput);
   await focusSearchInput(page);
-  await page.keyboard.type(ValidationText.SearchRegexValue, {
-    delay: 30
-  });
+  await dispatchSearchInputValue(page, ValidationText.SearchRegexValue);
   await delay(ValidationConfig.SearchDebounceWaitMs);
   await waitForSelector(page, Selector.SearchResultMatch);
-  await page.click(Selector.SearchResultMatch);
+  await clickSelector(page, Selector.SearchResultMatch);
   await waitForSelector(page, Selector.FileContent);
+  await waitForSelector(page, Selector.HighlightedLine);
   await waitForSelector(page, Selector.CompactExplorer);
-  await page.click(Selector.CompactExplorer);
+  await clickSelector(page, Selector.CompactExplorer);
   await waitForSelector(page, Selector.SidebarPanel);
   await waitForSelector(page, Selector.ExplorerNodeSrc);
   await captureBrowserValidationScreenshot({
@@ -442,6 +608,23 @@ async function waitForSelector(page: Page, selector: string): Promise<void> {
   });
 }
 
+async function clickSelector(page: Page, selector: string): Promise<void> {
+  await waitForCondition(async () => {
+    return page.evaluate((targetSelector) => {
+      const element = document.querySelector(targetSelector);
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+
+      element.click();
+      return true;
+    }, selector);
+  }, `click selector ${selector}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
 async function focusSearchInput(page: Page): Promise<void> {
   await page.evaluate((selector) => {
     const element = document.querySelector(selector);
@@ -451,9 +634,32 @@ async function focusSearchInput(page: Page): Promise<void> {
   }, Selector.SearchInput);
 }
 
+async function dispatchSearchInputValue(page: Page, value: string): Promise<void> {
+  await page.evaluate((input: {
+    selector: string;
+    value: string;
+  }) => {
+    const element = document.querySelector(input.selector);
+    if (!(element instanceof HTMLInputElement)) {
+      return;
+    }
+
+    element.focus();
+    element.value = input.value;
+    element.setSelectionRange(input.value.length, input.value.length);
+    element.dispatchEvent(new Event("input", {
+      bubbles: true,
+      cancelable: true
+    }));
+  }, {
+    selector: Selector.SearchInput,
+    value
+  });
+}
+
 async function startExplorerStubServer(): Promise<ReturnType<typeof createServer>> {
   const server = createServer((request, response) => {
-    void handleExplorerStubRequest(request, response);
+    void handleExplorerStubRequest(request, response, stubState);
   });
 
   await new Promise<void>((resolve) => {
@@ -465,7 +671,10 @@ async function startExplorerStubServer(): Promise<ReturnType<typeof createServer
 
 async function handleExplorerStubRequest(
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
+  state: {
+    searchRequestCount: number;
+  }
 ): Promise<void> {
   applyCorsHeaders(response);
 
@@ -554,6 +763,7 @@ async function handleExplorerStubRequest(
   }
 
   if (url.pathname === RequestPath.FilesSearch) {
+    state.searchRequestCount += 1;
     respondJson(response, 200, {
       results: FixtureSearchResults.regex
     });
@@ -624,4 +834,96 @@ function readRequiredString(value: unknown, key: string): string {
   }
 
   return entry;
+}
+
+function buildFixtureExplorerContent(): string {
+  const lines = Array.from({ length: 80 }, (_, index) => {
+    const lineNumber = index + 1;
+    if (lineNumber === 1) {
+      return "export class Explorer {";
+    }
+
+    if (lineNumber === SearchTargetLineNumber) {
+      return "  render(): string {";
+    }
+
+    if (lineNumber === SearchTargetLineNumber + 1) {
+      return "    return \"Explorer\";";
+    }
+
+    if (lineNumber === SearchTargetLineNumber + 2) {
+      return "  }";
+    }
+
+    if (lineNumber === 80) {
+      return "}";
+    }
+
+    return `  const line${lineNumber.toString().padStart(2, "0")} = "${lineNumber}";`;
+  });
+
+  return lines.join("\n");
+}
+
+function expectSearchRequestCount(expectedCount: number): void {
+  if (stubState.searchRequestCount !== expectedCount) {
+    throw new Error(
+      `Expected ${expectedCount} search request(s), received ${stubState.searchRequestCount}.`
+    );
+  }
+}
+
+async function rightClickTabAndSelectAction(
+  page: Page,
+  selector: string,
+  actionLabel: string
+): Promise<void> {
+  await waitForCondition(async () => {
+    return page.evaluate((targetSelector) => {
+      const element = document.querySelector(targetSelector);
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2
+      });
+      element.dispatchEvent(event);
+      return true;
+    }, selector);
+  }, `context menu open for ${selector}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForSelector(page, Selector.TabContextMenu);
+  await waitForCondition(async () => {
+    return page.evaluate((input: {
+      menuSelector: string;
+      actionLabel: string;
+    }) => {
+      const menu = document.querySelector(input.menuSelector);
+      if (!(menu instanceof HTMLElement)) {
+        return false;
+      }
+
+      const button = Array.from(menu.querySelectorAll("button")).find(
+        (element) => element.textContent?.trim() === input.actionLabel
+      );
+
+      if (!(button instanceof HTMLButtonElement)) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    }, {
+      menuSelector: Selector.TabContextMenu,
+      actionLabel
+    });
+  }, `tab context menu action ${actionLabel}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 }

@@ -168,7 +168,8 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
           onToggle && createElement('button', {
             onClick: onToggle,
             className: `${collapsed ? '' : 'ml-auto'} p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-all duration-300`,
-            title: collapsed ? 'Expand sidebar' : 'Collapse sidebar'
+            title: collapsed ? 'Expand sidebar' : 'Collapse sidebar',
+            'data-testid': 'app-sidebar-toggle'
           }, [
             createElement('span', {
               className: 'material-symbols-outlined text-[18px] transition-all duration-300'

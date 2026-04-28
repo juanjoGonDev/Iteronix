@@ -8,21 +8,33 @@ import {
   type ExplorerFileSearchMatchRangeRecord,
   type ExplorerFileSearchResultRecord
 } from "../shared/explorer-client.js";
+import {
+  readExplorerWorkspaceState,
+  writeExplorerWorkspaceState
+} from "../shared/explorer-workspace-session.js";
 import { readProjectSession } from "../shared/project-session.js";
 import { router } from "../shared/Router.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   buildExplorerTreeNodes,
+  closeAllExplorerOpenFiles,
+  closeExplorerFileTabsToLeft,
+  closeExplorerFileTabsToRight,
+  closeExplorerOpenFile,
   flattenExplorerTreeNodes,
   highlightExplorerFileContent,
   mergeExplorerDirectoryChildren,
+  openExplorerFile,
   readExplorerFileIcon,
   readExplorerLanguageTheme,
   readExplorerTokenClassName,
+  resolveNextExplorerActiveFilePath,
+  setExplorerFilePinned,
   setExplorerDirectoryExpanded,
   setExplorerTreeExpansion,
   toggleExplorerDirectory,
   type ExplorerHighlightToken,
+  type ExplorerOpenFile,
   type ExplorerTreeNode
 } from "./explorer-state.js";
 
@@ -68,6 +80,18 @@ const ExplorerSearchSettingKey = {
 type ExplorerSearchSettingKey =
   typeof ExplorerSearchSettingKey[keyof typeof ExplorerSearchSettingKey];
 
+const ExplorerTabMenuAction = {
+  Close: "close",
+  CloseLeft: "close-left",
+  CloseRight: "close-right",
+  CloseAll: "close-all",
+  Pin: "pin",
+  Unpin: "unpin"
+} as const;
+
+type ExplorerTabMenuAction =
+  typeof ExplorerTabMenuAction[keyof typeof ExplorerTabMenuAction];
+
 const ExplorerSelector = {
   WorkspaceTestId: "explorer-workspace",
   ActivityExplorerTestId: "explorer-activity-explorer",
@@ -79,6 +103,8 @@ const ExplorerSelector = {
   SearchToggleRegexTestId: "explorer-search-toggle-regex",
   SearchToggleMatchCaseTestId: "explorer-search-toggle-match-case",
   SearchToggleWholeWordTestId: "explorer-search-toggle-whole-word",
+  TabsBarTestId: "explorer-tabs-bar",
+  TabContextMenuTestId: "explorer-tab-context-menu",
   ExpandAllTestId: "explorer-expand-all",
   CollapseAllTestId: "explorer-collapse-all",
   CompactPanelExplorerTestId: "explorer-compact-panel-explorer",
@@ -87,14 +113,18 @@ const ExplorerSelector = {
 } as const;
 
 const SearchDebounceMs = 320;
+const ExplorerLineHighlightDurationMs = 1400;
 
 interface ExplorerState {
   sessionRootPath: string;
   sessionProjectName: string;
   currentProject: ProjectRecord | null;
   treeNodes: ReadonlyArray<ExplorerTreeNode>;
+  openFiles: ReadonlyArray<ExplorerOpenFile>;
   selectedFilePath: string | null;
   selectedFileContent: string;
+  highlightedLineNumber: number | null;
+  openTabContextMenuPath: string | null;
   pendingAction: ExplorerPendingAction | null;
   activePath: string | null;
   errorMessage: string | null;
@@ -116,6 +146,7 @@ interface ExplorerProps extends ComponentProps {
 export class Explorer extends Component<ExplorerProps, ExplorerState> {
   private readonly explorerClient = createExplorerClient();
   private searchDebounceId: number | null = null;
+  private lineHighlightTimeoutId: number | null = null;
   private searchRevision = 0;
   private searchDraftValue = "";
   private searchSelectionStart: number | null = null;
@@ -124,14 +155,18 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   constructor(props: ExplorerProps = {}) {
     const session = readProjectSession();
+    const workspaceState = readExplorerWorkspaceState(session.projectRootPath);
 
     super(props, {
       sessionRootPath: session.projectRootPath,
       sessionProjectName: session.projectName,
       currentProject: null,
       treeNodes: [],
-      selectedFilePath: null,
+      openFiles: workspaceState.openFiles,
+      selectedFilePath: workspaceState.activeFilePath,
       selectedFileContent: "",
+      highlightedLineNumber: null,
+      openTabContextMenuPath: null,
       pendingAction: null,
       activePath: null,
       errorMessage: null,
@@ -166,6 +201,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     return createElement("div", {
       className: `flex h-full w-full flex-col ${this.props.className ?? ""}`
     }, [
+      this.renderLineHighlightStyle(),
       this.renderMessages(),
       this.renderWorkbench(visibleNodes, selectedFile)
     ]);
@@ -173,11 +209,20 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   override onMount(): void {
     window.addEventListener("resize", this.handleViewportResize);
+    window.addEventListener("click", this.handleWindowClick);
   }
 
   override onUnmount(): void {
     this.clearSearchDebounce();
+    this.clearLineHighlight();
     window.removeEventListener("resize", this.handleViewportResize);
+    window.removeEventListener("click", this.handleWindowClick);
+  }
+
+  private renderLineHighlightStyle(): HTMLElement {
+    return createElement("style", {
+      textContent: "@keyframes explorer-line-flash {0% {background-color: rgba(251, 191, 36, 0.34);} 70% {background-color: rgba(251, 191, 36, 0.16);} 100% {background-color: transparent;}}"
+    });
   }
 
   private renderMessages(): HTMLElement {
@@ -455,31 +500,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     return createElement("div", {
       className: "flex min-h-0 flex-1 flex-col"
     }, [
-      createElement("section", {
-        className: "border-b border-border-dark px-3 py-2"
-      }, [
-        createElement("p", {
-          className: "text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary"
-        }, ["Open Editors"]),
-        this.state.selectedFilePath
-          ? createElement("button", {
-              type: "button",
-              className: "mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-white transition-colors hover:bg-[#242b34]",
-              onClick: () => {
-                void this.handleFilePathSelect(this.state.selectedFilePath ?? "", false);
-              }
-            }, [
-              createElement("span", {
-                className: `material-symbols-outlined text-[18px] ${readExplorerLanguageTheme(this.state.selectedFilePath).accentClassName}`
-              }, [readExplorerFileIcon(this.state.selectedFilePath)]),
-              createElement("span", { className: "truncate" }, [
-                readSelectedFileRecord(this.state.selectedFilePath)?.name ?? ""
-              ])
-            ])
-          : createElement("p", {
-              className: "mt-2 px-2 text-sm text-text-secondary"
-            }, ["No open editors"])
-      ]),
+      this.renderOpenEditorsSection(),
       createElement("section", {
         className: "flex min-h-0 flex-1 flex-col"
       }, [
@@ -502,6 +523,74 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
             }, [
               visibleNodes.map((item) => this.renderTreeNode(item.node, item.depth))
             ])
+      ])
+    ]);
+  }
+
+  private renderOpenEditorsSection(): HTMLElement {
+    return createElement("section", {
+      className: "border-b border-border-dark px-3 py-2"
+    }, [
+      createElement("p", {
+        className: "text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary"
+      }, ["Open Editors"]),
+      this.state.openFiles.length === 0
+        ? createElement("p", {
+            className: "mt-2 px-2 text-sm text-text-secondary"
+          }, ["No open editors"])
+        : createElement("div", {
+            className: "mt-2 flex flex-col gap-1"
+          }, [
+            this.state.openFiles.map((openFile) => this.renderOpenEditorRow(openFile))
+          ])
+    ]);
+  }
+
+  private renderOpenEditorRow(openFile: ExplorerOpenFile): HTMLElement {
+    const selected = this.state.selectedFilePath === openFile.path;
+    const selectedFile = readSelectedFileRecord(openFile.path);
+    const theme = readExplorerLanguageTheme(openFile.path);
+
+    return createElement("div", {
+      key: `open-editor-${openFile.path}`,
+      className: `flex items-center gap-2 rounded px-2 py-1.5 ${selected ? "bg-primary/10 text-white" : "text-slate-300 hover:bg-[#242b34]"}`,
+      "data-testid": `explorer-open-editor-${toTestIdSegment(openFile.path)}`
+    }, [
+      createElement("button", {
+        type: "button",
+        className: "flex min-w-0 flex-1 items-center gap-2 text-left",
+        onClick: () => {
+          void this.handleFilePathSelect(openFile.path, false);
+        }
+      }, [
+        createElement("span", {
+          className: `material-symbols-outlined text-[18px] ${theme.accentClassName}`
+        }, [readExplorerFileIcon(openFile.path)]),
+        createElement("span", {
+          className: "truncate text-sm"
+        }, [selectedFile?.name ?? openFile.path])
+      ]),
+      createElement("button", {
+        type: "button",
+        title: openFile.pinned ? "Unpin file" : "Pin file",
+        className: `flex h-7 w-7 items-center justify-center rounded border border-transparent transition-colors hover:bg-[#2a3340] ${openFile.pinned ? "text-amber-300" : "text-text-secondary"}`,
+        onClick: () => this.handleTabPinToggle(openFile.path)
+      }, [
+        createElement("span", {
+          className: "material-symbols-outlined text-[16px]"
+        }, [openFile.pinned ? "keep" : "keep_off"])
+      ]),
+      createElement("button", {
+        type: "button",
+        title: "Close file",
+        className: "flex h-7 w-7 items-center justify-center rounded border border-transparent text-text-secondary transition-colors hover:bg-[#2a3340] hover:text-white",
+        onClick: () => {
+          void this.handleTabMenuAction(ExplorerTabMenuAction.Close, openFile.path);
+        }
+      }, [
+        createElement("span", {
+          className: "material-symbols-outlined text-[16px]"
+        }, ["close"])
       ])
     ]);
   }
@@ -711,7 +800,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       className: "grid w-full grid-cols-[56px_minmax(0,1fr)] gap-2 px-3 py-2 text-left transition-colors hover:bg-[#202733]",
       "data-testid": `explorer-search-result-match-${toTestIdSegment(result.path)}-${match.lineNumber}`,
       onClick: () => {
-        void this.handleFilePathSelect(result.path, true);
+        void this.handleFilePathSelect(result.path, true, match.lineNumber);
       }
     }, [
       createElement("span", {
@@ -753,21 +842,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       return createElement("section", {
         className: "flex min-h-0 flex-1 flex-col bg-[#0f141b]"
       }, [
-        createElement("div", {
-          className: "flex items-center border-b border-border-dark bg-[#181c22] px-4 py-2"
-        }, [
-          this.state.isCompactViewport
-            ? createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                onClick: () => this.setCompactPanelView(this.state.activeSidebarSection),
-                children: "Panels"
-              })
-            : "",
-          createElement("span", {
-            className: "rounded border border-border-dark bg-[#11161d] px-3 py-1 text-sm text-text-secondary"
-          }, ["No file selected"])
-        ]),
+        this.renderEditorTabsBar(),
         createElement("div", {
           className: "flex flex-1 items-center justify-center p-8"
         }, [
@@ -792,19 +867,12 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     return createElement("section", {
       className: "flex min-h-0 flex-1 flex-col bg-[#0f141b]"
     }, [
+      this.renderEditorTabsBar(),
       createElement("div", {
-        className: "flex items-center gap-3 border-b border-border-dark bg-[#181c22] px-4 py-2"
+        className: "flex items-center gap-3 border-b border-border-dark bg-[#131922] px-4 py-2"
       }, [
-        this.state.isCompactViewport
-          ? createElement(Button, {
-              variant: "ghost",
-              size: "sm",
-              onClick: () => this.setCompactPanelView(this.state.activeSidebarSection),
-              children: "Panels"
-            })
-          : "",
         createElement("div", {
-          className: "flex min-w-0 items-center gap-2 rounded-t border border-border-dark border-b-0 bg-[#11161d] px-3 py-2"
+          className: "flex min-w-0 items-center gap-2"
         }, [
           createElement("span", {
             className: `material-symbols-outlined text-[18px] ${theme.accentClassName}`
@@ -841,6 +909,120 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     ]);
   }
 
+  private renderEditorTabsBar(): HTMLElement {
+    return createElement("div", {
+      className: "flex items-center gap-3 border-b border-border-dark bg-[#181c22] px-3 py-2",
+      "data-testid": ExplorerSelector.TabsBarTestId
+    }, [
+      this.state.isCompactViewport
+        ? createElement(Button, {
+            variant: "ghost",
+            size: "sm",
+            onClick: () => this.setCompactPanelView(this.state.activeSidebarSection),
+            children: "Panels"
+          })
+        : "",
+      this.state.openFiles.length === 0
+        ? createElement("span", {
+            className: "rounded border border-border-dark bg-[#11161d] px-3 py-1 text-sm text-text-secondary"
+          }, ["No file selected"])
+        : createElement("div", {
+            className: "relative flex min-w-0 flex-1 overflow-x-auto"
+          }, [
+            createElement("div", {
+              className: "flex min-w-max items-stretch"
+            }, [
+              this.state.openFiles.map((openFile) => this.renderEditorTab(openFile))
+            ])
+          ])
+    ]);
+  }
+
+  private renderEditorTab(openFile: ExplorerOpenFile): HTMLElement {
+    const selected = this.state.selectedFilePath === openFile.path;
+    const selectedFile = readSelectedFileRecord(openFile.path);
+    const theme = readExplorerLanguageTheme(openFile.path);
+    const isContextMenuOpen = this.state.openTabContextMenuPath === openFile.path;
+
+    return createElement("div", {
+      key: `editor-tab-${openFile.path}`,
+      className: `relative flex items-center border-r border-border-dark ${
+        selected ? "bg-[#0f141b]" : "bg-[#181c22]"
+      }`
+    }, [
+      createElement("button", {
+        type: "button",
+        className: `flex h-10 min-w-0 items-center gap-2 px-3 py-0 text-sm transition-colors ${
+          selected
+            ? "text-white"
+            : "text-slate-300 hover:bg-[#1f2630] hover:text-white"
+        }`,
+        "data-testid": `explorer-tab-${toTestIdSegment(openFile.path)}`,
+        onClick: () => {
+          void this.handleFilePathSelect(openFile.path, false);
+        },
+        onContextMenu: (event: Event) => this.handleTabContextMenu(event, openFile.path)
+      }, [
+        createElement("span", {
+          className: `material-symbols-outlined text-[16px] ${theme.accentClassName}`
+        }, [readExplorerFileIcon(openFile.path)]),
+        createElement("span", {
+          className: "max-w-[180px] truncate"
+        }, [selectedFile?.name ?? openFile.path]),
+        openFile.pinned
+          ? createElement("span", {
+              className: "material-symbols-outlined text-[14px] text-amber-300"
+            }, ["keep"])
+          : ""
+      ]),
+      createElement("button", {
+        type: "button",
+        title: "Close file",
+        className: "mr-2 flex h-7 w-7 items-center justify-center rounded text-text-secondary transition-colors hover:bg-[#242b34] hover:text-white",
+        "data-testid": `explorer-tab-close-${toTestIdSegment(openFile.path)}`,
+        onClick: () => {
+          void this.handleTabMenuAction(ExplorerTabMenuAction.Close, openFile.path);
+        }
+      }, [
+        createElement("span", {
+          className: "material-symbols-outlined text-[16px]"
+        }, ["close"])
+      ]),
+      isContextMenuOpen ? this.renderTabContextMenu(openFile) : ""
+    ]);
+  }
+
+  private renderTabContextMenu(openFile: ExplorerOpenFile): HTMLElement {
+    return createElement("div", {
+      className: "absolute left-0 top-full z-20 mt-1 flex min-w-[180px] flex-col rounded border border-border-dark bg-[#11161d] py-1 shadow-[0_12px_32px_rgba(0,0,0,0.35)]",
+      "data-testid": ExplorerSelector.TabContextMenuTestId
+    }, [
+      this.renderTabContextMenuAction(
+        openFile.pinned ? "Unpin" : "Pin",
+        openFile.pinned ? ExplorerTabMenuAction.Unpin : ExplorerTabMenuAction.Pin,
+        openFile.path
+      ),
+      this.renderTabContextMenuAction("Close", ExplorerTabMenuAction.Close, openFile.path),
+      this.renderTabContextMenuAction("Close to the left", ExplorerTabMenuAction.CloseLeft, openFile.path),
+      this.renderTabContextMenuAction("Close to the right", ExplorerTabMenuAction.CloseRight, openFile.path),
+      this.renderTabContextMenuAction("Close all", ExplorerTabMenuAction.CloseAll, openFile.path)
+    ]);
+  }
+
+  private renderTabContextMenuAction(
+    label: string,
+    action: ExplorerTabMenuAction,
+    path: string
+  ): HTMLElement {
+    return createElement("button", {
+      type: "button",
+      className: "flex w-full items-center px-3 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-[#202733]",
+      onClick: () => {
+        void this.handleTabMenuAction(action, path);
+      }
+    }, [label]);
+  }
+
   private renderHighlightedFileContent(
     highlightedLines: ReadonlyArray<ReadonlyArray<ExplorerHighlightToken>>
   ): HTMLElement {
@@ -850,25 +1032,36 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }, [
       createElement("tbody", {}, [
         highlightedLines.map((line, index) =>
-          createElement("tr", {
-            key: `explorer-line-${index + 1}`,
-            className: "align-top hover:bg-white/[0.02]"
-          }, [
-            createElement("td", {
-              className: "w-14 select-none border-r border-white/5 bg-black/10 px-3 text-right text-xs text-slate-500"
-            }, [String(index + 1)]),
-            createElement("td", {
-              className: "px-4 py-0.5 whitespace-pre"
+          {
+            const lineNumber = index + 1;
+            const isHighlighted = this.state.highlightedLineNumber === lineNumber;
+            return createElement("tr", {
+              key: `explorer-line-${lineNumber}`,
+              className: `align-top hover:bg-white/[0.02] ${isHighlighted ? "bg-amber-300/10" : ""}`,
+              style: isHighlighted
+                ? "animation: explorer-line-flash 1.1s ease-out;"
+                : undefined,
+              "data-line-number": String(lineNumber),
+              "data-testid": isHighlighted
+                ? "explorer-highlighted-line"
+                : `explorer-line-${lineNumber}`
             }, [
-              line.map((token, tokenIndex) =>
-                createElement("span", {
-                  key: `explorer-token-${index + 1}-${tokenIndex}`,
-                  className: readExplorerTokenClassName(token.kind),
-                  "data-token-kind": token.kind
-                }, [token.text.length > 0 ? token.text : " "])
-              )
-            ])
-          ])
+              createElement("td", {
+                className: `w-14 select-none border-r border-white/5 bg-black/10 px-3 text-right text-xs ${isHighlighted ? "text-amber-200" : "text-slate-500"}`
+              }, [String(lineNumber)]),
+              createElement("td", {
+                className: `px-4 py-0.5 whitespace-pre ${isHighlighted ? "bg-amber-300/[0.08]" : ""}`
+              }, [
+                line.map((token, tokenIndex) =>
+                  createElement("span", {
+                    key: `explorer-token-${lineNumber}-${tokenIndex}`,
+                    className: readExplorerTokenClassName(token.kind),
+                    "data-token-kind": token.kind
+                  }, [token.text.length > 0 ? token.text : " "])
+                )
+              ])
+            ]);
+          }
         )
       ])
     ]);
@@ -929,23 +1122,46 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       const entries = await this.explorerClient.listFileTree({
         projectId: project.id
       });
+      const nextTreeNodes = buildExplorerTreeNodes(entries);
+      const workspaceState = readExplorerWorkspaceState(project.rootPath);
+      const nextOpenFiles = workspaceState.openFiles;
+      const nextActiveFilePath = resolveNextExplorerActiveFilePath(
+        nextOpenFiles,
+        workspaceState.activeFilePath
+      );
 
       this.setState({
         currentProject: project,
-        treeNodes: buildExplorerTreeNodes(entries),
-        selectedFilePath: null,
+        treeNodes: nextTreeNodes,
+        openFiles: nextOpenFiles,
+        selectedFilePath: nextActiveFilePath,
         selectedFileContent: "",
+        highlightedLineNumber: null,
+        openTabContextMenuPath: null,
         pendingAction: null,
         activePath: null,
         errorMessage: null,
         noticeMessage: silent ? null : `${project.name} loaded in Explorer.`
       });
+
+      if (nextActiveFilePath) {
+        await this.loadWorkspaceActiveFile(
+          project,
+          nextActiveFilePath,
+          nextOpenFiles,
+          true,
+          nextTreeNodes
+        );
+      }
     } catch (error: unknown) {
       this.setState({
         currentProject: null,
         treeNodes: [],
+        openFiles: [],
         selectedFilePath: null,
         selectedFileContent: "",
+        highlightedLineNumber: null,
+        openTabContextMenuPath: null,
         pendingAction: null,
         activePath: null,
         errorMessage: readErrorMessage(error, "Unable to open the current project session."),
@@ -986,6 +1202,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         currentProject: project,
         treeNodes: buildExplorerTreeNodes(entries),
+        openFiles: this.state.openFiles,
         pendingAction: null,
         activePath: null,
         errorMessage: null,
@@ -1143,16 +1360,6 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       return;
     }
 
-    this.setState({
-      searchIsLoading: true,
-      errorMessage: null,
-      activeSidebarSection: ExplorerSidebarSection.Search,
-      isSidebarVisible: true,
-      compactView: this.state.isCompactViewport
-        ? ExplorerCompactView.Panel
-        : this.state.compactView
-    });
-
     const revision = this.searchRevision;
     this.searchDebounceId = window.setTimeout(() => {
       void this.applySearchDebounce(value, revision, settings);
@@ -1199,6 +1406,11 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
 
     try {
+      this.setState({
+        searchQuery: query,
+        searchIsLoading: true,
+        errorMessage: null
+      });
       const results = await this.explorerClient.searchFiles({
         projectId: this.state.currentProject.id,
         query,
@@ -1297,17 +1509,22 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   private async handleFilePathSelect(
     path: string,
-    revealInTree: boolean
+    revealInTree: boolean,
+    targetLineNumber?: number
   ): Promise<void> {
     if (this.state.currentProject === null || path.trim().length === 0) {
       return;
     }
 
+    const nextOpenFiles = openExplorerFile(this.state.openFiles, path);
+
     this.setState({
       pendingAction: ExplorerPendingAction.File,
       activePath: path,
+      openFiles: nextOpenFiles,
       selectedFilePath: path,
       selectedFileContent: "",
+      openTabContextMenuPath: null,
       errorMessage: null,
       noticeMessage: null
     });
@@ -1324,8 +1541,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
       this.setState({
         treeNodes: nextTreeNodes,
+        openFiles: nextOpenFiles,
         selectedFilePath: path,
         selectedFileContent: file.content,
+        highlightedLineNumber: targetLineNumber ?? null,
         pendingAction: null,
         activePath: null,
         errorMessage: null,
@@ -1334,6 +1553,13 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           ? ExplorerCompactView.Editor
           : this.state.compactView
       });
+      this.persistWorkspaceState(nextOpenFiles, path);
+      this.scheduleLineHighlight(targetLineNumber);
+      if (targetLineNumber) {
+        requestAnimationFrame(() => {
+          this.scrollEditorLineIntoView(targetLineNumber);
+        });
+      }
     } catch (error: unknown) {
       this.setState({
         pendingAction: null,
@@ -1353,12 +1579,14 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
       this.setState({
         selectedFileContent: file.content,
-        selectedFilePath: path
+        selectedFilePath: path,
+        highlightedLineNumber: null
       });
     } catch {
       this.setState({
         selectedFilePath: null,
-        selectedFileContent: ""
+        selectedFileContent: "",
+        highlightedLineNumber: null
       });
     }
   }
@@ -1457,6 +1685,82 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
   }
 
+  private clearLineHighlight(): void {
+    if (this.lineHighlightTimeoutId !== null) {
+      window.clearTimeout(this.lineHighlightTimeoutId);
+      this.lineHighlightTimeoutId = null;
+    }
+  }
+
+  private async handleTabMenuAction(
+    action: ExplorerTabMenuAction,
+    path: string
+  ): Promise<void> {
+    if (action === ExplorerTabMenuAction.Pin) {
+      this.handleTabPinState(path, true);
+      return;
+    }
+
+    if (action === ExplorerTabMenuAction.Unpin) {
+      this.handleTabPinState(path, false);
+      return;
+    }
+
+    const nextOpenFiles = readNextOpenFilesFromTabAction(this.state.openFiles, action, path);
+    const nextActiveFilePath = readNextActivePathFromTabAction(
+      nextOpenFiles,
+      this.state.selectedFilePath,
+      path
+    );
+
+    this.setState({
+      openFiles: nextOpenFiles,
+      selectedFilePath: nextActiveFilePath,
+      selectedFileContent:
+        nextActiveFilePath === this.state.selectedFilePath
+          ? this.state.selectedFileContent
+          : "",
+      highlightedLineNumber: null,
+      openTabContextMenuPath: null
+    });
+    this.persistWorkspaceState(nextOpenFiles, nextActiveFilePath);
+
+    if (
+      nextActiveFilePath &&
+      nextActiveFilePath !== this.state.selectedFilePath &&
+      this.state.currentProject
+    ) {
+      await this.loadWorkspaceActiveFile(
+        this.state.currentProject,
+        nextActiveFilePath,
+        nextOpenFiles,
+        false
+      );
+    }
+  }
+
+  private handleTabPinToggle(path: string): void {
+    const nextPinnedState = !this.state.openFiles.find((entry) => entry.path === path)?.pinned;
+    this.handleTabPinState(path, nextPinnedState);
+  }
+
+  private handleTabPinState(path: string, pinned: boolean): void {
+    const nextOpenFiles = setExplorerFilePinned(this.state.openFiles, path, pinned);
+    this.setState({
+      openFiles: nextOpenFiles,
+      openTabContextMenuPath: null
+    });
+    this.persistWorkspaceState(nextOpenFiles, this.state.selectedFilePath);
+  }
+
+  private handleTabContextMenu(event: Event, path: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.setState({
+      openTabContextMenuPath: path
+    });
+  }
+
   private readonly handleViewportResize = (): void => {
     const isCompactViewport = readIsCompactViewport();
     if (isCompactViewport === this.state.isCompactViewport) {
@@ -1499,6 +1803,132 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   private searchQueryOrDraft(): string {
     return this.searchDraftValue.length > 0 ? this.searchDraftValue : this.state.searchQuery;
+  }
+
+  private readonly handleWindowClick = (): void => {
+    if (this.state.openTabContextMenuPath === null) {
+      return;
+    }
+
+    this.setState({
+      openTabContextMenuPath: null
+    });
+  };
+
+  private persistWorkspaceState(
+    openFiles: ReadonlyArray<ExplorerOpenFile>,
+    activeFilePath: string | null
+  ): void {
+    const rootPath = this.state.currentProject?.rootPath ?? this.state.sessionRootPath;
+    if (rootPath.trim().length === 0) {
+      return;
+    }
+
+    writeExplorerWorkspaceState(rootPath, {
+      openFiles,
+      activeFilePath
+    });
+  }
+
+  private async loadWorkspaceActiveFile(
+    project: ProjectRecord,
+    path: string,
+    openFiles: ReadonlyArray<ExplorerOpenFile>,
+    revealInTree: boolean,
+    baseTreeNodes?: ReadonlyArray<ExplorerTreeNode>
+  ): Promise<void> {
+    try {
+      const file = await this.explorerClient.readFile({
+        projectId: project.id,
+        path
+      });
+      const nextTreeNodes = revealInTree
+        ? await this.revealTreePath(project.id, baseTreeNodes ?? this.state.treeNodes, path)
+        : baseTreeNodes ?? this.state.treeNodes;
+
+      this.setState({
+        treeNodes: nextTreeNodes,
+        openFiles,
+        selectedFilePath: path,
+        selectedFileContent: file.content,
+        highlightedLineNumber: null
+      });
+      this.persistWorkspaceState(openFiles, path);
+    } catch {
+      const nextOpenFiles = closeExplorerOpenFile(openFiles, path);
+      const nextActiveFilePath = resolveNextExplorerActiveFilePath(nextOpenFiles, path);
+
+      this.setState({
+        openFiles: nextOpenFiles,
+        selectedFilePath: nextActiveFilePath,
+        selectedFileContent: "",
+        highlightedLineNumber: null
+      });
+      this.persistWorkspaceState(nextOpenFiles, nextActiveFilePath);
+    }
+  }
+
+  private scheduleLineHighlight(lineNumber: number | undefined): void {
+    this.clearLineHighlight();
+    if (!lineNumber) {
+      return;
+    }
+
+    this.lineHighlightTimeoutId = window.setTimeout(() => {
+      const scrollPosition = this.readPreviewScrollPosition();
+      this.setState({
+        highlightedLineNumber: null
+      });
+      requestAnimationFrame(() => {
+        this.restorePreviewScrollPosition(scrollPosition);
+      });
+      this.lineHighlightTimeoutId = null;
+    }, ExplorerLineHighlightDurationMs);
+  }
+
+  private scrollEditorLineIntoView(lineNumber: number): void {
+    const lineElement = document.querySelector(
+      `[data-line-number="${lineNumber}"]`
+    );
+    if (!(lineElement instanceof HTMLElement)) {
+      return;
+    }
+
+    lineElement.scrollIntoView({
+      block: "center",
+      inline: "nearest"
+    });
+  }
+
+  private readPreviewScrollPosition(): {
+    top: number;
+    left: number;
+  } {
+    const previewSurface = document.querySelector('[data-testid="explorer-preview-surface"]');
+    if (!(previewSurface instanceof HTMLElement)) {
+      return {
+        top: 0,
+        left: 0
+      };
+    }
+
+    return {
+      top: previewSurface.scrollTop,
+      left: previewSurface.scrollLeft
+    };
+  }
+
+  private restorePreviewScrollPosition(position: {
+    top: number;
+    left: number;
+  }): void {
+    const previewSurface = document.querySelector('[data-testid="explorer-preview-surface"]');
+    if (!(previewSurface instanceof HTMLElement)) {
+      return;
+    }
+
+    previewSurface.scrollTop = position.top;
+    previewSurface.scrollLeft = position.left;
   }
 }
 
@@ -1565,6 +1995,46 @@ const findExplorerNodeByPath = (
   }
 
   return null;
+};
+
+const readNextOpenFilesFromTabAction = (
+  openFiles: ReadonlyArray<ExplorerOpenFile>,
+  action: ExplorerTabMenuAction,
+  path: string
+): ReadonlyArray<ExplorerOpenFile> => {
+  if (action === ExplorerTabMenuAction.Close) {
+    return closeExplorerOpenFile(openFiles, path);
+  }
+
+  if (action === ExplorerTabMenuAction.CloseLeft) {
+    return closeExplorerFileTabsToLeft(openFiles, path);
+  }
+
+  if (action === ExplorerTabMenuAction.CloseRight) {
+    return closeExplorerFileTabsToRight(openFiles, path);
+  }
+
+  if (action === ExplorerTabMenuAction.CloseAll) {
+    return closeAllExplorerOpenFiles();
+  }
+
+  return openFiles;
+};
+
+const readNextActivePathFromTabAction = (
+  nextOpenFiles: ReadonlyArray<ExplorerOpenFile>,
+  currentActivePath: string | null,
+  actionPath: string
+): string | null => {
+  if (nextOpenFiles.some((entry) => entry.path === currentActivePath)) {
+    return currentActivePath;
+  }
+
+  return resolveNextExplorerActiveFilePath(
+    nextOpenFiles,
+    currentActivePath,
+    actionPath
+  );
 };
 
 const readSelectedFileRecord = (path: string | null): ExplorerSelectedFile | null => {

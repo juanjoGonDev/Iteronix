@@ -105,6 +105,8 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('input', value as EventListener);
     } else if (key === 'onChange' && typeof value === 'function') {
       element.addEventListener('change', value as EventListener);
+    } else if (key === 'onContextMenu' && typeof value === 'function') {
+      element.addEventListener('contextmenu', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {
       element.addEventListener('submit', value as EventListener);
     } else if (typeof value === 'boolean') {

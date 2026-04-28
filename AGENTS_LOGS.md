@@ -1442,3 +1442,49 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente la nueva disposición del Explorer
 - Next:
   - Esperar validación visual del usuario sobre el nuevo workbench del Explorer; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+### 2026-04-28 12:32 (Europe/Madrid) — Explorer Tabs, Persistence and Shell Decoupling
+
+- Summary: Completado el salto del `Explorer` hacia un flujo de editor más cercano a VS Code con múltiples pestañas, persistencia por workspace, foco exacto desde resultados de búsqueda y corrección del remount al colapsar la sidebar global.
+- Decisions:
+  - Mantener `01. Explorer screen end-to-end` como única tarea activa y dejar la tarjeta de Notion en `En progreso` hasta validación explícita del usuario
+  - Fijar la regresión del colapso global en el shell de la app, no con otro parche local del `Explorer`: la pantalla activa ya no se reinstancia mientras no cambie la ruta
+  - Cubrir la regresión con validación browser determinista: ocultar el panel interno del Explorer, colapsar y expandir la navegación principal, y exigir que el panel interno siga oculto
+- Changes:
+  - **Added apps/web-ui/src/shared/explorer-workspace-session.ts** y **apps/web-ui/src/shared/explorer-workspace-session.test.ts**: persistencia por workspace de pestañas abiertas, pin state y fichero activo
+  - **Updated apps/web-ui/src/screens/explorer-state.ts** y **apps/web-ui/src/screens/explorer-state.test.ts**: helpers para abrir/cerrar pestañas, pinning, cierre a izquierda/derecha/todo y resolución determinista del tab activo
+  - **Updated apps/web-ui/src/shared/Component.ts** y **apps/web-ui/src/shared/Component.test.ts**: soporte nativo para `contextmenu`, necesario para el menú contextual de pestañas
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: barra de tabs, `Open Editors`, pinning, menú contextual tipo VS Code, persistencia local, debounce estable del buscador, salto a línea exacta desde resultados y resaltado temporal sin desplazar horizontalmente el preview ni perder el scroll vertical
+  - **Updated apps/web-ui/src/index.ts** y **apps/web-ui/src/components/Navigation.ts**: el shell mantiene viva la instancia de la pantalla activa y expone un selector estable del toggle global, evitando que el colapso de la sidebar principal reinicie el estado interno del `Explorer`
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: validación browser ampliada para debounce real, búsquedas en archivos no abiertos, múltiples tabs, pinning, cierre desde menú contextual, persistencia tras reload, scroll preservado después del highlight y desacoplo entre sidebar global y panel interno del Explorer
+  - **Updated PLAN.md** y comentario en Notion: avance registrado sin mover la tarea a `Listo`
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/explorer-state.test.ts apps/web-ui/src/shared/explorer-workspace-session.test.ts`
+  - `pnpm exec tsc -p apps/web-ui/tsconfig.json --noEmit`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El `Explorer` ya cubre bastante más comportamiento tipo VS Code, pero sigue sin incrustar Monaco o el core real de VS Code; si el usuario exige paridad todavía mayor, esa decisión será de infraestructura y no de retoque visual
+  - La tarea no debe moverse a `Listo` hasta que el usuario confirme visualmente la UX final del `Explorer`
+- Next:
+  - Pasar gates completos del repo, dejar el árbol limpio con commit manual y esperar validación del usuario antes de tocar `Settings`
+### 2026-04-28 12:35 (Europe/Madrid) — Explorer Final Verification
+
+- Summary: Reejecutados los gates completos y las validaciones browser tras endurecer el harness de debounce del Explorer; el estado final queda en verde sin mover aún la tarjeta de Notion a `Listo`.
+- Decisions:
+  - Mantener `01. Explorer screen end-to-end` en `En progreso` hasta confirmación visual del usuario
+  - Hacer la comprobación del debounce determinista en el browser harness mediante dos entradas rápidas y una espera inferior al umbral, en lugar de depender de `keyboard.type`
+- Changes:
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: el test del buscador ahora prueba el reinicio del debounce sin flake por velocidad de escritura
+  - **Added comment in Notion**: resultado de gates y browser validations registrado en la tarjeta activa
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - Ningún gate abierto; la única condición pendiente es la validación visual del usuario para cerrar la tarea de Explorer
+- Next:
+  - Esperar confirmación del usuario sobre el Explorer antes de mover la tarjeta a `Listo` y abrir `Settings`
