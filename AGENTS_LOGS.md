@@ -1619,3 +1619,34 @@
   - El tablero de Notion no puede quedar movido a `Listo`/`En progreso` desde esta sesión mientras el conector siga fallando por schema/auth; el estado operativo correcto queda documentado en comentarios intentados y en el repo
 - Next:
   - Empezar `Settings` como única tarea activa y mantenerla en progreso hasta validación funcional explícita del usuario
+### 2026-04-28 22:34 (Europe/Madrid) — Settings Multi-Provider Configuration
+
+- Summary: Reemplazada la pantalla `Settings` por una implementación funcional orientada a perfiles de providers múltiples, con persistencia local, sincronización backend selectiva para Codex CLI y validación browser determinista `load -> edit -> save -> reload`.
+- Decisions:
+  - Tratar `Settings` como catálogo de perfiles reutilizables de provider/modelo; no existe provider global activo en esta pantalla porque los flujos podrán mezclar providers y modelos más adelante
+  - Persistir en navegador `providerProfiles`, `workflowLimits`, `notifications` y `serverConnection`, dejando las claves API sólo en memoria de sesión hasta disponer de un adapter seguro de secretos para web
+  - Sincronizar únicamente perfiles `codex-cli` a `/providers/settings` cuando existe proyecto activo, reutilizando el contrato server-first ya presente sin inventar un backend parcial para providers aún no registrados
+  - Mantener la tarjeta `02. Settings screen end-to-end` en `En progreso`; el conector de Notion sigue sin permitir mutar el estado del tablero, pero sí aceptó un comentario de progreso en la tarjeta
+- Changes:
+  - **Added apps/web-ui/src/shared/settings-storage.ts** y **settings-storage.test.ts**: snapshot tipado y persistencia local de configuración de pantalla
+  - **Added apps/web-ui/src/shared/settings-client.ts** y **settings-client.test.ts**: cliente tipado para `/projects/open`, `/providers/list` y `/providers/settings`
+  - **Added apps/web-ui/src/screens/settings-state.ts** y **settings-state.test.ts**: lógica pura para perfiles de provider y generación de requests de sync backend
+  - **Replaced apps/web-ui/src/screens/Settings.ts**: tabs funcionales para General, Providers, Workflow Limits, Notifications y API Access, sin placeholders `coming soon` ni acciones `console.log`
+  - **Added apps/web-ui/scripts/validate-settings.ts** y script `validate:settings` en `apps/web-ui/package.json`: harness Puppeteer con stub backend dedicado, validando perfiles múltiples, webhook test, conexión API y persistencia tras recarga
+  - **Updated PLAN.md** y comentario en Notion de la tarjeta `02. Settings screen end-to-end`: reflejado el cambio de producto a configuración multi-provider y el avance funcional actual
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/settings-storage.test.ts apps/web-ui/src/shared/settings-client.test.ts apps/web-ui/src/screens/settings-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - En modo web, las claves API de providers remotos siguen siendo de sesión y no persisten entre recargas; es una decisión deliberada hasta que exista soporte de secretos seguro y server-backed para la UI
+  - El backend real sólo expone `codex-cli` como runtime provider hoy; la pantalla ya soporta perfilar OpenAI/Anthropic/Ollama, pero su activación efectiva en flujos dependerá de registrar esos adapters en iteraciones posteriores
+- Next:
+  - Esperar la validación explícita del usuario sobre `Settings`; sólo después se podrá mover la tarea a `Listo` y abrir la siguiente pantalla

@@ -1,418 +1,1097 @@
-import { Component, createElement, ComponentProps } from '../shared/Component.js';
-import { Button } from '../components/Button.js';
+import { Button } from "../components/Button.js";
+import { StatusBadge } from "../components/Card.js";
+import { Component, createElement, type ComponentProps } from "../shared/Component.js";
+import { ROUTES } from "../shared/constants.js";
+import { type ProjectSessionState, readProjectSession } from "../shared/project-session.js";
+import {
+  DefaultServerConnection,
+  readServerConnection,
+  writeServerConnection,
+  type ServerConnection
+} from "../shared/server-config.js";
+import {
+  DefaultSettingsProfileId,
+  createSettingsStorage,
+  type NotificationsSettings,
+  type SettingsSnapshot,
+  type WorkflowLimitsSettings
+} from "../shared/settings-storage.js";
+import {
+  createSettingsClient,
+  type RuntimeProviderRecord
+} from "../shared/settings-client.js";
+import { router } from "../shared/Router.js";
+import type { ProjectRecord } from "../shared/workbench-types.js";
+import {
+  ProviderKind,
+  ProviderPromptMode,
+  createProviderProfile,
+  createProviderSyncRequests,
+  updateProviderProfile,
+  type ProviderProfileRecord
+} from "./settings-state.js";
 
-interface SettingsState {
-  activeTab: 'general' | 'provider' | 'limits' | 'notifications' | 'api';
-  selectedProvider: string;
-  infiniteLoops: boolean;
-  maxLoops: number;
-  externalCalls: boolean;
-  soundEnabled: boolean;
-  webhookUrl: string;
-  apiKey: string;
+type SettingsTab = "general" | "provider" | "limits" | "notifications" | "api";
+
+interface SettingsScreenState {
+  activeTab: SettingsTab;
+  profileId: string;
+  providerProfiles: ReadonlyArray<ProviderProfileRecord>;
+  selectedProviderId: string | null;
+  workflowLimits: WorkflowLimitsSettings;
+  notifications: NotificationsSettings;
+  serverConnection: ServerConnection;
+  currentProject: ProjectRecord | null;
+  projectSession: ProjectSessionState;
+  runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
+  sessionSecrets: Record<string, string>;
+  errorMessage: string | null;
+  noticeMessage: string | null;
+  isSaving: boolean;
+  isTestingConnection: boolean;
+  isTestingWebhook: boolean;
 }
 
-export class SettingsScreen extends Component<ComponentProps, SettingsState> {
+const TabLabel: Record<SettingsTab, string> = {
+  general: "General",
+  provider: "Providers",
+  limits: "Workflow Limits",
+  notifications: "Notifications",
+  api: "API Access"
+};
+
+const ProviderKindLabel: Record<ProviderKind, string> = {
+  [ProviderKind.CodexCli]: "Codex CLI",
+  [ProviderKind.OpenAI]: "OpenAI",
+  [ProviderKind.Anthropic]: "Anthropic",
+  [ProviderKind.Ollama]: "Ollama"
+};
+
+const ProviderKindDescription: Record<ProviderKind, string> = {
+  [ProviderKind.CodexCli]: "CLI provider registered in the current backend runtime.",
+  [ProviderKind.OpenAI]: "API-based profile saved locally for future workflow selection.",
+  [ProviderKind.Anthropic]: "API-based profile saved locally for future workflow selection.",
+  [ProviderKind.Ollama]: "Local inference profile saved locally for future workflow selection."
+};
+
+const TestWebhookPayload = {
+  event: "iteronix.settings.test",
+  source: "settings-screen"
+} as const;
+
+export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
+  private readonly settingsStorage = createSettingsStorage();
+  private readonly settingsClient = createSettingsClient();
+
   constructor(props: ComponentProps = {}) {
-    super(props);
-    this.state = {
-      activeTab: 'general',
-      selectedProvider: 'openai',
-      infiniteLoops: false,
-      maxLoops: 50,
-      externalCalls: true,
-      soundEnabled: true,
-      webhookUrl: '',
-      apiKey: 'sk-proj-************************'
-    };
+    const snapshot = createSettingsStorage().load();
+    const selectedProviderId = snapshot.providerProfiles[0]?.id ?? null;
+
+    super(props, {
+      activeTab: "provider",
+      profileId: snapshot.profileId,
+      providerProfiles: snapshot.providerProfiles,
+      selectedProviderId,
+      workflowLimits: snapshot.workflowLimits,
+      notifications: snapshot.notifications,
+      serverConnection: readServerConnection(),
+      currentProject: null,
+      projectSession: readProjectSession(),
+      runtimeProviders: [],
+      sessionSecrets: {},
+      errorMessage: null,
+      noticeMessage: null,
+      isSaving: false,
+      isTestingConnection: false,
+      isTestingWebhook: false
+    });
   }
 
-  override render() {
-    const { activeTab } = this.state;
-    
-    return createElement('div', { className: 'max-w-[960px] mx-auto flex flex-col gap-8 pb-20 p-4 md:p-8 lg:px-12' }, [
-      // Page Heading
-      createElement('div', { className: 'flex flex-col gap-2' }, [
-        createElement('h1', { 
-          className: 'text-3xl md:text-4xl font-bold text-white tracking-tight' 
-        }, ['Settings']),
-        createElement('p', { 
-          className: 'text-text-secondary text-base max-w-2xl' 
-        }, ['Configure your autonomous coding environment, manage LLM providers, and set critical safety limits for your agents.'])
-      ]),
+  override onMount(): void {
+    void this.hydrateRuntimeContext();
+  }
 
-      // Tabs
-      createElement('div', { className: 'border-b border-border-dark' }, [
-        createElement('div', { className: 'flex gap-8 overflow-x-auto scrollbar-hide' }, [
-          this.renderTab('general', 'General'),
-          this.renderTab('provider', 'LLM Provider'),
-          this.renderTab('limits', 'Workflow Limits'),
-          this.renderTab('notifications', 'Notifications'),
-          this.renderTab('api', 'API Access')
-        ])
-      ]),
-
-      // Tab Content
-      activeTab === 'provider' && this.renderProviderContent(),
-      activeTab === 'limits' && this.renderLimitsContent(),
-      activeTab === 'notifications' && this.renderNotificationsContent(),
-      activeTab === 'general' && this.renderGeneralContent(),
-      activeTab === 'api' && this.renderApiContent(),
-
-      // Save Action Bar
+  override render(): HTMLElement {
+    return createElement("div", {
+      className: "mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-6 md:px-6 lg:px-8"
+    }, [
+      this.renderHeader(),
+      this.renderMessages(),
+      this.renderTabs(),
+      this.renderActiveTab(),
       this.renderSaveBar()
     ]);
   }
 
-  private renderTab(id: SettingsState['activeTab'], label: string) {
-    const { activeTab } = this.state;
-    const isActive = activeTab === id;
-    
-    return createElement('button', {
-      key: id,
-      className: `flex pb-3 border-b-2 ${
-        isActive ? 'border-white text-white' : 'border-transparent text-text-secondary'
-      } text-sm font-bold hover:text-white whitespace-nowrap transition-colors`,
-      onClick: () => this.setState({ activeTab: id })
-    }, [label]);
+  private renderHeader(): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-2" }, [
+      createElement("h1", { className: "text-3xl font-semibold text-white" }, ["Settings"]),
+      createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [
+        "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
+      ])
+    ]);
   }
 
-  private renderProviderContent() {
-    const { apiKey } = this.state;
-    
-    return createElement('section', { className: 'flex flex-col gap-6' }, [
-      createElement('div', { className: 'flex items-center justify-between' }, [
-        createElement('h2', { className: 'text-xl font-bold text-white' }, ['Provider Configuration']),
-        createElement('span', {
-          className: 'text-xs font-mono text-text-secondary bg-surface-dark px-2 py-1 rounded'
-        }, ['ENV: PRODUCTION'])
-      ]),
+  private renderMessages(): HTMLElement {
+    if (!this.state.errorMessage && !this.state.noticeMessage) {
+      return createElement("div", {});
+    }
 
-      // Provider Cards
-      createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' }, [
-        // OpenAI Card
-        this.renderProviderCard('openai', 'OpenAI', 'GPT-4o, GPT-3.5 Turbo', 'openai-logo'),
-        
-        // Anthropic Card
-        this.renderProviderCard('anthropic', 'Anthropic', 'Claude 3.5 Sonnet, Opus', 'C'),
-        
-        // Ollama Card
-        this.renderProviderCard('ollama', 'Ollama (Local)', 'Llama 3, Mixtral', 'terminal', true)
-      ]),
+    return createElement("div", { className: "flex flex-col gap-3" }, [
+      this.state.errorMessage
+        ? createElement("div", {
+            className: "rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
+          }, [this.state.errorMessage])
+        : "",
+      this.state.noticeMessage
+        ? createElement("div", {
+            className: "rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+          }, [this.state.noticeMessage])
+        : ""
+    ]);
+  }
 
-      // Provider Settings Form
-      createElement('div', {
-        className: 'grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 rounded-xl bg-[#1a2027] border border-border-dark'
+  private renderTabs(): HTMLElement {
+    return createElement("div", { className: "border-b border-border-dark" }, [
+      createElement("div", { className: "flex gap-6 overflow-x-auto pb-1" }, [
+        this.renderTab("general"),
+        this.renderTab("provider"),
+        this.renderTab("limits"),
+        this.renderTab("notifications"),
+        this.renderTab("api")
+      ])
+    ]);
+  }
+
+  private renderTab(tab: SettingsTab): HTMLElement {
+    const isActive = this.state.activeTab === tab;
+
+    return createElement("button", {
+      type: "button",
+      className: `border-b-2 pb-3 text-sm font-semibold whitespace-nowrap transition-colors ${
+        isActive ? "border-white text-white" : "border-transparent text-text-secondary hover:text-white"
+      }`,
+      onClick: () => this.setState({ activeTab: tab })
+    }, [TabLabel[tab]]);
+  }
+
+  private renderActiveTab(): HTMLElement {
+    if (this.state.activeTab === "general") {
+      return this.renderGeneralTab();
+    }
+
+    if (this.state.activeTab === "provider") {
+      return this.renderProviderTab();
+    }
+
+    if (this.state.activeTab === "limits") {
+      return this.renderLimitsTab();
+    }
+
+    if (this.state.activeTab === "notifications") {
+      return this.renderNotificationsTab();
+    }
+
+    return this.renderApiTab();
+  }
+
+  private renderGeneralTab(): HTMLElement {
+    const currentProject = this.state.currentProject;
+    const runtimeProviders = this.state.runtimeProviders;
+
+    return createElement("div", { className: "grid gap-6 lg:grid-cols-2" }, [
+      createElement("section", {
+        className: "rounded-xl border border-border-dark bg-surface-dark p-5"
       }, [
-        // Model Selection
-        createElement('div', { className: 'flex flex-col gap-2' }, [
-          createElement('label', { className: 'text-sm font-medium text-white' }, ['Model']),
-          createElement('div', { className: 'relative' }, [
-            createElement('select', {
-              className: 'w-full h-10 bg-surface-dark border-none rounded-lg px-3 text-white focus:ring-1 focus:ring-primary cursor-pointer text-sm',
-              value: 'gpt-4o'
-            }, [
-              createElement('option', { value: 'gpt-4o' }, ['gpt-4o (Recommended)']),
-              createElement('option', { value: 'gpt-4-turbo' }, ['gpt-4-turbo']),
-              createElement('option', { value: 'gpt-3.5-turbo' }, ['gpt-3.5-turbo'])
-            ]),
-            createElement('div', {
-              className: 'absolute right-3 top-2.5 pointer-events-none text-text-secondary'
-            }, [
-              createElement('span', { className: 'material-symbols-outlined text-lg' }, ['expand_more'])
+        createElement("div", { className: "flex items-start justify-between gap-3" }, [
+          createElement("div", { className: "flex flex-col gap-1" }, [
+            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Workspace context"]),
+            createElement("p", { className: "text-sm text-text-secondary" }, [
+              "Settings read the active project session so provider profiles can later be reused by workflows without hardcoding a single provider."
             ])
           ]),
-          createElement('p', { className: 'text-xs text-text-secondary' }, ['Estimated cost: ~$0.03 / 1k tokens'])
-        ]),
-
-        // Precision
-        createElement('div', { className: 'flex flex-col gap-2' }, [
-          createElement('label', { className: 'text-sm font-medium text-white' }, ['Precision & Context']),
-          createElement('div', { className: 'relative' }, [
-            createElement('select', {
-              className: 'w-full h-10 bg-surface-dark border-none rounded-lg px-3 text-white focus:ring-1 focus:ring-primary cursor-pointer text-sm'
-            }, [
-              createElement('option', { value: 'fp32' }, ['FP32 (Standard)']),
-              createElement('option', { value: 'fp16' }, ['FP16 (Half Precision)']),
-              createElement('option', { value: 'bf16' }, ['BF16'])
-            ]),
-            createElement('div', {
-              className: 'absolute right-3 top-2.5 pointer-events-none text-text-secondary'
-            }, [
-              createElement('span', { className: 'material-symbols-outlined text-lg' }, ['expand_more'])
-            ])
+          createElement(StatusBadge, { status: currentProject ? "success" : "warning" }, [
+            currentProject ? "project ready" : "project missing"
           ])
         ]),
-
-        // API Key
-        createElement('div', { 
-          className: 'flex flex-col gap-2 lg:col-span-2' 
-        }, [
-          createElement('label', { className: 'text-sm font-medium text-white' }, ['API Key']),
-          createElement('div', { className: 'relative flex items-center' }, [
-            createElement('span', {
-              className: 'absolute left-3 text-text-secondary material-symbols-outlined text-[20px]'
-            }, ['key']),
-            createElement('input', {
-              type: 'password',
-              value: apiKey,
-              className: 'w-full h-10 bg-surface-dark border-none rounded-lg pl-10 pr-3 text-white focus:ring-1 focus:ring-primary font-mono text-sm placeholder-text-secondary',
-              onChange: (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                this.setState({ apiKey: target.value });
-              }
-            }),
-            createElement('button', {
-              className: 'absolute right-2 text-primary text-xs font-bold hover:underline px-2',
-              onClick: () => console.log('Edit API key')
-            }, ['EDIT'])
-          ])
-        ])
-      ])
-    ]);
-  }
-
-  private renderProviderCard(id: string, name: string, description: string, icon: string, isLocal: boolean = false) {
-    const { selectedProvider } = this.state;
-    const isSelected = selectedProvider === id;
-    
-    return createElement('label', {
-      key: id,
-      className: `relative flex flex-col gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all hover:${
-        isSelected 
-          ? 'bg-primary/20' 
-          : 'bg-surface-dark hover:border-primary/50'
-      } ${isSelected ? 'border-primary bg-primary/10' : 'border-border-dark'}`
-    }, [
-      createElement('input', {
-        type: 'radio',
-        name: 'provider',
-        checked: isSelected,
-        onChange: () => this.setState({ selectedProvider: id }),
-        className: 'sr-only'
-      }),
-      createElement('div', { className: 'flex items-center justify-between' }, [
-        createElement('div', {
-          className: `size-10 ${isLocal ? 'bg-white' : 'bg-gradient-to-br from-primary to-blue-600'} rounded-lg flex items-center justify-center p-1.5`,
-          title: `${name} Logo`
-        }, [
-          icon === 'openai-logo' 
-            ? createElement('svg', { 
-                className: 'w-full h-full text-black',
-                fill: 'none',
-                viewBox: '0 0 24 24'
-              }, [
-                createElement('path', {
-                  d: 'M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0843 3.5398-2.0466.1877-.1096V14.9918l-3.8082 2.2045-2.7818 1.6138a4.5292 4.5292 0 0 1-.2994-5.2263l.1171-.064 3.7915-2.1966.1953-.1127v4.1561l3.5246 2.0375a4.4707 4.4707 0 0 1-1.732 4.0255zm7.2272-5.4623-2.8094 1.6247-.1133.0655-3.5246-2.0375-.1953-.1127V12.35l3.821-2.2017 2.7687-1.599a4.5077 4.5077 0 0 1 2.9102 1.1009 4.5363 4.5363 0 0 1-2.8572 7.1802zm-3.1537-8.7906a4.4693 4.4693 0 0 1 2.668 1.5546l-.1352.0789-3.5413 2.0476-.1846.1062v4.1481l3.8052-2.203 2.7818-1.6138a4.522 4.522 0 0 1 .301 5.231l-.1129.065-3.7997 2.1986-.1969.1142V11.233l-3.5186-2.0354a4.4693 4.4693 0 0 1 1.9333-3.8247zm-11.666 4.6062L8.47 11.1466l.1133-.0655 3.5247 2.0375.1953.1127v4.1624l-3.817 2.1986-2.7662 1.5943a4.5077 4.5077 0 0 1-2.9118-1.0962 4.5363 4.5363 0 0 1 2.8592-7.1648zm3.1422-3.7937a4.522 4.522 0 0 1 2.6288-1.0717l.1128-.065 3.8008-2.1991.1969-.1142v4.1566l-3.5212 2.037a4.4717 4.4717 0 0 1-1.745-4.025l2.8093-1.6238z',
-                  fill: 'currentColor'
-                })
-              ])
-            : createElement('span', { 
-                className: `material-symbols-outlined text-[32px] ${isLocal ? 'text-black' : 'text-white'}` 
-              }, [icon])
+        createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
+          renderReadOnlyCell("Project", currentProject?.name ?? "No project selected"),
+          renderReadOnlyCell(
+            "Root path",
+            currentProject?.rootPath ?? (this.state.projectSession.projectRootPath || "Not set")
+          ),
+          renderReadOnlyCell("Recent projects", String(this.state.projectSession.recentProjects.length)),
+          renderReadOnlyCell("Runtime providers", String(runtimeProviders.length))
         ]),
-        createElement('span', {
-          className: `material-symbols-outlined ${isSelected ? 'text-primary' : 'text-text-secondary'}`
-        }, [isSelected ? 'check_circle' : 'radio_button_unchecked'])
-      ]),
-      createElement('div', {}, [
-        createElement('p', { className: 'font-bold text-white' }, [name]),
-        createElement('p', { className: 'text-xs text-text-secondary' }, [description])
-      ])
-    ]);
-  }
-
-  private renderLimitsContent() {
-    const { infiniteLoops, maxLoops, externalCalls } = this.state;
-    
-    return createElement('section', { className: 'flex flex-col gap-6 pt-6 border-t border-border-dark' }, [
-      createElement('div', { className: 'flex flex-col' }, [
-        createElement('h2', { className: 'text-xl font-bold text-white' }, ['Workflow Limits']),
-        createElement('p', { className: 'text-sm text-text-secondary' }, ['Safety constraints for autonomous loops.'])
-      ]),
-
-      // Dangerous Settings Panel
-      createElement('div', { className: 'flex flex-col gap-6 p-6 rounded-xl bg-[#1a2027] border border-border-dark' }, [
-        // Max Loops Configuration
-        createElement('div', { className: 'flex flex-col gap-4' }, [
-          createElement('div', { className: 'flex items-center justify-between' }, [
-            createElement('div', { className: 'flex flex-col' }, [
-              createElement('p', { className: 'text-white font-medium' }, ['Maximum Loops per Agent']),
-              createElement('p', { className: 'text-xs text-text-secondary' }, ['Prevents runaway agents from consuming excessive tokens.'])
-            ]),
-            createElement('div', { className: 'flex items-center gap-3' }, [
-              createElement('span', {
-                className: 'text-xs font-bold text-text-secondary uppercase tracking-wider'
-              }, ['Finite']),
-              this.renderToggle('infinite-loops', infiniteLoops),
-              createElement('span', {
-                className: 'text-xs font-bold text-white uppercase tracking-wider'
-              }, ['Infinite'])
-            ])
-          ]),
-          
-          // Input for finite loops
-          createElement('div', { className: 'flex items-center gap-2' }, [
-            createElement('input', {
-              type: 'number',
-              value: maxLoops.toString(),
-              disabled: infiniteLoops,
-              className: 'w-32 h-10 bg-surface-dark border border-border-dark text-white rounded-lg px-3 focus:ring-0 disabled:opacity-50',
-              onChange: (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                this.setState({ maxLoops: parseInt(target.value) });
-              }
-            }),
-            createElement('span', { className: 'text-sm text-text-secondary' }, ['iterations'])
-          ]),
-
-          // Warning Banner
-          infiniteLoops && createElement('div', {
-            className: 'flex gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 items-start'
-          }, [
-            createElement('span', { className: 'material-symbols-outlined text-[20px] mt-0.5' }, ['warning']),
-            createElement('div', { className: 'flex flex-col gap-1' }, [
-              createElement('p', { className: 'text-sm font-bold' }, ['Infinite Loops Enabled']),
-              createElement('p', { className: 'text-xs opacity-90' }, ['Agents will run continuously until manually stopped or an error occurs. This can lead to significant API costs. Ensure you have spending limits configured on your provider dashboard.'])
-            ])
-          ])
-        ]),
-
-        createElement('div', { className: 'h-px bg-border-dark' }),
-
-        // External Calls
-        createElement('div', { className: 'flex items-center justify-between' }, [
-          createElement('div', { className: 'flex gap-3' }, [
-            createElement('div', {
-              className: 'flex items-center justify-center size-10 rounded-lg bg-surface-dark text-white shrink-0'
-            }, [
-              createElement('span', { className: 'material-symbols-outlined' }, ['public'])
-            ]),
-            createElement('div', { className: 'flex flex-col' }, [
-              createElement('p', { className: 'text-white font-medium' }, ['Allow External API Calls']),
-              createElement('p', { className: 'text-xs text-text-secondary' }, ['Agents can fetch data from open internet via curl/wget.'])
-            ])
-          ]),
-          this.renderToggle('external-calls', externalCalls)
-        ])
-      ])
-    ]);
-  }
-
-  private renderNotificationsContent() {
-    const { soundEnabled, webhookUrl } = this.state;
-    
-    return createElement('section', { className: 'flex flex-col gap-6 pt-6 border-t border-border-dark' }, [
-      createElement('div', { className: 'flex items-center justify-between' }, [
-        createElement('div', { className: 'flex flex-col' }, [
-          createElement('h2', { className: 'text-xl font-bold text-white' }, ['Notifications']),
-          createElement('p', { className: 'text-sm text-text-secondary' }, ['Alerts for agent completion and errors.'])
-        ])
-      ]),
-      
-      createElement('div', { className: 'flex flex-col gap-4' }, [
-        // Sound Toggle
-        createElement('div', {
-          className: 'flex items-center justify-between p-4 rounded-lg bg-[#1a2027] border border-border-dark'
-        }, [
-          createElement('div', { className: 'flex items-center gap-3' }, [
-            createElement('span', { className: 'material-symbols-outlined text-text-secondary' }, ['volume_up']),
-            createElement('span', { className: 'text-sm font-medium text-white' }, ['Play sound on completion'])
-          ]),
-          this.renderToggle('sound-enabled', soundEnabled)
-        ]),
-
-        // Webhook
-        createElement('div', {
-          className: 'flex flex-col gap-3 p-4 rounded-lg bg-[#1a2027] border border-border-dark'
-        }, [
-          createElement('div', { className: 'flex justify-between items-center' }, [
-            createElement('label', {
-              className: 'text-sm font-medium text-white flex items-center gap-2'
-            }, [
-              createElement('span', { className: 'material-symbols-outlined text-text-secondary text-[18px]' }, ['webhook']),
-              'Webhook URL'
-            ]),
-            createElement('button', {
-              className: 'text-xs font-bold text-primary hover:text-blue-400',
-              onClick: () => console.log('Test webhook payload')
-            }, ['TEST PAYLOAD'])
-          ]),
-          createElement('input', {
-            type: 'text',
-            value: webhookUrl,
-            placeholder: 'https://hooks.slack.com/services/...',
-            className: 'w-full h-10 bg-surface-dark border border-border-dark rounded-lg px-3 text-white focus:ring-1 focus:ring-primary text-sm font-mono placeholder-text-secondary',
-            onChange: (e: Event) => {
-              const target = e.target as HTMLInputElement;
-              this.setState({ webhookUrl: target.value });
-            }
+        createElement("div", { className: "mt-5 flex flex-wrap gap-3" }, [
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            onClick: () => router.navigate(ROUTES.PROJECTS),
+            children: currentProject ? "Change project" : "Open project"
           }),
-          createElement('p', { className: 'text-xs text-text-secondary' }, ['We will send a POST request with JSON payload upon workflow events.'])
+          createElement(Button, {
+            variant: "ghost",
+            size: "sm",
+            onClick: () => {
+              void this.hydrateRuntimeContext();
+            },
+            children: "Reload runtime"
+          })
+        ])
+      ]),
+      createElement("section", {
+        className: "rounded-xl border border-border-dark bg-surface-dark p-5"
+      }, [
+        createElement("div", { className: "flex items-start justify-between gap-3" }, [
+          createElement("div", { className: "flex flex-col gap-1" }, [
+            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Persistence policy"]),
+            createElement("p", { className: "text-sm text-text-secondary" }, [
+              "Provider profiles, workflow limits and notifications persist locally. Server URL and auth token reuse the existing app connection contract. Secrets remain session-only in the browser."
+            ])
+          ]),
+          createElement(StatusBadge, { status: "info" }, ["web mode"])
+        ]),
+        createElement("div", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
+          renderReadOnlyCell("Provider profiles", String(this.state.providerProfiles.length)),
+          renderReadOnlyCell("Current namespace", this.state.profileId || DefaultSettingsProfileId),
+          renderReadOnlyCell("Sound notifications", this.state.notifications.soundEnabled ? "Enabled" : "Disabled"),
+          renderReadOnlyCell("External calls", this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked")
+        ]),
+        createElement("div", {
+          className: "mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+        }, [
+          "API keys are intentionally not written to local storage in browser mode. Keep them in the current session only until a secure secret adapter exists for web."
         ])
       ])
     ]);
   }
 
-  private renderGeneralContent() {
-    return createElement('section', { className: 'flex flex-col gap-6' }, [
-      createElement('div', { className: 'text-center py-12' }, [
-        createElement('p', { className: 'text-text-secondary' }, ['General settings coming soon...'])
-      ])
+  private renderProviderTab(): HTMLElement {
+    const selectedProfile = this.readSelectedProviderProfile();
+
+    return createElement("div", { className: "grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" }, [
+      createElement("section", {
+        className: "flex flex-col gap-4 rounded-xl border border-border-dark bg-surface-dark p-5"
+      }, [
+        createElement("div", { className: "flex items-start justify-between gap-3" }, [
+          createElement("div", { className: "flex flex-col gap-1" }, [
+            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Provider profiles"]),
+            createElement("p", { className: "text-sm text-text-secondary" }, [
+              "Create multiple reusable provider profiles. Workflows will choose among them later instead of activating a single global provider here."
+            ])
+          ]),
+          createElement(StatusBadge, { status: "info" }, [`${this.state.providerProfiles.length} configured`])
+        ]),
+        this.renderAddProfileButtons(),
+        createElement("div", { className: "flex flex-col gap-2" }, [
+          this.state.providerProfiles.length > 0
+            ? this.state.providerProfiles.map((profile) => this.renderProviderProfileListItem(profile))
+            : createElement("div", {
+                className: "rounded-lg border border-dashed border-border-dark px-4 py-6 text-sm text-text-secondary"
+              }, ["No provider profiles yet. Add one from the buttons above."])
+        ])
+      ]),
+      selectedProfile
+        ? this.renderProviderProfileEditor(selectedProfile)
+        : createElement("section", {
+            className: "rounded-xl border border-border-dark bg-surface-dark p-5"
+          }, [
+            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Select a profile"]),
+            createElement("p", { className: "mt-2 text-sm text-text-secondary" }, [
+              "Choose a provider profile from the left column to edit its model, endpoint or CLI parameters."
+            ])
+          ])
     ]);
   }
 
-  private renderApiContent() {
-    return createElement('section', { className: 'flex flex-col gap-6' }, [
-      createElement('div', { className: 'text-center py-12' }, [
-        createElement('p', { className: 'text-text-secondary' }, ['API Access settings coming soon...'])
-      ])
+  private renderAddProfileButtons(): HTMLElement {
+    return createElement("div", { className: "flex flex-wrap gap-2" }, [
+      this.renderAddProfileButton(ProviderKind.CodexCli),
+      this.renderAddProfileButton(ProviderKind.OpenAI),
+      this.renderAddProfileButton(ProviderKind.Anthropic),
+      this.renderAddProfileButton(ProviderKind.Ollama)
     ]);
   }
 
-  private renderToggle(id: string, checked: boolean) {
-    return createElement('label', {
-      className: 'relative inline-flex items-center cursor-pointer',
-      htmlFor: id
+  private renderAddProfileButton(kind: ProviderKind): HTMLElement {
+    return createElement(Button, {
+      variant: "secondary",
+      size: "sm",
+      onClick: () => this.handleAddProviderProfile(kind),
+      children: `Add ${ProviderKindLabel[kind]}`
+    });
+  }
+
+  private renderProviderProfileListItem(profile: ProviderProfileRecord): HTMLElement {
+    const isSelected = this.state.selectedProviderId === profile.id;
+
+    return createElement("div", {
+      className: `rounded-lg border px-3 py-3 transition-colors ${
+        isSelected
+          ? "border-primary bg-primary/10"
+          : "border-border-dark bg-background-dark/40"
+      }`
     }, [
-      createElement('input', {
-        type: 'checkbox',
-        id: id,
-        checked: checked,
-        className: 'sr-only peer',
-        onChange: (e: Event) => {
-          const target = e.target as HTMLInputElement;
-          if (id === 'infinite-loops') this.setState({ infiniteLoops: target.checked });
-          else if (id === 'external-calls') this.setState({ externalCalls: target.checked });
-          else if (id === 'sound-enabled') this.setState({ soundEnabled: target.checked });
-        }
+      createElement("div", { className: "flex items-start gap-3" }, [
+        createElement("button", {
+          type: "button",
+          className: "flex min-w-0 flex-1 flex-col text-left",
+          onClick: () => this.setState({ selectedProviderId: profile.id })
+        }, [
+          createElement("span", { className: "truncate text-sm font-semibold text-white" }, [profile.name]),
+          createElement("span", { className: "mt-1 truncate text-xs text-text-secondary" }, [
+            `${ProviderKindLabel[profile.providerKind]}${profile.modelId ? ` · ${profile.modelId}` : ""}`
+          ])
+        ]),
+        createElement(StatusBadge, {
+          status: profile.providerKind === ProviderKind.CodexCli ? "success" : "info"
+        }, [profile.providerKind === ProviderKind.CodexCli ? "syncable" : "local"]),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          onClick: () => this.handleRemoveProviderProfile(profile.id),
+          children: "Remove"
+        })
+      ])
+    ]);
+  }
+
+  private renderProviderProfileEditor(profile: ProviderProfileRecord): HTMLElement {
+    const apiKeyValue = this.state.sessionSecrets[profile.id] ?? "";
+    const runtimeAvailable = this.state.runtimeProviders.some(
+      (provider) => provider.id === profile.providerKind
+    );
+
+    return createElement("section", {
+      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+    }, [
+      createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, [
+        createElement("div", { className: "flex flex-col gap-1" }, [
+          createElement("h2", { className: "text-lg font-semibold text-white" }, [profile.name]),
+          createElement("p", { className: "text-sm text-text-secondary" }, [
+            ProviderKindDescription[profile.providerKind]
+          ])
+        ]),
+        createElement("div", { className: "flex items-center gap-2" }, [
+          createElement(StatusBadge, {
+            status: runtimeAvailable ? "success" : "warning"
+          }, [runtimeAvailable ? "runtime available" : "local only"]),
+          profile.providerKind === ProviderKind.CodexCli && this.state.currentProject
+            ? createElement(StatusBadge, { status: "info" }, ["sync on save"])
+            : ""
+        ])
+      ]),
+      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+        renderTextField({
+          label: "Profile name",
+          value: profile.name,
+          placeholder: "Planner profile",
+          testId: "settings-provider-name",
+          onChange: (value) => this.handleProviderProfileTextChange(profile.id, "name", value)
+        }),
+        renderSelectField({
+          label: "Provider",
+          value: profile.providerKind,
+          testId: "settings-provider-kind",
+          options: [
+            { value: ProviderKind.CodexCli, label: ProviderKindLabel[ProviderKind.CodexCli] },
+            { value: ProviderKind.OpenAI, label: ProviderKindLabel[ProviderKind.OpenAI] },
+            { value: ProviderKind.Anthropic, label: ProviderKindLabel[ProviderKind.Anthropic] },
+            { value: ProviderKind.Ollama, label: ProviderKindLabel[ProviderKind.Ollama] }
+          ],
+          onChange: (value) => this.handleProviderKindChange(profile.id, value)
+        }),
+        renderTextField({
+          label: "Model",
+          value: profile.modelId,
+          placeholder: "Enter the model id used by flows",
+          testId: "settings-provider-model",
+          onChange: (value) => this.handleProviderProfileTextChange(profile.id, "modelId", value)
+        }),
+        profile.providerKind === ProviderKind.CodexCli
+          ? renderTextField({
+              label: "Command",
+              value: profile.command,
+              placeholder: "codex",
+              testId: "settings-provider-command",
+              onChange: (value) => this.handleProviderProfileTextChange(profile.id, "command", value)
+            })
+          : renderTextField({
+              label: "Endpoint URL",
+              value: profile.endpointUrl,
+              placeholder: "https://provider.example.com",
+              testId: "settings-provider-endpoint",
+              onChange: (value) => this.handleProviderProfileTextChange(profile.id, "endpointUrl", value)
+            }),
+        profile.providerKind === ProviderKind.CodexCli
+          ? renderSelectField({
+              label: "Prompt mode",
+              value: profile.promptMode,
+              testId: "settings-provider-prompt-mode",
+              options: [
+                { value: ProviderPromptMode.Stdin, label: "stdin" },
+                { value: ProviderPromptMode.Arg, label: "arg" }
+              ],
+              onChange: (value) => this.handleProviderPromptModeChange(profile.id, value)
+            })
+          : renderSessionSecretField({
+              label: "API key",
+              value: apiKeyValue,
+              placeholder: "Session only in web mode",
+              testId: "settings-provider-api-key",
+              onChange: (value) => this.handleProviderSecretChange(profile.id, value)
+            })
+      ]),
+      createElement("div", {
+        className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4 text-sm text-text-secondary"
+      }, [
+        profile.providerKind === ProviderKind.CodexCli
+          ? this.state.currentProject
+            ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
+            : "This Codex CLI profile is already persisted locally. Open a project if you also want to sync its CLI config to the backend store on save."
+          : "This provider profile is persisted locally. It becomes server-backed once a matching runtime adapter is registered in the backend."
+      ])
+    ]);
+  }
+
+  private renderLimitsTab(): HTMLElement {
+    return createElement("section", {
+      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+    }, [
+      createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("h2", { className: "text-lg font-semibold text-white" }, ["Workflow limits"]),
+        createElement("p", { className: "text-sm text-text-secondary" }, [
+          "Guardrails that apply before autonomous runs consume excessive time, loops or external access."
+        ])
+      ]),
+      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+        renderNumberField({
+          label: "Maximum loops",
+          value: this.state.workflowLimits.maxLoops,
+          disabled: this.state.workflowLimits.infiniteLoops,
+          testId: "settings-max-loops",
+          onChange: (value) => this.handleMaxLoopsChange(value)
+        }),
+        this.renderToggleField({
+          label: "Infinite loops",
+          description: "Allow autonomous execution without a hard loop cap.",
+          checked: this.state.workflowLimits.infiniteLoops,
+          testId: "settings-infinite-loops",
+          onChange: (checked) =>
+            this.setState({
+              workflowLimits: {
+                ...this.state.workflowLimits,
+                infiniteLoops: checked
+              }
+            })
+        }),
+        this.renderToggleField({
+          label: "Allow external API calls",
+          description: "Permit network access from tool executions and workflow steps.",
+          checked: this.state.workflowLimits.externalCalls,
+          testId: "settings-external-calls",
+          onChange: (checked) =>
+            this.setState({
+              workflowLimits: {
+                ...this.state.workflowLimits,
+                externalCalls: checked
+              }
+            })
+        })
+      ])
+    ]);
+  }
+
+  private renderNotificationsTab(): HTMLElement {
+    return createElement("section", {
+      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+    }, [
+      createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("h2", { className: "text-lg font-semibold text-white" }, ["Notifications"]),
+        createElement("p", { className: "text-sm text-text-secondary" }, [
+          "Keep browser-side alert preferences and webhook routing in sync with the current workstation."
+        ])
+      ]),
+      this.renderToggleField({
+        label: "Completion sound",
+        description: "Play a local confirmation tone when a run finishes.",
+        checked: this.state.notifications.soundEnabled,
+        testId: "settings-sound-enabled",
+        onChange: (checked) =>
+          this.setState({
+            notifications: {
+              ...this.state.notifications,
+              soundEnabled: checked
+            }
+          })
       }),
-      createElement('div', {
-        className: 'w-11 h-6 bg-border-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary'
+      createElement("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" }, [
+        renderTextField({
+          label: "Webhook URL",
+          value: this.state.notifications.webhookUrl,
+          placeholder: "https://hooks.example.com/iteronix",
+          testId: "settings-webhook-url",
+          onChange: (value) =>
+            this.setState({
+              notifications: {
+                ...this.state.notifications,
+                webhookUrl: value
+              }
+            })
+        }),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled:
+            this.state.isTestingWebhook ||
+            this.state.notifications.webhookUrl.trim().length === 0,
+          onClick: () => {
+            void this.handleTestWebhook();
+          },
+          children: this.state.isTestingWebhook ? "Testing" : "Test payload"
+        })
+      ]),
+      createElement("p", { className: "text-xs text-text-secondary" }, [
+        "Webhook tests send a JSON POST directly from the browser. If the destination blocks CORS, the test fails locally but the saved URL remains available for future server-side integrations."
+      ])
+    ]);
+  }
+
+  private renderApiTab(): HTMLElement {
+    return createElement("section", {
+      className: "flex flex-col gap-5 rounded-xl border border-border-dark bg-surface-dark p-5"
+    }, [
+      createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("h2", { className: "text-lg font-semibold text-white" }, ["API access"]),
+        createElement("p", { className: "text-sm text-text-secondary" }, [
+          "These values back the existing web UI connection contract and are reused by every server-first screen."
+        ])
+      ]),
+      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+        renderTextField({
+          label: "Server URL",
+          value: this.state.serverConnection.serverUrl,
+          placeholder: DefaultServerConnection.serverUrl,
+          testId: "settings-server-url",
+          onChange: (value) => this.handleServerConnectionChange("serverUrl", value)
+        }),
+        renderTextField({
+          label: "Auth token",
+          value: this.state.serverConnection.authToken,
+          placeholder: DefaultServerConnection.authToken,
+          testId: "settings-auth-token",
+          onChange: (value) => this.handleServerConnectionChange("authToken", value)
+        })
+      ]),
+      createElement("div", { className: "flex flex-wrap items-center gap-3" }, [
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled: this.state.isTestingConnection,
+          onClick: () => {
+            void this.handleTestConnection();
+          },
+          children: this.state.isTestingConnection ? "Testing" : "Check connection"
+        }),
+        createElement(StatusBadge, {
+          status: this.state.runtimeProviders.length > 0 ? "success" : "warning"
+        }, [
+          this.state.runtimeProviders.length > 0
+            ? `${this.state.runtimeProviders.length} runtime provider${this.state.runtimeProviders.length === 1 ? "" : "s"}`
+            : "No runtime providers loaded"
+        ])
+      ]),
+      this.state.runtimeProviders.length > 0
+        ? createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+            this.state.runtimeProviders.map((provider) =>
+              createElement("div", {
+                key: provider.id,
+                className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3"
+              }, [
+                createElement("p", { className: "text-sm font-semibold text-white" }, [provider.displayName]),
+                createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                  `${provider.id} · ${provider.type} · auth ${provider.authType}`
+                ])
+              ])
+            )
+          ])
+        : createElement("div", {
+            className: "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary"
+          }, ["Use Check connection to validate the current server URL and auth token."])
+    ]);
+  }
+
+  private renderSaveBar(): HTMLElement {
+    return createElement("div", {
+      className: "sticky bottom-0 z-20 flex flex-wrap justify-end gap-3 border-t border-border-dark bg-background-dark/95 px-0 py-4 backdrop-blur"
+    }, [
+      createElement(Button, {
+        variant: "secondary",
+        onClick: () => this.handleResetDefaults(),
+        children: "Reset defaults"
+      }),
+      createElement(Button, {
+        variant: "primary",
+        icon: "save",
+        disabled: this.state.isSaving,
+        onClick: () => {
+          void this.handleSave();
+        },
+        children: this.state.isSaving ? "Saving" : "Save changes"
       })
     ]);
   }
 
-  private renderSaveBar() {
-    return createElement('div', {
-      className: 'fixed bottom-0 right-0 left-0 md:left-64 p-4 bg-background-dark/90 backdrop-blur-sm border-t border-border-dark flex justify-end gap-3 z-30'
+  private renderToggleField(input: {
+    label: string;
+    description: string;
+    checked: boolean;
+    testId: string;
+    onChange: (checked: boolean) => void;
+  }): HTMLElement {
+    return createElement("label", {
+      className: "flex items-center justify-between gap-4 rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4"
     }, [
-      createElement(Button, {
-        variant: 'secondary',
-        onClick: () => console.log('Reset to defaults')
-      }, ['Reset Defaults']),
-      createElement(Button, {
-        variant: 'primary',
-        icon: 'save',
-        onClick: () => this.handleSave()
-      }, ['Save Changes'])
+      createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+        createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+        createElement("span", { className: "text-xs text-text-secondary" }, [input.description])
+      ]),
+      createElement("input", {
+        type: "checkbox",
+        checked: input.checked,
+        "data-testid": input.testId,
+        className: "h-4 w-4 accent-primary",
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            input.onChange(target.checked);
+          }
+        }
+      })
     ]);
   }
 
-  private handleSave() {
-    console.log('Saving settings:', this.state);
-    // Here you would save to backend/storage
+  private async hydrateRuntimeContext(): Promise<void> {
+    const projectSession = readProjectSession();
+    let currentProject: ProjectRecord | null = null;
+    let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> = this.state.runtimeProviders;
+    let message: string | null = null;
+
+    try {
+      const providerResponse = await this.settingsClient.listProviders();
+      runtimeProviders = providerResponse.providers;
+    } catch (error) {
+      message = toErrorMessage(error, "Could not load runtime providers.");
+    }
+
+    if (projectSession.projectRootPath.length > 0) {
+      try {
+        currentProject = await this.settingsClient.openProject({
+          rootPath: projectSession.projectRootPath,
+          ...(projectSession.projectName ? { name: projectSession.projectName } : {})
+        });
+      } catch (error) {
+        message = toErrorMessage(error, "Could not resolve the active project for settings.");
+      }
+    }
+
+    this.setState({
+      projectSession,
+      currentProject,
+      runtimeProviders,
+      ...(message ? { noticeMessage: message } : {})
+    });
   }
 
+  private handleAddProviderProfile(kind: ProviderKind): void {
+    const profile = createProviderProfile(kind);
+    this.setState({
+      activeTab: "provider",
+      providerProfiles: [...this.state.providerProfiles, profile],
+      selectedProviderId: profile.id,
+      noticeMessage: null,
+      errorMessage: null
+    });
+  }
 
+  private handleRemoveProviderProfile(profileId: string): void {
+    const nextProfiles = this.state.providerProfiles.filter((profile) => profile.id !== profileId);
+    const selectedProviderId =
+      this.state.selectedProviderId === profileId
+        ? nextProfiles[0]?.id ?? null
+        : this.state.selectedProviderId;
+
+    const nextSecrets = { ...this.state.sessionSecrets };
+    delete nextSecrets[profileId];
+
+    this.setState({
+      providerProfiles: nextProfiles,
+      selectedProviderId,
+      sessionSecrets: nextSecrets
+    });
+  }
+
+  private handleProviderProfileTextChange(
+    profileId: string,
+    key: "name" | "modelId" | "endpointUrl" | "command",
+    value: string
+  ): void {
+    const nextProfiles = this.state.providerProfiles.map((profile) =>
+      profile.id === profileId ? updateProviderProfile(profile, { [key]: value }) : profile
+    );
+
+    this.setState({
+      providerProfiles: nextProfiles
+    });
+  }
+
+  private handleProviderKindChange(profileId: string, value: string): void {
+    const kind = readProviderKind(value);
+    if (!kind) {
+      return;
+    }
+
+    const nextProfiles = this.state.providerProfiles.map((profile) =>
+      profile.id === profileId ? updateProviderProfile(profile, { providerKind: kind, modelId: "" }) : profile
+    );
+
+    this.setState({ providerProfiles: nextProfiles });
+  }
+
+  private handleProviderPromptModeChange(profileId: string, value: string): void {
+    const promptMode = readPromptMode(value);
+    if (!promptMode) {
+      return;
+    }
+
+    const nextProfiles = this.state.providerProfiles.map((profile) =>
+      profile.id === profileId ? updateProviderProfile(profile, { promptMode }) : profile
+    );
+
+    this.setState({ providerProfiles: nextProfiles });
+  }
+
+  private handleProviderSecretChange(profileId: string, value: string): void {
+    this.setState({
+      sessionSecrets: {
+        ...this.state.sessionSecrets,
+        [profileId]: value
+      }
+    });
+  }
+
+  private handleMaxLoopsChange(value: string): void {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    this.setState({
+      workflowLimits: {
+        ...this.state.workflowLimits,
+        maxLoops: parsed
+      }
+    });
+  }
+
+  private handleServerConnectionChange(
+    key: keyof ServerConnection,
+    value: string
+  ): void {
+    this.setState({
+      serverConnection: {
+        ...this.state.serverConnection,
+        [key]: value
+      }
+    });
+  }
+
+  private async handleTestConnection(): Promise<void> {
+    this.setState({
+      isTestingConnection: true,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      writeServerConnection(this.state.serverConnection);
+      const response = await this.settingsClient.listProviders();
+      this.setState({
+        runtimeProviders: response.providers,
+        noticeMessage: `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: toErrorMessage(error, "Connection test failed.")
+      });
+    } finally {
+      this.setState({
+        isTestingConnection: false
+      });
+    }
+  }
+
+  private async handleTestWebhook(): Promise<void> {
+    this.setState({
+      isTestingWebhook: true,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const response = await fetch(this.state.notifications.webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          ...TestWebhookPayload,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook returned status ${response.status}`);
+      }
+
+      this.setState({
+        noticeMessage: "Webhook test payload delivered successfully."
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: toErrorMessage(error, "Webhook test failed.")
+      });
+    } finally {
+      this.setState({
+        isTestingWebhook: false
+      });
+    }
+  }
+
+  private async handleSave(): Promise<void> {
+    if (this.state.isSaving) {
+      return;
+    }
+
+    this.setState({
+      isSaving: true,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const snapshot: SettingsSnapshot = {
+        profileId: this.state.profileId || DefaultSettingsProfileId,
+        providerProfiles: this.state.providerProfiles,
+        workflowLimits: this.state.workflowLimits,
+        notifications: this.state.notifications
+      };
+
+      this.settingsStorage.save(snapshot);
+      writeServerConnection(this.state.serverConnection);
+
+      let syncedCount = 0;
+      if (this.state.currentProject) {
+        const syncRequests = createProviderSyncRequests(
+          this.state.providerProfiles,
+          this.state.currentProject.id
+        );
+
+        for (const request of syncRequests) {
+          await this.settingsClient.updateProviderSettings({
+            projectId: request.projectId,
+            profileId: request.profileId,
+            providerId: request.providerId,
+            config: request.config
+          });
+          syncedCount += 1;
+        }
+      }
+
+      const localOnlyCount = this.state.providerProfiles.length - syncedCount;
+      this.setState({
+        noticeMessage: `Settings saved. ${syncedCount} profile${syncedCount === 1 ? "" : "s"} synced to the backend and ${localOnlyCount} kept as local-only configuration.`
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: toErrorMessage(error, "Could not save settings.")
+      });
+    } finally {
+      this.setState({
+        isSaving: false
+      });
+    }
+  }
+
+  private handleResetDefaults(): void {
+    const confirmed = window.confirm("Reset provider profiles, workflow limits, notifications and API access to their defaults?");
+    if (!confirmed) {
+      return;
+    }
+
+    const snapshot = this.settingsStorage.reset();
+    const serverConnection = writeServerConnection(DefaultServerConnection);
+
+    this.setState({
+      activeTab: "provider",
+      profileId: snapshot.profileId,
+      providerProfiles: snapshot.providerProfiles,
+      selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
+      workflowLimits: snapshot.workflowLimits,
+      notifications: snapshot.notifications,
+      serverConnection,
+      sessionSecrets: {},
+      errorMessage: null,
+      noticeMessage: "Settings restored to defaults."
+    });
+  }
+
+  private readSelectedProviderProfile(): ProviderProfileRecord | null {
+    const selectedProviderId = this.state.selectedProviderId;
+    if (!selectedProviderId) {
+      return null;
+    }
+
+    return this.state.providerProfiles.find((profile) => profile.id === selectedProviderId) ?? null;
+  }
 }
+
+const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
+  createElement("div", {
+    className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3"
+  }, [
+    createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
+    createElement("dd", { className: "mt-2 text-sm font-medium text-white break-all" }, [value])
+  ]);
+
+const renderTextField = (input: {
+  label: string;
+  value: string;
+  placeholder: string;
+  testId: string;
+  onChange: (value: string) => void;
+}): HTMLElement =>
+  createElement("label", { className: "flex flex-col gap-2" }, [
+    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("input", {
+      type: "text",
+      value: input.value,
+      placeholder: input.placeholder,
+      "data-testid": input.testId,
+      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      onChange: (event: Event) => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement) {
+          input.onChange(target.value);
+        }
+      }
+    })
+  ]);
+
+const renderSessionSecretField = (input: {
+  label: string;
+  value: string;
+  placeholder: string;
+  testId: string;
+  onChange: (value: string) => void;
+}): HTMLElement =>
+  createElement("label", { className: "flex flex-col gap-2" }, [
+    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+      createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+      createElement(StatusBadge, { status: "warning" }, ["session only"])
+    ]),
+    createElement("input", {
+      type: "password",
+      value: input.value,
+      placeholder: input.placeholder,
+      "data-testid": input.testId,
+      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      onChange: (event: Event) => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement) {
+          input.onChange(target.value);
+        }
+      }
+    }),
+    createElement("span", { className: "text-xs text-text-secondary" }, [
+      "The browser keeps this key only in memory for the current session."
+    ])
+  ]);
+
+const renderNumberField = (input: {
+  label: string;
+  value: number;
+  disabled?: boolean;
+  testId: string;
+  onChange: (value: string) => void;
+}): HTMLElement =>
+  createElement("label", { className: "flex flex-col gap-2" }, [
+    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("input", {
+      type: "number",
+      value: input.value.toString(),
+      disabled: input.disabled,
+      "data-testid": input.testId,
+      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50",
+      onChange: (event: Event) => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement) {
+          input.onChange(target.value);
+        }
+      }
+    })
+  ]);
+
+const renderSelectField = (input: {
+  label: string;
+  value: string;
+  testId: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}): HTMLElement =>
+  createElement("label", { className: "flex flex-col gap-2" }, [
+    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
+    createElement("select", {
+      value: input.value,
+      "data-testid": input.testId,
+      className: "w-full rounded-lg border border-border-dark bg-background-dark/40 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+      onChange: (event: Event) => {
+        const target = event.target;
+        if (target instanceof HTMLSelectElement) {
+          input.onChange(target.value);
+        }
+      }
+    }, input.options.map((option) =>
+      createElement("option", { value: option.value }, [option.label])
+    ))
+  ]);
+
+const toErrorMessage = (value: unknown, fallback: string): string => {
+  if (value instanceof Error && value.message.trim().length > 0) {
+    return value.message;
+  }
+
+  return fallback;
+};
+
+const readProviderKind = (value: string): ProviderKind | null => {
+  if (
+    value === ProviderKind.CodexCli ||
+    value === ProviderKind.OpenAI ||
+    value === ProviderKind.Anthropic ||
+    value === ProviderKind.Ollama
+  ) {
+    return value;
+  }
+
+  return null;
+};
+
+const readPromptMode = (value: string): ProviderPromptMode | null => {
+  if (value === ProviderPromptMode.Arg || value === ProviderPromptMode.Stdin) {
+    return value;
+  }
+
+  return null;
+};

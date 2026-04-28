@@ -600,6 +600,9 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - [ ] Persist supported settings through existing server and local storage contracts
   - [ ] Validate load/edit/save/reload with browser automation
   - Active screen task since `2026-04-28`: Settings is now the single focus after Explorer acceptance, and responsive behavior remains mandatory
+  - Product clarification recorded on `2026-04-28`: Settings configures multiple provider profiles and models; it does not activate a single global provider because workflows may mix providers and models later
+  - Implementation progress on `2026-04-28`: `Settings` now persists provider profiles, workflow limits, notifications and API access through local browser storage, while Codex CLI profiles sync to `/providers/settings` when an active project exists
+  - Browser validation progress on `2026-04-28`: deterministic Puppeteer coverage now exercises load -> edit -> save -> reload, including local-only Anthropic profile persistence, Codex CLI backend sync, webhook test, and API connection check
 - [ ] Kanban:
   - [ ] Replace local seed board state with `/kanban/*` persistence
   - [ ] Persist create/edit/move/delete flows
