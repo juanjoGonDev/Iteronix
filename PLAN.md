@@ -593,11 +593,13 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Preview readability refinement completed on `2026-04-28`: bottom-side lazy loading now starts once the user is past roughly 60% of the preview scroll range, and long lines wrap inside the editor instead of clipping horizontally
   - Tree and tabs stability refinement completed on `2026-04-28`: opening a file from the tree preserves the current tree scroll position, while the editor tab strip now overflows horizontally instead of clipping open files
   - Search results control refinement completed on `2026-04-28`: per-file search result groups can now collapse or hide independently, and those controls reset cleanly on each new search request so the flow stays close to VS Code semantics without adding replace mode
-  - Real-app validation completed on `2026-04-28`: the live `localhost` workbench confirms representative tab overflow, tree scroll preservation for visible file clicks, lazy preview paging for `apps/server-api/src/server.ts`, and collapse/hide/reset behavior for grouped search results; keep the Notion card in `En progreso` until explicit user acceptance
+  - Real-app validation completed on `2026-04-28`: the live `localhost` workbench confirms representative tab overflow, tree scroll preservation for visible file clicks, lazy preview paging for `apps/server-api/src/server.ts`, and collapse/hide/reset behavior for grouped search results
+  - User acceptance completed on `2026-04-28`: Explorer is now the finished reference screen for the stabilization pass; direct Notion status mutation is still blocked by connector validation, so the board handoff was recorded through comments plus repo logs
 - [ ] Settings:
   - [ ] Remove `coming soon` and `console.log` actions from active controls
   - [ ] Persist supported settings through existing server and local storage contracts
   - [ ] Validate load/edit/save/reload with browser automation
+  - Active screen task since `2026-04-28`: Settings is now the single focus after Explorer acceptance, and responsive behavior remains mandatory
 - [ ] Kanban:
   - [ ] Replace local seed board state with `/kanban/*` persistence
   - [ ] Persist create/edit/move/delete flows

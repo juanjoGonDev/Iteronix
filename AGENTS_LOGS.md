@@ -1601,3 +1601,21 @@
   - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
 - Next:
   - Pasar gates completos, dejar el árbol limpio con commit manual y esperar validación del usuario antes de mover Explorer a `Listo`
+### 2026-04-28 22:13 (Europe/Madrid) — Explorer Accepted, Settings Activated
+
+- Summary: El usuario ha aceptado explícitamente `Explorer`, así que el siguiente foco único pasa a `Settings` sin abrir otra pantalla en paralelo.
+- Decisions:
+  - Considerar `Explorer` como pantalla de referencia terminada para esta fase de estabilización
+  - Mantener la disciplina de una sola tarea activa: `Settings` pasa a ser la única pantalla en progreso
+  - Registrar el handoff de Notion por trazabilidad en repo porque el conector actual no permite mutar el estado de la tarjeta con un payload válido ni autenticado de forma consistente
+- Changes:
+  - **Updated PLAN.md**: `Explorer` marcado como aceptado por usuario y `Settings` declarado como foco activo único
+  - **Attempted Notion sync**: comentarios de handoff intentados sobre las tarjetas de `Explorer` y `Settings`, bloqueados por validación/autenticación del conector actual
+- Commands:
+  - `git status --short`
+  - `Get-Content PLAN.md -Tail 80`
+  - `Get-Content AGENTS_LOGS.md -Tail 60`
+- Issues/Risks:
+  - El tablero de Notion no puede quedar movido a `Listo`/`En progreso` desde esta sesión mientras el conector siga fallando por schema/auth; el estado operativo correcto queda documentado en comentarios intentados y en el repo
+- Next:
+  - Empezar `Settings` como única tarea activa y mantenerla en progreso hasta validación funcional explícita del usuario
