@@ -126,7 +126,7 @@ const SearchDebounceMs = 320;
 const ExplorerLineHighlightDurationMs = 1400;
 const ExplorerPreviewLineCount = 240;
 const ExplorerPreviewContextRadius = 80;
-const ExplorerPreviewLoadThresholdPx = 120;
+const ExplorerPreviewLoadThresholdPx = 280;
 
 interface ExplorerState {
   sessionRootPath: string;
@@ -2092,9 +2092,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       return;
     }
 
-    const previousMetrics = direction === ExplorerPreviewLoadDirection.Previous
-      ? this.readPreviewSurfaceMetrics()
-      : null;
+    const previousMetrics = this.readPreviewSurfaceMetrics();
     this.previewLoadDirection = direction;
 
     try {
@@ -2125,11 +2123,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         }),
         highlightedLineNumber: this.state.highlightedLineNumber
       });
-      if (previousMetrics !== null) {
-        requestAnimationFrame(() => {
-          this.restorePreviewScrollAfterPrepend(previousMetrics);
-        });
-      }
+      this.schedulePreviewScrollRestore(previousMetrics, direction);
     } catch (error: unknown) {
       this.setState({
         errorMessage: readErrorMessage(error, `Unable to read ${this.state.selectedFilePath}.`),
@@ -2285,6 +2279,36 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       left: previewSurface.scrollLeft,
       scrollHeight: previewSurface.scrollHeight
     };
+  }
+
+  private schedulePreviewScrollRestore(
+    previousMetrics: {
+      top: number;
+      left: number;
+      scrollHeight: number;
+    },
+    direction: ExplorerPreviewLoadDirection
+  ): void {
+    const restore = (): void => {
+      if (direction === ExplorerPreviewLoadDirection.Previous) {
+        this.restorePreviewScrollAfterPrepend(previousMetrics);
+        return;
+      }
+
+      this.restorePreviewScrollPosition({
+        top: previousMetrics.top,
+        left: previousMetrics.left
+      });
+    };
+
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(() => {
+        restore();
+      });
+    });
+    window.setTimeout(restore, 0);
+    window.setTimeout(restore, 48);
   }
 
   private restorePreviewScrollAfterPrepend(previousMetrics: {

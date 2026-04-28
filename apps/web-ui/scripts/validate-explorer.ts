@@ -105,6 +105,7 @@ const Selector = {
 } as const;
 
 const SearchTargetLineNumber = 648;
+const PreviewPrefetchGapPx = 220;
 const FixtureTabPaths = Array.from(
   { length: 20 },
   (_, index) => `workspace-validation-tab-${String(index + 1).padStart(2, "0")}.ts`
@@ -445,7 +446,7 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await scrollPreviewSurfaceToBottom(page);
+  await scrollPreviewSurfaceNearBottom(page, PreviewPrefetchGapPx);
   await waitForCondition(async () => {
     const range = await readPreviewRangeValues(page);
     return range !== null &&
@@ -453,6 +454,15 @@ async function validateDesktopExplorer(
       range.end > 807 &&
       range.total === 1200;
   }, "preview extends after scroll near bottom", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+  await waitForCondition(async () => {
+    return page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      return surface instanceof HTMLElement && surface.scrollTop > 0;
+    }, Selector.PreviewSurface);
+  }, "preview scroll preserved after bottom extension", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
@@ -850,19 +860,32 @@ async function dispatchSearchInputValue(page: Page, value: string): Promise<void
   });
 }
 
-async function scrollPreviewSurfaceToBottom(page: Page): Promise<void> {
+async function scrollPreviewSurfaceNearBottom(
+  page: Page,
+  gapPx: number
+): Promise<void> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    await page.evaluate((selector) => {
-      const surface = document.querySelector(selector);
+    await page.evaluate((input: {
+      selector: string;
+      gapPx: number;
+    }) => {
+      const surface = document.querySelector(input.selector);
       if (!(surface instanceof HTMLElement)) {
         return;
       }
 
-      surface.scrollTop = surface.scrollHeight;
+      const nextScrollTop = Math.max(
+        0,
+        surface.scrollHeight - surface.clientHeight - input.gapPx
+      );
+      surface.scrollTop = nextScrollTop;
       surface.dispatchEvent(new Event("scroll", {
         bubbles: true
       }));
-    }, Selector.PreviewSurface);
+    }, {
+      selector: Selector.PreviewSurface,
+      gapPx
+    });
     await delay(140);
   }
 }

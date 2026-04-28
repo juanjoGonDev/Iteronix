@@ -1562,3 +1562,23 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario confirme visualmente que el Explorer ya le convence
 - Next:
   - Pasar gates completos del repo, mantener la tarjeta de Notion en `En progreso` y esperar confirmación del usuario antes de abrir `Settings`
+### 2026-04-28 21:31 (Europe/Madrid) — Explorer Lazy Preview Scroll Stability
+
+- Summary: Corregida la regresión del lazy loading inferior en `Explorer`: al cargar más líneas hacia abajo el preview ya no vuelve al principio, y la carga empieza antes de alcanzar el final exacto del rango visible.
+- Decisions:
+  - Elevar el umbral de prefetch del preview para disparar la carga con antelación en lugar de esperar al borde exacto
+  - Restaurar el `scrollTop` también en las ampliaciones hacia abajo, no sólo en las cargas previas que anteponen contenido
+  - Mantener `01. Explorer screen end-to-end` en `En progreso` hasta validación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: umbral de lazy load ampliado, captura/restauración del scroll del preview al extender contenido por abajo y reutilización del mismo mecanismo robusto de restauración usado en otros puntos del shell
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: el harness ahora exige que la expansión del preview ocurra antes del final absoluto y verifica que el scroll del editor siga siendo mayor que cero después de extender contenido por abajo
+  - **Updated PLAN.md** y comentario en Notion: progreso registrado sin cerrar aún la tarea
+- Commands:
+  - `pnpm -C apps/web-ui build`
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - La estrategia sigue basada en ventanas HTTP acumulativas; si más adelante el usuario exige edición de archivos enormes o previews realmente infinitos, habrá que pasar a virtualización o streaming
+  - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
+- Next:
+  - Ejecutar gates completos, dejar el árbol limpio con commit manual y esperar confirmación del usuario sobre el Explorer antes de abrir `Settings`
