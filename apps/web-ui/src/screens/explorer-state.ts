@@ -1,4 +1,5 @@
 import {
+  type ExplorerFileContentRecord,
   ExplorerFileEntryKind,
   type ExplorerFileEntryRecord
 } from "../shared/explorer-client.js";
@@ -20,6 +21,22 @@ export type FlattenedExplorerTreeNode = {
 export type ExplorerOpenFile = {
   path: string;
   pinned: boolean;
+};
+
+export const ExplorerPreviewLoadDirection = {
+  Previous: "previous",
+  Next: "next"
+} as const;
+
+export type ExplorerPreviewLoadDirection =
+  typeof ExplorerPreviewLoadDirection[keyof typeof ExplorerPreviewLoadDirection];
+
+export type ExplorerPreviewWindowState = {
+  content: string;
+  startLine: number;
+  endLine: number;
+  totalLines: number;
+  truncated: boolean;
 };
 
 export type ExplorerSearchResultPath = string;
@@ -301,6 +318,62 @@ export const resolveNextExplorerActiveFilePath = (
   }
 
   return openFiles.at(-1)?.path ?? null;
+};
+
+export const readExplorerPreviewWindowRequest = (
+  state: ExplorerPreviewWindowState,
+  direction: ExplorerPreviewLoadDirection,
+  lineCount: number
+): {
+  startLine: number;
+  lineCount: number;
+} | null => {
+  const normalizedLineCount = Math.max(1, Math.floor(lineCount));
+
+  if (direction === ExplorerPreviewLoadDirection.Previous) {
+    if (state.startLine <= 1) {
+      return null;
+    }
+
+    const startLine = Math.max(1, state.startLine - normalizedLineCount);
+    return {
+      startLine,
+      lineCount: state.startLine - startLine
+    };
+  }
+
+  if (state.endLine >= state.totalLines) {
+    return null;
+  }
+
+  return {
+    startLine: state.endLine + 1,
+    lineCount: Math.min(normalizedLineCount, state.totalLines - state.endLine)
+  };
+};
+
+export const mergeExplorerPreviewWindow = (
+  state: ExplorerPreviewWindowState,
+  file: ExplorerFileContentRecord,
+  direction: ExplorerPreviewLoadDirection
+): ExplorerPreviewWindowState => {
+  if (direction === ExplorerPreviewLoadDirection.Previous) {
+    return {
+      content: joinExplorerPreviewContent(file.content, state.content),
+      startLine: file.startLine,
+      endLine: state.endLine,
+      totalLines: file.totalLines,
+      truncated: file.startLine > 1 || state.endLine < file.totalLines
+    };
+  }
+
+  return {
+    content: joinExplorerPreviewContent(state.content, file.content),
+    startLine: state.startLine,
+    endLine: file.endLine,
+    totalLines: file.totalLines,
+    truncated: state.startLine > 1 || file.endLine < file.totalLines
+  };
 };
 
 export const collapseExplorerSearchResultPath = (
@@ -631,6 +704,21 @@ const readExplorerLanguageId = (path: string): ExplorerLanguageId => {
 };
 
 const normalizeExplorerPath = (value: string): string => value.trim();
+
+const joinExplorerPreviewContent = (
+  left: string,
+  right: string
+): string => {
+  if (left.length === 0) {
+    return right;
+  }
+
+  if (right.length === 0) {
+    return left;
+  }
+
+  return `${left}\n${right}`;
+};
 
 const highlightJsonLine = (
   line: string

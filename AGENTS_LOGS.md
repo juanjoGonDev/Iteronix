@@ -1540,3 +1540,25 @@
   - La tarea sigue sin poder cerrarse porque la aceptación final del `Explorer` depende del usuario, no del harness
 - Next:
   - Esperar la aceptación explícita del usuario sobre el `Explorer`; sólo entonces mover la tarjeta de Notion a `Listo` y abrir `Settings`
+### 2026-04-28 18:07 (Europe/Madrid) — Explorer Scroll-Driven Lazy Preview
+
+- Summary: Sustituida la paginación manual del preview grande en `Explorer` por carga perezosa al hacer scroll, manteniendo la tarea `01. Explorer screen end-to-end` como única activa y sin moverla aún a `Listo`.
+- Decisions:
+  - Eliminar los botones `Load previous`, `Load next` y `Load full file`; el preview debe ampliarse automáticamente al acercarse al borde superior o inferior del editor
+  - Mantener el comportamiento validado con Puppeteer sobre `dist`, pero endureciendo el harness para comprobar expansión real del rango visible en lugar de asumir exactamente un solo chunk adicional
+  - Mantener la tarjeta de Notion en `En progreso` hasta aceptación explícita del usuario
+- Changes:
+  - **Updated apps/web-ui/src/shared/Component.ts** y **apps/web-ui/src/shared/Component.test.ts**: `createElement` ya enlaza `onScroll` al evento nativo
+  - **Updated apps/web-ui/src/screens/explorer-state.ts** y **apps/web-ui/src/screens/explorer-state.test.ts**: helpers puros para calcular ventanas previas/siguientes y fusionar previews parciales sin solapes
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: reemplazo de acciones manuales por lazy loading al hacer scroll, preservación del scroll al anteponer líneas previas y refuerzo de la restauración del árbol tras abrir archivos
+  - **Updated apps/web-ui/scripts/validate-explorer.ts**: el harness fuerza scroll incremental, valida expansión/anteposición del rango visible y tolera la carga de más de un chunk cuando el preview sigue cerca del borde
+  - **Updated PLAN.md** y comentario en Notion: progreso registrado sin cerrar aún la tarea
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/explorer-state.test.ts`
+  - `pnpm -C apps/web-ui build`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El preview grande ya no depende de botones, pero la estrategia sigue siendo paginación HTTP por ventanas; si el usuario exige virtualización completa o edición sobre archivos enormes, habrá que subir el nivel de infraestructura
+  - La tarea no debe moverse a `Listo` hasta que el usuario confirme visualmente que el Explorer ya le convence
+- Next:
+  - Pasar gates completos del repo, mantener la tarjeta de Notion en `En progreso` y esperar confirmación del usuario antes de abrir `Settings`

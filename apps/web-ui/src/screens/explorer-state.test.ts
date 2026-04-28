@@ -7,13 +7,16 @@ import {
   closeExplorerFileTabsToRight,
   closeExplorerOpenFile,
   collapseExplorerSearchResultPath,
+  ExplorerPreviewLoadDirection,
   filterExplorerTreeNodes,
   filterHiddenExplorerSearchResults,
   flattenExplorerTreeNodes,
   highlightExplorerFileContent,
   hideExplorerSearchResultPath,
   isExplorerSearchResultCollapsed,
+  mergeExplorerPreviewWindow,
   openExplorerFile,
+  readExplorerPreviewWindowRequest,
   resolveNextExplorerActiveFilePath,
   readExplorerFileIcon,
   mergeExplorerDirectoryChildren,
@@ -304,6 +307,97 @@ describe("explorer state helpers", () => {
       )
     ).toBe("src/index.ts");
     expect(resolveNextExplorerActiveFilePath([], "README.md")).toBeNull();
+  });
+
+  it("calculates non-overlapping lazy preview windows and merges them deterministically", () => {
+    const current = {
+      content: ["line 568", "line 569", "line 807"].join("\n"),
+      startLine: 568,
+      endLine: 807,
+      totalLines: 1200,
+      truncated: true
+    } as const;
+    const previousChunk = {
+      content: ["line 328", "line 329", "line 567"].join("\n"),
+      startLine: 328,
+      endLine: 567,
+      totalLines: 1200,
+      truncated: true
+    } as const;
+    const nextChunk = {
+      content: ["line 808", "line 809", "line 1047"].join("\n"),
+      startLine: 808,
+      endLine: 1047,
+      totalLines: 1200,
+      truncated: true
+    } as const;
+
+    expect(
+      readExplorerPreviewWindowRequest(
+        current,
+        ExplorerPreviewLoadDirection.Previous,
+        240
+      )
+    ).toEqual({
+      startLine: 328,
+      lineCount: 240
+    });
+    expect(
+      readExplorerPreviewWindowRequest(
+        current,
+        ExplorerPreviewLoadDirection.Next,
+        240
+      )
+    ).toEqual({
+      startLine: 808,
+      lineCount: 240
+    });
+    expect(
+      readExplorerPreviewWindowRequest(
+        {
+          ...current,
+          startLine: 1
+        },
+        ExplorerPreviewLoadDirection.Previous,
+        240
+      )
+    ).toBeNull();
+    expect(
+      readExplorerPreviewWindowRequest(
+        {
+          ...current,
+          endLine: 1200
+        },
+        ExplorerPreviewLoadDirection.Next,
+        240
+      )
+    ).toBeNull();
+    expect(
+      mergeExplorerPreviewWindow(
+        current,
+        previousChunk,
+        ExplorerPreviewLoadDirection.Previous
+      )
+    ).toEqual({
+      content: ["line 328", "line 329", "line 567", "line 568", "line 569", "line 807"].join("\n"),
+      startLine: 328,
+      endLine: 807,
+      totalLines: 1200,
+      truncated: true
+    });
+    expect(
+      mergeExplorerPreviewWindow(
+        current,
+        nextChunk,
+        ExplorerPreviewLoadDirection.Next
+      )
+    ).toEqual({
+      content: ["line 568", "line 569", "line 807", "line 808", "line 809", "line 1047"].join("\n"),
+      startLine: 568,
+      endLine: 1047,
+      totalLines: 1200,
+      truncated: true
+    });
   });
 
   it("manages collapsed and hidden search result groups per file", () => {

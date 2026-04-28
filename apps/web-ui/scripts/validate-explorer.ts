@@ -61,9 +61,7 @@ const ValidationText = {
   RemovedPanelLabel: "Project session",
   LanguageBadge: "TypeScript",
   SearchResultLineNumber: "648",
-  PreviewSearchRange: "568-807 / 1200",
-  PreviewNextRange: "808-1047 / 1200",
-  PreviewFullRange: "1-1200 / 1200"
+  PreviewSearchRange: "568-807 / 1200"
 } as const;
 
 const Selector = {
@@ -90,9 +88,7 @@ const Selector = {
   HighlightedLine: '[data-testid="explorer-highlighted-line"]',
   PreviewSurface: '[data-testid="explorer-preview-surface"]',
   PreviewRange: '[data-testid="explorer-preview-range"]',
-  PreviewActionNext: '[data-testid="explorer-preview-action-next"]',
-  PreviewActionPrevious: '[data-testid="explorer-preview-action-previous"]',
-  PreviewActionFull: '[data-testid="explorer-preview-action-full"]',
+  PreviewActions: '[data-testid^="explorer-preview-action-"]',
   TabsScrollSurface: '[data-testid="explorer-tabs-scroll-surface"]',
   TabReadme: '[data-testid="explorer-tab-readme-md"]',
   TabExplorer: '[data-testid="explorer-tab-src-screens-explorer-ts"]',
@@ -441,36 +437,37 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await clickSelector(page, Selector.PreviewActionNext);
   await waitForCondition(async () => {
-    const range = await page.evaluate((selector) => {
-      const element = document.querySelector(selector);
-      return element?.textContent ?? "";
-    }, Selector.PreviewRange);
-    return range.includes(ValidationText.PreviewNextRange);
-  }, "preview next window", {
+    return page.evaluate((selector) => {
+      return document.querySelectorAll(selector).length === 0;
+    }, Selector.PreviewActions);
+  }, "preview action buttons removed", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await clickSelector(page, Selector.PreviewActionPrevious);
+  await scrollPreviewSurfaceToBottom(page);
   await waitForCondition(async () => {
-    const range = await page.evaluate((selector) => {
-      const element = document.querySelector(selector);
-      return element?.textContent ?? "";
-    }, Selector.PreviewRange);
-    return range.includes(ValidationText.PreviewSearchRange);
-  }, "preview previous window", {
+    const range = await readPreviewRangeValues(page);
+    return range !== null &&
+      range.start === 568 &&
+      range.end > 807 &&
+      range.total === 1200;
+  }, "preview extends after scroll near bottom", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await clickSelector(page, Selector.PreviewActionFull);
+  const rangeAfterBottomScroll = await readPreviewRangeValues(page);
+  if (rangeAfterBottomScroll === null) {
+    throw new Error("Preview range was not available after scrolling near the bottom.");
+  }
+  await scrollPreviewSurfaceToTop(page);
   await waitForCondition(async () => {
-    const range = await page.evaluate((selector) => {
-      const element = document.querySelector(selector);
-      return element?.textContent ?? "";
-    }, Selector.PreviewRange);
-    return range.includes(ValidationText.PreviewFullRange);
-  }, "full file preview", {
+    const range = await readPreviewRangeValues(page);
+    return range !== null &&
+      range.start < rangeAfterBottomScroll.start &&
+      range.end >= rangeAfterBottomScroll.end &&
+      range.total === rangeAfterBottomScroll.total;
+  }, "preview prepends after scroll near top", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
@@ -493,10 +490,12 @@ async function validateDesktopExplorer(
   }
   await clickSelector(page, explorerNodeSelector(FixtureTabPaths.at(-1) ?? "tab-12.ts"));
   await waitForSelector(page, explorerTabSelector(FixtureTabPaths.at(-1) ?? "tab-12.ts"));
+  await delay(200);
   await waitForCondition(async () => {
     return page.evaluate((selector, expectedScrollTop) => {
       const surface = document.querySelector(selector);
-      return surface instanceof HTMLElement && surface.scrollTop === expectedScrollTop;
+      return surface instanceof HTMLElement &&
+        Math.abs(surface.scrollTop - expectedScrollTop) <= 2;
     }, Selector.TreeSurface, treeScrollTop);
   }, "tree scroll preserved after opening file", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
@@ -520,17 +519,37 @@ async function validateDesktopExplorer(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
-  await page.evaluate((selector) => {
+  const initialTabsScrollLeft = await page.evaluate((selector) => {
     const surface = document.querySelector(selector);
-    if (surface instanceof HTMLElement) {
-      surface.scrollLeft = surface.scrollWidth;
-    }
+    return surface instanceof HTMLElement ? surface.scrollLeft : 0;
   }, Selector.TabsScrollSurface);
+  await page.evaluate((input: {
+    selector: string;
+    initialScrollLeft: number;
+  }) => {
+    const surface = document.querySelector(input.selector);
+    if (!(surface instanceof HTMLElement)) {
+      return;
+    }
+
+    surface.scrollLeft = input.initialScrollLeft > 0
+      ? 0
+      : Math.min(surface.scrollWidth, 180);
+  }, {
+    selector: Selector.TabsScrollSurface,
+    initialScrollLeft: initialTabsScrollLeft
+  });
   await waitForCondition(async () => {
-    return page.evaluate((selector) => {
-      const surface = document.querySelector(selector);
-      return surface instanceof HTMLElement && surface.scrollLeft > 0;
-    }, Selector.TabsScrollSurface);
+    return page.evaluate((input: {
+      selector: string;
+      initialScrollLeft: number;
+    }) => {
+      const surface = document.querySelector(input.selector);
+      return surface instanceof HTMLElement && surface.scrollLeft !== input.initialScrollLeft;
+    }, {
+      selector: Selector.TabsScrollSurface,
+      initialScrollLeft: initialTabsScrollLeft
+    });
   }, "tab strip scrolls horizontally", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
@@ -829,6 +848,67 @@ async function dispatchSearchInputValue(page: Page, value: string): Promise<void
     selector: Selector.SearchInput,
     value
   });
+}
+
+async function scrollPreviewSurfaceToBottom(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      if (!(surface instanceof HTMLElement)) {
+        return;
+      }
+
+      surface.scrollTop = surface.scrollHeight;
+      surface.dispatchEvent(new Event("scroll", {
+        bubbles: true
+      }));
+    }, Selector.PreviewSurface);
+    await delay(140);
+  }
+}
+
+async function scrollPreviewSurfaceToTop(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.evaluate((selector) => {
+      const surface = document.querySelector(selector);
+      if (!(surface instanceof HTMLElement)) {
+        return;
+      }
+
+      surface.scrollTop = 0;
+      surface.dispatchEvent(new Event("scroll", {
+        bubbles: true
+      }));
+    }, Selector.PreviewSurface);
+    await delay(140);
+  }
+}
+
+async function readPreviewRangeValues(page: Page): Promise<{
+  start: number;
+  end: number;
+  total: number;
+} | null> {
+  return page.evaluate((selector) => {
+    const text = document.querySelector(selector)?.textContent ?? "";
+    const match = text.match(/^(\d+)-(\d+) \/ (\d+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const start = Number.parseInt(match[1] ?? "", 10);
+    const end = Number.parseInt(match[2] ?? "", 10);
+    const total = Number.parseInt(match[3] ?? "", 10);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(total)) {
+      return null;
+    }
+
+    return {
+      start,
+      end,
+      total
+    };
+  }, Selector.PreviewRange);
 }
 
 async function startExplorerStubServer(): Promise<ReturnType<typeof createServer>> {

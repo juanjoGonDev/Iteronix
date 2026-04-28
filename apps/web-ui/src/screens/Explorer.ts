@@ -29,9 +29,11 @@ import {
   hideExplorerSearchResultPath,
   isExplorerSearchResultCollapsed,
   mergeExplorerDirectoryChildren,
+  mergeExplorerPreviewWindow,
   openExplorerFile,
   readExplorerFileIcon,
   readExplorerLanguageTheme,
+  readExplorerPreviewWindowRequest,
   readExplorerTokenClassName,
   resolveNextExplorerActiveFilePath,
   setExplorerFilePinned,
@@ -40,6 +42,7 @@ import {
   toggleExplorerDirectory,
   type ExplorerHighlightToken,
   type ExplorerOpenFile,
+  ExplorerPreviewLoadDirection,
   type ExplorerTreeNode
 } from "./explorer-state.js";
 
@@ -97,15 +100,6 @@ const ExplorerTabMenuAction = {
 type ExplorerTabMenuAction =
   typeof ExplorerTabMenuAction[keyof typeof ExplorerTabMenuAction];
 
-const ExplorerPreviewAction = {
-  Previous: "previous",
-  Next: "next",
-  Full: "full"
-} as const;
-
-type ExplorerPreviewAction =
-  typeof ExplorerPreviewAction[keyof typeof ExplorerPreviewAction];
-
 const ExplorerSelector = {
   WorkspaceTestId: "explorer-workspace",
   ActivityExplorerTestId: "explorer-activity-explorer",
@@ -132,6 +126,7 @@ const SearchDebounceMs = 320;
 const ExplorerLineHighlightDurationMs = 1400;
 const ExplorerPreviewLineCount = 240;
 const ExplorerPreviewContextRadius = 80;
+const ExplorerPreviewLoadThresholdPx = 120;
 
 interface ExplorerState {
   sessionRootPath: string;
@@ -171,6 +166,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
   private readonly explorerClient = createExplorerClient();
   private searchDebounceId: number | null = null;
   private lineHighlightTimeoutId: number | null = null;
+  private previewLoadDirection: ExplorerPreviewLoadDirection | null = null;
   private searchRevision = 0;
   private searchDraftValue = "";
   private searchSelectionStart: number | null = null;
@@ -642,7 +638,11 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           : "border-transparent text-slate-300 hover:bg-[#242b34] hover:text-white"
       }`,
       style: `padding-left: ${paddingLeft}px`,
-      onClick: () => {
+      onClick: (event: Event) => {
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.blur();
+        }
+
         if (isDirectory) {
           void this.handleDirectorySelect(node);
           return;
@@ -903,13 +903,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     ]);
   }
 
-  private renderPreviewLoadActions(): HTMLElement {
+  private renderPreviewLoadHint(): HTMLElement {
     if (!this.state.selectedFileTruncated) {
       return createElement("div", {});
     }
-
-    const canLoadPrevious = this.state.selectedFileStartLine > 1;
-    const canLoadNext = this.state.selectedFileEndLine < this.state.selectedFileTotalLines;
 
     return createElement("div", {
       className: "flex items-center gap-2 border-b border-border-dark bg-[#131922] px-4 py-2"
@@ -917,38 +914,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       createElement("span", {
         className: "text-xs text-text-secondary"
       }, ["Large file preview"]),
-      this.renderPreviewActionButton({
-        action: ExplorerPreviewAction.Previous,
-        label: "Load previous",
-        disabled: !canLoadPrevious
-      }),
-      this.renderPreviewActionButton({
-        action: ExplorerPreviewAction.Next,
-        label: "Load next",
-        disabled: !canLoadNext
-      }),
-      this.renderPreviewActionButton({
-        action: ExplorerPreviewAction.Full,
-        label: "Load full file",
-        disabled: false
-      })
+      createElement("span", {
+        className: "text-xs text-slate-400"
+      }, ["Scroll to load more lines"])
     ]);
-  }
-
-  private renderPreviewActionButton(input: {
-    action: ExplorerPreviewAction;
-    label: string;
-    disabled: boolean;
-  }): HTMLElement {
-    return createElement("button", {
-      type: "button",
-      disabled: input.disabled,
-      className: "rounded border border-border-dark bg-[#11161d] px-2 py-1 text-xs text-slate-200 transition-colors hover:bg-[#202733] disabled:cursor-not-allowed disabled:opacity-50",
-      "data-testid": `explorer-preview-action-${input.action}`,
-      onClick: () => {
-        void this.handlePreviewAction(input.action);
-      }
-    }, [input.label]);
   }
 
   private renderSearchResultMatch(
@@ -1060,7 +1029,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       }, [selectedFile.path]),
       createElement("div", {
         className: `min-h-0 flex-1 overflow-auto ${theme.surfaceClassName}`,
-        "data-testid": "explorer-preview-surface"
+        "data-testid": "explorer-preview-surface",
+        onScroll: (event: Event) => {
+          void this.handlePreviewSurfaceScroll(event);
+        }
       }, [
         isLoading
           ? createElement("div", {
@@ -1069,7 +1041,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           : createElement("div", {
               className: "flex min-h-full flex-col"
             }, [
-              this.renderPreviewLoadActions(),
+              this.renderPreviewLoadHint(),
               this.renderHighlightedFileContent(highlightedLines)
             ])
       ])
@@ -1649,9 +1621,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           ? ExplorerCompactView.Panel
           : this.state.compactView
       });
-      requestAnimationFrame(() => {
-        this.restoreTreeScrollTop(treeScrollTop);
-      });
+      this.scheduleTreeScrollRestore(treeScrollTop);
       return;
     }
 
@@ -1680,9 +1650,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         errorMessage: null,
         noticeMessage: null
       });
-      requestAnimationFrame(() => {
-        this.restoreTreeScrollTop(treeScrollTop);
-      });
+      this.scheduleTreeScrollRestore(treeScrollTop);
     } catch (error: unknown) {
       this.setState({
         pendingAction: null,
@@ -1716,9 +1684,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       noticeMessage: null
     });
     if (treeScrollTop !== null) {
-      requestAnimationFrame(() => {
-        this.restoreTreeScrollTop(treeScrollTop);
-      });
+      this.scheduleTreeScrollRestore(treeScrollTop);
     }
 
     try {
@@ -1749,10 +1715,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.persistWorkspaceState(nextOpenFiles, path);
       requestAnimationFrame(() => {
         this.scrollEditorTabIntoView(path);
-        if (treeScrollTop !== null) {
-          this.restoreTreeScrollTop(treeScrollTop);
-        }
       });
+      if (treeScrollTop !== null) {
+        this.scheduleTreeScrollRestore(treeScrollTop);
+      }
       this.scheduleLineHighlight(targetLineNumber);
       if (targetLineNumber) {
         requestAnimationFrame(() => {
@@ -2077,22 +2043,59 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     }
   }
 
-  private async handlePreviewAction(action: ExplorerPreviewAction): Promise<void> {
+  private async handlePreviewSurfaceScroll(_event: Event): Promise<void> {
+    if (
+      this.previewLoadDirection !== null ||
+      this.state.currentProject === null ||
+      this.state.selectedFilePath === null
+    ) {
+      return;
+    }
+
+    const surface = this.readPreviewSurfaceElement();
+    if (!(surface instanceof HTMLElement)) {
+      return;
+    }
+
+    const distanceToTop = surface.scrollTop;
+    const distanceToBottom = surface.scrollHeight - surface.clientHeight - surface.scrollTop;
+
+    if (distanceToTop <= ExplorerPreviewLoadThresholdPx) {
+      await this.loadPreviewWindow(ExplorerPreviewLoadDirection.Previous);
+      return;
+    }
+
+    if (distanceToBottom <= ExplorerPreviewLoadThresholdPx) {
+      await this.loadPreviewWindow(ExplorerPreviewLoadDirection.Next);
+    }
+  }
+
+  private async loadPreviewWindow(
+    direction: ExplorerPreviewLoadDirection
+  ): Promise<void> {
     if (this.state.currentProject === null || this.state.selectedFilePath === null) {
       return;
     }
 
-    const window = readPreviewWindowFromAction(this.state, action);
-    if (!window) {
+    const window = readExplorerPreviewWindowRequest(
+      {
+        content: this.state.selectedFileContent,
+        startLine: this.state.selectedFileStartLine,
+        endLine: this.state.selectedFileEndLine,
+        totalLines: this.state.selectedFileTotalLines,
+        truncated: this.state.selectedFileTruncated
+      },
+      direction,
+      ExplorerPreviewLineCount
+    );
+    if (window === null) {
       return;
     }
 
-    this.setState({
-      pendingAction: ExplorerPendingAction.File,
-      activePath: this.state.selectedFilePath,
-      errorMessage: null,
-      noticeMessage: null
-    });
+    const previousMetrics = direction === ExplorerPreviewLoadDirection.Previous
+      ? this.readPreviewSurfaceMetrics()
+      : null;
+    this.previewLoadDirection = direction;
 
     try {
       const file = await this.explorerClient.readFile({
@@ -2100,20 +2103,40 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         path: this.state.selectedFilePath,
         ...window
       });
+      const mergedWindow = mergeExplorerPreviewWindow(
+        {
+          content: this.state.selectedFileContent,
+          startLine: this.state.selectedFileStartLine,
+          endLine: this.state.selectedFileEndLine,
+          totalLines: this.state.selectedFileTotalLines,
+          truncated: this.state.selectedFileTruncated
+        },
+        file,
+        direction
+      );
 
       this.setState({
-        ...readExplorerFileViewState(file),
-        highlightedLineNumber: null,
-        pendingAction: null,
-        activePath: null
+        ...readExplorerFileViewState({
+          content: mergedWindow.content,
+          startLine: mergedWindow.startLine,
+          endLine: mergedWindow.endLine,
+          totalLines: mergedWindow.totalLines,
+          truncated: mergedWindow.truncated
+        }),
+        highlightedLineNumber: this.state.highlightedLineNumber
       });
+      if (previousMetrics !== null) {
+        requestAnimationFrame(() => {
+          this.restorePreviewScrollAfterPrepend(previousMetrics);
+        });
+      }
     } catch (error: unknown) {
       this.setState({
-        pendingAction: null,
-        activePath: null,
         errorMessage: readErrorMessage(error, `Unable to read ${this.state.selectedFilePath}.`),
         noticeMessage: null
       });
+    } finally {
+      this.previewLoadDirection = null;
     }
   }
 
@@ -2186,6 +2209,21 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     return treeSurface.scrollTop;
   }
 
+  private scheduleTreeScrollRestore(scrollTop: number): void {
+    const restore = (): void => {
+      this.restoreTreeScrollTop(scrollTop);
+    };
+
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(() => {
+        restore();
+      });
+    });
+    window.setTimeout(restore, 0);
+    window.setTimeout(restore, 48);
+  }
+
   private restoreTreeScrollTop(scrollTop: number): void {
     const treeSurface = document.querySelector(
       `[data-testid="${ExplorerSelector.TreeSurfaceTestId}"]`
@@ -2201,7 +2239,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     top: number;
     left: number;
   } {
-    const previewSurface = document.querySelector('[data-testid="explorer-preview-surface"]');
+    const previewSurface = this.readPreviewSurfaceElement();
     if (!(previewSurface instanceof HTMLElement)) {
       return {
         top: 0,
@@ -2219,13 +2257,53 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     top: number;
     left: number;
   }): void {
-    const previewSurface = document.querySelector('[data-testid="explorer-preview-surface"]');
+    const previewSurface = this.readPreviewSurfaceElement();
     if (!(previewSurface instanceof HTMLElement)) {
       return;
     }
 
     previewSurface.scrollTop = position.top;
     previewSurface.scrollLeft = position.left;
+  }
+
+  private readPreviewSurfaceMetrics(): {
+    top: number;
+    left: number;
+    scrollHeight: number;
+  } {
+    const previewSurface = this.readPreviewSurfaceElement();
+    if (!(previewSurface instanceof HTMLElement)) {
+      return {
+        top: 0,
+        left: 0,
+        scrollHeight: 0
+      };
+    }
+
+    return {
+      top: previewSurface.scrollTop,
+      left: previewSurface.scrollLeft,
+      scrollHeight: previewSurface.scrollHeight
+    };
+  }
+
+  private restorePreviewScrollAfterPrepend(previousMetrics: {
+    top: number;
+    left: number;
+    scrollHeight: number;
+  }): void {
+    const previewSurface = this.readPreviewSurfaceElement();
+    if (!(previewSurface instanceof HTMLElement)) {
+      return;
+    }
+
+    const scrollHeightDelta = previewSurface.scrollHeight - previousMetrics.scrollHeight;
+    previewSurface.scrollTop = previousMetrics.top + scrollHeightDelta;
+    previewSurface.scrollLeft = previousMetrics.left;
+  }
+
+  private readPreviewSurfaceElement(): Element | null {
+    return document.querySelector('[data-testid="explorer-preview-surface"]');
   }
 }
 
@@ -2292,38 +2370,6 @@ const createExplorerFileReadWindow = (
 
   return {
     startLine: Math.max(1, targetLineNumber - ExplorerPreviewContextRadius),
-    lineCount: ExplorerPreviewLineCount
-  };
-};
-
-const readPreviewWindowFromAction = (
-  state: ExplorerState,
-  action: ExplorerPreviewAction
-): {
-  startLine?: number;
-  lineCount?: number;
-} | null => {
-  if (action === ExplorerPreviewAction.Full) {
-    return {};
-  }
-
-  if (action === ExplorerPreviewAction.Previous) {
-    if (state.selectedFileStartLine <= 1) {
-      return null;
-    }
-
-    return {
-      startLine: Math.max(1, state.selectedFileStartLine - ExplorerPreviewLineCount),
-      lineCount: ExplorerPreviewLineCount
-    };
-  }
-
-  if (state.selectedFileEndLine >= state.selectedFileTotalLines) {
-    return null;
-  }
-
-  return {
-    startLine: state.selectedFileEndLine + 1,
     lineCount: ExplorerPreviewLineCount
   };
 };

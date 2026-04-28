@@ -109,6 +109,42 @@ describe("createElement", () => {
 
     expect(recorded).toContain("listener:contextmenu");
   });
+
+  it("binds onScroll handlers to the native scroll event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("div", {
+        onScroll: () => {
+          recorded.push("handled");
+        }
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:scroll");
+  });
 });
 
 const createFakeElement = (recorded: string[]) => ({
