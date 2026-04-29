@@ -4,8 +4,8 @@ import {
   PageFrame,
   PageIntro,
   PageTabs,
-  ToastStack,
-  type ToastRecord,
+  showGlobalToast,
+  type ToastKind,
   type PageTabItem
 } from "../components/PageScaffold.js";
 import {
@@ -60,7 +60,6 @@ interface SettingsScreenState {
   projectSession: ProjectSessionState;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   sessionSecrets: Record<string, string>;
-  toasts: ReadonlyArray<ToastRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
   isTestingWebhook: boolean;
@@ -93,13 +92,9 @@ const TestWebhookPayload = {
   source: "settings-screen"
 } as const;
 
-const ToastDismissMs = 4500;
-
 export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
   private readonly settingsStorage = createSettingsStorage();
   private readonly settingsClient = createSettingsClient();
-  private readonly toastTimeouts = new Map<string, number>();
-  private toastSequence = 0;
 
   constructor(props: ComponentProps = {}) {
     const snapshot = createSettingsStorage().load();
@@ -117,7 +112,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       projectSession: readProjectSession(),
       runtimeProviders: [],
       sessionSecrets: {},
-      toasts: [],
       isSaving: false,
       isTestingConnection: false,
       isTestingWebhook: false
@@ -128,11 +122,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     void this.hydrateRuntimeContext();
   }
 
-  override onUnmount(): void {
-    this.toastTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    this.toastTimeouts.clear();
-  }
-
   override render(): HTMLElement {
     return createElement(PageFrame, {
       className: "max-w-[1380px] gap-7 pb-28 md:pb-10"
@@ -141,7 +130,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         title: "Settings",
         description: "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
       }),
-      this.renderToasts(),
       createElement(PageTabs, {
         sticky: true,
         items: this.createTabItems()
@@ -149,13 +137,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         this.renderActiveTab(),
         this.renderSaveBar()
     ]);
-  }
-
-  private renderToasts(): HTMLElement {
-    return createElement(ToastStack, {
-      toasts: this.state.toasts,
-      onDismiss: (id: string) => this.dismissToast(id)
-    });
   }
 
   private createTabItems(): ReadonlyArray<PageTabItem> {
@@ -906,33 +887,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     this.pushToast("success", "Settings restored to defaults.");
   }
 
-  private pushToast(kind: ToastRecord["kind"], message: string): void {
-    const id = `settings-toast-${String(this.toastSequence)}`;
-    this.toastSequence += 1;
-    const timeoutId = window.setTimeout(() => this.dismissToast(id), ToastDismissMs);
-    this.toastTimeouts.set(id, timeoutId);
-    this.setState({
-      toasts: [
-        ...this.state.toasts,
-        {
-          id,
-          kind,
-          message
-        }
-      ]
-    });
-  }
-
-  private dismissToast(id: string): void {
-    const timeoutId = this.toastTimeouts.get(id);
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-      this.toastTimeouts.delete(id);
-    }
-
-    this.setState({
-      toasts: this.state.toasts.filter((toast) => toast.id !== id)
-    });
+  private pushToast(kind: ToastKind, message: string): void {
+    showGlobalToast(kind, message);
   }
 
   private readSelectedProviderProfile(): ProviderProfileRecord | null {

@@ -1950,3 +1950,43 @@
   - Sin fallos de gates
 - Next:
   - Esperar revisión del usuario sobre Settings antes de mover la tarea a `Listo` o pasar a otra pantalla
+### 2026-04-29 16:15 (Europe/Madrid) — Global Toast Feedback
+
+- Summary: Convertido el sistema compartido de avisos en toasts globales para eliminar banners inline de pantallas estándar.
+- Decisions:
+  - Mantener `PageNoticeStack` como contrato público para las pantallas existentes, pero cambiar su render a adaptador de `showGlobalToast`
+  - Evitar cambios pantalla por pantalla: `Projects`, `Workflows`, `History`, `Kanban` y `Explorer` heredan el comportamiento global sin tocar su estado local
+  - Mantener `Settings` usando el mismo `showGlobalToast` global en vez de una pila local propia
+- Changes:
+  - **Updated apps/web-ui/src/components/PageScaffold.ts** y tests: viewport global, deduplicación mientras el toast está activo, autocierre y cierre manual
+  - **Updated apps/web-ui/src/screens/Settings.ts**: feedback conectado al publicador global
+  - **Updated apps/web-ui/scripts/validate-quality-gates-projects.ts**: validación del error de root path como toast global y bloqueo de banners inline legacy
+  - **Updated PLAN.md** y Notion: registrada la corrección adicional manteniendo Settings en progreso
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/PageScaffold.test.ts apps/web-ui/src/components/SettingsFields.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Pendiente ejecutar gates completos antes de cierre
+- Next:
+  - Ejecutar gates completos y commitear la corrección
+### 2026-04-29 16:16 (Europe/Madrid) — Global Toast Gates
+
+- Summary: Cerrados los gates obligatorios y validaciones browser después de convertir avisos compartidos a toasts globales.
+- Decisions:
+  - Mantener `Settings` en progreso hasta confirmación visual del usuario; la corrección afecta al sistema compartido de feedback usado por Projects y otras pantallas
+- Changes:
+  - Sin cambios adicionales de producto después de los gates
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Sin fallos de gates
+- Next:
+  - Esperar aceptación visual del sistema de toasts y continuar sólo con la siguiente pantalla cuando el usuario lo confirme

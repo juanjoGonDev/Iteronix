@@ -20,6 +20,10 @@ export interface PageNoticeStackProps extends ComponentProps {
 
 export type ToastKind = "success" | "error";
 
+const GlobalToastViewportId = "iteronix-global-toast-viewport";
+const GlobalToastDismissMs = 4500;
+const activeToastKeys = new Set<string>();
+
 export interface ToastRecord {
   id: string;
   kind: ToastKind;
@@ -76,28 +80,21 @@ export class PageNoticeStack extends Component<PageNoticeStackProps> {
   override render(): HTMLElement {
     const {
       errorMessage = null,
-      noticeMessage = null,
-      className = ""
+      noticeMessage = null
     } = this.props;
 
-    if (!errorMessage && !noticeMessage) {
-      return createElement("div", {});
+    if (errorMessage) {
+      showGlobalToast("error", errorMessage);
+    }
+
+    if (noticeMessage) {
+      showGlobalToast("success", noticeMessage);
     }
 
     return createElement("div", {
-      className: joinClasses("flex flex-col gap-3", className)
-    }, [
-      errorMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
-          }, [errorMessage])
-        : "",
-      noticeMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
-          }, [noticeMessage])
-        : ""
-    ]);
+      "data-notice-stack": "global-toast-adapter",
+      className: "hidden"
+    });
   }
 }
 
@@ -185,8 +182,86 @@ export const readToastClassName = (kind: ToastKind): string =>
       : "border-rose-200 bg-rose-50 text-rose-950"
   );
 
+export const readToastViewportClassName = (): string =>
+  "pointer-events-none fixed right-5 top-20 z-50 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3";
+
+export const showGlobalToast = (kind: ToastKind, message: string): void => {
+  const trimmedMessage = message.trim();
+  if (trimmedMessage.length === 0 || typeof document === "undefined" || typeof window === "undefined") {
+    return;
+  }
+
+  const toastKey = `${kind}:${trimmedMessage}`;
+  if (activeToastKeys.has(toastKey)) {
+    return;
+  }
+
+  const viewport = ensureGlobalToastViewport();
+  activeToastKeys.add(toastKey);
+
+  let timeoutId: number | undefined;
+  const toast = createGlobalToastElement(kind, trimmedMessage, () => {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+    removeGlobalToast(toastKey, toast);
+  });
+
+  viewport.appendChild(toast);
+  timeoutId = window.setTimeout(() => {
+    removeGlobalToast(toastKey, toast);
+  }, GlobalToastDismissMs);
+};
+
 const joinClasses = (...values: ReadonlyArray<string>): string =>
   values
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
     .join(" ");
+
+const ensureGlobalToastViewport = (): HTMLElement => {
+  const existingViewport = document.getElementById(GlobalToastViewportId);
+  if (existingViewport instanceof HTMLElement) {
+    return existingViewport;
+  }
+
+  const viewport = document.createElement("div");
+  viewport.id = GlobalToastViewportId;
+  viewport.className = readToastViewportClassName();
+  document.body.appendChild(viewport);
+  return viewport;
+};
+
+const createGlobalToastElement = (
+  kind: ToastKind,
+  message: string,
+  onDismiss: () => void
+): HTMLElement => {
+  const toast = document.createElement("div");
+  toast.className = readToastClassName(kind);
+  toast.dataset["testid"] = `toast-${kind}`;
+
+  const content = document.createElement("span");
+  content.className = "min-w-0 flex-1";
+  content.textContent = message;
+
+  const dismissButton = document.createElement("button");
+  dismissButton.type = "button";
+  dismissButton.className = "ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-current opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/30";
+  dismissButton.setAttribute("aria-label", "Dismiss notification");
+  dismissButton.addEventListener("click", onDismiss);
+
+  const dismissIcon = document.createElement("span");
+  dismissIcon.className = "material-symbols-outlined text-[18px]";
+  dismissIcon.textContent = "close";
+
+  dismissButton.appendChild(dismissIcon);
+  toast.appendChild(content);
+  toast.appendChild(dismissButton);
+  return toast;
+};
+
+const removeGlobalToast = (toastKey: string, toast: HTMLElement): void => {
+  activeToastKeys.delete(toastKey);
+  toast.remove();
+};

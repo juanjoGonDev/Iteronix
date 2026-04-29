@@ -58,6 +58,7 @@ const ValidationText = {
   RunHistoryHeading: "Run history",
   OpenProject: "Open project",
   RunSelected: "Run selected",
+  ProjectRootRequired: "A project root path is required.",
   ProjectOpened: "opened",
   RunningLint: "Running lint",
   TypecheckPassed: "Typecheck passed",
@@ -120,6 +121,17 @@ async function validateQualityGatesProjects(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "before-open",
+      artifactName: "workbench-quality-gates"
+    });
+
+    await setInputValueByTestId(page, "quality-gates-project-root", "");
+    await clickNamedButton(page, ValidationText.OpenProject);
+    await waitForToastText(page, ValidationText.ProjectRootRequired);
+    await assertNoLegacyInlineNotice(page);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "after-toast",
       artifactName: "workbench-quality-gates"
     });
 
@@ -485,6 +497,33 @@ async function waitForPanelTexts(
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+}
+
+async function waitForToastText(page: Page, text: string): Promise<void> {
+  await waitForCondition(async () => {
+    const toastText = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-testid^=\"toast-\"]"))
+        .map((element) => element.textContent ?? "")
+        .join("\n")
+    );
+    return toastText.includes(text);
+  }, `toast text "${text}"`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function assertNoLegacyInlineNotice(page: Page): Promise<void> {
+  const hasLegacyNotice = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("div")).some((element) => {
+      const className = element.getAttribute("class") ?? "";
+      return className.includes("bg-rose-500/10") || className.includes("bg-emerald-500/10");
+    })
+  );
+
+  if (hasLegacyNotice) {
+    throw new Error("Legacy inline alert markup is still visible.");
+  }
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
