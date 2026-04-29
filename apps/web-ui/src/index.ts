@@ -85,7 +85,7 @@ export class App extends Component<AppProps, AppState> {
 
   override render(): HTMLElement {
     const projectLabel = readActiveProjectSessionLabel(this.state.projectSession);
-    const hasProject = this.state.projectSession.projectRootPath.length > 0;
+    const hasProject = projectLabel.length > 0;
 
     return createElement(MainLayout, {
       sidebar: createElement(Sidebar, {
@@ -102,11 +102,6 @@ export class App extends Component<AppProps, AppState> {
           : null,
         onProjectClick: () => router.navigate(ROUTES.PROJECTS),
         navigation: this.buildNavigationItems(),
-        user: {
-          name: "John Doe",
-          role: "DevOps Lead",
-          avatar: null
-        },
         onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
         collapsed: this.state.sidebarCollapsed
       }),
@@ -203,6 +198,11 @@ export class App extends Component<AppProps, AppState> {
                 { label: ScreenLabel[this.state.currentScreen] }
               ],
       actions,
+      user: {
+        name: "John Doe",
+        email: "john@example.com",
+        avatar: null
+      },
       className: this.state.isCompactViewport ? "px-3" : ""
     });
   }

@@ -221,7 +221,7 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       artifactName: "projects-git-workspace"
     });
 
-    await setInputValueByTestId(page, "quality-gates-project-root", FixtureProject.rootPath);
+    await setInputValueByTestId(page, "quality-gates-project-root", FixtureProject.rootPath ?? "");
     await clickNamedButton(page, ValidationText.OpenProject);
     await waitForPageTexts(page, [
       FixtureProject.name,

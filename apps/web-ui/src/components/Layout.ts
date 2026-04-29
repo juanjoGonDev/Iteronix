@@ -1,6 +1,7 @@
 import { Component, createElement, ComponentProps } from '../shared/Component';
 import { css } from '../shared/tokens';
 import { Button, IconButton } from './Button';
+import { Avatar } from './Card';
 import { Breadcrumb } from './Navigation';
 
 interface HeaderActions {
@@ -112,7 +113,23 @@ export class Header extends Component<HeaderProps> {
           icon: actions.primary.icon,
           onClick: actions.primary.onClick,
           children: actions.primary.label
-        })
+        }),
+
+        this.props.user && createElement('button', {
+          type: 'button',
+          className: 'flex items-center gap-2 rounded-xl border border-border-dark bg-surface-dark px-2.5 py-2 text-left transition-colors hover:bg-surface-dark-hover',
+          title: this.props.user.name,
+          'data-testid': 'header-user-menu'
+        }, [
+          createElement(Avatar, {
+            src: this.props.user.avatar || null,
+            name: this.props.user.name,
+            size: 'sm'
+          }),
+          createElement('span', { className: 'hidden max-w-32 truncate text-sm font-medium text-white md:inline' }, [
+            this.props.user.name
+          ])
+        ])
       ])
     ]);
   }

@@ -1,6 +1,5 @@
 import { Component, createElement, ComponentProps } from '../shared/Component';
 import { css } from '../shared/tokens';
-import { Avatar } from './Card';
 
 interface NavigationItemProps extends ComponentProps {
   icon: string;
@@ -44,7 +43,7 @@ interface SidebarProps extends ComponentProps {
   } | null;
   project?: {
     label: string;
-    rootPath: string;
+    rootPath: string | null;
   } | null;
   onProjectClick?: () => void;
   onToggle?: () => void;
@@ -134,7 +133,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
     const { 
       brand = { name: 'Iteronix', icon: 'terminal', version: null },
       navigation = [],
-      user = null,
       project = null,
       onProjectClick,
       onToggle,
@@ -178,43 +176,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
         ])
       ]),
 
-      createElement('div', {
-        className: collapsed ? 'px-2 pb-2' : 'px-4 pb-2'
-      }, [
-        createElement('button', {
-          type: 'button',
-          className: `flex w-full items-center rounded-xl border border-border-dark bg-surface-dark/60 transition-colors hover:bg-surface-dark-hover ${
-            collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-3 text-left'
-          }`,
-          'data-testid': 'sidebar-project-button',
-          onClick: onProjectClick
-        }, [
-          createElement('span', {
-            className: `material-symbols-outlined shrink-0 text-[20px] ${
-              project ? 'text-primary' : 'text-text-secondary'
-            }`
-          }, [project ? 'folder_open' : 'folder']),
-          !collapsed && createElement('div', {
-            className: 'flex min-w-0 flex-1 flex-col'
-          }, [
-            createElement('span', {
-              className: 'text-xs font-semibold uppercase tracking-wide text-text-secondary'
-            }, [project ? 'Active project' : 'Workspace']),
-            createElement('span', {
-              className: 'truncate text-sm font-medium text-white',
-              'data-testid': 'sidebar-project-label'
-            }, [project?.label ?? 'Select project']),
-            createElement('span', {
-              className: 'truncate text-xs text-text-secondary'
-            }, [project?.rootPath || 'Open a project from the Projects screen'])
-          ]),
-          !collapsed && createElement('span', {
-            className: 'material-symbols-outlined ml-auto text-[18px] text-text-secondary'
-          }, ['chevron_right'])
-        ])
-      ]),
-
-      // Navigation
       createElement('nav', { 
         className: readSidebarNavigationClassName(collapsed)
       }, [
@@ -229,30 +190,10 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
         })
       ]),
 
-      // User Profile
-      user && createElement('div', { 
+      createElement('div', {
         className: `${collapsed ? 'p-3' : 'p-4'} border-t border-border-dark`
       }, [
-        createElement('div', {
-          className: `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} p-2 rounded-lg hover:bg-surface-dark-hover cursor-pointer transition-colors`
-        }, [
-          createElement(Avatar, {
-            src: user.avatar || null,
-            name: user.name,
-            size: 'sm'
-          }),
-          !collapsed && createElement('div', { className: 'flex flex-col overflow-hidden' }, [
-            createElement('span', {
-              className: 'text-sm font-medium truncate text-white'
-            }, [user.name]),
-            user.role && createElement('span', {
-              className: 'text-xs text-text-secondary truncate'
-            }, [user.role])
-          ]),
-          !collapsed && createElement('span', {
-            className: 'material-symbols-outlined text-text-secondary ml-auto text-[18px]'
-          }, ['unfold_more'])
-        ])
+        renderProjectButton({ project, collapsed, onProjectClick })
       ])
     ]);
   }
@@ -270,3 +211,43 @@ export const readSidebarRootClassName = (className: string): string =>
 
 export const readSidebarNavigationClassName = (collapsed: boolean): string =>
   `min-h-0 flex-1 overflow-y-auto overscroll-contain ${collapsed ? 'py-4 px-1' : 'py-6 px-3'} flex flex-col gap-1`;
+
+const renderProjectButton = (input: {
+  project: {
+    label: string;
+    rootPath: string | null;
+  } | null;
+  collapsed: boolean;
+  onProjectClick: (() => void) | undefined;
+}): HTMLElement =>
+  createElement('button', {
+    type: 'button',
+    className: `flex w-full items-center rounded-xl border border-border-dark bg-surface-dark/60 transition-colors hover:bg-surface-dark-hover ${
+      input.collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-3 text-left'
+    }`,
+    'data-testid': 'sidebar-project-button',
+    onClick: input.onProjectClick
+  }, [
+    createElement('span', {
+      className: `material-symbols-outlined shrink-0 text-[20px] ${
+        input.project ? 'text-primary' : 'text-text-secondary'
+      }`
+    }, [input.project ? 'folder_open' : 'folder']),
+    !input.collapsed && createElement('div', {
+      className: 'flex min-w-0 flex-1 flex-col'
+    }, [
+      createElement('span', {
+        className: 'text-xs font-semibold uppercase tracking-wide text-text-secondary'
+      }, [input.project ? 'Active project' : 'Project']),
+      createElement('span', {
+        className: 'truncate text-sm font-medium text-white',
+        'data-testid': 'sidebar-project-label'
+      }, [input.project?.label ?? 'Select project']),
+      createElement('span', {
+        className: 'truncate text-xs text-text-secondary'
+      }, [input.project?.rootPath ?? (input.project ? 'Workflow-only project' : 'Open or create a project')])
+    ]),
+    !input.collapsed && createElement('span', {
+      className: 'material-symbols-outlined ml-auto text-[18px] text-text-secondary'
+    }, ['chevron_right'])
+  ]);

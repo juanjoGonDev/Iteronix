@@ -321,7 +321,7 @@ const prepareQualityGateRun = (
 ): Result<
   {
     run: HistoryRunRecord;
-    project: Project;
+    project: Project & { rootPath: string };
     definitions: ReadonlyArray<QualityGateDefinition>;
   },
   ApiError
@@ -329,6 +329,13 @@ const prepareQualityGateRun = (
   const project = dependencies.projectStore.getById(input.projectId);
   if (project.type === ResultType.Err) {
     return err(mapProjectStoreError(project.error.code));
+  }
+
+  if (project.value.rootPath === null) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingRootPath
+    });
   }
 
   const root = dependencies.workspacePolicy.assertPathAllowed(project.value.rootPath);
@@ -352,7 +359,10 @@ const prepareQualityGateRun = (
 
   return ok({
     run,
-    project: project.value,
+    project: {
+      ...project.value,
+      rootPath: root.value
+    },
     definitions: definitionsResult.value
   });
 };
@@ -360,7 +370,7 @@ const prepareQualityGateRun = (
 const executeQualityGateRun = async (
   input: {
     run: HistoryRunRecord;
-    project: Project;
+    project: Project & { rootPath: string };
     definitions: ReadonlyArray<QualityGateDefinition>;
   },
   dependencies: QualityGateApiDependencies

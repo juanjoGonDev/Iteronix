@@ -58,7 +58,7 @@ const ValidationText = {
   RunHistoryHeading: "Run history",
   OpenProject: "Open project",
   RunSelected: "Run selected",
-  ProjectRootRequired: "A project root path is required.",
+  ProjectRootRequired: "A project name or root path is required.",
   ProjectOpened: "opened",
   RunningLint: "Running lint",
   TypecheckPassed: "Typecheck passed",
@@ -135,11 +135,11 @@ async function validateQualityGatesProjects(): Promise<void> {
       artifactName: "workbench-quality-gates"
     });
 
-    await setInputValueByTestId(page, "quality-gates-project-root", fixture.project.rootPath);
+    await setInputValueByTestId(page, "quality-gates-project-root", fixture.project.rootPath ?? "");
     await clickNamedButton(page, ValidationText.OpenProject);
     await waitForPageTexts(page, [
       fixture.project.name,
-      fixture.project.rootPath,
+      fixture.project.rootPath ?? "",
       ValidationText.ProjectOpened
     ]);
     await captureBrowserValidationScreenshot({

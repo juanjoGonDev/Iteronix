@@ -177,10 +177,11 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
   constructor(props: ExplorerProps = {}) {
     const session = readProjectSession();
-    const workspaceState = readExplorerWorkspaceState(session.projectRootPath);
+    const sessionRootPath = session.projectRootPath ?? "";
+    const workspaceState = readExplorerWorkspaceState(sessionRootPath);
 
     super(props, {
-      sessionRootPath: session.projectRootPath,
+      sessionRootPath,
       sessionProjectName: session.projectName,
       currentProject: null,
       treeNodes: [],
@@ -209,7 +210,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       hiddenSearchResultPaths: []
     });
 
-    if (session.projectRootPath.length > 0) {
+    if (session.projectRootPath !== null) {
       requestAnimationFrame(() => {
         setTimeout(() => {
           void this.handleOpenProject(true);
@@ -1253,6 +1254,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       const entries = await this.explorerClient.listFileTree({
         projectId: project.id
       });
+      if (project.rootPath === null) {
+        throw new Error("Explorer requires a project with a root directory.");
+      }
       const nextTreeNodes = buildExplorerTreeNodes(entries);
       const workspaceState = readExplorerWorkspaceState(project.rootPath);
       const nextOpenFiles = workspaceState.openFiles;

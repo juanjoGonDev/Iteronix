@@ -11,12 +11,12 @@ export const ProjectSessionEventName = {
 } as const;
 
 export type RecentProjectEntry = {
-  rootPath: string;
+  rootPath: string | null;
   name: string;
 };
 
 export type ProjectSessionState = {
-  projectRootPath: string;
+  projectRootPath: string | null;
   projectName: string;
   recentProjects: ReadonlyArray<RecentProjectEntry>;
 };
@@ -38,7 +38,7 @@ export const createProjectSessionStorage = (
       recentProjects: [
         normalizedProject,
         ...current.recentProjects.filter(
-          (entry) => entry.rootPath !== normalizedProject.rootPath
+          (entry) => readRecentProjectKey(entry) !== readRecentProjectKey(normalizedProject)
         )
       ].slice(0, RecentProjectsLimit)
     };
@@ -69,9 +69,9 @@ export const writeProjectSession = (
 ): ProjectSessionState => {
   const current = readProjectSession(storage);
   const nextState = {
-    projectRootPath: normalizeText(
-      input.projectRootPath ?? current.projectRootPath
-    ),
+    projectRootPath: Object.hasOwn(input, "projectRootPath")
+      ? normalizeNullableText(input.projectRootPath)
+      : current.projectRootPath,
     projectName: normalizeText(input.projectName ?? current.projectName),
     recentProjects: normalizeRecentProjects(
       input.recentProjects ?? current.recentProjects
@@ -88,7 +88,7 @@ export const clearProjectSession = (
 ): ProjectSessionState =>
   writeProjectSession(
     {
-      projectRootPath: "",
+      projectRootPath: null,
       projectName: "",
       recentProjects: readProjectSession(storage).recentProjects
     },
@@ -103,7 +103,7 @@ export const readActiveProjectSessionLabel = (
     return explicitName;
   }
 
-  return readProjectRootName(session.projectRootPath);
+  return readProjectRootName(session.projectRootPath ?? "");
 };
 
 const parseProjectSession = (value: unknown): ProjectSessionState => {
@@ -113,7 +113,7 @@ const parseProjectSession = (value: unknown): ProjectSessionState => {
 
   const record = value as Record<string, unknown>;
   return {
-    projectRootPath: normalizeText(record["projectRootPath"]),
+    projectRootPath: normalizeNullableText(record["projectRootPath"]),
     projectName: normalizeText(record["projectName"]),
     recentProjects: normalizeRecentProjects(record["recentProjects"])
   };
@@ -139,11 +139,11 @@ const normalizeRecentProjects = (
       name: record["name"]
     });
 
-    if (project.rootPath.length === 0) {
+    if (project.rootPath === null && project.name.length === 0) {
       continue;
     }
 
-    if (!normalized.some((item) => item.rootPath === project.rootPath)) {
+    if (!normalized.some((item) => readRecentProjectKey(item) === readRecentProjectKey(project))) {
       normalized.push(project);
     }
   }
@@ -155,15 +155,25 @@ const normalizeRecentProject = (value: {
   rootPath: unknown;
   name: unknown;
 }): RecentProjectEntry => ({
-  rootPath: normalizeText(value.rootPath),
+  rootPath: normalizeNullableText(value.rootPath),
   name: normalizeText(value.name)
 });
+
+const readRecentProjectKey = (project: RecentProjectEntry): string =>
+  project.rootPath !== null
+    ? `root:${project.rootPath}`
+    : `workflow:${project.name.toLocaleLowerCase()}`;
 
 const normalizeText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
+const normalizeNullableText = (value: unknown): string | null => {
+  const normalized = normalizeText(value);
+  return normalized.length > 0 ? normalized : null;
+};
+
 const createEmptyProjectSession = (): ProjectSessionState => ({
-  projectRootPath: "",
+  projectRootPath: null,
   projectName: "",
   recentProjects: []
 });

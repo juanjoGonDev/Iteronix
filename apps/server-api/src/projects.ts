@@ -6,18 +6,18 @@ import { err, ok, type Result } from "./result";
 export type Project = {
   id: string;
   name: string;
-  rootPath: string;
+  rootPath: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ProjectCreateInput = {
   name: string;
-  rootPath: string;
+  rootPath: string | null;
 };
 
 export type ProjectOpenInput = {
-  rootPath: string;
+  rootPath: string | null;
   name?: string;
 };
 
@@ -67,13 +67,6 @@ const createProject = (
   input: ProjectCreateInput
 ): Result<Project, ProjectStoreError> => {
   const rootPath = normalizePath(input.rootPath);
-  if (!rootPath) {
-    return err({
-      code: ProjectStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingRootPath
-    });
-  }
-
   const name = normalizePath(input.name);
   if (!name) {
     return err({
@@ -82,7 +75,8 @@ const createProject = (
     });
   }
 
-  if (projectsByRoot.has(rootPath)) {
+  const projectKey = readProjectKey(rootPath, name);
+  if (projectsByRoot.has(projectKey)) {
     return err({
       code: ProjectStoreErrorCode.Conflict,
       message: ErrorMessage.ProjectExists
@@ -91,11 +85,11 @@ const createProject = (
 
   const project = createProjectEntity({
     name,
-    rootPath
+    rootPath: rootPath ?? null
   });
 
   projectsById.set(project.id, project);
-  projectsByRoot.set(project.rootPath, project.id);
+  projectsByRoot.set(projectKey, project.id);
 
   return ok(project);
 };
@@ -106,14 +100,17 @@ const openProject = (
   input: ProjectOpenInput
 ): Result<Project, ProjectStoreError> => {
   const rootPath = normalizePath(input.rootPath);
-  if (!rootPath) {
+  const explicitName = normalizePath(input.name);
+  const name = explicitName ?? readNameFromRootPath(rootPath);
+  if (!name) {
     return err({
       code: ProjectStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingRootPath
+      message: ErrorMessage.MissingName
     });
   }
 
-  const existingId = projectsByRoot.get(rootPath);
+  const projectKey = readProjectKey(rootPath, name);
+  const existingId = projectsByRoot.get(projectKey);
   if (existingId) {
     const existing = projectsById.get(existingId);
     if (existing) {
@@ -121,14 +118,13 @@ const openProject = (
     }
   }
 
-  const name = normalizePath(input.name) ?? basename(rootPath) ?? rootPath;
   const project = createProjectEntity({
     name,
-    rootPath
+    rootPath: rootPath ?? null
   });
 
   projectsById.set(project.id, project);
-  projectsByRoot.set(project.rootPath, project.id);
+  projectsByRoot.set(projectKey, project.id);
 
   return ok(project);
 };
@@ -159,7 +155,7 @@ const createProjectEntity = (input: ProjectCreateInput): Project => {
   };
 };
 
-const normalizePath = (value: string | undefined): string | undefined => {
+const normalizePath = (value: string | null | undefined): string | undefined => {
   if (!value) {
     return undefined;
   }
@@ -167,3 +163,16 @@ const normalizePath = (value: string | undefined): string | undefined => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
+
+const readNameFromRootPath = (rootPath: string | undefined): string | undefined => {
+  if (!rootPath) {
+    return undefined;
+  }
+
+  return basename(rootPath) || rootPath;
+};
+
+const readProjectKey = (
+  rootPath: string | undefined,
+  name: string
+): string => rootPath ?? `workflow:${name.toLocaleLowerCase()}`;

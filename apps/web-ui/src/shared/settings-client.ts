@@ -37,7 +37,7 @@ export type RuntimeProviderSettingsRecord = {
 };
 
 export type SettingsClient = {
-  openProject: (input: { rootPath: string; name?: string }) => Promise<ProjectRecord>;
+  openProject: (input: { rootPath: string | null; name?: string }) => Promise<ProjectRecord>;
   listProviders: (input?: { projectId?: string; profileId?: string }) => Promise<RuntimeProviderListResponse>;
   updateProviderSettings: (input: {
     projectId: string;

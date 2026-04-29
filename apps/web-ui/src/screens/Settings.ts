@@ -201,7 +201,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           renderReadOnlyCell("Project", currentProject?.name ?? "No project selected"),
           renderReadOnlyCell(
             "Root path",
-            currentProject?.rootPath ?? (this.state.projectSession.projectRootPath || "Not set")
+            currentProject?.rootPath ?? this.state.projectSession.projectRootPath ?? "Workflow-only project"
           ),
           renderReadOnlyCell("Recent projects", String(this.state.projectSession.recentProjects.length)),
           renderReadOnlyCell("Runtime providers", String(runtimeProviders.length))
@@ -635,7 +635,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       message = toErrorMessage(error, "Could not load runtime providers.");
     }
 
-    if (projectSession.projectRootPath.length > 0) {
+    if (projectSession.projectRootPath !== null || projectSession.projectName.length > 0) {
       try {
         currentProject = await this.settingsClient.openProject({
           rootPath: projectSession.projectRootPath,

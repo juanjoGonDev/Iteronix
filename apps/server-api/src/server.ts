@@ -884,7 +884,7 @@ const handleCreateProject = async (
     return;
   }
 
-  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -922,7 +922,7 @@ const handleOpenProject = async (
     return;
   }
 
-  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -942,6 +942,28 @@ const handleOpenProject = async (
   respondJson(res, HttpStatus.Ok, {
     project: opened.value
   });
+};
+
+const assertProjectRootIfPresent = (
+  rootPath: string | null,
+  workspacePolicy: WorkspacePolicy
+): Result<string | null, ApiError> => {
+  if (rootPath === null) {
+    return ok(null);
+  }
+
+  return workspacePolicy.assertPathAllowed(rootPath);
+};
+
+const readProjectFilesystemRoot = (project: Project): Result<string, ApiError> => {
+  if (project.rootPath === null) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingRootPath
+    });
+  }
+
+  return ok(project.rootPath);
 };
 
 const handleFileTree = async (
@@ -966,9 +988,14 @@ const handleFileTree = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const treeResult = await listFileTree(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path
   );
   if (treeResult.type === ResultType.Err) {
@@ -1003,9 +1030,14 @@ const handleFileRead = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const readResult = await readFileContent(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path,
     {
       ...(parsed.value.startLine !== undefined
@@ -1052,8 +1084,13 @@ const handleFileSearch = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
-  const searchResult = await searchFiles(projectResult.value.rootPath, {
+  const searchResult = await searchFiles(rootPath.value, {
     query: parsed.value.query,
     isRegex: parsed.value.isRegex,
     matchCase: parsed.value.matchCase,
@@ -1091,9 +1128,14 @@ const handleFileDelete = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const deleteResult = await deleteFile(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path
   );
   if (deleteResult.type === ResultType.Err) {
@@ -1128,9 +1170,14 @@ const handleFileCreate = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const createResult = await createDirectory(
-    projectResult.value.rootPath,
+    rootPath.value,
     dirname(parsed.value.path)
   );
   if (createResult.type === ResultType.Err) {
@@ -1139,7 +1186,7 @@ const handleFileCreate = async (
   }
 
   const writeResult = await writeFileContent(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path,
     parsed.value.content
   );
@@ -1176,9 +1223,14 @@ const handleFileMove = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const moveResult = await moveFile(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.sourcePath,
     parsed.value.targetPath
   );
@@ -1214,9 +1266,14 @@ const handleFileWrite = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const writeResult = await writeFileContent(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path,
     parsed.value.content
   );
@@ -2217,23 +2274,15 @@ const parseCreateProject = (
     });
   }
 
-  const rootPath = readRequiredString(
-    value,
-    ProjectField.RootPath,
-    ErrorMessage.MissingRootPath
-  );
-  if (rootPath.type === ResultType.Err) {
-    return rootPath;
-  }
-
   const name = readRequiredString(value, ProjectField.Name, ErrorMessage.MissingName);
   if (name.type === ResultType.Err) {
     return name;
   }
+  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
 
   return ok({
     name: name.value,
-    rootPath: rootPath.value
+    rootPath
   });
 };
 
@@ -2247,26 +2296,18 @@ const parseOpenProject = (
     });
   }
 
-  const rootPath = readRequiredString(
-    value,
-    ProjectField.RootPath,
-    ErrorMessage.MissingRootPath
-  );
-  if (rootPath.type === ResultType.Err) {
-    return rootPath;
-  }
-
+  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
   const name = readOptionalString(value, ProjectField.Name);
 
   if (name) {
     return ok({
       name,
-      rootPath: rootPath.value
+      rootPath
     });
   }
 
   return ok({
-    rootPath: rootPath.value
+    rootPath
   });
 };
 
@@ -4542,6 +4583,19 @@ const readOptionalString = (
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const readOptionalNullableString = (
+  record: Record<string, unknown>,
+  key: string
+): string | null => {
+  const value = record[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 const readOptionalStringField = (

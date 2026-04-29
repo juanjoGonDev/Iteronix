@@ -138,7 +138,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     const session = createProjectSessionStorage().load();
 
     super(props, {
-      projectRootPath: session.projectRootPath,
+      projectRootPath: session.projectRootPath ?? "",
       projectName: session.projectName,
       currentProject: null,
       recentProjects: session.recentProjects,
@@ -166,7 +166,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       noticeMessage: null
     });
 
-    if (session.projectRootPath.length > 0) {
+    if (session.projectRootPath !== null || session.projectName.length > 0) {
       setTimeout(() => {
         void this.handleOpenProject(undefined, true);
       }, 0);
@@ -228,9 +228,9 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       ]),
       children: createElement("div", { className: "flex flex-col gap-4" }, [
         renderInputField({
-          label: "Root path",
+          label: "Root path (optional)",
           value: this.state.projectRootPath,
-          placeholder: "D:/projects/Iteronix",
+          placeholder: "D:/projects/Iteronix or leave empty for workflow-only",
           testId: "quality-gates-project-root",
           onChange: (value) => this.setState({ projectRootPath: value })
         }),
@@ -246,7 +246,9 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
               createElement("div", { className: "flex items-center justify-between gap-3" }, [
                 createElement("div", { className: "flex flex-col gap-1" }, [
                   createElement("p", { className: "text-sm font-semibold text-white" }, [currentProject.name]),
-                  createElement("p", { className: "text-xs text-text-secondary" }, [currentProject.rootPath])
+                  createElement("p", { className: "text-xs text-text-secondary" }, [
+                    currentProject.rootPath ?? "Workflow-only project"
+                  ])
                 ]),
                 createElement(StatusBadge, {
                   status: "success"
@@ -268,18 +270,22 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
                 this.state.recentProjects.map((project) =>
                   createElement("button", {
                     type: "button",
-                    key: project.rootPath,
+                    key: project.rootPath ?? `workflow-${project.name}`,
                     className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 text-left transition-colors hover:bg-surface-dark-hover",
                     onClick: () => {
                       this.setState({
-                        projectRootPath: project.rootPath,
+                        projectRootPath: project.rootPath ?? "",
                         projectName: project.name
                       });
                       void this.handleOpenProject(project);
                     }
                   }, [
-                    createElement("p", { className: "truncate text-sm font-medium text-white" }, [project.name || project.rootPath]),
-                    createElement("p", { className: "mt-1 truncate text-xs text-text-secondary" }, [project.rootPath])
+                    createElement("p", { className: "truncate text-sm font-medium text-white" }, [
+                      project.name || project.rootPath || "Workflow-only project"
+                    ]),
+                    createElement("p", { className: "mt-1 truncate text-xs text-text-secondary" }, [
+                      project.rootPath ?? "Workflow-only project"
+                    ])
                   ])
                 )
               ])
@@ -292,6 +298,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
   private renderGitWorkspacePanel(): HTMLElement {
     const currentProject = this.state.currentProject;
     const repository = this.state.gitRepository;
+    const hasFilesystemProject = currentProject?.rootPath !== null && currentProject !== null;
     const branchValidationMessage = readGitBranchValidationMessage(
       this.state.gitBranchName,
       this.state.gitBranches
@@ -301,9 +308,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
     return createElement(SectionPanel, {
       title: "Git workspace",
-      subtitle: currentProject
+      subtitle: hasFilesystemProject
         ? "Repository status comes from the server-side Git adapter."
-        : "Requires an opened project",
+        : currentProject
+          ? "Requires a project with a root directory"
+          : "Requires an opened project",
       actions: createElement("div", { className: "flex items-center gap-2" }, [
         repository
           ? createElement(StatusBadge, {
@@ -313,7 +322,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
         createElement(Button, {
           variant: "secondary",
           size: "sm",
-          disabled: currentProject === null || this.state.gitPendingAction === GitPendingAction.Refresh,
+          disabled: !hasFilesystemProject || this.state.gitPendingAction === GitPendingAction.Refresh,
           onClick: () => {
             void this.refreshGitWorkspace(undefined, true);
           },
@@ -326,6 +335,12 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
             title: "No repository loaded",
             description: "Open a project inside the workspace to inspect staged and unstaged Git changes."
           })
+        : !hasFilesystemProject
+          ? createElement(EmptyStatePanel, {
+              icon: "account_tree",
+              title: "Workflow-only project",
+              description: "Git actions require a project with a root directory."
+            })
         : repository === null
           ? createElement("div", { className: "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary" }, [
               "Git status will load as soon as the project is opened."
@@ -374,17 +389,20 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
   private renderGateLauncherPanel(): HTMLElement {
     const currentProject = this.state.currentProject;
+    const hasFilesystemProject = currentProject?.rootPath !== null && currentProject !== null;
     const selectedRun = readSelectedRun(this.state.runs, this.state.selectedRunId);
     const runDisabled =
-      currentProject === null ||
+      !hasFilesystemProject ||
       this.state.selectedGates.length === 0 ||
       this.state.pendingAction === PendingAction.Run;
 
     return createElement(SectionPanel, {
       title: "Quality gates",
-      subtitle: currentProject
+      subtitle: hasFilesystemProject
         ? `Launches against ${currentProject.name}`
-        : "Requires an opened project",
+        : currentProject
+          ? "Requires a project with a root directory"
+          : "Requires an opened project",
       actions: createElement("div", { className: "flex items-center gap-2" }, [
         createElement(StatusBadge, {
           status: this.state.streamState === StreamState.Live ? "running" : "info"
@@ -490,6 +508,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
   private renderGitReviewPanel(): HTMLElement {
     const currentProject = this.state.currentProject;
     const repository = this.state.gitRepository;
+    const hasFilesystemProject = currentProject?.rootPath !== null && currentProject !== null;
     const selectedScope = resolveGitDiffScope(repository, this.state.selectedGitDiffScope);
     const activeDiff = readGitDiff(this.state.gitDiffs, selectedScope);
     const focusedPath = resolveGitFocusedPath(
@@ -510,9 +529,11 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
     return createElement(SectionPanel, {
       title: "Git review",
-      subtitle: currentProject
+      subtitle: hasFilesystemProject
         ? "Inspect repository diffs and create a Conventional Commit from the server workspace."
-        : "Requires an opened project",
+        : currentProject
+          ? "Requires a project with a root directory"
+          : "Requires an opened project",
       actions: createElement("div", { className: "flex items-center gap-2" }, [
         repository
           ? createElement(StatusBadge, {
@@ -531,6 +552,12 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
             title: "Git actions unavailable",
             description: "Open a project first. Diff loading and commit creation stay scoped to that project."
           })
+        : !hasFilesystemProject
+          ? createElement(EmptyStatePanel, {
+              icon: "account_tree",
+              title: "Workflow-only project",
+              description: "Diff loading and commit creation require a project with a root directory."
+            })
         : createElement("div", { className: "flex flex-col gap-5" }, [
             createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
                 renderGitDiffScopeButton({
@@ -725,9 +752,9 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
     const rootPath = (recentProject?.rootPath ?? this.state.projectRootPath).trim();
     const projectName = (recentProject?.name ?? this.state.projectName).trim();
 
-    if (rootPath.length === 0) {
+    if (rootPath.length === 0 && projectName.length === 0) {
       this.setState({
-        errorMessage: "A project root path is required.",
+        errorMessage: "A project name or root path is required.",
         noticeMessage: null
       });
       return;
@@ -741,7 +768,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
 
     try {
       const project = await this.qualityGatesClient.openProject({
-        rootPath,
+        rootPath: rootPath.length > 0 ? rootPath : null,
         ...(projectName.length > 0 ? { name: projectName } : {})
       });
       const recentState = this.projectSession.saveRecentProject({
@@ -758,7 +785,7 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       this.pollGeneration += 1;
 
       this.setState({
-        projectRootPath: session.projectRootPath,
+        projectRootPath: session.projectRootPath ?? "",
         projectName: session.projectName,
         currentProject: project,
         recentProjects: session.recentProjects,
@@ -788,7 +815,9 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
       this.startProjectPolling(project.id);
       await Promise.all([
         this.refreshProjectRuns(false, project.id),
-        this.refreshGitWorkspace(project.id, false)
+        project.rootPath !== null
+          ? this.refreshGitWorkspace(project.id, false)
+          : Promise.resolve()
       ]);
     } catch (error) {
       this.stopRunStream();

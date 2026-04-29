@@ -19,7 +19,7 @@ const EndpointPath = {
 
 export type QualityGatesClient = {
   openProject: (input: {
-    rootPath: string;
+    rootPath: string | null;
     name?: string;
   }) => Promise<ProjectRecord>;
   runQualityGates: (input: {
@@ -185,7 +185,7 @@ const parseServerSentEventBlock = (
 const parseProjectRecord = (value: Record<string, unknown>): ProjectRecord => ({
   id: readRequiredString(value, "projectRecord", "id"),
   name: readRequiredString(value, "projectRecord", "name"),
-  rootPath: readRequiredString(value, "projectRecord", "rootPath"),
+  rootPath: readNullableString(value, "projectRecord", "rootPath"),
   createdAt: readRequiredString(value, "projectRecord", "createdAt"),
   updatedAt: readRequiredString(value, "projectRecord", "updatedAt")
 });
@@ -289,6 +289,23 @@ const readRequiredString = (
   key: string
 ): string => {
   const nested = value[key];
+  if (typeof nested !== "string") {
+    throw new Error(`Invalid ${label}.${key}`);
+  }
+
+  return nested;
+};
+
+const readNullableString = (
+  value: Record<string, unknown>,
+  label: string,
+  key: string
+): string | null => {
+  const nested = value[key];
+  if (nested === null) {
+    return null;
+  }
+
   if (typeof nested !== "string") {
     throw new Error(`Invalid ${label}.${key}`);
   }

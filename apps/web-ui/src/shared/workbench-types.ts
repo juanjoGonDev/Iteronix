@@ -25,7 +25,7 @@ export type QualityGateRunStatus =
 export type ProjectRecord = {
   id: string;
   name: string;
-  rootPath: string;
+  rootPath: string | null;
   createdAt: string;
   updatedAt: string;
 };

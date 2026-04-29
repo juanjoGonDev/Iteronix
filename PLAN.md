@@ -211,6 +211,7 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
     - [x] be visibly disabled + explain "Not available yet"
   - [x] No broken menus, no dead buttons, no fake dropdowns, no placeholder navigation
   - [x] Main sidebar navigation scrolls independently on short viewports so every route remains reachable
+  - [x] Shell refinement on `2026-04-29`: project selector lives in the sidebar footer, user selector lives in the header actions, and projects can be workflow-only with `rootPath: null` while filesystem features remain disabled until a root directory exists
 
 - [x] Add a "UI consistency checklist" (docs/UI_CHECKLIST.md):
   - [x] menu order/icons unchanged across screens

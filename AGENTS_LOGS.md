@@ -2022,3 +2022,33 @@
   - Sin fallos de gates
 - Next:
   - Commit manual y esperar revisión visual del usuario
+
+### 2026-04-29 17:30 (Europe/Madrid) — Navigation Project Selector
+
+- Summary: Reubicado el selector de proyecto al pie de la navegación principal y movido el usuario al header derecho; el contrato de proyecto pasa a soportar `rootPath: null` para proyectos workflow-only.
+- Decisions:
+  - Usar `null` como ausencia explícita de root en vez de cadena vacía, sin compatibilidad legacy.
+  - Mantener Explorer, Git y quality gates restringidos a proyectos con directorio real.
+  - Mantener Notion en progreso hasta revisión del usuario; no se marca como `Listo` sin confirmación.
+- Changes:
+  - **Updated PLAN.md**: registrada la nueva ubicación de selector de proyecto/usuario y el soporte workflow-only.
+  - **Updated apps/server-api/src/projects.ts** y tests: proyectos con nombre y root nulo son válidos; sin nombre se rechazan.
+  - **Updated apps/server-api/src/server.ts**, `git.ts`, `quality-gates.ts`: validación explícita de root requerido en operaciones con filesystem.
+  - **Updated apps/web-ui/src/shared/project-session.ts** y cliente API: sesión y responses usan root nullable.
+  - **Updated apps/web-ui/src/components/Navigation.ts**, `Layout.ts`, `index.ts`: proyecto en sidebar inferior y usuario en header.
+  - **Updated apps/web-ui/src/screens/Projects.ts**, `Explorer.ts`, `Settings.ts`: UI preparada para proyectos workflow-only sin acciones muertas.
+  - Comentario añadido en el tablero de Notion con el estado en progreso.
+- Commands:
+  - `pnpm exec vitest run apps/server-api/src/projects.test.ts apps/web-ui/src/shared/project-session.test.ts apps/web-ui/src/components/Navigation.test.ts apps/web-ui/src/shared/quality-gates-client.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - No se ejecutó `validate:source-linking` porque el cambio no toca Workflows/History ni el panel de evidencias.
+- Next:
+  - Commit manual y revisión visual del usuario en la app local.

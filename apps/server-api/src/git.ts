@@ -350,6 +350,13 @@ const resolveGitRoot = (
     return err(mapProjectStoreError(project.error.code));
   }
 
+  if (project.value.rootPath === null) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingRootPath
+    });
+  }
+
   const root = dependencies.workspacePolicy.assertPathAllowed(project.value.rootPath);
   if (root.type === ResultType.Err) {
     return err(root.error);

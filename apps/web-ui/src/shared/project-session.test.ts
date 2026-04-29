@@ -48,6 +48,34 @@ describe("project session storage", () => {
     ]);
   });
 
+  it("persists workflow-only recent projects without a root path", () => {
+    const storage = createMemoryStorage();
+    const session = createProjectSessionStorage(storage);
+
+    writeProjectSession(
+      {
+        projectRootPath: "",
+        projectName: "Workflow Lab"
+      },
+      storage
+    );
+    session.saveRecentProject({
+      rootPath: null,
+      name: "Workflow Lab"
+    });
+
+    expect(readProjectSession(storage)).toEqual({
+      projectRootPath: null,
+      projectName: "Workflow Lab",
+      recentProjects: [
+        {
+          rootPath: null,
+          name: "Workflow Lab"
+        }
+      ]
+    });
+  });
+
   it("clears the active project without dropping recent entries", () => {
     const storage = createMemoryStorage();
     const session = createProjectSessionStorage(storage);
@@ -73,7 +101,7 @@ describe("project session storage", () => {
     clearProjectSession(storage);
 
     expect(readProjectSession(storage)).toEqual({
-      projectRootPath: "",
+      projectRootPath: null,
       projectName: "",
       recentProjects: [
         {
