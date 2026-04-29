@@ -1990,3 +1990,35 @@
   - Sin fallos de gates
 - Next:
   - Esperar aceptación visual del sistema de toasts y continuar sólo con la siguiente pantalla cuando el usuario lo confirme
+### 2026-04-29 16:30 (Europe/Madrid) — Explorer Toast Gap Fix
+
+- Summary: Eliminado el hueco residual que aparecía en Explorer cuando un aviso se publicaba como toast global.
+- Decisions:
+  - Mantener `PageNoticeStack` como adaptador global sin layout y retirar el wrapper específico de `Explorer.renderMessages`
+  - No tocar la lógica de estados de Explorer ni el contrato de avisos compartido
+- Changes:
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: los mensajes se renderizan directamente como adaptador global sin contenedor con padding
+  - **Updated PLAN.md**: registrada la corrección del hueco residual
+- Commands:
+  - Pendiente ejecutar gates
+- Issues/Risks:
+  - Ninguno identificado
+- Next:
+  - Ejecutar validaciones relevantes y commit manual
+### 2026-04-29 17:06 (Europe/Madrid) — Explorer Toast Gap Gates
+
+- Summary: Validada la eliminación del hueco residual de toasts en Explorer.
+- Decisions:
+  - Mantener el cambio acotado a `Explorer.renderMessages`, sin alterar el contrato global de `PageNoticeStack`
+- Changes:
+  - Sin cambios adicionales de producto después de los gates
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - Sin fallos de gates
+- Next:
+  - Commit manual y esperar revisión visual del usuario

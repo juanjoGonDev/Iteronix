@@ -619,6 +619,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Form component progress on `2026-04-29`: provider, limits, notifications and API field markup now comes from shared `SettingsFields` components instead of screen-local helper functions, keeping existing test ids intact
   - Visual component fix on `2026-04-29`: shared page headers and tabs now use readable light-surface contrast, `Settings` toggles render through reusable switch styling, feedback uses stackable dismissible toasts, and the save action bar is a solid responsive footer instead of a translucent panel
   - Global feedback fix on `2026-04-29`: `PageNoticeStack` now publishes all screen notices as fixed global toasts with auto-dismiss and close controls, and the `Projects` browser validation guards against the legacy inline alert returning
+  - Explorer toast gap fix on `2026-04-29`: `Explorer` no longer wraps global notice toasts in a padded inline container, so refreshing/reloading the tree does not leave the old alert space above the editor
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

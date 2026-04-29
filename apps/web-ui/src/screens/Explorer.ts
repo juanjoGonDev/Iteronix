@@ -256,14 +256,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       return createElement("div", {});
     }
 
-    return createElement("div", {
-      className: this.state.isCompactViewport ? "px-3 pt-3" : "px-6 pt-6"
-    }, [
-      createElement(PageNoticeStack, {
-        errorMessage,
-        noticeMessage
-      })
-    ]);
+    return createElement(PageNoticeStack, {
+      errorMessage,
+      noticeMessage
+    });
   }
 
   private renderWorkbench(
