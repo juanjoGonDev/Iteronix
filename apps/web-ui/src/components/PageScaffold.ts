@@ -18,6 +18,19 @@ export interface PageNoticeStackProps extends ComponentProps {
   className?: string;
 }
 
+export type ToastKind = "success" | "error";
+
+export interface ToastRecord {
+  id: string;
+  kind: ToastKind;
+  message: string;
+}
+
+export interface ToastStackProps extends ComponentProps {
+  toasts: ReadonlyArray<ToastRecord>;
+  onDismiss: (id: string) => void;
+}
+
 export interface PageTabItem {
   id: string;
   label: string;
@@ -49,9 +62,9 @@ export class PageIntro extends Component<PageIntroProps> {
       className: readPageIntroClassName(className)
     }, [
       createElement("div", { className: "flex min-w-0 flex-col gap-2" }, [
-        createElement("h1", { className: "text-3xl font-semibold tracking-tight text-white" }, [title]),
+        createElement("h1", { className: readPageIntroTitleClassName() }, [title]),
         description
-          ? createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [description])
+          ? createElement("p", { className: readPageIntroDescriptionClassName() }, [description])
           : ""
       ]),
       actions ?? ""
@@ -88,6 +101,33 @@ export class PageNoticeStack extends Component<PageNoticeStackProps> {
   }
 }
 
+export class ToastStack extends Component<ToastStackProps> {
+  override render(): HTMLElement {
+    const { toasts, onDismiss } = this.props;
+
+    return createElement("div", {
+      className: "pointer-events-none fixed right-5 top-20 z-50 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3"
+    }, [
+      toasts.map((toast) =>
+        createElement("div", {
+          className: readToastClassName(toast.kind),
+          "data-testid": `toast-${toast.kind}`
+        }, [
+          createElement("span", { className: "min-w-0 flex-1" }, [toast.message]),
+          createElement("button", {
+            type: "button",
+            className: "ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-current opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/30",
+            "aria-label": "Dismiss notification",
+            onClick: () => onDismiss(toast.id)
+          }, [
+            createElement("span", { className: "material-symbols-outlined text-[18px]" }, ["close"])
+          ])
+        ])
+      )
+    ]);
+  }
+}
+
 export class PageTabs extends Component<PageTabsProps> {
   override render(): HTMLElement {
     const { items, sticky = false, className = "" } = this.props;
@@ -115,21 +155,35 @@ export const readPageFrameClassName = (className = ""): string =>
 export const readPageIntroClassName = (className = ""): string =>
   joinClasses("flex flex-col gap-3 md:flex-row md:items-end md:justify-between", className);
 
+export const readPageIntroTitleClassName = (): string =>
+  "text-3xl font-semibold tracking-tight text-slate-950";
+
+export const readPageIntroDescriptionClassName = (): string =>
+  "max-w-3xl text-sm leading-6 text-slate-600";
+
 export const readPageTabsContainerClassName = (
   sticky: boolean,
   className = ""
 ): string =>
   joinClasses(
     sticky
-      ? "sticky top-0 z-10 border-b border-border-dark bg-background-dark/95 backdrop-blur"
-      : "border-b border-border-dark",
+      ? "sticky top-0 z-10 border-b border-slate-300 bg-background-light"
+      : "border-b border-slate-300",
     className
   );
 
 export const readPageTabButtonClassName = (active: boolean): string =>
   active
-    ? "border-b-2 border-white px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap text-white transition-colors"
-    : "border-b-2 border-transparent px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap text-text-secondary transition-colors hover:text-white";
+    ? "border-b-2 border-slate-950 px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap text-slate-950 transition-colors"
+    : "border-b-2 border-transparent px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap text-slate-600 transition-colors hover:text-slate-950";
+
+export const readToastClassName = (kind: ToastKind): string =>
+  joinClasses(
+    "pointer-events-auto flex items-start gap-2 rounded-lg border px-4 py-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.12)]",
+    kind === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+      : "border-rose-200 bg-rose-50 text-rose-950"
+  );
 
 const joinClasses = (...values: ReadonlyArray<string>): string =>
   values

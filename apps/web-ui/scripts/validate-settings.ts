@@ -28,7 +28,9 @@ const ValidationConfig = {
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
   ViewportWidth: 1480,
-  ViewportHeight: 1280
+  ViewportHeight: 1280,
+  MobileViewportWidth: 390,
+  MobileViewportHeight: 844
 } as const;
 
 const BrowserStorageKey = {
@@ -165,7 +167,7 @@ async function validateSettingsScreen(): Promise<void> {
     await clickNamedButton(page, "Workflow Limits");
     await waitForTestId(page, "settings-max-loops");
     await setInputValueByTestId(page, "settings-max-loops", "21");
-    await toggleCheckboxByTestId(page, "settings-external-calls", false);
+    await toggleSwitchByTestId(page, "settings-external-calls", false);
 
     await clickNamedButton(page, "Notifications");
     await waitForTestId(page, "settings-webhook-url");
@@ -208,7 +210,7 @@ async function validateSettingsScreen(): Promise<void> {
 
     await clickNamedButton(page, "Workflow Limits");
     await waitForInputValue(page, "settings-max-loops", "21");
-    await waitForCheckboxValue(page, "settings-external-calls", false);
+    await waitForSwitchValue(page, "settings-external-calls", false);
 
     await clickNamedButton(page, "Notifications");
     await waitForInputValue(page, "settings-webhook-url", ValidationText.NotificationsUrl);
@@ -216,6 +218,24 @@ async function validateSettingsScreen(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "settings-reloaded",
+      artifactName: "settings"
+    });
+
+    await page.setViewport({
+      width: ValidationConfig.MobileViewportWidth,
+      height: ValidationConfig.MobileViewportHeight
+    });
+    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
+      waitUntil: "networkidle0"
+    });
+    await waitForPageTexts(page, [
+      ValidationText.ScreenTitle,
+      ValidationText.AnthropicProfileName
+    ]);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "settings-mobile",
       artifactName: "settings"
     });
 
@@ -506,7 +526,7 @@ async function setInputValueByTestId(
   }
 }
 
-async function toggleCheckboxByTestId(
+async function toggleSwitchByTestId(
   page: Page,
   testId: string,
   checked: boolean
@@ -514,14 +534,13 @@ async function toggleCheckboxByTestId(
   const updated = await page.evaluate(
     (input: { testId: string; checked: boolean }) => {
       const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      if (!(element instanceof HTMLInputElement) || element.type !== "checkbox") {
+      if (!(element instanceof HTMLButtonElement) || element.getAttribute("role") !== "switch") {
         return false;
       }
 
-      element.checked = input.checked;
-      element.dispatchEvent(new Event("change", {
-        bubbles: true
-      }));
+      if (element.getAttribute("aria-checked") !== String(input.checked)) {
+        element.click();
+      }
       return true;
     },
     {
@@ -531,7 +550,7 @@ async function toggleCheckboxByTestId(
   );
 
   if (!updated) {
-    throw new Error(`Could not toggle checkbox ${testId}.`);
+    throw new Error(`Could not toggle switch ${testId}.`);
   }
 }
 
@@ -562,7 +581,7 @@ async function waitForInputValue(
   });
 }
 
-async function waitForCheckboxValue(
+async function waitForSwitchValue(
   page: Page,
   testId: string,
   expectedValue: boolean
@@ -570,17 +589,17 @@ async function waitForCheckboxValue(
   await waitForCondition(async () => {
     const checked = await page.evaluate((input: { testId: string }) => {
       const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      if (!(element instanceof HTMLInputElement) || element.type !== "checkbox") {
+      if (!(element instanceof HTMLButtonElement) || element.getAttribute("role") !== "switch") {
         return null;
       }
 
-      return element.checked;
+      return element.getAttribute("aria-checked") === "true";
     }, {
       testId
     });
 
     return checked === expectedValue;
-  }, `checkbox ${testId} value ${String(expectedValue)}`, {
+  }, `switch ${testId} value ${String(expectedValue)}`, {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });

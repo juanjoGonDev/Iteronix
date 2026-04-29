@@ -3,8 +3,9 @@ import { StatusBadge } from "../components/Card.js";
 import {
   PageFrame,
   PageIntro,
-  PageNoticeStack,
   PageTabs,
+  ToastStack,
+  type ToastRecord,
   type PageTabItem
 } from "../components/PageScaffold.js";
 import {
@@ -59,8 +60,7 @@ interface SettingsScreenState {
   projectSession: ProjectSessionState;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   sessionSecrets: Record<string, string>;
-  errorMessage: string | null;
-  noticeMessage: string | null;
+  toasts: ReadonlyArray<ToastRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
   isTestingWebhook: boolean;
@@ -93,9 +93,13 @@ const TestWebhookPayload = {
   source: "settings-screen"
 } as const;
 
+const ToastDismissMs = 4500;
+
 export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
   private readonly settingsStorage = createSettingsStorage();
   private readonly settingsClient = createSettingsClient();
+  private readonly toastTimeouts = new Map<string, number>();
+  private toastSequence = 0;
 
   constructor(props: ComponentProps = {}) {
     const snapshot = createSettingsStorage().load();
@@ -113,8 +117,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       projectSession: readProjectSession(),
       runtimeProviders: [],
       sessionSecrets: {},
-      errorMessage: null,
-      noticeMessage: null,
+      toasts: [],
       isSaving: false,
       isTestingConnection: false,
       isTestingWebhook: false
@@ -125,6 +128,11 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     void this.hydrateRuntimeContext();
   }
 
+  override onUnmount(): void {
+    this.toastTimeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    this.toastTimeouts.clear();
+  }
+
   override render(): HTMLElement {
     return createElement(PageFrame, {
       className: "max-w-[1380px] gap-7 pb-28 md:pb-10"
@@ -133,10 +141,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         title: "Settings",
         description: "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
       }),
-      createElement(PageNoticeStack, {
-        errorMessage: this.state.errorMessage,
-        noticeMessage: this.state.noticeMessage
-      }),
+      this.renderToasts(),
       createElement(PageTabs, {
         sticky: true,
         items: this.createTabItems()
@@ -144,6 +149,13 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         this.renderActiveTab(),
         this.renderSaveBar()
     ]);
+  }
+
+  private renderToasts(): HTMLElement {
+    return createElement(ToastStack, {
+      toasts: this.state.toasts,
+      onDismiss: (id: string) => this.dismissToast(id)
+    });
   }
 
   private createTabItems(): ReadonlyArray<PageTabItem> {
@@ -260,9 +272,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   private renderProviderTab(): HTMLElement {
     const selectedProfile = this.readSelectedProviderProfile();
 
-    return createElement("div", { className: "grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" }, [
+    return createElement("div", { className: "grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" }, [
       createElement("section", {
-        className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
+        className: "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
       }, [
         createElement("div", { className: "flex items-start justify-between gap-3" }, [
           createElement("div", { className: "flex flex-col gap-1" }, [
@@ -284,7 +296,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       selectedProfile
         ? this.renderProviderProfileEditor(selectedProfile)
         : createElement("section", {
-            className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
+            className: "min-w-0 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
           }, [
             createElement("h2", { className: "text-lg font-semibold text-white" }, ["Select a profile"]),
             createElement("p", { className: "mt-2 text-sm text-text-secondary" }, [
@@ -323,7 +335,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           : "border-[#2b3644] bg-[#1a2129]"
       }`
     }, [
-      createElement("div", { className: "flex items-start gap-3" }, [
+      createElement("div", { className: "flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start" }, [
         createElement("button", {
           type: "button",
           className: "flex min-w-0 flex-1 flex-col text-left",
@@ -337,7 +349,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         createElement(Button, {
           variant: "danger",
           size: "sm",
-          className: "self-start",
+          className: "w-full justify-center sm:w-auto sm:self-start",
           onClick: () => this.handleRemoveProviderProfile(profile.id),
           children: "Remove"
         })
@@ -352,7 +364,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     );
 
     return createElement("section", {
-      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
+      className: "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
     }, [
       createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, [
         createElement("div", { className: "flex flex-col gap-1" }, [
@@ -607,12 +619,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private renderSaveBar(): HTMLElement {
     return createElement("div", {
-      className: "sticky bottom-4 z-20 mt-1 flex flex-col gap-3 rounded-2xl border border-[#202832] bg-[#171c22]/96 px-4 py-4 shadow-[0_16px_34px_rgba(15,23,32,0.16)] backdrop-blur md:flex-row md:items-center md:justify-end md:px-6"
+      className: "sticky bottom-4 z-20 mt-1 flex w-full flex-col gap-3 rounded-xl border border-[#202832] bg-[#171c22] px-4 py-4 shadow-[0_8px_18px_rgba(15,23,32,0.12)] md:w-auto md:flex-row md:items-center md:justify-end md:px-6"
         + " self-stretch md:self-end md:min-w-[420px]"
     }, [
       createElement(Button, {
         variant: "danger",
-        className: "justify-center",
+        className: "w-full justify-center md:w-auto",
         onClick: () => this.handleResetDefaults(),
         children: "Reset defaults"
       }),
@@ -620,7 +632,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         variant: "primary",
         icon: "save",
         disabled: this.state.isSaving,
-        className: "justify-center",
+        className: "w-full justify-center md:w-auto",
         onClick: () => {
           void this.handleSave();
         },
@@ -657,8 +669,11 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       projectSession,
       currentProject,
       runtimeProviders,
-      ...(message ? { noticeMessage: message } : {})
     });
+
+    if (message) {
+      this.pushToast("error", message);
+    }
   }
 
   private handleAddProviderProfile(kind: ProviderKind): void {
@@ -666,9 +681,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     this.setState({
       activeTab: "provider",
       providerProfiles: [...this.state.providerProfiles, profile],
-      selectedProviderId: profile.id,
-      noticeMessage: null,
-      errorMessage: null
+      selectedProviderId: profile.id
     });
   }
 
@@ -766,22 +779,21 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private async handleTestConnection(): Promise<void> {
     this.setState({
-      isTestingConnection: true,
-      errorMessage: null,
-      noticeMessage: null
+      isTestingConnection: true
     });
 
     try {
       writeServerConnection(this.state.serverConnection);
       const response = await this.settingsClient.listProviders();
       this.setState({
-        runtimeProviders: response.providers,
-        noticeMessage: `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`
+        runtimeProviders: response.providers
       });
+      this.pushToast(
+        "success",
+        `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`
+      );
     } catch (error) {
-      this.setState({
-        errorMessage: toErrorMessage(error, "Connection test failed.")
-      });
+      this.pushToast("error", toErrorMessage(error, "Connection test failed."));
     } finally {
       this.setState({
         isTestingConnection: false
@@ -791,9 +803,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private async handleTestWebhook(): Promise<void> {
     this.setState({
-      isTestingWebhook: true,
-      errorMessage: null,
-      noticeMessage: null
+      isTestingWebhook: true
     });
 
     try {
@@ -812,13 +822,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         throw new Error(`Webhook returned status ${response.status}`);
       }
 
-      this.setState({
-        noticeMessage: "Webhook test payload delivered successfully."
-      });
+      this.pushToast("success", "Webhook test payload delivered successfully.");
     } catch (error) {
-      this.setState({
-        errorMessage: toErrorMessage(error, "Webhook test failed.")
-      });
+      this.pushToast("error", toErrorMessage(error, "Webhook test failed."));
     } finally {
       this.setState({
         isTestingWebhook: false
@@ -832,9 +838,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     }
 
     this.setState({
-      isSaving: true,
-      errorMessage: null,
-      noticeMessage: null
+      isSaving: true
     });
 
     try {
@@ -867,13 +871,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       }
 
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;
-      this.setState({
-        noticeMessage: `Settings saved. ${syncedCount} profile${syncedCount === 1 ? "" : "s"} synced to the backend and ${localOnlyCount} kept as local-only configuration.`
-      });
+      this.pushToast(
+        "success",
+        `Settings saved. ${syncedCount} profile${syncedCount === 1 ? "" : "s"} synced to the backend and ${localOnlyCount} kept as local-only configuration.`
+      );
     } catch (error) {
-      this.setState({
-        errorMessage: toErrorMessage(error, "Could not save settings.")
-      });
+      this.pushToast("error", toErrorMessage(error, "Could not save settings."));
     } finally {
       this.setState({
         isSaving: false
@@ -898,9 +901,37 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
       serverConnection,
-      sessionSecrets: {},
-      errorMessage: null,
-      noticeMessage: "Settings restored to defaults."
+      sessionSecrets: {}
+    });
+    this.pushToast("success", "Settings restored to defaults.");
+  }
+
+  private pushToast(kind: ToastRecord["kind"], message: string): void {
+    const id = `settings-toast-${String(this.toastSequence)}`;
+    this.toastSequence += 1;
+    const timeoutId = window.setTimeout(() => this.dismissToast(id), ToastDismissMs);
+    this.toastTimeouts.set(id, timeoutId);
+    this.setState({
+      toasts: [
+        ...this.state.toasts,
+        {
+          id,
+          kind,
+          message
+        }
+      ]
+    });
+  }
+
+  private dismissToast(id: string): void {
+    const timeoutId = this.toastTimeouts.get(id);
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+      this.toastTimeouts.delete(id);
+    }
+
+    this.setState({
+      toasts: this.state.toasts.filter((toast) => toast.id !== id)
     });
   }
 

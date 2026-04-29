@@ -168,25 +168,25 @@ export class SettingsToggleField extends Component<SettingsToggleFieldProps> {
   override render(): HTMLElement {
     const { label, description, checked, testId, onChange } = this.props;
 
-    return createElement("label", {
+    return createElement("div", {
       className: "flex items-center justify-between gap-4 rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4"
     }, [
       createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
         createElement("span", { className: "text-sm font-medium text-white" }, [label]),
         createElement("span", { className: "text-xs text-text-secondary" }, [description])
       ]),
-      createElement("input", {
-        type: "checkbox",
-        checked,
+      createElement("button", {
+        type: "button",
+        role: "switch",
+        "aria-checked": String(checked),
         "data-testid": testId,
-        className: "h-4 w-4 accent-primary",
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.checked);
-          }
-        }
-      })
+        className: readSettingsToggleTrackClassName(checked),
+        onClick: () => onChange(!checked)
+      }, [
+        createElement("span", {
+          className: readSettingsToggleKnobClassName(checked)
+        })
+      ])
     ]);
   }
 }
@@ -196,6 +196,20 @@ export const readSettingsInputClassName = (): string =>
 
 export const readSettingsSelectClassName = (): string =>
   "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+
+export const readSettingsToggleTrackClassName = (checked: boolean): string =>
+  joinClasses(
+    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+    checked
+      ? "border-primary bg-primary"
+      : "border-[#3a4655] bg-[#2b3644]"
+  );
+
+export const readSettingsToggleKnobClassName = (checked: boolean): string =>
+  joinClasses(
+    "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+    checked ? "translate-x-5" : "translate-x-0.5"
+  );
 
 const joinClasses = (...values: ReadonlyArray<string>): string =>
   values

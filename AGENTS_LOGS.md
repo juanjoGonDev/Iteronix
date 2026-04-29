@@ -1910,3 +1910,43 @@
   - Pendiente cubrir Kanban con browser automation end-to-end contra servidor stub o real controlado
 - Next:
   - Implementar validación determinista de navegador para Kanban load/create/move/edit/delete si se continúa la estabilización
+### 2026-04-29 15:42 (Europe/Madrid) — Settings Visual Components
+
+- Summary: Corregida la deuda visual de Settings desde primitivas compartidas y validada con el flujo browser determinista.
+- Decisions:
+  - Tratar `PageScaffold` como fuente única para contraste de títulos, subtítulos y tabs en pantallas estándar
+  - Mantener `Settings` como pantalla activa y no moverla a `Listo` hasta confirmación explícita del usuario
+  - Sustituir checkboxes visibles por switches accesibles reutilizables en `SettingsFields`
+  - Sustituir los mensajes inline de Settings por toasts acumulables con cierre manual y autocierre
+- Changes:
+  - **Updated apps/web-ui/src/components/PageScaffold.ts** y tests: headers/tabs con contraste correcto sobre fondo claro y `ToastStack` reutilizable
+  - **Updated apps/web-ui/src/components/SettingsFields.ts** y tests: toggles con `role="switch"` y estilos compartidos
+  - **Updated apps/web-ui/src/screens/Settings.ts**: action bar sólida responsive, toasts, sin alertas inline translúcidas y mejor comportamiento móvil
+  - **Updated apps/web-ui/scripts/validate-settings.ts**: validación adaptada a switches y captura responsive móvil
+  - **Updated PLAN.md** y comentario en Notion: registrada la corrección visual manteniendo la tarea en progreso
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/PageScaffold.test.ts apps/web-ui/src/components/SettingsFields.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Falta confirmación visual final del usuario para mover `02. Settings screen end-to-end` a `Listo`
+- Next:
+  - Ejecutar gates completos y mantener el foco en Settings hasta aceptación del usuario
+### 2026-04-29 15:43 (Europe/Madrid) — Settings Gates
+
+- Summary: Ejecutados los gates completos después de la corrección visual de Settings.
+- Decisions:
+  - Mantener la tarea de Settings en progreso hasta aceptación visual explícita del usuario
+- Changes:
+  - Sin cambios adicionales de producto después de los gates
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Sin fallos de gates
+- Next:
+  - Esperar revisión del usuario sobre Settings antes de mover la tarea a `Listo` o pasar a otra pantalla

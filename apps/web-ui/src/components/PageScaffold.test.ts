@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  readPageIntroDescriptionClassName,
+  readPageIntroTitleClassName,
   readPageFrameClassName,
   readPageIntroClassName,
   readPageTabButtonClassName,
-  readPageTabsContainerClassName
+  readPageTabsContainerClassName,
+  readToastClassName
 } from "./PageScaffold.js";
 
 describe("PageScaffold", () => {
@@ -18,10 +21,22 @@ describe("PageScaffold", () => {
 
   it("supports sticky tabs without changing the shared underline pattern", () => {
     expect(readPageTabsContainerClassName(true)).toContain("sticky top-0 z-10");
-    expect(readPageTabsContainerClassName(true)).toContain("border-b border-border-dark");
-    expect(readPageTabButtonClassName(true)).toContain("border-white");
-    expect(readPageTabButtonClassName(true)).toContain("text-white");
+    expect(readPageTabsContainerClassName(true)).toContain("border-b border-slate-300");
+    expect(readPageTabsContainerClassName(true)).not.toContain("backdrop-blur");
+    expect(readPageTabButtonClassName(true)).toContain("border-slate-950");
+    expect(readPageTabButtonClassName(true)).toContain("text-slate-950");
     expect(readPageTabButtonClassName(false)).toContain("border-transparent");
-    expect(readPageTabButtonClassName(false)).toContain("text-text-secondary");
+    expect(readPageTabButtonClassName(false)).toContain("text-slate-600");
+  });
+
+  it("keeps page intro contrast readable on the shared light surface", () => {
+    expect(readPageIntroTitleClassName()).toContain("text-slate-950");
+    expect(readPageIntroDescriptionClassName()).toContain("text-slate-600");
+  });
+
+  it("uses solid toast surfaces with close controls instead of inline translucent alerts", () => {
+    expect(readToastClassName("success")).toContain("bg-emerald-50");
+    expect(readToastClassName("error")).toContain("bg-rose-50");
+    expect(readToastClassName("success")).not.toContain("/10");
   });
 });

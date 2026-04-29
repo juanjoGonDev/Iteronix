@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  readSettingsToggleKnobClassName,
+  readSettingsToggleTrackClassName,
   SettingsNumberField,
   SettingsSecretField,
   SettingsSelectField,
@@ -61,7 +63,14 @@ describe("SettingsFields", () => {
     expect(recorded).toContain("attr:data-testid=settings-provider-kind");
     expect(recorded).toContain("listener:change");
     expect(recorded).toContain("attr:data-testid=settings-sound-enabled");
-    expect(recorded).toContain("attr:checked=");
+    expect(recorded).toContain("attr:role=switch");
+    expect(recorded).toContain("attr:aria-checked=true");
+  });
+
+  it("renders reusable toggles with switch-specific design states", () => {
+    expect(readSettingsToggleTrackClassName(true)).toContain("bg-primary");
+    expect(readSettingsToggleTrackClassName(false)).toContain("bg-[#2b3644]");
+    expect(readSettingsToggleKnobClassName(true)).toContain("translate-x-5");
   });
 });
 
