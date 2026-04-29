@@ -33,11 +33,9 @@ const ValidationConfig = {
   MobileViewportHeight: 844
 } as const;
 
-const BrowserStorageKey = {
-  ProjectSession: "iteronix_project_session"
-} as const;
-
 const RequestPath = {
+  WorkspaceStateGet: "/workspace/state/get",
+  WorkspaceStateUpdate: "/workspace/state/update",
   ProjectOpen: "/projects/open",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
@@ -92,6 +90,7 @@ type ProviderSettingsRequestRecord = {
 type StubServerState = {
   providerSettingsRequests: ProviderSettingsRequestRecord[];
   webhookPayloadCount: number;
+  workspaceSettings: Record<string, unknown>;
 };
 
 const fixtureProject: StubProjectRecord = {
@@ -260,7 +259,8 @@ async function startSettingsStubServer(): Promise<{
 }> {
   const state: StubServerState = {
     providerSettingsRequests: [],
-    webhookPayloadCount: 0
+    webhookPayloadCount: 0,
+    workspaceSettings: createDefaultWorkspaceSettings()
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -309,6 +309,24 @@ async function handleStubRequest(
   if (requestUrl.pathname !== RequestPath.Webhook && !isAuthorized(request)) {
     writeJson(response, 401, {
       message: "Unauthorized"
+    });
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.WorkspaceStateGet) {
+    writeJson(response, 200, {
+      state: createWorkspaceState(state.workspaceSettings)
+    });
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.WorkspaceStateUpdate) {
+    const body = await readJsonBody(request);
+    if (isRecord(body) && isRecord(body["settings"])) {
+      state.workspaceSettings = body["settings"];
+    }
+    writeJson(response, 200, {
+      state: createWorkspaceState(state.workspaceSettings)
     });
     return;
   }
@@ -397,38 +415,55 @@ async function seedBrowserStorage(page: Page): Promise<void> {
     (payload: {
       serverUrl: string;
       authToken: string;
-      projectSessionKey: string;
-      projectRootPath: string;
-      projectName: string;
-      recentProjects: ReadonlyArray<{ rootPath: string; name: string }>;
       serverKeys: typeof ServerStorageKey;
     }) => {
       window.localStorage.setItem(payload.serverKeys.ServerUrl, payload.serverUrl);
       window.localStorage.setItem(payload.serverKeys.AuthToken, payload.authToken);
-      window.localStorage.setItem(
-        payload.projectSessionKey,
-        JSON.stringify({
-          projectRootPath: payload.projectRootPath,
-          projectName: payload.projectName,
-          recentProjects: payload.recentProjects
-        })
-      );
     },
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: DefaultServerConnection.authToken,
-      projectSessionKey: BrowserStorageKey.ProjectSession,
-      projectRootPath: fixtureProject.rootPath,
-      projectName: fixtureProject.name,
-      recentProjects: [
-        {
-          rootPath: fixtureProject.rootPath,
-          name: fixtureProject.name
-        }
-      ],
       serverKeys: ServerStorageKey
     }
   );
+}
+
+function createWorkspaceState(settings: Record<string, unknown>): Record<string, unknown> {
+  return {
+    activeProjectId: fixtureProject.id,
+    projects: [fixtureProject],
+    settings,
+    workbenchHistory: {
+      runs: [],
+      evals: []
+    }
+  };
+}
+
+function createDefaultWorkspaceSettings(): Record<string, unknown> {
+  return {
+    profileId: "default",
+    providerProfiles: [
+      {
+        id: "codex-cli-default",
+        name: "Codex CLI",
+        providerKind: "codex-cli",
+        modelId: "",
+        endpointUrl: "",
+        command: "codex",
+        promptMode: "stdin"
+      }
+    ],
+    workflowLimits: {
+      infiniteLoops: false,
+      maxLoops: 50,
+      externalCalls: true
+    },
+    notifications: {
+      soundEnabled: true,
+      webhookUrl: ""
+    }
+  };
 }
 
 function assertProviderSyncRequest(request: ProviderSettingsRequestRecord | undefined): void {

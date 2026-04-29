@@ -10,6 +10,10 @@ import {
   readProjectSession,
   type ProjectSessionState
 } from "./shared/project-session.js";
+import {
+  createWorkspaceStateClient,
+  hydrateWorkspaceStateClients
+} from "./shared/workspace-state-client.js";
 import { DashboardScreen } from "./screens/Dashboard.js";
 import { Explorer } from "./screens/Explorer.js";
 import { KanbanBoard } from "./screens/Kanban.js";
@@ -58,6 +62,7 @@ const ScreenHostTestId = "app-screen-host";
 export class App extends Component<AppProps, AppState> {
   private activeScreenInstance: Component<ComponentProps, unknown> | null = null;
   private activeScreenId: ScreenId | null = null;
+  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: AppProps) {
     super(props, {
@@ -115,6 +120,7 @@ export class App extends Component<AppProps, AppState> {
   override onMount(): void {
     window.addEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
     window.addEventListener("resize", this.handleViewportResize);
+    void this.hydrateWorkspaceState();
     this.mountActiveScreenInstance();
   }
 
@@ -230,6 +236,7 @@ export class App extends Component<AppProps, AppState> {
       return;
     }
 
+    this.invalidateActiveScreenInstance();
     this.setState({
       projectSession: nextSession
     });
@@ -246,6 +253,25 @@ export class App extends Component<AppProps, AppState> {
       sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed
     });
   };
+
+  private async hydrateWorkspaceState(): Promise<void> {
+    try {
+      const state = await this.workspaceStateClient.load();
+      hydrateWorkspaceStateClients(state);
+      this.invalidateActiveScreenInstance();
+      this.setState({
+        projectSession: readProjectSession()
+      });
+    } catch {
+      return;
+    }
+  }
+
+  private invalidateActiveScreenInstance(): void {
+    this.activeScreenInstance?.unmount();
+    this.activeScreenInstance = null;
+    this.activeScreenId = null;
+  }
 
   private mountActiveScreenInstance(): void {
     const screenHost = this.element?.querySelector(

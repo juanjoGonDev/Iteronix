@@ -1,4 +1,4 @@
-import { LocalStorageKey, type StorageLike } from "./server-config.js";
+import type { StorageLike } from "./server-config.js";
 import {
   parseEvaluationRunResponse,
   parseSkillRunResponse,
@@ -18,6 +18,11 @@ import {
 } from "./workbench-types.js";
 
 const HistoryLimit = 24;
+const WorkbenchHistoryStorageKey = "iteronix_workbench_history";
+let workbenchHistoryCache: WorkbenchHistoryState = {
+  runs: [],
+  evals: []
+};
 
 export type WorkbenchHistoryStore = {
   load: () => WorkbenchHistoryState;
@@ -48,26 +53,30 @@ export type WorkbenchHistoryStore = {
 };
 
 export const createWorkbenchHistoryStore = (
-  storage: StorageLike = window.localStorage,
+  storage?: StorageLike,
   now: () => string = () => new Date().toISOString()
 ): WorkbenchHistoryStore => {
   const load = (): WorkbenchHistoryState => {
-    const raw = storage.getItem(LocalStorageKey.WorkbenchHistory);
-    if (!raw) {
-      return {
-        runs: [],
-        evals: []
-      };
+    if (storage) {
+      const raw = storage.getItem(WorkbenchHistoryStorageKey);
+      if (!raw) {
+        return {
+          runs: [],
+          evals: []
+        };
+      }
+
+      try {
+        return parseWorkbenchHistoryState(JSON.parse(raw));
+      } catch {
+        return {
+          runs: [],
+          evals: []
+        };
+      }
     }
 
-    try {
-      return parseWorkbenchHistoryState(JSON.parse(raw));
-    } catch {
-      return {
-        runs: [],
-        evals: []
-      };
-    }
+    return workbenchHistoryCache;
   };
 
   const saveSkillRun = (input: {
@@ -215,11 +224,23 @@ export const createWorkbenchHistoryStore = (
   };
 };
 
+export const hydrateWorkbenchHistory = (
+  state: WorkbenchHistoryState
+): WorkbenchHistoryState => {
+  workbenchHistoryCache = parseWorkbenchHistoryState(state);
+  return workbenchHistoryCache;
+};
+
 const persist = (
-  storage: StorageLike,
+  storage: StorageLike | undefined,
   state: WorkbenchHistoryState
 ): void => {
-  storage.setItem(LocalStorageKey.WorkbenchHistory, JSON.stringify(state));
+  const normalized = parseWorkbenchHistoryState(state);
+  if (storage) {
+    storage.setItem(WorkbenchHistoryStorageKey, JSON.stringify(normalized));
+  } else {
+    workbenchHistoryCache = normalized;
+  }
 };
 
 const createId = (): string => {

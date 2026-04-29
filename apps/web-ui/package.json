@@ -16,7 +16,8 @@
     "validate:quality-gates": "tsx scripts/validate-quality-gates-projects.ts",
     "validate:git-workspace": "tsx scripts/validate-projects-git-workspace.ts",
     "validate:explorer": "tsx scripts/validate-explorer.ts",
-    "validate:settings": "tsx scripts/validate-settings.ts"
+    "validate:settings": "tsx scripts/validate-settings.ts",
+    "validate:server-persistence": "tsx scripts/validate-server-persistence.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

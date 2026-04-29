@@ -27,6 +27,7 @@ import {
 import {
   DefaultSettingsProfileId,
   createSettingsStorage,
+  hydrateSettingsSnapshot,
   type NotificationsSettings,
   type SettingsSnapshot,
   type WorkflowLimitsSettings
@@ -35,6 +36,10 @@ import {
   createSettingsClient,
   type RuntimeProviderRecord
 } from "../shared/settings-client.js";
+import {
+  createWorkspaceStateClient,
+  hydrateWorkspaceStateClients
+} from "../shared/workspace-state-client.js";
 import { router } from "../shared/Router.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
@@ -95,6 +100,7 @@ const TestWebhookPayload = {
 export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
   private readonly settingsStorage = createSettingsStorage();
   private readonly settingsClient = createSettingsClient();
+  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
     const snapshot = createSettingsStorage().load();
@@ -623,12 +629,24 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   private async hydrateRuntimeContext(): Promise<void> {
-    const projectSession = readProjectSession();
+    let projectSession = readProjectSession();
     let currentProject: ProjectRecord | null = null;
     let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> = this.state.runtimeProviders;
     let message: string | null = null;
 
     try {
+      const workspaceState = await this.workspaceStateClient.load();
+      hydrateWorkspaceStateClients(workspaceState);
+      projectSession = readProjectSession();
+      hydrateSettingsSnapshot(workspaceState.settings);
+      const snapshot = workspaceState.settings;
+      this.setState({
+        profileId: snapshot.profileId,
+        providerProfiles: snapshot.providerProfiles,
+        selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
+        workflowLimits: snapshot.workflowLimits,
+        notifications: snapshot.notifications
+      });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
     } catch (error) {
@@ -831,6 +849,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       };
 
       this.settingsStorage.save(snapshot);
+      await this.workspaceStateClient.update({
+        settings: snapshot
+      });
       writeServerConnection(this.state.serverConnection);
 
       let syncedCount = 0;
@@ -872,6 +893,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     }
 
     const snapshot = this.settingsStorage.reset();
+    void this.workspaceStateClient.update({
+      settings: snapshot
+    });
     const serverConnection = writeServerConnection(DefaultServerConnection);
 
     this.setState({

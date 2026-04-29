@@ -68,6 +68,12 @@ export type ProviderStore = {
   updateSettings: (
     input: ProviderSettingsInput
   ) => Result<ProviderSettingsRecord, ProviderStoreError>;
+  snapshot: () => ProviderStoreSnapshot;
+};
+
+export type ProviderStoreSnapshot = {
+  selections: ReadonlyArray<ProviderSelection>;
+  settings: ReadonlyArray<ProviderSettingsRecord>;
 };
 
 export const createProviderStore = (
@@ -127,11 +133,17 @@ export const createProviderStore = (
   ): Result<ProviderSettingsRecord, ProviderStoreError> =>
     writeSettings(providersById, settingsByKey, input);
 
+  const snapshot = (): ProviderStoreSnapshot => ({
+    selections: Array.from(selectionsByKey.values()),
+    settings: Array.from(settingsByKey.values())
+  });
+
   return {
     listProviders,
     getSelection,
     selectProvider,
-    updateSettings
+    updateSettings,
+    snapshot
   };
 };
 

@@ -135,19 +135,58 @@ import {
   createGitCliAdapter,
   type GitRepository
 } from "../../../packages/adapters/src/git/git-adapter";
+import {
+  createFileWorkspaceStateStore,
+  createWorkspaceStateFromStores,
+  parseWorkspaceState,
+  type WorkspaceSettingsSnapshot,
+  type WorkspaceState,
+  type WorkspaceStateStore,
+  type WorkspaceWorkbenchHistory
+} from "./workspace-state";
 
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
   const logsStore = await createServerLogsStore(config.logDir);
   installServerConsoleForwarder(logsStore);
 
-  const projectStore = createProjectStore();
+  const workspaceStateStore = createFileWorkspaceStateStore(config.workspaceStateFile);
+  const initialWorkspaceState = await workspaceStateStore.load();
+  const projectStore = createProjectStore({
+    projects: initialWorkspaceState.projects,
+    activeProjectId: initialWorkspaceState.activeProjectId
+  });
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
-  const historyStore = createHistoryStore();
+  let persistHistoryStoreChange = (): void => {
+    return;
+  };
+  const historyStore = createHistoryStore(initialWorkspaceState.qualityHistory, () => {
+    persistHistoryStoreChange();
+  });
   const qualityGateEventHub = createQualityGateEventHub();
-  const providerStore = createProviderStore();
-  const kanbanStore = createKanbanStore();
+  const providerStore = createProviderStore({
+    selections: initialWorkspaceState.providerSelections,
+    settings: initialWorkspaceState.providerSettings
+  });
+  const kanbanStore = createKanbanStore(initialWorkspaceState.kanban);
+  const workspacePersistence = createWorkspacePersistence({
+    stateStore: workspaceStateStore,
+    initialState: initialWorkspaceState,
+    projectStore,
+    providerStore,
+    kanbanStore,
+    historyStore
+  });
+  let historySaveQueue = Promise.resolve();
+  persistHistoryStoreChange = () => {
+    historySaveQueue = historySaveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await workspacePersistence.saveCurrent();
+      });
+    void historySaveQueue.catch(() => undefined);
+  };
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
   const commandPolicy = createCommandPolicy(
     config.commandAllowlist,
@@ -177,11 +216,86 @@ export const startServer = async (): Promise<void> => {
       commandRunner,
       qualityGateCatalog,
       aiWorkbench,
-      git
+      git,
+      workspacePersistence
     );
   });
 
   server.listen(config.port, config.host);
+};
+
+type WorkspacePersistence = {
+  read: () => WorkspaceState;
+  saveCurrent: () => Promise<WorkspaceState>;
+  updateUiState: (input: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  }) => Promise<WorkspaceState>;
+};
+
+const createWorkspacePersistence = (input: {
+  stateStore: WorkspaceStateStore;
+  initialState: WorkspaceState;
+  projectStore: ProjectStore;
+  providerStore: ProviderStore;
+  kanbanStore: KanbanStore;
+  historyStore: HistoryStore;
+}): WorkspacePersistence => {
+  let state = input.initialState;
+
+  const buildState = (overrides: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+  } = {}): WorkspaceState =>
+    createWorkspaceStateFromStores({
+      projectSnapshot: input.projectStore.snapshot(),
+      providerSnapshot: input.providerStore.snapshot(),
+      kanbanSnapshot: input.kanbanStore.snapshot(),
+      historySnapshot: input.historyStore.snapshot(),
+      settings: overrides.settings ?? state.settings,
+      workbenchHistory: overrides.workbenchHistory ?? state.workbenchHistory,
+      previousState: state
+    });
+
+  const saveCurrent = async (): Promise<WorkspaceState> => {
+    state = await input.stateStore.save(buildState());
+    return state;
+  };
+
+  const updateUiState = async (update: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  }): Promise<WorkspaceState> => {
+    if (Object.hasOwn(update, "activeProjectId")) {
+      const activeResult = input.projectStore.setActive(update.activeProjectId ?? null);
+      if (activeResult.type === ResultType.Err) {
+        throw new Error(activeResult.error.message);
+      }
+    }
+
+    const overrides: {
+      settings?: WorkspaceSettingsSnapshot;
+      workbenchHistory?: WorkspaceWorkbenchHistory;
+    } = {};
+    if (update.settings !== undefined) {
+      overrides.settings = update.settings;
+    }
+
+    if (update.workbenchHistory !== undefined) {
+      overrides.workbenchHistory = update.workbenchHistory;
+    }
+
+    state = await input.stateStore.save(buildState(overrides));
+    return state;
+  };
+
+  return {
+    read: () => state,
+    saveCurrent,
+    updateUiState
+  };
 };
 
 const handleRequest = async (
@@ -201,7 +315,8 @@ const handleRequest = async (
   commandRunner: CommandRunner,
   qualityGateCatalog: QualityGateCatalog,
   aiWorkbench: AiWorkbenchService,
-  git: GitRepository
+  git: GitRepository,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -226,13 +341,33 @@ const handleRequest = async (
   const path = url.pathname;
   const method = req.method;
 
+  if (path === RoutePath.WorkspaceStateGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkspaceStateGet(res, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkspaceStateUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkspaceStateUpdate(req, res, workspacePersistence);
+    return;
+  }
+
   if (path === RoutePath.ProjectsCreate) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleCreateProject(req, res, projectStore, workspacePolicy);
+    await handleCreateProject(req, res, projectStore, workspacePolicy, workspacePersistence);
     return;
   }
 
@@ -242,7 +377,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleOpenProject(req, res, projectStore, workspacePolicy);
+    await handleOpenProject(req, res, projectStore, workspacePolicy, workspacePersistence);
     return;
   }
 
@@ -442,7 +577,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleProvidersSelect(req, res, projectStore, providerStore);
+    await handleProvidersSelect(req, res, projectStore, providerStore, workspacePersistence);
     return;
   }
 
@@ -452,7 +587,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleProviderSettingsUpdate(req, res, projectStore, providerStore);
+    await handleProviderSettingsUpdate(req, res, projectStore, providerStore, workspacePersistence);
     return;
   }
 
@@ -665,7 +800,8 @@ const handleRequest = async (
       commandPolicy,
       commandRunner,
       qualityGateEventHub,
-      qualityGateCatalog
+      qualityGateCatalog,
+      workspacePersistence
     );
     return;
   }
@@ -706,7 +842,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -726,7 +862,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -736,7 +872,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -746,7 +882,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -766,7 +902,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -776,7 +912,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -786,7 +922,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -806,7 +942,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -816,7 +952,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -870,7 +1006,8 @@ const handleCreateProject = async (
   req: IncomingMessage,
   res: ServerResponse,
   store: ProjectStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -899,6 +1036,7 @@ const handleCreateProject = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     project: created.value
   });
@@ -908,7 +1046,8 @@ const handleOpenProject = async (
   req: IncomingMessage,
   res: ServerResponse,
   store: ProjectStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -939,9 +1078,115 @@ const handleOpenProject = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     project: opened.value
   });
+};
+
+const handleWorkspaceStateGet = async (
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  respondJson(res, HttpStatus.Ok, {
+    state: workspacePersistence.read()
+  });
+};
+
+const handleWorkspaceStateUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkspaceStateUpdateRequest(
+    bodyResult.value,
+    workspacePersistence.read()
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const state = await workspacePersistence.updateUiState(parsed.value);
+    respondJson(res, HttpStatus.Ok, {
+      state
+    });
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InvalidBody
+    });
+  }
+};
+
+export const parseWorkspaceStateUpdateRequest = (
+  value: unknown,
+  currentState: WorkspaceState
+): Result<
+  {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const parsed = parseWorkspaceStateUpdateValue(value, currentState);
+  if (parsed.type === ResultType.Err) {
+    return parsed;
+  }
+
+  const update: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  } = {};
+
+  if (Object.hasOwn(value, "settings")) {
+    update.settings = parsed.value.settings;
+  }
+
+  if (Object.hasOwn(value, "workbenchHistory")) {
+    update.workbenchHistory = parsed.value.workbenchHistory;
+  }
+
+  if (Object.hasOwn(value, "activeProjectId")) {
+    update.activeProjectId = parsed.value.activeProjectId;
+  }
+
+  return ok(update);
+};
+
+const parseWorkspaceStateUpdateValue = (
+  value: Record<string, unknown>,
+  currentState: WorkspaceState
+): Result<WorkspaceState, ApiError> => {
+  try {
+    return ok(parseWorkspaceState({
+      ...currentState,
+      ...(Object.hasOwn(value, "settings") ? { settings: value["settings"] } : {}),
+      ...(Object.hasOwn(value, "workbenchHistory") ? { workbenchHistory: value["workbenchHistory"] } : {}),
+      ...(Object.hasOwn(value, "activeProjectId") ? { activeProjectId: value["activeProjectId"] } : {})
+    }));
+  } catch {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
 };
 
 const assertProjectRootIfPresent = (
@@ -1566,7 +1811,8 @@ const handleProvidersSelect = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1592,6 +1838,7 @@ const handleProvidersSelect = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     selection: selected.value
   });
@@ -1601,7 +1848,8 @@ const handleProviderSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1627,6 +1875,7 @@ const handleProviderSettingsUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     settings: updated.value
   });
@@ -1636,7 +1885,8 @@ const handleKanbanBoardCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1662,6 +1912,7 @@ const handleKanbanBoardCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     board: created.value
   });
@@ -1706,7 +1957,8 @@ const handleKanbanBoardUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1732,6 +1984,7 @@ const handleKanbanBoardUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     board: updated.value
   });
@@ -1741,7 +1994,8 @@ const handleKanbanBoardDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1767,6 +2021,7 @@ const handleKanbanBoardDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     board: deleted.value
   });
@@ -1776,7 +2031,8 @@ const handleKanbanColumnCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1802,6 +2058,7 @@ const handleKanbanColumnCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     column: created.value
   });
@@ -1846,7 +2103,8 @@ const handleKanbanColumnUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1872,6 +2130,7 @@ const handleKanbanColumnUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     column: updated.value
   });
@@ -1881,7 +2140,8 @@ const handleKanbanColumnDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1907,6 +2167,7 @@ const handleKanbanColumnDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     column: deleted.value
   });
@@ -1916,7 +2177,8 @@ const handleKanbanTaskCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1942,6 +2204,7 @@ const handleKanbanTaskCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     task: created.value
   });
@@ -1986,7 +2249,8 @@ const handleKanbanTaskUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2012,6 +2276,7 @@ const handleKanbanTaskUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     task: updated.value
   });
@@ -2021,7 +2286,8 @@ const handleKanbanTaskDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2047,6 +2313,7 @@ const handleKanbanTaskDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     task: deleted.value
   });
@@ -3765,7 +4032,8 @@ const handleQualityGateRunRequest = async (
   commandPolicy: CommandPolicy,
   commandRunner: CommandRunner,
   eventHub: QualityGateEventHub,
-  catalog: QualityGateCatalog
+  catalog: QualityGateCatalog,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -3793,6 +4061,7 @@ const handleQualityGateRunRequest = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     run: result.value
   });

@@ -15,8 +15,7 @@ const RuntimePort = {
 
 export const LocalStorageKey = {
   ServerUrl: "iteronix_server_url",
-  AuthToken: "iteronix_auth_token",
-  WorkbenchHistory: "iteronix_workbench_history"
+  AuthToken: "iteronix_auth_token"
 } as const;
 
 export const DefaultServerConnection = {

@@ -1,3 +1,4 @@
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
@@ -15,7 +16,9 @@ import {
 
 const ValidationConfig = {
   BaseUrl: "http://127.0.0.1:4000",
+  StubApiBaseUrl: "http://127.0.0.1:4106",
   PreviewHealthPath: "/index.html",
+  StubHealthPath: "/health",
   HistoryRoute: "/history",
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 15000,
@@ -27,8 +30,7 @@ const ValidationConfig = {
 
 const LocalStorageKey = {
   ServerUrl: "iteronix_server_url",
-  AuthToken: "iteronix_auth_token",
-  WorkbenchHistory: "iteronix_workbench_history"
+  AuthToken: "iteronix_auth_token"
 } as const;
 
 const ValidationText = {
@@ -175,10 +177,15 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
   });
 
   const previewServer = startPreviewServer(projectRoot);
+  const stubServer = await startStubServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
     await waitForHttpReady(`${ValidationConfig.BaseUrl}${ValidationConfig.PreviewHealthPath}`, {
+      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await waitForHttpReady(`${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`, {
       timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs
     });
@@ -243,29 +250,128 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
     if (browser) {
       await browser.close();
     }
+    await stubServer.close();
     await stopProcess(previewServer);
   }
+}
+
+async function startStubServer(): Promise<{ close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    handleStubRequest(request, response);
+  });
+
+  await new Promise<void>((resolvePromise, reject) => {
+    server.listen(4106, "127.0.0.1", () => resolvePromise());
+    server.on("error", (error) => reject(error));
+  });
+
+  return {
+    close: () =>
+      new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      })
+  };
+}
+
+function handleStubRequest(
+  request: IncomingMessage,
+  response: ServerResponse
+): void {
+  const requestUrl = new URL(request.url ?? "/", ValidationConfig.StubApiBaseUrl);
+  if (requestUrl.pathname === ValidationConfig.StubHealthPath) {
+    writeJson(response, 200, {
+      ok: true
+    });
+    return;
+  }
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, createCorsHeaders());
+    response.end();
+    return;
+  }
+
+  if (requestUrl.pathname === "/workspace/state/get") {
+    writeJson(response, 200, {
+      state: {
+        activeProjectId: null,
+        projects: [],
+        settings: {
+          profileId: "default",
+          providerProfiles: [
+            {
+              id: "codex-cli-default",
+              name: "Codex CLI",
+              providerKind: "codex-cli",
+              modelId: "",
+              endpointUrl: "",
+              command: "codex",
+              promptMode: "stdin"
+            }
+          ],
+          workflowLimits: {
+            infiniteLoops: false,
+            maxLoops: 50,
+            externalCalls: true
+          },
+          notifications: {
+            soundEnabled: true,
+            webhookUrl: ""
+          }
+        },
+        workbenchHistory: historyFixture
+      }
+    });
+    return;
+  }
+
+  writeJson(response, 404, {
+    message: "Not found"
+  });
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
   await page.evaluateOnNewDocument(
     (payload: {
-      history: WorkbenchHistoryState;
       serverUrl: string;
       authToken: string;
       keys: typeof LocalStorageKey;
     }) => {
-      window.localStorage.setItem(payload.keys.WorkbenchHistory, JSON.stringify(payload.history));
       window.localStorage.setItem(payload.keys.ServerUrl, payload.serverUrl);
       window.localStorage.setItem(payload.keys.AuthToken, payload.authToken);
     },
     {
-      history: historyFixture,
-      serverUrl: ValidationConfig.BaseUrl,
+      serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: ValidationConfig.AuthToken,
       keys: LocalStorageKey
     }
   );
+}
+
+function writeJson(
+  response: ServerResponse,
+  statusCode: number,
+  value: Readonly<Record<string, unknown>>
+): void {
+  response.writeHead(statusCode, {
+    ...createCorsHeaders(),
+    "Content-Type": "application/json"
+  });
+  response.end(JSON.stringify(value));
+}
+
+function createCorsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+  };
 }
 
 async function clickCitationFocusAction(page: Page, sourceUri: string): Promise<void> {

@@ -2052,3 +2052,48 @@
   - No se ejecutó `validate:source-linking` porque el cambio no toca Workflows/History ni el panel de evidencias.
 - Next:
   - Commit manual y revisión visual del usuario en la app local.
+### 2026-04-29 21:32 (Europe/Madrid) — Server-first Workspace Persistence
+
+- Summary: Implementada persistencia server-first del estado de workspace para eliminar localStorage como fuente de verdad de proyectos, settings e historial del Workbench.
+- Decisions:
+  - Mantener localStorage sólo para URL/token del servidor y preferencias no críticas del dispositivo.
+  - Usar un adapter JSON file-backed en `apps/server-api` apto para volúmenes Docker y exponer `/workspace/state/get` + `/workspace/state/update` como contrato tipado inicial.
+  - Remontar la pantalla activa cuando se hidrata/cambia la sesión de proyecto para evitar vistas con estado obsoleto.
+- Changes:
+  - **Added apps/server-api/src/workspace-state.ts** y tests TDD para carga por defecto, guardado atómico e hidratación desde stores.
+  - **Updated apps/server-api/src/server.ts** y stores de proyectos, providers, Kanban e historial para sembrar y persistir estado de workspace.
+  - **Updated apps/web-ui/src/shared/** para hidratar sesión, settings e historial desde API server-backed en vez de localStorage.
+  - **Updated apps/web-ui/src/screens/Settings.ts**, `Workflows.ts`, `History.ts` y `index.ts` para leer/escribir snapshots vía servidor.
+  - **Added apps/web-ui/scripts/validate-server-persistence.ts** y script `validate:server-persistence` para validar dos contextos de navegador contra el mismo estado servidor.
+  - **Updated PLAN.md** con el hito de workspace state persistente.
+- Commands:
+  - `pnpm exec vitest run apps/server-api/src/workspace-state.test.ts apps/web-ui/src/shared/settings-storage.test.ts apps/web-ui/src/shared/project-session.test.ts apps/web-ui/src/shared/workbench-history.test.ts`
+  - `pnpm typecheck`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - Pendiente ejecutar gates completos finales y browser validations relevantes antes del commit.
+- Next:
+  - Ejecutar `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` y validaciones browser relevantes; después crear commit manual.### 2026-04-29 21:36 (Europe/Madrid) — Server-first Persistence Gates
+
+- Summary: Cerrada la validación de persistencia server-first con adapter, contrato API, UI rewiring y browser validations.
+- Decisions:
+  - Añadir test específico de contrato para `parseWorkspaceStateUpdateRequest` y convertir payloads no válidos en `400 Invalid request body` tipado.
+  - Ejecutar `validate:server-persistence` aislado tras una ejecución paralela fallida por timing; aislado pasó correctamente.
+- Changes:
+  - **Added apps/server-api/src/workspace-state-api.test.ts** para contrato de actualización de workspace state.
+  - **Updated apps/server-api/src/server.ts** para exportar y endurecer el parser de actualización.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:server-persistence`
+  - `pnpm -C apps/web-ui validate:settings`
+  - `pnpm -C apps/web-ui validate:source-linking`
+  - `pnpm -C apps/web-ui validate:quality-gates`
+  - `pnpm -C apps/web-ui validate:git-workspace`
+  - `pnpm -C apps/web-ui validate:explorer`
+- Issues/Risks:
+  - El conector de Notion permite comentar pero no modificar columnas/estado con las herramientas disponibles; el estado queda documentado por comentario y no se marca `Listo` sin confirmación del usuario.
+- Next:
+  - Commit manual y pedir confirmación antes de pasar a la siguiente pantalla/tarea.

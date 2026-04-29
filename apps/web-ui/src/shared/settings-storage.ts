@@ -7,11 +7,8 @@ import {
   type ProviderPromptMode
 } from "../screens/settings-state.js";
 
-const LocalStorageKey = {
-  SettingsSnapshot: "iteronix_settings_snapshot"
-} as const;
-
 export const DefaultSettingsProfileId = "default";
+const SettingsSnapshotStorageKey = "iteronix_settings_snapshot";
 
 export type WorkflowLimitsSettings = {
   infiniteLoops: boolean;
@@ -48,50 +45,61 @@ const DefaultNotifications: NotificationsSettings = {
   webhookUrl: ""
 };
 
-export const createSettingsStorage = (
-  storage: StorageLike = window.localStorage
-): SettingsStorage => ({
+let settingsSnapshotCache = createDefaultSettingsSnapshot();
+
+export const createSettingsStorage = (storage?: StorageLike): SettingsStorage => ({
   load: () => readSettingsSnapshot(storage),
   save: (input) => writeSettingsSnapshot(input, storage),
   reset: () => writeSettingsSnapshot(createDefaultSettingsSnapshot(), storage)
 });
 
-export const readSettingsSnapshot = (
-  storage: StorageLike = window.localStorage
-): SettingsSnapshot => {
-  const raw = storage.getItem(LocalStorageKey.SettingsSnapshot);
-  if (!raw) {
-    return createDefaultSettingsSnapshot();
+export const readSettingsSnapshot = (storage?: StorageLike): SettingsSnapshot => {
+  if (storage) {
+    const raw = storage.getItem(SettingsSnapshotStorageKey);
+    if (!raw) {
+      return createDefaultSettingsSnapshot();
+    }
+
+    try {
+      return parseSettingsSnapshot(JSON.parse(raw));
+    } catch {
+      return createDefaultSettingsSnapshot();
+    }
   }
 
-  try {
-    return parseSettingsSnapshot(JSON.parse(raw));
-  } catch {
-    return createDefaultSettingsSnapshot();
-  }
+  return settingsSnapshotCache;
 };
 
 export const writeSettingsSnapshot = (
   input: SettingsSnapshot,
-  storage: StorageLike = window.localStorage
+  storage?: StorageLike
 ): SettingsSnapshot => {
   const normalized = normalizeSettingsSnapshot(input);
-  storage.setItem(LocalStorageKey.SettingsSnapshot, JSON.stringify(normalized));
+  if (storage) {
+    storage.setItem(SettingsSnapshotStorageKey, JSON.stringify(normalized));
+  } else {
+    settingsSnapshotCache = normalized;
+  }
   return normalized;
 };
 
-const createDefaultSettingsSnapshot = (): SettingsSnapshot => ({
-  profileId: DefaultSettingsProfileId,
-  providerProfiles: createDefaultProviderProfiles(),
-  workflowLimits: {
-    ...DefaultWorkflowLimits
-  },
-  notifications: {
-    ...DefaultNotifications
-  }
-});
+export const hydrateSettingsSnapshot = (input: SettingsSnapshot): SettingsSnapshot =>
+  writeSettingsSnapshot(input);
 
-const parseSettingsSnapshot = (value: unknown): SettingsSnapshot => {
+export function createDefaultSettingsSnapshot(): SettingsSnapshot {
+  return {
+    profileId: DefaultSettingsProfileId,
+    providerProfiles: createDefaultProviderProfiles(),
+    workflowLimits: {
+      ...DefaultWorkflowLimits
+    },
+    notifications: {
+      ...DefaultNotifications
+    }
+  };
+}
+
+export const parseSettingsSnapshot = (value: unknown): SettingsSnapshot => {
   if (!isRecord(value)) {
     return createDefaultSettingsSnapshot();
   }
@@ -105,7 +113,7 @@ const parseSettingsSnapshot = (value: unknown): SettingsSnapshot => {
   });
 };
 
-const normalizeSettingsSnapshot = (input: SettingsSnapshot): SettingsSnapshot => {
+export const normalizeSettingsSnapshot = (input: SettingsSnapshot): SettingsSnapshot => {
   const profileId = normalizeText(input.profileId) || DefaultSettingsProfileId;
   const providerProfiles = normalizeProviderProfiles(input.providerProfiles);
 

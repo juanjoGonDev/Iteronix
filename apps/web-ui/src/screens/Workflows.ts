@@ -19,6 +19,10 @@ import {
 import { createWorkbenchClient } from "../shared/workbench-client.js";
 import { createWorkbenchHistoryStore } from "../shared/workbench-history.js";
 import {
+  createWorkspaceStateClient,
+  hydrateWorkspaceStateClients
+} from "../shared/workspace-state-client.js";
+import {
   DefaultMemoryQueryLimit,
   ReviewerDecision,
   WorkbenchSkillName,
@@ -44,6 +48,7 @@ interface WorkflowsScreenState {
 
 export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenState> {
   private readonly historyStore = createWorkbenchHistoryStore();
+  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
     super(props);
@@ -63,6 +68,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       noticeMessage: null,
       selectedEvidenceSourceId: null
     };
+  }
+
+  override onMount(): void {
+    void this.hydrateWorkspaceState();
   }
 
   override render(): HTMLElement {
@@ -406,6 +415,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         result,
         memory
       });
+      await this.persistWorkbenchHistory();
       this.setState({
         latestRun: record,
         pendingAction: null,
@@ -453,6 +463,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         result,
         memory
       });
+      await this.persistWorkbenchHistory();
       this.setState({
         latestRun: record,
         pendingAction: null,
@@ -496,6 +507,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         reason: this.state.reviewReason.trim() || "Approved in the workbench UI.",
         replacementResult: result
       });
+      await this.persistWorkbenchHistory();
       this.setState({
         latestRun: approvedRecord,
         pendingAction: null,
@@ -524,6 +536,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       decision: ReviewerDecision.Denied,
       reason: this.state.reviewReason.trim() || "Changes requested from the reviewer checkpoint."
     });
+    void this.persistWorkbenchHistory();
     this.setState({
       latestRun: deniedRecord,
       pendingAction: null,
@@ -543,6 +556,24 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.setState({
       serverUrl: connection.serverUrl,
       authToken: connection.authToken
+    });
+  }
+
+  private async hydrateWorkspaceState(): Promise<void> {
+    try {
+      const state = await this.workspaceStateClient.load();
+      hydrateWorkspaceStateClients(state);
+      this.setState({
+        latestRun: this.historyStore.load().runs[0] ?? null
+      });
+    } catch {
+      return;
+    }
+  }
+
+  private async persistWorkbenchHistory(): Promise<void> {
+    await this.workspaceStateClient.update({
+      workbenchHistory: this.historyStore.load()
     });
   }
 }

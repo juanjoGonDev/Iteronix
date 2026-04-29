@@ -22,7 +22,9 @@ export const RoutePath = {
   HistoryEvents: "/history/events",
   LogsQuery: "/logs/query",
   LogsAppend: "/logs/append",
-  LogsReset: "/logs/reset", 
+  LogsReset: "/logs/reset",
+  WorkspaceStateGet: "/workspace/state/get",
+  WorkspaceStateUpdate: "/workspace/state/update",
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
   ProvidersSettings: "/providers/settings",
@@ -80,13 +82,15 @@ export const EnvKey = {
   AuthToken: "AUTH_TOKEN",
   WorkspaceRoots: "WORKSPACE_ROOTS",
   CommandAllowlist: "COMMAND_ALLOWLIST",
-  LogDir: "LOG_DIR"
+  LogDir: "LOG_DIR",
+  WorkspaceStateFile: "WORKSPACE_STATE_FILE"
 } as const;
 
 export const DefaultServerConfig = {
   Host: "0.0.0.0",
   Port: 4000,
-  LogDir: "../web-ui/logs"
+  LogDir: "../web-ui/logs",
+  WorkspaceStateFile: ".iteronix/workspace-state.json"
 } as const;
 
 export const ErrorMessage = {

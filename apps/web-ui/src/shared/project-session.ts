@@ -1,9 +1,6 @@
 import type { StorageLike } from "./server-config.js";
 
-const LocalStorageKey = {
-  ProjectSession: "iteronix_project_session"
-} as const;
-
+const ProjectSessionStorageKey = "iteronix_project_session";
 const RecentProjectsLimit = 6;
 
 export const ProjectSessionEventName = {
@@ -26,11 +23,17 @@ export type ProjectSessionStorage = {
   saveRecentProject: (project: RecentProjectEntry) => ProjectSessionState;
 };
 
+let projectSessionCache = createEmptyProjectSession();
+
 export const createProjectSessionStorage = (
-  storage: StorageLike = window.localStorage
+  storage?: StorageLike
 ): ProjectSessionStorage => ({
-  load: () => readProjectSession(storage),
+  load: () => {
+    void storage;
+    return readProjectSession();
+  },
   saveRecentProject: (project) => {
+    void storage;
     const current = readProjectSession(storage);
     const normalizedProject = normalizeRecentProject(project);
     const nextState = {
@@ -49,23 +52,27 @@ export const createProjectSessionStorage = (
 });
 
 export const readProjectSession = (
-  storage: StorageLike = window.localStorage
+  storage?: StorageLike
 ): ProjectSessionState => {
-  const raw = storage.getItem(LocalStorageKey.ProjectSession);
-  if (!raw) {
-    return createEmptyProjectSession();
+  if (storage) {
+    const raw = storage.getItem(ProjectSessionStorageKey);
+    if (!raw) {
+      return createEmptyProjectSession();
+    }
+
+    try {
+      return parseProjectSession(JSON.parse(raw));
+    } catch {
+      return createEmptyProjectSession();
+    }
   }
 
-  try {
-    return parseProjectSession(JSON.parse(raw));
-  } catch {
-    return createEmptyProjectSession();
-  }
+  return projectSessionCache;
 };
 
 export const writeProjectSession = (
   input: Partial<ProjectSessionState>,
-  storage: StorageLike = window.localStorage
+  storage?: StorageLike
 ): ProjectSessionState => {
   const current = readProjectSession(storage);
   const nextState = {
@@ -78,13 +85,17 @@ export const writeProjectSession = (
     )
   };
 
-  storage.setItem(LocalStorageKey.ProjectSession, JSON.stringify(nextState));
+  if (storage) {
+    storage.setItem(ProjectSessionStorageKey, JSON.stringify(nextState));
+  } else {
+    projectSessionCache = nextState;
+  }
   notifyProjectSessionChanged();
   return nextState;
 };
 
 export const clearProjectSession = (
-  storage: StorageLike = window.localStorage
+  storage?: StorageLike
 ): ProjectSessionState =>
   writeProjectSession(
     {
@@ -95,6 +106,9 @@ export const clearProjectSession = (
     storage
   );
 
+export const hydrateProjectSession = (input: ProjectSessionState): ProjectSessionState =>
+  writeProjectSession(input);
+
 export const readActiveProjectSessionLabel = (
   session: ProjectSessionState
 ): string => {
@@ -104,19 +118,6 @@ export const readActiveProjectSessionLabel = (
   }
 
   return readProjectRootName(session.projectRootPath ?? "");
-};
-
-const parseProjectSession = (value: unknown): ProjectSessionState => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return createEmptyProjectSession();
-  }
-
-  const record = value as Record<string, unknown>;
-  return {
-    projectRootPath: normalizeNullableText(record["projectRootPath"]),
-    projectName: normalizeText(record["projectName"]),
-    recentProjects: normalizeRecentProjects(record["recentProjects"])
-  };
 };
 
 const normalizeRecentProjects = (
@@ -151,6 +152,19 @@ const normalizeRecentProjects = (
   return normalized.slice(0, RecentProjectsLimit);
 };
 
+const parseProjectSession = (value: unknown): ProjectSessionState => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return createEmptyProjectSession();
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    projectRootPath: normalizeNullableText(record["projectRootPath"]),
+    projectName: normalizeText(record["projectName"]),
+    recentProjects: normalizeRecentProjects(record["recentProjects"])
+  };
+};
+
 const normalizeRecentProject = (value: {
   rootPath: unknown;
   name: unknown;
@@ -172,11 +186,13 @@ const normalizeNullableText = (value: unknown): string | null => {
   return normalized.length > 0 ? normalized : null;
 };
 
-const createEmptyProjectSession = (): ProjectSessionState => ({
-  projectRootPath: null,
-  projectName: "",
-  recentProjects: []
-});
+function createEmptyProjectSession(): ProjectSessionState {
+  return {
+    projectRootPath: null,
+    projectName: "",
+    recentProjects: []
+  };
+}
 
 const readProjectRootName = (value: string): string => {
   const normalized = normalizeText(value).replace(/\\/g, "/");

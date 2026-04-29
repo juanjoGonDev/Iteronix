@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { ErrorMessage } from "./constants";
-import { err, ok, type Result } from "./result";
+import { ResultType, err, ok, type Result } from "./result";
 
 export type Project = {
   id: string;
@@ -39,25 +39,86 @@ export type ProjectStore = {
   create: (input: ProjectCreateInput) => Result<Project, ProjectStoreError>;
   open: (input: ProjectOpenInput) => Result<Project, ProjectStoreError>;
   getById: (id: string) => Result<Project, ProjectStoreError>;
+  getActive: () => Result<Project | undefined, ProjectStoreError>;
+  setActive: (id: string | null) => Result<Project | undefined, ProjectStoreError>;
+  snapshot: () => ProjectStoreSnapshot;
 };
 
-export const createProjectStore = (): ProjectStore => {
+export type ProjectStoreSnapshot = {
+  projects: ReadonlyArray<Project>;
+  activeProjectId: string | null;
+};
+
+export type ProjectStoreSeed = Partial<ProjectStoreSnapshot>;
+
+export const createProjectStore = (seed: ProjectStoreSeed = {}): ProjectStore => {
   const projectsById = new Map<string, Project>();
   const projectsByRoot = new Map<string, string>();
+  let activeProjectId = seed.activeProjectId ?? null;
+
+  for (const project of seed.projects ?? []) {
+    projectsById.set(project.id, project);
+    projectsByRoot.set(readProjectKey(project.rootPath ?? undefined, project.name), project.id);
+  }
+
+  if (activeProjectId !== null && !projectsById.has(activeProjectId)) {
+    activeProjectId = null;
+  }
 
   const create = (input: ProjectCreateInput): Result<Project, ProjectStoreError> =>
-    createProject(projectsById, projectsByRoot, input);
+    withActiveProject(createProject(projectsById, projectsByRoot, input));
 
   const open = (input: ProjectOpenInput): Result<Project, ProjectStoreError> =>
-    openProject(projectsById, projectsByRoot, input);
+    withActiveProject(openProject(projectsById, projectsByRoot, input));
 
   const getById = (id: string): Result<Project, ProjectStoreError> =>
     getProjectById(projectsById, id);
 
+  const getActive = (): Result<Project | undefined, ProjectStoreError> => {
+    if (activeProjectId === null) {
+      return ok(undefined);
+    }
+
+    return getProjectById(projectsById, activeProjectId);
+  };
+
+  const setActive = (id: string | null): Result<Project | undefined, ProjectStoreError> => {
+    if (id === null) {
+      activeProjectId = null;
+      return ok(undefined);
+    }
+
+    const project = getProjectById(projectsById, id);
+    if (project.type === ResultType.Err) {
+      return project;
+    }
+
+    activeProjectId = project.value.id;
+    return ok(project.value);
+  };
+
+  const snapshot = (): ProjectStoreSnapshot => ({
+    projects: Array.from(projectsById.values()),
+    activeProjectId
+  });
+
+  const withActiveProject = (
+    result: Result<Project, ProjectStoreError>
+  ): Result<Project, ProjectStoreError> => {
+    if (result.type === ResultType.Ok) {
+      activeProjectId = result.value.id;
+    }
+
+    return result;
+  };
+
   return {
     create,
     open,
-    getById
+    getById,
+    getActive,
+    setActive,
+    snapshot
   };
 };
 

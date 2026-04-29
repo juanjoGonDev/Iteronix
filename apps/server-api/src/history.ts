@@ -1,5 +1,5 @@
 import { ErrorMessage } from "./constants";
-import { err, ok, type Result } from "./result";
+import { err, ok, ResultType, type Result } from "./result";
 
 export const HistoryRunStatus = {
   Pending: "pending",
@@ -99,6 +99,7 @@ export type HistoryStore = {
   listEvents: (
     runId: string
   ) => Result<ReadonlyArray<HistoryEvent>, HistoryStoreError>;
+  snapshot: () => HistoryStoreSeed;
 };
 
 export type HistoryStoreSeed = {
@@ -106,7 +107,12 @@ export type HistoryStoreSeed = {
   events?: ReadonlyArray<HistoryEvent>;
 };
 
-export const createHistoryStore = (seed: HistoryStoreSeed = {}): HistoryStore => {
+export type HistoryStoreChangeListener = () => void;
+
+export const createHistoryStore = (
+  seed: HistoryStoreSeed = {},
+  onChange: HistoryStoreChangeListener = noopHistoryStoreChangeListener
+): HistoryStore => {
   const runs = seed.runs ? [...seed.runs] : [];
   const runsById = new Map<string, HistoryRunRecord>();
   const eventsByRun = new Map<string, HistoryEvent[]>();
@@ -126,17 +132,17 @@ export const createHistoryStore = (seed: HistoryStoreSeed = {}): HistoryStore =>
   const createRun = (
     run: HistoryRunRecord
   ): Result<HistoryRunRecord, HistoryStoreError> =>
-    storeRun(runs, runsById, run);
+    notifyWhenOk(storeRun(runs, runsById, run), onChange);
 
   const updateRun = (
     run: HistoryRunRecord
   ): Result<HistoryRunRecord, HistoryStoreError> =>
-    updateStoredRun(runs, runsById, run);
+    notifyWhenOk(updateStoredRun(runs, runsById, run), onChange);
 
   const appendEvent = (
     event: HistoryEvent
   ): Result<HistoryEvent, HistoryStoreError> =>
-    storeEvent(runsById, eventsByRun, event);
+    notifyWhenOk(storeEvent(runsById, eventsByRun, event), onChange);
 
   const listRuns = (
     input: HistoryListInput
@@ -165,13 +171,34 @@ export const createHistoryStore = (seed: HistoryStoreSeed = {}): HistoryStore =>
     return ok([...events]);
   };
 
+  const snapshot = (): HistoryStoreSeed => ({
+    runs: [...runs],
+    events: Array.from(eventsByRun.values()).flat()
+  });
+
   return {
     createRun,
     updateRun,
     appendEvent,
     listRuns,
-    listEvents
+    listEvents,
+    snapshot
   };
+};
+
+const noopHistoryStoreChangeListener = (): void => {
+  return;
+};
+
+const notifyWhenOk = <TValue, TError>(
+  result: Result<TValue, TError>,
+  onChange: HistoryStoreChangeListener
+): Result<TValue, TError> => {
+  if (result.type === ResultType.Ok) {
+    onChange();
+  }
+
+  return result;
 };
 
 const storeRun = (

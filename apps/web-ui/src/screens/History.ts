@@ -19,6 +19,10 @@ import {
 import { createWorkbenchClient } from "../shared/workbench-client.js";
 import { createWorkbenchHistoryStore } from "../shared/workbench-history.js";
 import {
+  createWorkspaceStateClient,
+  hydrateWorkspaceStateClients
+} from "../shared/workspace-state-client.js";
+import {
   MinimalEvalDatasetPath,
   type WorkbenchEvalHistoryRecord,
   type WorkbenchHistoryState,
@@ -38,6 +42,7 @@ interface HistoryScreenState {
 
 export class HistoryScreen extends Component<ComponentProps, HistoryScreenState> {
   private readonly historyStore = createWorkbenchHistoryStore();
+  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
     super(props);
@@ -53,6 +58,10 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       errorMessage: null,
       noticeMessage: null
     };
+  }
+
+  override onMount(): void {
+    void this.hydrateWorkspaceState();
   }
 
   override render(): HTMLElement {
@@ -330,6 +339,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         datasetPath: this.state.datasetPath.trim(),
         result
       });
+      await this.persistWorkbenchHistory();
       const history = this.historyStore.load();
       this.setState({
         history,
@@ -362,6 +372,29 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       selectedEvidenceSourceId: null,
       errorMessage: null,
       noticeMessage: null
+    });
+  }
+
+  private async hydrateWorkspaceState(): Promise<void> {
+    try {
+      const state = await this.workspaceStateClient.load();
+      hydrateWorkspaceStateClients(state);
+      const history = this.historyStore.load();
+      const selection = pickInitialSelection(history);
+      this.setState({
+        history,
+        selectedKind: selection.kind,
+        selectedId: selection.id,
+        selectedEvidenceSourceId: null
+      });
+    } catch {
+      return;
+    }
+  }
+
+  private async persistWorkbenchHistory(): Promise<void> {
+    await this.workspaceStateClient.update({
+      workbenchHistory: this.historyStore.load()
     });
   }
 

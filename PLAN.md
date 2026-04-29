@@ -119,6 +119,7 @@ Acceptance:
   - [x] History/logs retrieval
   - [x] Providers: list/select + settings update
   - [x] Kanban: board/columns/tasks CRUD (minimal)
+  - [x] Workspace state: server-first persisted projects, active project, settings snapshots, Kanban data, quality-gate history and AI Workbench history
 - [x] Auth: static token via env var `AUTH_TOKEN` (Bearer header)
 - [x] Workspace sandbox: path allowlist + command policy checks
 - [x] Dockerfile + minimal run docs

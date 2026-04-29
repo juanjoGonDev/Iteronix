@@ -37,6 +37,7 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
+  WorkspaceStateGet: "/workspace/state/get",
   ProjectOpen: "/projects/open",
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
@@ -48,10 +49,6 @@ const ResponseHeader = {
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
   ContentType: "Content-Type"
-} as const;
-
-const LocalStorageKeys = {
-  ProjectSession: "iteronix_project_session"
 } as const;
 
 const ValidationText = {
@@ -771,36 +768,15 @@ async function seedBrowserStorage(page: Page): Promise<void> {
       authTokenKey: string;
       serverUrl: string;
       authToken: string;
-      projectSessionKey: string;
-      projectSession: {
-        projectRootPath: string;
-        projectName: string;
-        recentProjects: ReadonlyArray<{
-          rootPath: string;
-          name: string;
-        }>;
-      };
     }) => {
       window.localStorage.setItem(input.serverUrlKey, input.serverUrl);
       window.localStorage.setItem(input.authTokenKey, input.authToken);
-      window.localStorage.setItem(input.projectSessionKey, JSON.stringify(input.projectSession));
     },
     {
       serverUrlKey: LocalStorageKey.ServerUrl,
       authTokenKey: LocalStorageKey.AuthToken,
       serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-      projectSessionKey: LocalStorageKeys.ProjectSession,
-      projectSession: {
-        projectRootPath: FixtureProject.rootPath,
-        projectName: FixtureProject.name,
-        recentProjects: [
-          {
-            rootPath: FixtureProject.rootPath,
-            name: FixtureProject.name
-          }
-        ]
-      }
+      authToken: DefaultServerConnection.authToken
     }
   );
 }
@@ -998,6 +974,13 @@ async function handleExplorerStubRequest(
 
   const body = await readJsonBody(request);
 
+  if (url.pathname === RequestPath.WorkspaceStateGet) {
+    respondJson(response, 200, {
+      state: createWorkspaceStateFixture()
+    });
+    return;
+  }
+
   if (url.pathname === RequestPath.ProjectOpen) {
     respondJson(response, 200, {
       project: FixtureProject
@@ -1052,6 +1035,45 @@ async function handleExplorerStubRequest(
   respondJson(response, 404, {
     message: "Route not found"
   });
+}
+
+function createWorkspaceStateFixture(): Record<string, unknown> {
+  return {
+    activeProjectId: FixtureProject.id,
+    projects: [FixtureProject],
+    settings: {
+      profileId: "default",
+      providerProfiles: [
+        {
+          id: "default",
+          label: "Codex CLI",
+          providerId: "codex-cli",
+          modelId: "",
+          command: "codex",
+          promptMode: "stdin",
+          baseUrl: "",
+          sessionApiKey: ""
+        }
+      ],
+      workflowLimits: {
+        maxLoops: 50,
+        allowInfiniteLoops: false,
+        allowExternalCalls: true
+      },
+      notifications: {
+        completionSound: true,
+        webhookUrl: ""
+      },
+      server: {
+        url: ValidationConfig.StubApiBaseUrl,
+        authToken: DefaultServerConnection.authToken
+      }
+    },
+    workbenchHistory: {
+      runs: [],
+      evals: []
+    }
+  };
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {

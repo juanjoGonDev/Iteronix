@@ -7,6 +7,7 @@ export type ServerConfig = {
   workspaceRoots: ReadonlyArray<string>;
   commandAllowlist: ReadonlyArray<string>;
   logDir: string;
+  workspaceStateFile: string;
 };
 
 export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
@@ -16,6 +17,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   const workspaceRoots = parseAllowlist(env[EnvKey.WorkspaceRoots]);
   const commandAllowlist = parseAllowlist(env[EnvKey.CommandAllowlist]);
   const logDir = env[EnvKey.LogDir] ?? DefaultServerConfig.LogDir;
+  const workspaceStateFile =
+    env[EnvKey.WorkspaceStateFile] ?? DefaultServerConfig.WorkspaceStateFile;
 
   if (!authToken || authToken.trim().length === 0) {
     throw new Error(ErrorMessage.AuthTokenMissing);
@@ -31,7 +34,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
     authToken,
     workspaceRoots,
     commandAllowlist,
-    logDir
+    logDir,
+    workspaceStateFile
   };
 };
 
