@@ -1751,3 +1751,162 @@
   - `Settings` sigue como tarea de pantalla activa hasta aceptación explícita del usuario; este cambio fue un bug global bloqueante del shell
 - Next:
   - Esperar validación del usuario sobre la sidebar en su pantalla pequeña; si queda aceptada, volver al cierre visual de `Settings`
+### 2026-04-29 09:03 (Europe/Madrid) — Shared Page Scaffolding
+
+- Summary: Extraído un `PageScaffold` compartido para unificar la estructura superior de las pantallas y aplicado el primer refactor visible sobre `Dashboard` y `Settings`, eliminando wrappers de cabecera y tabs definidos localmente.
+- Decisions:
+  - El primer paso del modelo component-first se limita al chrome de página: contenedor, intro, mensajes y tabs
+  - `Settings` deja de depender de su wrapper claro local y vuelve a alinearse con el shell oscuro compartido del resto de pantallas server-first
+  - La obligatoriedad del scaffold compartido queda fijada tanto en `PLAN.md` como en `docs/UI_CHECKLIST.md`
+- Changes:
+  - **Added apps/web-ui/src/components/PageScaffold.ts** y **PageScaffold.test.ts**: primitivas `PageFrame`, `PageIntro`, `PageNoticeStack` y `PageTabs` con helpers testeados
+  - **Updated apps/web-ui/src/screens/Dashboard.ts**: el encabezado de `Overview` ahora usa el scaffold compartido
+  - **Updated apps/web-ui/src/screens/Settings.ts**: intro, alertas y tabs migrados al scaffold compartido
+  - **Updated PLAN.md** y **docs/UI_CHECKLIST.md**: el repositorio ya exige page scaffolding reutilizable para nuevas iteraciones de pantalla
+  - **Created Notion page**: `UI component consistency checklist` para seguimiento de la refactorización por componentes
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/PageScaffold.test.ts apps/web-ui/src/screens/settings-state.test.ts`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - `History`, `Workflows`, `Projects` y `Kanban` todavía repiten wrappers de intro y mensajes; quedan como siguientes pasos del checklist de Notion
+  - `Dashboard` mantiene acciones aún no server-backed; esta iteración sólo unifica estructura y estilo, no completa esos flujos
+- Next:
+  - Cerrar quality gates completos y, si siguen en verde, continuar con la siguiente migración de componentes del checklist
+### 2026-04-29 09:04 (Europe/Madrid) — Shared Page Scaffolding Validation
+
+- Summary: Cerrados los quality gates del repositorio y validado el flujo de `Settings` en navegador tras migrar al scaffold compartido.
+- Decisions:
+  - Mantener `Dashboard` sin harness visual específico en esta iteración; el control adicional se centra en `Settings`, que ya tenía validación automatizada existente
+- Changes:
+  - **Validated repo gates**: `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build`
+  - **Validated browser flow**: `pnpm -C apps/web-ui validate:settings`
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:settings`
+- Issues/Risks:
+  - Sigue pendiente una validación visual/determinista equivalente para `Dashboard` una vez se empiecen a sustituir sus bloques internos por componentes compartidos
+- Next:
+  - Continuar con el punto 3 del checklist de Notion: extraer campos reutilizables para `Settings`
+### 2026-04-29 09:13 (Europe/Madrid) — Shared Settings Fields
+
+- Summary: Extraídos los campos reutilizables de `Settings` a un componente compartido y migradas las secciones de provider, limits, notifications y API sin cambiar `data-testid` ni contratos de interacción.
+- Decisions:
+  - Mantener la extracción acotada a un set específico de settings (`text`, `number`, `select`, `secret`, `toggle`) en lugar de rediseñar todo el sistema global de inputs en esta iteración
+  - Conservar el comportamiento visible del screen, incluida la visibilidad actual de `Auth token`, para evitar regresiones funcionales durante el refactor
+- Changes:
+  - **Added apps/web-ui/src/components/SettingsFields.ts** y **SettingsFields.test.ts**: componentes compartidos y cobertura de `data-testid`/semántica base
+  - **Updated apps/web-ui/src/screens/Settings.ts**: eliminados los helpers locales de campos y migradas las cuatro secciones objetivo a los nuevos componentes
+  - **Updated PLAN.md** y checklist de Notion: el punto de campos compartidos queda marcado como completado y el siguiente paso activo pasa a `Overview`
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/SettingsFields.test.ts apps/web-ui/src/screens/settings-state.test.ts`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - `Settings` todavía mantiene celdas de solo lectura locales en la pestaña general; no forman parte de la aceptación actual, pero siguen siendo candidatas a extracción si se repiten en otras pantallas
+- Next:
+  - Ejecutar los quality gates completos y la validación `validate:settings`, luego continuar con las primitivas reutilizables de `Overview`
+### 2026-04-29 09:18 (Europe/Madrid) — Shared Overview Primitives
+
+- Summary: Extraídas primitivas reutilizables para `Overview` y migrado `Dashboard.ts` para que deje de poseer el markup repetido de metric cards, actividad y quick actions.
+- Decisions:
+  - Mantener el refactor acotado a `Overview` sin tocar aún la tabla principal de proyectos, porque la aceptación sólo pedía métricas y side panels
+  - Crear primitivas específicas de overview en lugar de forzar `SectionPanel`, ya que el panel de logs usa un tratamiento terminal distinto al panel de quick actions
+- Changes:
+  - **Added apps/web-ui/src/components/OverviewPrimitives.ts** y **OverviewPrimitives.test.ts**: `OverviewMetricCard`, `OverviewPanel`, `OverviewActivityPanel` y `OverviewQuickActionsPanel`
+  - **Updated apps/web-ui/src/screens/Dashboard.ts**: el screen ahora compone datos y delega el render de métricas, logs y quick actions a las nuevas primitivas compartidas
+  - **Updated PLAN.md** y checklist de Notion: el punto de `Overview` queda completado y el siguiente foco activo pasa a `Kanban`
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/OverviewPrimitives.test.ts`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - `Dashboard` sigue usando acciones stubbed en quick actions y en la tabla; esa deuda funcional permanece abierta en el plan y no se abordó en este refactor estructural
+- Next:
+  - Ejecutar los quality gates completos y continuar con el refactor component-first de `Kanban`
+### 2026-04-29 09:25 (Europe/Madrid) — Shared Kanban Primitives
+
+- Summary: Extraídas primitivas reutilizables para `Kanban` y migrado `Kanban.ts` para que deje de poseer el shell repetido de columnas, task cards y modal de detalle.
+- Decisions:
+  - Mantener el refactor acotado a estructura visual: seed data, drag/drop y callbacks siguen viviendo en `Kanban.ts`
+  - Usar tipos compartidos `KanbanTask` y `KanbanTaskStatus` para eliminar casts locales de estado/columna
+  - Convertir los menús placeholder `more_horiz` y `more_vert` en botones deshabilitados con tooltip explicativo para respetar la regla de no dead UI
+- Changes:
+  - **Added apps/web-ui/src/components/KanbanPrimitives.ts** y **KanbanPrimitives.test.ts**: `KanbanColumnPanel`, `KanbanTaskCard`, `KanbanTaskModal` y helpers de estilos compartidos
+  - **Updated apps/web-ui/src/screens/Kanban.ts**: el screen ahora sólo agrupa datos y pasa callbacks a las primitivas compartidas
+  - **Updated PLAN.md**, **docs/UI_CHECKLIST.md** y checklist de Notion: registrado el avance component-first de Kanban
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/KanbanPrimitives.test.ts`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - `Kanban` sigue usando estado seed local y no persiste contra `/kanban/*`; esa deuda funcional permanece abierta en el plan
+  - El test de render DOM se sustituyó por cobertura de helpers porque el harness Vitest actual del repo no instala entorno DOM
+- Next:
+  - Continuar con la migración de pantallas restantes a scaffolding compartido
+### 2026-04-29 09:39 (Europe/Madrid) — Remaining Shared Screen Scaffolding
+
+- Summary: Migradas las pantallas estándar restantes a scaffolding compartido y extraídos los campos/meta cells repetidos del workbench a primitivas comunes.
+- Decisions:
+  - Tratar `Projects`, `Workflows` y `History` como pantallas estándar con `PageFrame`, `PageIntro` y `PageNoticeStack`
+  - Mantener `Explorer` fuera de `PageFrame` porque su layout full-height tipo IDE es intencional, pero reutilizar `PageNoticeStack` para no duplicar alertas
+  - Centralizar campos de texto y meta cells en `WorkbenchPanels` para evitar helpers locales duplicados en pantallas maduras
+- Changes:
+  - **Updated apps/web-ui/src/components/WorkbenchPanels.ts** y **WorkbenchPanels.test.ts**: nuevas primitivas `WorkbenchTextField`, `WorkbenchMetaCell` y helpers de render/estilo
+  - **Updated apps/web-ui/src/screens/Projects.ts**, **Workflows.ts** y **History.ts**: wrappers, intros, notices, campos y meta cells migrados a componentes compartidos
+  - **Updated apps/web-ui/src/screens/Explorer.ts**: notices migrados a `PageNoticeStack` manteniendo el workbench shell específico
+  - **Updated PLAN.md**, **docs/UI_CHECKLIST.md** y checklist de Notion: registrada la finalización del pass de scaffolding restante
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/WorkbenchPanels.test.ts apps/web-ui/src/components/PageScaffold.test.ts`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - `Explorer` conserva un shell propio por diseño; cualquier intento de forzarlo a `PageFrame` rompería el layout IDE validado previamente
+  - La deuda funcional de `Kanban` persistente y acciones stubbed de `Dashboard` sigue abierta en `PLAN.md`
+- Next:
+  - Continuar con estabilización funcional, no más refactor estructural salvo duplicación nueva
+### 2026-04-29 09:48 (Europe/Madrid) — Kanban Server Persistence
+
+- Summary: Implementada persistencia server-backed para `Kanban` sobre el API `/kanban/*`, retirando las tareas seed locales como fuente de verdad.
+- Decisions:
+  - Mantener los estados visuales canónicos `IDEAS`, `TODO`, `IN_PROGRESS`, `QA` y `DONE` en el cliente, mapeados a columnas reales del servidor por nombre
+  - Abrir primero el proyecto activo con `/projects/open` porque el store Kanban del servidor valida `projectId`
+  - Deshabilitar la edición de prioridad en el modal porque el contrato actual de `/kanban/tasks/update` no persiste prioridad
+- Changes:
+  - **Added apps/web-ui/src/shared/kanban-client.ts** y **kanban-client.test.ts**: cliente tipado y parsers para board, columnas y tareas
+  - **Added apps/web-ui/src/screens/kanban-state.ts** y **kanban-state.test.ts**: mapeo puro de registros del servidor a primitivas visuales compartidas
+  - **Updated apps/web-ui/src/screens/Kanban.ts**: load/create/move/edit/delete ahora llaman al servidor y refrescan la vista desde `listTasks`
+  - **Updated apps/web-ui/src/components/KanbanPrimitives.ts**: modal con borrador editable de título/descripción y prioridad explícitamente no editable
+  - **Updated PLAN.md**, **docs/UI_CHECKLIST.md** y checklist de Notion: registrada la persistencia Kanban server-first
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/kanban-client.test.ts apps/web-ui/src/screens/kanban-state.test.ts`
+  - `pnpm exec vitest run apps/web-ui/src/shared/kanban-client.test.ts apps/web-ui/src/screens/kanban-state.test.ts apps/web-ui/src/components/KanbanPrimitives.test.ts`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - Falta browser validation determinista para Kanban; permanece abierto en `PLAN.md`
+  - La prioridad queda en estado visual por defecto hasta que el API de tareas soporte ese campo
+- Next:
+  - Ejecutar quality gates completos y corregir cualquier fallo antes de cerrar la tarea
+### 2026-04-29 09:51 (Europe/Madrid) — Kanban Persistence Validation
+
+- Summary: Cerrados los quality gates obligatorios tras la migración server-backed de Kanban.
+- Decisions:
+  - Mantener la validación browser de Kanban como siguiente tarea explícita porque no existe todavía un harness determinista para esta pantalla
+- Changes:
+  - **Validated repo gates**: `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build`
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Sin fallos de gates
+  - Pendiente cubrir Kanban con browser automation end-to-end contra servidor stub o real controlado
+- Next:
+  - Implementar validación determinista de navegador para Kanban load/create/move/edit/delete si se continúa la estabilización

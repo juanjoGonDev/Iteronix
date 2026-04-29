@@ -1,5 +1,19 @@
 import { Button } from "../components/Button.js";
 import { StatusBadge } from "../components/Card.js";
+import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack,
+  PageTabs,
+  type PageTabItem
+} from "../components/PageScaffold.js";
+import {
+  SettingsNumberField,
+  SettingsSecretField,
+  SettingsSelectField,
+  SettingsTextField,
+  SettingsToggleField
+} from "../components/SettingsFields.js";
 import { Component, createElement, type ComponentProps } from "../shared/Component.js";
 import { ROUTES } from "../shared/constants.js";
 import { type ProjectSessionState, readProjectSession } from "../shared/project-session.js";
@@ -112,79 +126,43 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   override render(): HTMLElement {
-    return createElement("div", {
-      className: "min-h-full w-full bg-[#eef2f6]"
+    return createElement(PageFrame, {
+      className: "max-w-[1380px] gap-7 pb-28 md:pb-10"
     }, [
-      createElement("div", {
-        className: "mx-auto flex w-full max-w-[1380px] flex-col gap-7 px-4 py-6 pb-28 md:px-8 md:py-8 md:pb-10 lg:px-10"
-      }, [
-        this.renderHeader(),
-        this.renderMessages(),
-        this.renderTabs(),
+      createElement(PageIntro, {
+        title: "Settings",
+        description: "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
+      }),
+      createElement(PageNoticeStack, {
+        errorMessage: this.state.errorMessage,
+        noticeMessage: this.state.noticeMessage
+      }),
+      createElement(PageTabs, {
+        sticky: true,
+        items: this.createTabItems()
+      }),
         this.renderActiveTab(),
         this.renderSaveBar()
-      ])
     ]);
   }
 
-  private renderHeader(): HTMLElement {
-    return createElement("div", { className: "flex flex-col gap-3 pt-2" }, [
-      createElement("h1", {
-        className: "text-[2rem] font-semibold tracking-tight text-slate-900 md:text-[2.35rem]"
-      }, ["Settings"]),
-      createElement("p", {
-        className: "max-w-3xl text-sm leading-7 text-slate-600 md:text-[15px]"
-      }, [
-        "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
-      ])
-    ]);
+  private createTabItems(): ReadonlyArray<PageTabItem> {
+    return [
+      this.createTabItem("general"),
+      this.createTabItem("provider"),
+      this.createTabItem("limits"),
+      this.createTabItem("notifications"),
+      this.createTabItem("api")
+    ];
   }
 
-  private renderMessages(): HTMLElement {
-    if (!this.state.errorMessage && !this.state.noticeMessage) {
-      return createElement("div", {});
-    }
-
-    return createElement("div", { className: "flex flex-col gap-3" }, [
-      this.state.errorMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
-          }, [this.state.errorMessage])
-        : "",
-      this.state.noticeMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
-          }, [this.state.noticeMessage])
-        : ""
-    ]);
-  }
-
-  private renderTabs(): HTMLElement {
-    return createElement("div", {
-      className: "sticky top-0 z-10 -mx-1 border-b border-slate-300 bg-[#eef2f6]/95 px-1 backdrop-blur"
-    }, [
-      createElement("div", { className: "scrollbar-hide flex gap-8 overflow-x-auto pb-1" }, [
-        this.renderTab("general"),
-        this.renderTab("provider"),
-        this.renderTab("limits"),
-        this.renderTab("notifications"),
-        this.renderTab("api")
-      ])
-    ]);
-  }
-
-  private renderTab(tab: SettingsTab): HTMLElement {
-    const isActive = this.state.activeTab === tab;
-
-    return createElement("button", {
-      type: "button",
-      className: `border-b-2 px-1 pb-3 pt-1 text-sm font-semibold whitespace-nowrap transition-colors ${
-        isActive
-          ? "border-slate-900 text-slate-900"
-          : "border-transparent text-slate-500 hover:text-slate-800"
-      }`,
+  private createTabItem(tab: SettingsTab): PageTabItem {
+    return {
+      id: tab,
+      label: TabLabel[tab],
+      active: this.state.activeTab === tab,
       onClick: () => this.setState({ activeTab: tab })
-    }, [TabLabel[tab]]);
+    };
   }
 
   private renderActiveTab(): HTMLElement {
@@ -388,14 +366,14 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        renderTextField({
+        createElement(SettingsTextField, {
           label: "Profile name",
           value: profile.name,
           placeholder: "Planner profile",
           testId: "settings-provider-name",
-          onChange: (value) => this.handleProviderProfileTextChange(profile.id, "name", value)
+          onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "name", value)
         }),
-        renderSelectField({
+        createElement(SettingsSelectField, {
           label: "Provider",
           value: profile.providerKind,
           testId: "settings-provider-kind",
@@ -405,32 +383,32 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             { value: ProviderKind.Anthropic, label: ProviderKindLabel[ProviderKind.Anthropic] },
             { value: ProviderKind.Ollama, label: ProviderKindLabel[ProviderKind.Ollama] }
           ],
-          onChange: (value) => this.handleProviderKindChange(profile.id, value)
+          onChange: (value: string) => this.handleProviderKindChange(profile.id, value)
         }),
-        renderTextField({
+        createElement(SettingsTextField, {
           label: "Model",
           value: profile.modelId,
           placeholder: "Enter the model id used by flows",
           testId: "settings-provider-model",
-          onChange: (value) => this.handleProviderProfileTextChange(profile.id, "modelId", value)
+          onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "modelId", value)
         }),
         profile.providerKind === ProviderKind.CodexCli
-          ? renderTextField({
+          ? createElement(SettingsTextField, {
               label: "Command",
               value: profile.command,
               placeholder: "codex",
               testId: "settings-provider-command",
-              onChange: (value) => this.handleProviderProfileTextChange(profile.id, "command", value)
+              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "command", value)
             })
-          : renderTextField({
+          : createElement(SettingsTextField, {
               label: "Endpoint URL",
               value: profile.endpointUrl,
               placeholder: "https://provider.example.com",
               testId: "settings-provider-endpoint",
-              onChange: (value) => this.handleProviderProfileTextChange(profile.id, "endpointUrl", value)
+              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "endpointUrl", value)
             }),
         profile.providerKind === ProviderKind.CodexCli
-          ? renderSelectField({
+          ? createElement(SettingsSelectField, {
               label: "Prompt mode",
               value: profile.promptMode,
               testId: "settings-provider-prompt-mode",
@@ -438,14 +416,14 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
                 { value: ProviderPromptMode.Stdin, label: "stdin" },
                 { value: ProviderPromptMode.Arg, label: "arg" }
               ],
-              onChange: (value) => this.handleProviderPromptModeChange(profile.id, value)
+              onChange: (value: string) => this.handleProviderPromptModeChange(profile.id, value)
             })
-          : renderSessionSecretField({
+          : createElement(SettingsSecretField, {
               label: "API key",
               value: apiKeyValue,
               placeholder: "Session only in web mode",
               testId: "settings-provider-api-key",
-              onChange: (value) => this.handleProviderSecretChange(profile.id, value)
+              onChange: (value: string) => this.handleProviderSecretChange(profile.id, value)
             })
       ]),
       createElement("div", {
@@ -471,19 +449,19 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        renderNumberField({
+        createElement(SettingsNumberField, {
           label: "Maximum loops",
           value: this.state.workflowLimits.maxLoops,
           disabled: this.state.workflowLimits.infiniteLoops,
           testId: "settings-max-loops",
-          onChange: (value) => this.handleMaxLoopsChange(value)
+          onChange: (value: string) => this.handleMaxLoopsChange(value)
         }),
-        this.renderToggleField({
+        createElement(SettingsToggleField, {
           label: "Infinite loops",
           description: "Allow autonomous execution without a hard loop cap.",
           checked: this.state.workflowLimits.infiniteLoops,
           testId: "settings-infinite-loops",
-          onChange: (checked) =>
+          onChange: (checked: boolean) =>
             this.setState({
               workflowLimits: {
                 ...this.state.workflowLimits,
@@ -491,12 +469,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
               }
             })
         }),
-        this.renderToggleField({
+        createElement(SettingsToggleField, {
           label: "Allow external API calls",
           description: "Permit network access from tool executions and workflow steps.",
           checked: this.state.workflowLimits.externalCalls,
           testId: "settings-external-calls",
-          onChange: (checked) =>
+          onChange: (checked: boolean) =>
             this.setState({
               workflowLimits: {
                 ...this.state.workflowLimits,
@@ -518,12 +496,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           "Keep browser-side alert preferences and webhook routing in sync with the current workstation."
         ])
       ]),
-      this.renderToggleField({
+      createElement(SettingsToggleField, {
         label: "Completion sound",
         description: "Play a local confirmation tone when a run finishes.",
         checked: this.state.notifications.soundEnabled,
         testId: "settings-sound-enabled",
-        onChange: (checked) =>
+        onChange: (checked: boolean) =>
           this.setState({
             notifications: {
               ...this.state.notifications,
@@ -532,12 +510,12 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           })
       }),
       createElement("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" }, [
-        renderTextField({
+        createElement(SettingsTextField, {
           label: "Webhook URL",
           value: this.state.notifications.webhookUrl,
           placeholder: "https://hooks.example.com/iteronix",
           testId: "settings-webhook-url",
-          onChange: (value) =>
+          onChange: (value: string) =>
             this.setState({
               notifications: {
                 ...this.state.notifications,
@@ -574,19 +552,19 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        renderTextField({
+        createElement(SettingsTextField, {
           label: "Server URL",
           value: this.state.serverConnection.serverUrl,
           placeholder: DefaultServerConnection.serverUrl,
           testId: "settings-server-url",
-          onChange: (value) => this.handleServerConnectionChange("serverUrl", value)
+          onChange: (value: string) => this.handleServerConnectionChange("serverUrl", value)
         }),
-        renderTextField({
+        createElement(SettingsTextField, {
           label: "Auth token",
           value: this.state.serverConnection.authToken,
           placeholder: DefaultServerConnection.authToken,
           testId: "settings-auth-token",
-          onChange: (value) => this.handleServerConnectionChange("authToken", value)
+          onChange: (value: string) => this.handleServerConnectionChange("authToken", value)
         })
       ]),
       createElement("div", { className: "flex flex-wrap items-center gap-3" }, [
@@ -647,35 +625,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           void this.handleSave();
         },
         children: this.state.isSaving ? "Saving" : "Save changes"
-      })
-    ]);
-  }
-
-  private renderToggleField(input: {
-    label: string;
-    description: string;
-    checked: boolean;
-    testId: string;
-    onChange: (checked: boolean) => void;
-  }): HTMLElement {
-    return createElement("label", {
-      className: "flex items-center justify-between gap-4 rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4"
-    }, [
-      createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
-        createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
-        createElement("span", { className: "text-xs text-text-secondary" }, [input.description])
-      ]),
-      createElement("input", {
-        type: "checkbox",
-        checked: input.checked,
-        "data-testid": input.testId,
-        className: "h-4 w-4 accent-primary",
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            input.onChange(target.checked);
-          }
-        }
       })
     ]);
   }
@@ -971,108 +920,6 @@ const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
   }, [
     createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
     createElement("dd", { className: "mt-2 text-sm font-medium text-white break-all" }, [value])
-  ]);
-
-const renderTextField = (input: {
-  label: string;
-  value: string;
-  placeholder: string;
-  testId: string;
-  onChange: (value: string) => void;
-}): HTMLElement =>
-  createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
-    createElement("input", {
-      type: "text",
-      value: input.value,
-      placeholder: input.placeholder,
-      "data-testid": input.testId,
-      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
-      onChange: (event: Event) => {
-        const target = event.target;
-        if (target instanceof HTMLInputElement) {
-          input.onChange(target.value);
-        }
-      }
-    })
-  ]);
-
-const renderSessionSecretField = (input: {
-  label: string;
-  value: string;
-  placeholder: string;
-  testId: string;
-  onChange: (value: string) => void;
-}): HTMLElement =>
-  createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("div", { className: "flex items-center justify-between gap-3" }, [
-      createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
-      createElement(StatusBadge, { status: "warning" }, ["session only"])
-    ]),
-    createElement("input", {
-      type: "password",
-      value: input.value,
-      placeholder: input.placeholder,
-      "data-testid": input.testId,
-      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
-      onChange: (event: Event) => {
-        const target = event.target;
-        if (target instanceof HTMLInputElement) {
-          input.onChange(target.value);
-        }
-      }
-    }),
-    createElement("span", { className: "text-xs text-text-secondary" }, [
-      "The browser keeps this key only in memory for the current session."
-    ])
-  ]);
-
-const renderNumberField = (input: {
-  label: string;
-  value: number;
-  disabled?: boolean;
-  testId: string;
-  onChange: (value: string) => void;
-}): HTMLElement =>
-  createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
-    createElement("input", {
-      type: "number",
-      value: input.value.toString(),
-      disabled: input.disabled,
-      "data-testid": input.testId,
-      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50",
-      onChange: (event: Event) => {
-        const target = event.target;
-        if (target instanceof HTMLInputElement) {
-          input.onChange(target.value);
-        }
-      }
-    })
-  ]);
-
-const renderSelectField = (input: {
-  label: string;
-  value: string;
-  testId: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-}): HTMLElement =>
-  createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [input.label]),
-    createElement("select", {
-      value: input.value,
-      "data-testid": input.testId,
-      className: "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
-      onChange: (event: Event) => {
-        const target = event.target;
-        if (target instanceof HTMLSelectElement) {
-          input.onChange(target.value);
-        }
-      }
-    }, input.options.map((option) =>
-      createElement("option", { value: option.value }, [option.label])
-    ))
   ]);
 
 const toErrorMessage = (value: unknown, fallback: string): string => {

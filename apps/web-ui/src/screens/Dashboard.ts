@@ -1,6 +1,15 @@
 import { Component, createElement } from '../shared/Component.js';
 import { Card, StatusBadge } from '../components/Card.js';
-import { Button, IconButton } from '../components/Button.js';
+import { IconButton } from '../components/Button.js';
+import { PageFrame, PageIntro } from '../components/PageScaffold.js';
+import {
+  OverviewActivityPanel,
+  OverviewMetricCard,
+  OverviewQuickActionsPanel,
+  type OverviewActivityPanelProps,
+  type OverviewMetricCardProps,
+  type OverviewQuickAction
+} from '../components/OverviewPrimitives.js';
 
 interface ProjectItem {
   id: number;
@@ -14,112 +23,26 @@ interface ProjectItem {
   version: string;
 }
 
-interface LogEntry {
-  time: string;
-  color: string;
-  icon: string | undefined;
-  message: string;
-  code?: string;
-  details?: string;
-  trigger?: string;
-  error?: boolean;
-  opacity?: string;
-}
-
 export class DashboardScreen extends Component {
   override render(): HTMLElement {
-    return createElement('div', { className: 'max-w-[1600px] mx-auto flex flex-col gap-6 p-6' }, [
-      // Page Heading & Stats
+    const metrics = readDashboardMetrics();
+    const quickActions = readDashboardQuickActions();
+
+    return createElement(PageFrame, { className: 'max-w-[1600px]' }, [
+      createElement(PageIntro, {
+        title: 'Overview',
+        description: 'Manage your autonomous coding workflows and repositories.'
+      }),
       createElement('div', { className: 'flex flex-col gap-6' }, [
-        createElement('div', { className: 'flex flex-col sm:flex-row sm:items-end justify-between gap-4' }, [
-          createElement('div', {}, [
-            createElement('h1', { 
-              className: 'text-3xl font-bold text-white tracking-tight' 
-            }, ['Overview']),
-            createElement('p', { 
-              className: 'text-text-secondary mt-1' 
-            }, ['Manage your autonomous coding workflows and repositories.'])
-          ]),
-          createElement('div', { className: 'flex gap-2' }, [])
-        ]),
-
-        // Stats Grid
         createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4' }, [
-          // Total Projects Card
-          createElement(Card, { hover: true, className: 'hover:border-primary/30' }, [
-            createElement('div', { className: 'flex justify-between items-start mb-4' }, [
-              createElement('div', {
-                className: 'p-2 bg-blue-500/10 rounded-lg text-blue-500 group-hover:text-blue-400 group-hover:bg-blue-500/20 transition-colors'
-              }, [
-                createElement('span', { className: 'material-symbols-outlined' }, ['folder_open'])
-              ]),
-              createElement('span', {
-                className: 'text-xs font-medium text-emerald-400'
-              }, ['+2 this week'])
-            ]),
-            createElement('div', { className: 'flex flex-col gap-1' }, [
-              createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Total Projects']),
-              createElement('span', { className: 'text-2xl font-bold text-white' }, ['12'])
-            ])
-          ]),
-
-          // Active Runners Card
-          createElement(Card, { hover: true, className: 'hover:border-primary/30' }, [
-            createElement('div', { className: 'flex justify-between items-start mb-4' }, [
-              createElement('div', {
-                className: 'p-2 bg-orange-500/10 rounded-lg text-orange-500 group-hover:text-orange-400 group-hover:bg-orange-500/20 transition-colors'
-              }, [
-                createElement('span', { className: 'material-symbols-outlined' }, ['terminal'])
-              ]),
-              createElement('span', {
-                className: 'text-xs font-medium text-text-secondary'
-              }, ['4 idle'])
-            ]),
-            createElement('div', { className: 'flex flex-col gap-1' }, [
-              createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Active Runners']),
-              createElement('span', { className: 'text-2xl font-bold text-white' }, ['8'])
-            ])
-          ]),
-
-          // API Requests Card
-          createElement(Card, { hover: true, className: 'hover:border-primary/30' }, [
-            createElement('div', { className: 'flex justify-between items-start mb-4' }, [
-              createElement('div', {
-                className: 'p-2 bg-purple-500/10 rounded-lg text-purple-500 group-hover:text-purple-400 group-hover:bg-purple-500/20 transition-colors'
-              }, [
-                createElement('span', { className: 'material-symbols-outlined' }, ['api'])
-              ]),
-              createElement('span', {
-                className: 'text-xs font-medium text-emerald-400'
-              }, ['99.9% uptime'])
-            ]),
-            createElement('div', { className: 'flex flex-col gap-1' }, [
-              createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['API Requests']),
-              createElement('span', { className: 'text-2xl font-bold text-white font-mono' }, ['14,203'])
-            ])
-          ]),
-
-          // Monthly Cost Card
-          createElement(Card, { hover: true, className: 'hover:border-primary/30' }, [
-            createElement('div', { className: 'flex justify-between items-start mb-4' }, [
-              createElement('div', {
-                className: 'p-2 bg-emerald-500/10 rounded-lg text-emerald-500 group-hover:text-emerald-400 group-hover:bg-emerald-500/20 transition-colors'
-              }, [
-                createElement('span', { className: 'material-symbols-outlined' }, ['payments'])
-              ]),
-              createElement('span', {
-                className: 'text-xs font-medium text-text-secondary'
-              }, ['Current cycle'])
-            ]),
-            createElement('div', { className: 'flex flex-col gap-1' }, [
-              createElement('span', { className: 'text-text-secondary text-sm font-medium' }, ['Monthly Cost']),
-              createElement('span', { className: 'text-2xl font-bold text-white' }, ['$14.50'])
-            ])
-          ])
+          metrics.map((metric) =>
+            createElement(OverviewMetricCard, {
+              key: metric.label,
+              ...metric
+            })
+          )
         ])
       ]),
-
-      // Main Layout Grid
       createElement('div', { className: 'grid grid-cols-1 xl:grid-cols-3 gap-6' }, [
         // Projects Column
         createElement('div', { className: 'xl:col-span-2 flex flex-col gap-4' }, [
@@ -225,53 +148,12 @@ export class DashboardScreen extends Component {
 
         // Right Column: Activity Feed / Terminal
         createElement('div', { className: 'xl:col-span-1 flex flex-col gap-4' }, [
-          // Live Logs
-          createElement('div', {
-            className: 'bg-[#0d1117] border border-border-dark rounded-xl flex flex-col h-full min-h-[400px]'
-          }, [
-            createElement('div', {
-              className: 'px-4 py-3 border-b border-border-dark flex items-center justify-between bg-surface-dark rounded-t-xl'
-            }, [
-              createElement('div', { className: 'flex items-center gap-2 text-sm font-semibold text-white' }, [
-                createElement('span', { className: 'material-symbols-outlined text-text-secondary text-[18px]' }, ['terminal']),
-                'Live Logs'
-              ]),
-              createElement('div', { className: 'flex gap-1.5' }, [
-                createElement('div', { className: 'size-2.5 rounded-full bg-red-500/20 border border-red-500/50' }),
-                createElement('div', { className: 'size-2.5 rounded-full bg-amber-500/20 border border-amber-500/50' }),
-                createElement('div', { className: 'size-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/50' })
-              ])
-            ]),
-            // Logs Content
-            this.renderLogsContent()
-          ]),
-
-          // Quick Actions
-          createElement('div', {
-            className: 'bg-gradient-to-br from-surface-dark to-slate-900 border border-border-dark rounded-xl p-5'
-          }, [
-            createElement('h3', { className: 'text-sm font-semibold text-white mb-3' }, ['Quick Actions']),
-            createElement('div', { className: 'space-y-2' }, [
-              createElement(Button, {
-                variant: 'ghost',
-                className: 'w-full justify-start text-sm group',
-                icon: 'add_circle',
-                onClick: () => console.log('Import from GitHub')
-              }, ['Import from GitHub']),
-              createElement(Button, {
-                variant: 'ghost',
-                className: 'w-full justify-start text-sm group',
-                icon: 'key',
-                onClick: () => console.log('Manage API Keys')
-              }, ['Manage API Keys']),
-              createElement(Button, {
-                variant: 'ghost',
-                className: 'w-full justify-start text-sm group',
-                icon: 'history',
-                onClick: () => console.log('View Audit Logs')
-              }, ['View Audit Logs'])
-            ])
-          ])
+          createElement(OverviewActivityPanel, {
+            entries: readDashboardLogs()
+          }),
+          createElement(OverviewQuickActionsPanel, {
+            actions: quickActions
+          })
         ])
       ])
     ]);
@@ -351,82 +233,90 @@ export class DashboardScreen extends Component {
     ]);
   }
 
-  renderLogsContent(): HTMLElement {
-    const logs: LogEntry[] = [
-      {
-        time: '10:42:15 AM',
-        color: 'blue',
-        icon: 'started',
-        message: 'Started optimization task on',
-        code: 'backend/db.py',
-        details: '> Analyzing query performance...\n> Found 3 inefficient joins.'
-      },
-      {
-        time: '10:38:22 AM',
-        color: 'emerald',
-        icon: 'check_circle',
-        message: 'Pull Request merged:',
-        code: '#42 Fix auth logic',
-        details: 'Triggered by',
-        trigger: 'Auto-Reviewer'
-      },
-      {
-        time: '10:15:00 AM',
-        color: 'rose',
-        icon: 'error',
-        message: 'Test suite failed on',
-        code: 'Auth-Service',
-        details: 'Error: JWT signature invalid\nat verifyToken (auth.go:154)',
-        error: true
-      },
-      {
-        time: '09:55:12 AM',
-        color: 'gray',
-        icon: undefined,
-        message: 'System initialization complete',
-        opacity: '60'
-      }
-    ];
-
-    return createElement('div', { 
-      className: 'p-4 font-mono text-xs flex-1 overflow-y-auto space-y-4 max-h-[500px]' 
-    }, [
-      logs.map((log, index) =>
-        createElement('div', { 
-          key: `log-${index}`,
-          className: 'flex gap-3' + (log.opacity ? ` opacity-${log.opacity}` : '')
-        }, [
-          // Timeline connector
-          createElement('div', { className: 'flex flex-col items-center' }, [
-            createElement('div', {
-              className: `size-2 rounded-full bg-${log.color}-500${log.color === 'blue' ? ' shadow-[0_0_8px_rgba(59,130,246,0.5)]' : ''} mt-1.5`
-            }, []),
-            index < logs.length - 1 && createElement('div', { 
-              className: 'w-px h-full bg-border-dark my-1' 
-            }, [])
-          ]),
-
-          // Log content
-          createElement('div', { className: 'flex flex-col gap-1 pb-2' }, [
-            createElement('div', { className: 'text-text-secondary' }, [log.time]),
-            createElement('div', { className: 'text-white' }, [
-              log.message,
-              log.code && createElement('span', { 
-                className: `text-${log.color}-400` 
-              }, [log.code]),
-              log.trigger && createElement('div', { 
-                className: 'text-text-secondary' 
-              }, [
-                log.details || '',
-                createElement('span', { className: 'text-white' }, [log.trigger])
-              ])
-            ]),
-            log.details && !log.trigger && createElement('div', {
-              className: `bg-surface-dark p-2 rounded border border-border-dark text-${log.color === 'rose' ? 'rose-300' : 'text-text-secondary'} mt-1${log.error ? ' bg-rose-950/20 border-rose-900/50' : ''}`
-            }, [log.details])
-          ])
-        ])
-      )
-    ]);
-  }
 }
+
+const readDashboardMetrics = (): ReadonlyArray<OverviewMetricCardProps> => [
+  {
+    icon: 'folder_open',
+    accent: 'blue',
+    badgeText: '+2 this week',
+    badgeTone: 'positive',
+    label: 'Total Projects',
+    value: '12'
+  },
+  {
+    icon: 'terminal',
+    accent: 'orange',
+    badgeText: '4 idle',
+    badgeTone: 'neutral',
+    label: 'Active Runners',
+    value: '8'
+  },
+  {
+    icon: 'api',
+    accent: 'purple',
+    badgeText: '99.9% uptime',
+    badgeTone: 'positive',
+    label: 'API Requests',
+    value: '14,203',
+    valueTone: 'mono'
+  },
+  {
+    icon: 'payments',
+    accent: 'emerald',
+    badgeText: 'Current cycle',
+    badgeTone: 'neutral',
+    label: 'Monthly Cost',
+    value: '$14.50'
+  }
+];
+
+const readDashboardQuickActions = (): ReadonlyArray<OverviewQuickAction> => [
+  {
+    icon: 'add_circle',
+    label: 'Import from GitHub',
+    onClick: () => console.log('Import from GitHub')
+  },
+  {
+    icon: 'key',
+    label: 'Manage API Keys',
+    onClick: () => console.log('Manage API Keys')
+  },
+  {
+    icon: 'history',
+    label: 'View Audit Logs',
+    onClick: () => console.log('View Audit Logs')
+  }
+];
+
+const readDashboardLogs = (): OverviewActivityPanelProps['entries'] => [
+  {
+    time: '10:42:15 AM',
+    color: 'blue',
+    message: 'Started optimization task on',
+    code: 'backend/db.py',
+    details: '> Analyzing query performance...\n> Found 3 inefficient joins.'
+  },
+  {
+    time: '10:38:22 AM',
+    color: 'emerald',
+    message: 'Pull Request merged:',
+    code: '#42 Fix auth logic',
+    details: 'Triggered by',
+    trigger: 'Auto-Reviewer'
+  },
+  {
+    time: '10:15:00 AM',
+    color: 'rose',
+    message: 'Test suite failed on',
+    code: 'Auth-Service',
+    details: 'Error: JWT signature invalid\nat verifyToken (auth.go:154)',
+    error: true
+  },
+  {
+    time: '09:55:12 AM',
+    color: 'gray',
+    message: 'System initialization complete',
+    opacity: '60'
+  }
+];

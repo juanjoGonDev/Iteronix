@@ -3,6 +3,8 @@ import {
   createCitationEvidenceGroups,
   createEvidenceSourceSummaries,
   filterEvidenceSourcesBySourceId,
+  readWorkbenchMetaCellClassName,
+  readWorkbenchTextFieldInputClassName,
   resolveEvidenceSourceFocus
 } from "./WorkbenchPanels.js";
 import type { Citation } from "../shared/workbench-types.js";
@@ -185,6 +187,12 @@ describe("workbench citation groups", () => {
     expect(resolveEvidenceSourceFocus("README.md", retrievedSources)).toBe("README.md");
     expect(resolveEvidenceSourceFocus("missing.md", retrievedSources)).toBeNull();
     expect(resolveEvidenceSourceFocus(null, retrievedSources)).toBeNull();
+  });
+
+  it("keeps reusable workbench field and meta cell styles centralized", () => {
+    expect(readWorkbenchTextFieldInputClassName()).toContain("focus:border-primary");
+    expect(readWorkbenchTextFieldInputClassName()).toContain("bg-background-dark/40");
+    expect(readWorkbenchMetaCellClassName()).toBe("rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3");
   });
 });
 

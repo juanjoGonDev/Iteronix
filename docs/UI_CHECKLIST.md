@@ -35,6 +35,13 @@ This document ensures UI invariants are maintained across all screens and change
 - [ ] No per-screen layout variants
 - [ ] Consistent structure: Sidebar + Header + Main content
 - [ ] Responsive behavior preserved
+- [ ] Page-level chrome comes from shared components, not screen-local wrappers
+- [ ] `PageFrame` defines the top-level content container and spacing rhythm
+- [ ] `PageIntro` defines the screen title and introductory copy
+- [ ] `PageNoticeStack` owns transient success and error messaging
+- [ ] `PageTabs` owns tab underline styling and sticky tab rows when a screen needs tabs
+- [ ] `Projects`, `Workflows`, `History`, `Dashboard` and `Settings` use shared page scaffolding instead of local page wrappers
+- [ ] Full-height workbench screens that intentionally do not use `PageFrame` still reuse shared notice chrome
 
 ### ✅ Sidebar Collapse
 - [ ] Toggle button in brand area
@@ -75,6 +82,14 @@ This document ensures UI invariants are maintained across all screens and change
 - [ ] Form controls use consistent styling
 - [ ] Toggle switches follow design system
 - [ ] Save bar fixed positioning
+- [ ] No screen-local page wrapper or ad hoc tab chrome outside the shared page scaffold
+
+### ✅ Kanban
+- [ ] Board columns render through shared Kanban column primitives
+- [ ] Task cards render through shared Kanban card primitives
+- [ ] Task details render through the shared Kanban modal primitive
+- [ ] Placeholder column/task menus are disabled with explanatory tooltips
+- [ ] Board load, task create, move, edit and delete flows use the server `/kanban/*` API instead of local seed state
 
 ### ✅ Placeholder Screens
 - [ ] Consistent "Not available yet" messaging
@@ -100,6 +115,8 @@ This document ensures UI invariants are maintained across all screens and change
 
 - Changes to global invariants require updating this checklist first
 - New screens must follow existing patterns exactly
+- New screens must compose their page wrapper from shared screen primitives before adding screen-specific sections
+- New workbench screens must use `WorkbenchTextField` and `WorkbenchMetaCell` for repeated field and metric shells
 - Icon additions must be Material Symbols Outlined
 - Color additions must go through TOKENS system
 - Spacing changes must use TOKENS.spacing values

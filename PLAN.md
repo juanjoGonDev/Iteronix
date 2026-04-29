@@ -172,6 +172,11 @@ Acceptance:
 - [x] Settings: provider/model/precision, per project/profile
 - [x] Kanban board: create/move tasks; show task details
 - [x] Separate each screen into its own component, dont repeat code, use shared components/utilitiesm but with a single responsibility (apply to all screens)
+- [ ] Component-first screen scaffolding:
+  - [x] Shared page-level primitives own screen title, intro text, alert stack and tab chrome
+  - [x] `Dashboard` and `Settings` use the shared page scaffolding instead of screen-local wrappers
+  - [x] Remaining standard screens adopt the shared page scaffolding instead of duplicating page wrappers
+  - Component primitive progress on `2026-04-29`: `Projects`, `Workflows` and `History` now use shared page scaffolding and shared workbench field/meta primitives; `Explorer` keeps its full-height workbench shell while reusing shared notice chrome
 - [x] Emit browser-ready JS for web UI modules via tsc build output
 - [x] Shared styles, fonts, icons, etc. Use glogal variables and CSS custom properties. Dont repeat styles.
 - [x] Make sure all screens use always the same layout structure (header, sidebar, main content, footer, styles, etc.)
@@ -195,6 +200,9 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
 
   - [x] Header + Sidebar + Main + optional Right Panel
   - [x] No per-screen shell variants
+- [ ] All screens use shared page scaffolding for page title, notices, tabs and top-level content rhythm:
+  - [x] Shared page scaffold extracted for `apps/web-ui`
+  - [x] Remove duplicated page wrappers from the remaining standard screens
 
 - [ ] Interaction completeness gate (per screen):
 
@@ -607,14 +615,19 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Visual refinement progress on `2026-04-28`: contrast and spacing of `Settings` were reworked for the live shell, and Playwright desktop/mobile screenshots now validate the responsive layout before user acceptance
   - UI cleanup progress on `2026-04-28`: residual empty status chips were traced to the shared component renderer, fixed at the helper level, and removed from `Settings` where they added no value
   - Button semantics progress on `2026-04-28`: destructive actions in `Settings` now use the shared rose danger variant, and the shared button token was tightened so destructive intent is visible and consistent across screens
+  - Component scaffolding progress on `2026-04-29`: shared `PageScaffold` primitives now own screen intro, notices and tabs, and `Settings` was migrated off its screen-local light wrapper to align with the shared shell model
+  - Form component progress on `2026-04-29`: provider, limits, notifications and API field markup now comes from shared `SettingsFields` components instead of screen-local helper functions, keeping existing test ids intact
 - [ ] Kanban:
-  - [ ] Replace local seed board state with `/kanban/*` persistence
-  - [ ] Persist create/edit/move/delete flows
+  - [x] Replace local seed board state with `/kanban/*` persistence
+  - [x] Persist create/edit/move/delete flows
   - [ ] Validate the board with a deterministic browser flow
+  - Component primitive progress on `2026-04-29`: board columns, task cards and the task detail modal now render through shared `KanbanPrimitives` instead of screen-local shell markup; placeholder menu buttons are disabled with explanatory tooltips
+  - Persistence progress on `2026-04-29`: `Kanban` now opens the active project through the server, ensures a canonical board and columns through `/kanban/*`, reloads tasks from the API after load/create/move/edit/delete, and no longer uses seeded local tasks as source of truth
 - [ ] Dashboard:
   - [ ] Replace showcase metrics and rows with real overview data
   - [ ] Remove dead quick actions
   - [ ] Validate overview navigation and one real action in browser automation
+  - Component primitive progress on `2026-04-29`: metrics, live activity and quick actions now render through shared `OverviewPrimitives` instead of screen-local card and panel shells
 - [ ] Regression lock:
   - [ ] Keep `Projects`, `Workflows`, and `History` green while unfinished screens are completed
   - [ ] Avoid reopening mature screens for cosmetic churn during stabilization

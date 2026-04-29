@@ -2,8 +2,15 @@ import { Component, createElement, type ComponentProps } from "../shared/Compone
 import { Button } from "../components/Button.js";
 import { StatusBadge } from "../components/Card.js";
 import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack
+} from "../components/PageScaffold.js";
+import {
   EmptyStatePanel,
-  SectionPanel
+  SectionPanel,
+  renderWorkbenchMetaCell as renderMetaCell,
+  renderWorkbenchTextField as renderInputField
 } from "../components/WorkbenchPanels.js";
 import {
   clearProjectSession,
@@ -169,16 +176,15 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
   override render(): HTMLElement {
     const connection = readServerConnection();
 
-    return createElement("div", {
-      className: "mx-auto flex w-full max-w-[1480px] flex-col gap-6 p-6"
-    }, [
-      createElement("div", { className: "flex flex-col gap-2" }, [
-        createElement("h1", { className: "text-3xl font-semibold text-white" }, ["Projects"]),
-        createElement("p", { className: "max-w-3xl text-sm leading-6 text-text-secondary" }, [
-          "Open a project inside the configured workspace, inspect Git status and diffs, create Conventional Commits, and follow quality gates from the same server-first screen."
-        ])
-      ]),
-      this.renderMessages(),
+    return createElement(PageFrame, {}, [
+      createElement(PageIntro, {
+        title: "Projects",
+        description: "Open a project inside the configured workspace, inspect Git status and diffs, create Conventional Commits, and follow quality gates from the same server-first screen."
+      }),
+      createElement(PageNoticeStack, {
+        errorMessage: this.state.errorMessage,
+        noticeMessage: this.state.noticeMessage
+      }),
       createElement("div", { className: "grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]" }, [
         createElement("div", { className: "flex flex-col gap-6" }, [
           this.renderProjectPanel(connection.serverUrl),
@@ -192,27 +198,6 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
           this.renderRunEventsPanel()
         ])
       ])
-    ]);
-  }
-
-  private renderMessages(): HTMLElement {
-    const { errorMessage, noticeMessage } = this.state;
-
-    if (!errorMessage && !noticeMessage) {
-      return createElement("div", {});
-    }
-
-    return createElement("div", { className: "flex flex-col gap-3" }, [
-      errorMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
-          }, [errorMessage])
-        : "",
-      noticeMessage
-        ? createElement("div", {
-            className: "rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
-          }, [noticeMessage])
-        : ""
     ]);
   }
 
@@ -1569,32 +1554,6 @@ export class ProjectsScreen extends Component<ComponentProps, ProjectsScreenStat
   }
 }
 
-const renderInputField = (input: {
-  label: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-  testId: string;
-}): HTMLElement =>
-  createElement("label", { className: "flex flex-col gap-2" }, [
-    createElement("span", { className: "text-sm font-medium text-white" }, [input.label]),
-    createElement("input", {
-      type: "text",
-      value: input.value,
-      placeholder: input.placeholder,
-      className: "h-11 rounded-lg border border-border-dark bg-background-dark/40 px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none",
-      dataset: {
-        testid: input.testId
-      },
-      onChange: (event: Event) => {
-        const target = event.target;
-        if (target instanceof HTMLInputElement) {
-          input.onChange(target.value);
-        }
-      }
-    })
-  ]);
-
 const renderGateToggle = (input: {
   gate: QualityGateKey;
   checked: boolean;
@@ -1699,12 +1658,6 @@ const renderEventItem = (event: QualityGateEventRecord): HTMLElement => {
       : ""
   ]);
 };
-
-const renderMetaCell = (label: string, value: string): HTMLElement =>
-  createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3" }, [
-    createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
-    createElement("p", { className: "mt-2 text-sm font-medium text-white" }, [value])
-  ]);
 
 const renderGitWorkspaceContent = (input: {
   repository: GitRepositoryRecord;

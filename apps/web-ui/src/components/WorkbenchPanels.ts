@@ -60,6 +60,20 @@ interface EmptyStatePanelProps extends ComponentProps {
   className?: string;
 }
 
+interface WorkbenchTextFieldProps extends ComponentProps {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  type?: "text" | "password";
+  testId?: string;
+}
+
+interface WorkbenchMetaCellProps extends ComponentProps {
+  label: string;
+  value: string;
+}
+
 export interface CitationEvidenceGroup {
   citation: Citation;
   provenance: ReadonlyArray<Citation>;
@@ -440,6 +454,63 @@ export class EmptyStatePanel extends Component<EmptyStatePanelProps> {
     });
   }
 }
+
+export class WorkbenchTextField extends Component<WorkbenchTextFieldProps> {
+  override render(): HTMLElement {
+    const {
+      label,
+      value,
+      placeholder,
+      onChange,
+      type = "text",
+      testId
+    } = this.props;
+
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-sm font-medium text-white" }, [label]),
+      createElement("input", {
+        type,
+        value,
+        placeholder,
+        className: readWorkbenchTextFieldInputClassName(),
+        dataset: testId
+          ? {
+              testid: testId
+            }
+          : undefined,
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            onChange(target.value);
+          }
+        }
+      })
+    ]);
+  }
+}
+
+export class WorkbenchMetaCell extends Component<WorkbenchMetaCellProps> {
+  override render(): HTMLElement {
+    const { label, value } = this.props;
+
+    return createElement("div", { className: readWorkbenchMetaCellClassName() }, [
+      createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
+      createElement("p", { className: "mt-2 text-sm font-medium text-white" }, [value])
+    ]);
+  }
+}
+
+export const renderWorkbenchTextField = (input: WorkbenchTextFieldProps): HTMLElement =>
+  createElement(WorkbenchTextField, input);
+
+export const renderWorkbenchMetaCell = (label: string, value: string): HTMLElement =>
+  createElement(WorkbenchMetaCell, { label, value });
+
+export const readWorkbenchTextFieldInputClassName = (): string =>
+  "h-11 rounded-lg border border-border-dark bg-background-dark/40 px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none";
+
+export const readWorkbenchMetaCellClassName = (): string =>
+  "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3";
 
 const renderDefinition = (label: string, value: string): HTMLElement =>
   createElement("div", { className: "flex flex-col gap-1" }, [

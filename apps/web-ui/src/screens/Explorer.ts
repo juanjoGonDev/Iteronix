@@ -1,4 +1,5 @@
 import { Button } from "../components/Button.js";
+import { PageNoticeStack } from "../components/PageScaffold.js";
 import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
 import { Component, createElement, type ComponentProps } from "../shared/Component.js";
 import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
@@ -258,18 +259,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     return createElement("div", {
       className: this.state.isCompactViewport ? "px-3 pt-3" : "px-6 pt-6"
     }, [
-      createElement("div", { className: "flex flex-col gap-3" }, [
-        errorMessage
-          ? createElement("div", {
-              className: "rounded-md border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
-            }, [errorMessage])
-          : "",
+      createElement(PageNoticeStack, {
+        errorMessage,
         noticeMessage
-          ? createElement("div", {
-              className: "rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
-            }, [noticeMessage])
-          : ""
-      ])
+      })
     ]);
   }
 
