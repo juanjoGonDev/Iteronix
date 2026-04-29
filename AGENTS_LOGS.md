@@ -1728,3 +1728,26 @@
   - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque la semántica visual ya esté corregida
 - Next:
   - Esperar validación visual del usuario sobre `Settings`; si aparece otra incoherencia de color o jerarquía, seguir sólo en esta pantalla antes de abrir la siguiente
+### 2026-04-29 08:43 (Europe/Madrid) — Main Sidebar Short Viewport Scroll
+
+- Summary: Corregido el menú principal en pantallas bajas para que la navegación central tenga scroll vertical independiente y todas las opciones sigan siendo alcanzables.
+- Decisions:
+  - Tratarlo como bug del shell global, no como ajuste de `Workflows`, porque la sidebar es compartida por todas las pantallas
+  - Mantener el layout y el orden de navegación existentes; sólo se ajusta la caja de scroll con `h-full`, `min-h-0`, `overflow-hidden` y `overflow-y-auto`
+  - Validar con Playwright en un viewport bajo similar al reporte del usuario
+- Changes:
+  - **Updated apps/web-ui/src/components/Navigation.ts**: el root interno de `Sidebar` ahora ocupa la altura disponible y el `nav` central queda acotado con scroll vertical independiente
+  - **Added apps/web-ui/src/components/Navigation.test.ts**: cobertura de clases para evitar perder `min-h-0`/`overflow-y-auto` en futuras iteraciones
+  - **Playwright visual check**: verificado `/workflows` en viewport `965x444`, confirmando que el menú puede desplazarse hasta el final
+  - **Updated PLAN.md**: registrada la corrección como invariante de interacción del shell
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/Navigation.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - El viewport bajo deja menos espacio visible para rutas intermedias, pero todas quedan accesibles mediante scroll sin cambiar el orden del menú
+  - `Settings` sigue como tarea de pantalla activa hasta aceptación explícita del usuario; este cambio fue un bug global bloqueante del shell
+- Next:
+  - Esperar validación del usuario sobre la sidebar en su pantalla pequeña; si queda aceptada, volver al cierre visual de `Settings`

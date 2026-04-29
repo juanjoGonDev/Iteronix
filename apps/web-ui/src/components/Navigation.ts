@@ -143,7 +143,7 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
     } = this.props;
 
     return createElement('aside', {
-      className: className
+      className: readSidebarRootClassName(className)
     }, [
       // Brand
       createElement('div', { 
@@ -216,7 +216,7 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
 
       // Navigation
       createElement('nav', { 
-        className: `flex flex-1 overflow-y-auto ${collapsed ? 'py-4 px-1' : 'py-6 px-3'} flex flex-col gap-1`
+        className: readSidebarNavigationClassName(collapsed)
       }, [
         navigation.map((item: NavigationItemProps, index: number) => {
           const navItem = new NavigationItem({
@@ -264,3 +264,9 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
 
 
 }
+
+export const readSidebarRootClassName = (className: string): string =>
+  `flex h-full min-h-0 flex-col overflow-hidden ${className}`.trim();
+
+export const readSidebarNavigationClassName = (collapsed: boolean): string =>
+  `min-h-0 flex-1 overflow-y-auto overscroll-contain ${collapsed ? 'py-4 px-1' : 'py-6 px-3'} flex flex-col gap-1`;

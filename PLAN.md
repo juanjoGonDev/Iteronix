@@ -202,6 +202,7 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
     - [x] work end-to-end, OR
     - [x] be visibly disabled + explain "Not available yet"
   - [x] No broken menus, no dead buttons, no fake dropdowns, no placeholder navigation
+  - [x] Main sidebar navigation scrolls independently on short viewports so every route remains reachable
 
 - [x] Add a "UI consistency checklist" (docs/UI_CHECKLIST.md):
   - [x] menu order/icons unchanged across screens
