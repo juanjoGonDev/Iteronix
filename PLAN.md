@@ -249,6 +249,7 @@ Acceptance:
   - [x] Loop limit: infinite toggle + numeric max loops
   - [x] On complete: sound toggle (if supported by current shell) (optional)
   - [x] Optional webhook config (URL + payload preview + test button)
+- [x] Validate the Settings screen against server-first workspace persistence, including cross-context provider profile visibility
 - [ ] Clear warnings for infinite loops and external webhooks.
 
 Acceptance:

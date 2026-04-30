@@ -47,7 +47,10 @@ describe("SettingsFields", () => {
         label: "Provider",
         value: "openai",
         testId: "settings-provider-kind",
-        options: [{ value: "openai", label: "OpenAI" }],
+        options: [
+          { value: "codex-cli", label: "Codex CLI" },
+          { value: "openai", label: "OpenAI" }
+        ],
         onChange: () => undefined
       }).render();
 
@@ -61,6 +64,7 @@ describe("SettingsFields", () => {
     });
 
     expect(recorded).toContain("attr:data-testid=settings-provider-kind");
+    expect(recorded).toContain("attr:selected=");
     expect(recorded).toContain("listener:change");
     expect(recorded).toContain("attr:data-testid=settings-sound-enabled");
     expect(recorded).toContain("attr:role=switch");

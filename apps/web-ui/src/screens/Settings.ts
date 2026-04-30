@@ -87,9 +87,9 @@ const ProviderKindLabel: Record<ProviderKind, string> = {
 
 const ProviderKindDescription: Record<ProviderKind, string> = {
   [ProviderKind.CodexCli]: "CLI provider registered in the current backend runtime.",
-  [ProviderKind.OpenAI]: "API-based profile saved locally for future workflow selection.",
-  [ProviderKind.Anthropic]: "API-based profile saved locally for future workflow selection.",
-  [ProviderKind.Ollama]: "Local inference profile saved locally for future workflow selection."
+  [ProviderKind.OpenAI]: "API-based profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Anthropic]: "API-based profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Ollama]: "Local inference profile persisted in the shared server workspace for future workflow selection."
 };
 
 const TestWebhookPayload = {
@@ -236,7 +236,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           createElement("div", { className: "flex flex-col gap-1" }, [
             createElement("h2", { className: "text-lg font-semibold text-white" }, ["Persistence policy"]),
             createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Provider profiles, workflow limits and notifications persist locally. Server URL and auth token reuse the existing app connection contract. Secrets remain session-only in the browser."
+              "Provider profiles, workflow limits and notifications persist on the current server workspace. Server URL and auth token remain per-device connection settings. Secrets stay session-only in the browser."
             ])
           ]),
           createElement(StatusBadge, { status: "info" }, ["web mode"])
@@ -361,7 +361,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           ])
         ]),
         createElement("div", { className: "text-xs font-medium uppercase tracking-[0.16em] text-slate-500" }, [
-          runtimeAvailable ? "Runtime available" : "Local profile"
+          runtimeAvailable ? "Runtime available" : "Server-backed"
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
@@ -431,8 +431,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         profile.providerKind === ProviderKind.CodexCli
           ? this.state.currentProject
             ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
-            : "This Codex CLI profile is already persisted locally. Open a project if you also want to sync its CLI config to the backend store on save."
-          : "This provider profile is persisted locally. It becomes server-backed once a matching runtime adapter is registered in the backend."
+            : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
+          : "This provider profile is already persisted in the server workspace snapshot. Register a matching runtime adapter in the backend when you want flows to execute through it."
       ])
     ]);
   }
@@ -612,7 +612,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       createElement(Button, {
         variant: "danger",
         className: "w-full justify-center md:w-auto",
-        onClick: () => this.handleResetDefaults(),
+        onClick: () => {
+          void this.handleResetDefaults();
+        },
         children: "Reset defaults"
       }),
       createElement(Button, {
@@ -875,7 +877,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;
       this.pushToast(
         "success",
-        `Settings saved. ${syncedCount} profile${syncedCount === 1 ? "" : "s"} synced to the backend and ${localOnlyCount} kept as local-only configuration.`
+        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in the workspace state, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`
       );
     } catch (error) {
       this.pushToast("error", toErrorMessage(error, "Could not save settings."));
@@ -886,29 +888,33 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     }
   }
 
-  private handleResetDefaults(): void {
+  private async handleResetDefaults(): Promise<void> {
     const confirmed = window.confirm("Reset provider profiles, workflow limits, notifications and API access to their defaults?");
     if (!confirmed) {
       return;
     }
 
     const snapshot = this.settingsStorage.reset();
-    void this.workspaceStateClient.update({
-      settings: snapshot
-    });
     const serverConnection = writeServerConnection(DefaultServerConnection);
 
-    this.setState({
-      activeTab: "provider",
-      profileId: snapshot.profileId,
-      providerProfiles: snapshot.providerProfiles,
-      selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
-      workflowLimits: snapshot.workflowLimits,
-      notifications: snapshot.notifications,
-      serverConnection,
-      sessionSecrets: {}
-    });
-    this.pushToast("success", "Settings restored to defaults.");
+    try {
+      await this.workspaceStateClient.update({
+        settings: snapshot
+      });
+      this.setState({
+        activeTab: "provider",
+        profileId: snapshot.profileId,
+        providerProfiles: snapshot.providerProfiles,
+        selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
+        workflowLimits: snapshot.workflowLimits,
+        notifications: snapshot.notifications,
+        serverConnection,
+        sessionSecrets: {}
+      });
+      this.pushToast("success", "Settings restored to defaults.");
+    } catch (error) {
+      this.pushToast("error", toErrorMessage(error, "Could not reset settings."));
+    }
   }
 
   private pushToast(kind: ToastKind, message: string): void {

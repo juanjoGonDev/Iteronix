@@ -2096,4 +2096,28 @@
 - Issues/Risks:
   - El conector de Notion permite comentar pero no modificar columnas/estado con las herramientas disponibles; el estado queda documentado por comentario y no se marca `Listo` sin confirmación del usuario.
 - Next:
-  - Commit manual y pedir confirmación antes de pasar a la siguiente pantalla/tarea.
+  - Commit manual y pedir confirmación antes de pasar a la siguiente pantalla/tarea.### 2026-04-30 13:36 (Europe/Madrid) — Settings End-to-End Validation
+
+- Summary: Cerrada la pantalla `Settings` contra la persistencia server-first, con validación browser de alta/edición en un contexto, visibilidad en un segundo contexto y borrado persistido.
+- Decisions:
+  - Mantener la tarjeta de Notion en progreso hasta confirmación explícita del usuario; el conector sigue usándose sólo para comentarios de estado.
+  - Considerar `Server URL` y `Auth token` como preferencias por dispositivo, pero mover el resto del snapshot de `Settings` al workspace server-backed.
+  - Corregir un bug del primitive compartido `SettingsSelectField` porque impedía rehidratar correctamente el provider seleccionado y bloqueaba `Settings`.
+- Changes:
+  - **Updated apps/web-ui/src/screens/Settings.ts**: copy alineado con persistencia server-first, labels de estado ajustadas y reset de defaults persistido correctamente en servidor.
+  - **Updated apps/web-ui/src/components/SettingsFields.ts** y test asociado: el select marca la opción persistida al renderizar.
+  - **Updated apps/web-ui/scripts/validate-settings.ts**: cobertura determinista para guardado, rehidratación, segundo contexto, borrado persistido y responsive.
+  - **Updated PLAN.md** con la validación cross-context de `Settings`.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/components/SettingsFields.test.ts`
+  - `pnpm build`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:settings`
+  - `pnpm -C apps/web-ui validate:server-persistence`
+- Issues/Risks:
+  - Ninguno abierto en `Settings`; pendiente sólo la confirmación visual/funcional del usuario para mover la tarea a `Listo`.
+- Next:
+  - Crear commit manual y esperar confirmación del usuario antes de pasar a otra pantalla.

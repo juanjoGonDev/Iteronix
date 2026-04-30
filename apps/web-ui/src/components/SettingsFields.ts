@@ -129,7 +129,10 @@ export class SettingsSelectField extends Component<SettingsSelectFieldProps> {
           }
         }
       }, options.map((option) =>
-        createElement("option", { value: option.value }, [option.label])
+        createElement("option", {
+          value: option.value,
+          selected: option.value === value
+        }, [option.label])
       ))
     });
   }

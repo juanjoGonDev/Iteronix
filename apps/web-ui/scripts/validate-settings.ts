@@ -59,8 +59,9 @@ const ValidationText = {
   AnthropicModelId: "claude-sonnet-4-20250514",
   NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
   SaveNotice: "Settings saved.",
+  SettingsServerBackedNotice: "Provider profiles, workflow limits and notifications persist on the current server workspace.",
   WebhookNotice: "Webhook test payload delivered successfully.",
-  ConnectionNotice: "Connection OK."
+  ConnectionNotice: "Connection OK.",
 } as const;
 
 const ProviderKind = {
@@ -134,7 +135,8 @@ async function validateSettingsScreen(): Promise<void> {
       args: ["--no-sandbox"]
     });
 
-    const page = await browser.newPage();
+    const firstContext = await browser.createBrowserContext();
+    const page = await firstContext.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight
@@ -167,6 +169,7 @@ async function validateSettingsScreen(): Promise<void> {
     await waitForTestId(page, "settings-max-loops");
     await setInputValueByTestId(page, "settings-max-loops", "21");
     await toggleSwitchByTestId(page, "settings-external-calls", false);
+    await toggleSwitchByTestId(page, "settings-infinite-loops", true);
 
     await clickNamedButton(page, "Notifications");
     await waitForTestId(page, "settings-webhook-url");
@@ -194,6 +197,9 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings"
     });
 
+    await clickNamedButton(page, "General");
+    await waitForPageText(page, ValidationText.SettingsServerBackedNotice);
+
     await page.reload({
       waitUntil: "networkidle0"
     });
@@ -210,6 +216,7 @@ async function validateSettingsScreen(): Promise<void> {
     await clickNamedButton(page, "Workflow Limits");
     await waitForInputValue(page, "settings-max-loops", "21");
     await waitForSwitchValue(page, "settings-external-calls", false);
+    await waitForSwitchValue(page, "settings-infinite-loops", true);
 
     await clickNamedButton(page, "Notifications");
     await waitForInputValue(page, "settings-webhook-url", ValidationText.NotificationsUrl);
@@ -220,6 +227,78 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings"
     });
 
+    const secondContext = await browser.createBrowserContext();
+    const secondPage = await secondContext.newPage();
+    await secondPage.setViewport({
+      width: ValidationConfig.ViewportWidth,
+      height: ValidationConfig.ViewportHeight
+    });
+    await seedBrowserStorage(secondPage);
+    await secondPage.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
+      waitUntil: "networkidle0"
+    });
+    await waitForPageTexts(secondPage, [
+      ValidationText.ScreenTitle,
+      ValidationText.AnthropicProfileName
+    ]);
+    await clickElementContainingText(secondPage, "button", ValidationText.AnthropicProfileName);
+    await waitForInputValue(secondPage, "settings-provider-model", ValidationText.AnthropicModelId);
+    await clickNamedButton(secondPage, "General");
+    await waitForPageText(secondPage, ValidationText.SettingsServerBackedNotice);
+    await clickNamedButton(secondPage, "Providers");
+    await captureBrowserValidationScreenshot({
+      page: secondPage,
+      directory: screenshotDirectory,
+      suffix: "settings-second-context-before-remove",
+      artifactName: "settings"
+    });
+    await clickProviderRemoveButton(secondPage, ValidationText.AnthropicProfileName);
+    await captureBrowserValidationScreenshot({
+      page: secondPage,
+      directory: screenshotDirectory,
+      suffix: "settings-second-context-after-remove-click",
+      artifactName: "settings"
+    });
+    await waitForCondition(async () => {
+      const state = await secondPage.evaluate((profileName: string) => {
+        const rows = Array.from(document.querySelectorAll("button"))
+          .map((button) => button.closest("div.rounded-xl, div.border"))
+          .filter((entry): entry is Element => entry instanceof Element);
+        const profileStillListed = rows.some((row) => row.textContent?.includes(profileName));
+        const selectedHeading = Array.from(document.querySelectorAll("h2"))
+          .map((element) => element.textContent?.trim() ?? "")
+          .includes(profileName);
+        return {
+          profileStillListed,
+          selectedHeading
+        };
+      }, ValidationText.AnthropicProfileName);
+
+      return !state.profileStillListed && !state.selectedHeading;
+    }, "anthropic profile removed from second context", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+    await clickNamedButton(secondPage, ValidationText.SaveChanges);
+    await waitForPageText(secondPage, ValidationText.SaveNotice);
+    await captureBrowserValidationScreenshot({
+      page: secondPage,
+      directory: screenshotDirectory,
+      suffix: "settings-second-context-removed",
+      artifactName: "settings"
+    });
+
+    await page.reload({
+      waitUntil: "networkidle0"
+    });
+    await waitForCondition(async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return !bodyText.includes(ValidationText.AnthropicProfileName);
+    }, "anthropic profile removal reflected in first context", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
+
     await page.setViewport({
       width: ValidationConfig.MobileViewportWidth,
       height: ValidationConfig.MobileViewportHeight
@@ -227,10 +306,14 @@ async function validateSettingsScreen(): Promise<void> {
     await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
       waitUntil: "networkidle0"
     });
-    await waitForPageTexts(page, [
-      ValidationText.ScreenTitle,
-      ValidationText.AnthropicProfileName
-    ]);
+    await waitForPageText(page, ValidationText.ScreenTitle);
+    await waitForCondition(async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return !bodyText.includes(ValidationText.AnthropicProfileName);
+    }, "mobile view reflects persisted provider removal", {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs
+    });
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -243,6 +326,10 @@ async function validateSettingsScreen(): Promise<void> {
       throw new Error(`Expected exactly one webhook test payload, received ${stubServer.state.webhookPayloadCount}.`);
     }
 
+    await secondPage.close();
+    await secondContext.close();
+    await page.close();
+    await firstContext.close();
     console.log("Browser validation passed for settings screen.");
   } finally {
     if (browser) {
@@ -497,6 +584,44 @@ async function clickNamedButton(page: Page, label: string): Promise<void> {
 
   if (!clicked) {
     throw new Error(`Could not click button "${label}".`);
+  }
+}
+
+async function clickProviderRemoveButton(page: Page, profileName: string): Promise<void> {
+  const clicked = await page.evaluate((input: { profileName: string }) => {
+    const buttons = Array.from(document.querySelectorAll("button"));
+    for (const candidate of buttons) {
+      if (!(candidate instanceof HTMLButtonElement) || candidate.disabled) {
+        continue;
+      }
+
+      if ((candidate.textContent?.trim() ?? "") !== "Remove") {
+        continue;
+      }
+
+      let current: HTMLElement | null = candidate;
+      while (current) {
+        const className = current.className;
+        if (
+          typeof className === "string" &&
+          className.includes("border-primary") &&
+          (current.textContent?.includes(input.profileName) ?? false)
+        ) {
+          candidate.click();
+          return true;
+        }
+
+        current = current.parentElement;
+      }
+    }
+
+    return false;
+  }, {
+    profileName
+  });
+
+  if (!clicked) {
+    throw new Error(`Could not click remove for provider "${profileName}".`);
   }
 }
 
