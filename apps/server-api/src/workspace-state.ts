@@ -34,6 +34,10 @@ export type WorkspaceSettingsSnapshot = {
   providerProfiles: ReadonlyArray<WorkspaceProviderProfile>;
   workflowLimits: WorkspaceWorkflowLimits;
   notifications: WorkspaceNotifications;
+  serverConnection: {
+    serverUrl: string;
+    authToken: string;
+  };
 };
 
 export type WorkspaceWorkbenchHistory = {
@@ -75,6 +79,8 @@ const DefaultMaxLoops = 50;
 const JsonIndent = 2;
 const DefaultProviderKind = "codex-cli";
 const DefaultPromptMode = "stdin";
+const DefaultServerUrl = "http://localhost:4000";
+const DefaultAuthToken = "dev-token";
 
 export const createFileWorkspaceStateStore = (
   stateFilePath: string
@@ -222,6 +228,10 @@ const createDefaultSettingsSnapshot = (): WorkspaceSettingsSnapshot => ({
   notifications: {
     soundEnabled: true,
     webhookUrl: ""
+  },
+  serverConnection: {
+    serverUrl: DefaultServerUrl,
+    authToken: DefaultAuthToken
   }
 });
 
@@ -237,7 +247,8 @@ const readSettingsSnapshot = (value: unknown): WorkspaceSettingsSnapshot => {
     profileId: readString(value, "profileId") ?? defaults.profileId,
     providerProfiles: providerProfiles.length > 0 ? providerProfiles : defaults.providerProfiles,
     workflowLimits: readWorkflowLimits(value["workflowLimits"]),
-    notifications: readNotifications(value["notifications"])
+    notifications: readNotifications(value["notifications"]),
+    serverConnection: readServerConnection(value["serverConnection"])
   };
 };
 
@@ -261,6 +272,17 @@ const readNotifications = (value: unknown): WorkspaceNotifications => {
   return {
     soundEnabled: readBoolean(value, "soundEnabled") ?? true,
     webhookUrl: readString(value, "webhookUrl") ?? ""
+  };
+};
+
+const readServerConnection = (value: unknown): WorkspaceSettingsSnapshot["serverConnection"] => {
+  if (!isRecord(value)) {
+    return createDefaultSettingsSnapshot().serverConnection;
+  }
+
+  return {
+    serverUrl: readString(value, "serverUrl") ?? DefaultServerUrl,
+    authToken: readString(value, "authToken") ?? DefaultAuthToken
   };
 };
 

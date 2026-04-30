@@ -62,6 +62,10 @@ describe("workspace state persistence", () => {
           infiniteLoops: true,
           maxLoops: 75,
           externalCalls: false
+        },
+        serverConnection: {
+          serverUrl: "https://server.example.com",
+          authToken: "server-token"
         }
       },
       workbenchHistory: {
@@ -79,7 +83,13 @@ describe("workspace state persistence", () => {
     const raw = await readFile(stateFile, "utf8");
 
     expect(JSON.parse(raw)).toMatchObject({
-      activeProjectId: "project-1"
+      activeProjectId: "project-1",
+      settings: {
+        serverConnection: {
+          serverUrl: "https://server.example.com",
+          authToken: "server-token"
+        }
+      }
     });
     expect(loaded).toEqual(saved);
   });

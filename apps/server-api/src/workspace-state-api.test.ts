@@ -21,6 +21,22 @@ describe("workspace state API contract", () => {
 
     const result = parseWorkspaceStateUpdateRequest({
       activeProjectId: "project-1",
+      settings: {
+        ...currentState.settings,
+        workflowLimits: {
+          infiniteLoops: true,
+          maxLoops: 21,
+          externalCalls: false
+        },
+        notifications: {
+          soundEnabled: false,
+          webhookUrl: "https://hooks.example.com/iteronix"
+        },
+        serverConnection: {
+          serverUrl: "https://server.example.com",
+          authToken: "server-token"
+        }
+      },
       workbenchHistory: {
         runs: [
           {
@@ -38,8 +54,10 @@ describe("workspace state API contract", () => {
     }
 
     expect(result.value.activeProjectId).toBe("project-1");
+    expect(result.value.settings?.workflowLimits.maxLoops).toBe(21);
+    expect(result.value.settings?.notifications.webhookUrl).toBe("https://hooks.example.com/iteronix");
+    expect(result.value.settings?.serverConnection.serverUrl).toBe("https://server.example.com");
     expect(result.value.workbenchHistory?.runs).toHaveLength(1);
-    expect(result.value.settings).toBeUndefined();
   });
 
   it("rejects invalid workspace state update bodies as typed bad requests", () => {

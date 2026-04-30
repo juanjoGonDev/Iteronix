@@ -2121,3 +2121,25 @@
   - Ninguno abierto en `Settings`; pendiente sólo la confirmación visual/funcional del usuario para mover la tarea a `Listo`.
 - Next:
   - Crear commit manual y esperar confirmación del usuario antes de pasar a otra pantalla.
+
+### 2026-04-30 13:58 (Europe/Madrid) — Settings Server Persistence Hardening
+
+- Summary: Endurecida la persistencia server-first de `Settings` para que `Workflow Limits`, `Notifications` y `API Access` formen parte explícita del snapshot de workspace y la UI sólo hidrate caché tras confirmación del backend.
+- Decisions:
+  - Tratar `API Access` como estado compartido del workspace dentro de la pantalla, pero mantener el bootstrap técnico del cliente separado hasta que el resto de pantallas pueda consumir una conexión reactiva.
+  - Evitar escrituras optimistas de caché local antes de `workspace/state/update`; el servidor pasa a ser la única confirmación efectiva del guardado.
+- Changes:
+  - **Updated apps/web-ui/src/shared/settings-storage.ts** y tests: `SettingsSnapshot` ahora incluye `serverConnection`.
+  - **Updated apps/server-api/src/workspace-state.ts** y tests/API contract: el snapshot persistido incluye `serverConnection` tipado.
+  - **Updated apps/web-ui/src/screens/Settings.ts**: el save/reset rehidrata desde la respuesta persistida del servidor en vez de cachear local antes.
+  - **Updated apps/web-ui/scripts/validate-settings.ts**: el navegador verifica `Workflow Limits`, `Notifications` y `API Access` desde un segundo contexto y también sobre el estado crudo persistido en el stub del servidor.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/settings-storage.test.ts apps/server-api/src/workspace-state.test.ts apps/server-api/src/workspace-state-api.test.ts`
+  - `pnpm -C apps/web-ui validate:settings`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - Cambiar `API Access` a un host/token distinto del servidor actual sigue siendo un caso delicado mientras el resto de clientes HTTP de la app lean el bootstrap local; queda acotado a `Settings` por ahora.
+- Next:
+  - Ejecutar gates completos y validaciones relevantes, luego commit manual y revisión del usuario.
+
+

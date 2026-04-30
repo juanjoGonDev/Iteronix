@@ -59,7 +59,7 @@ const ValidationText = {
   AnthropicModelId: "claude-sonnet-4-20250514",
   NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
   SaveNotice: "Settings saved.",
-  SettingsServerBackedNotice: "Provider profiles, workflow limits and notifications persist on the current server workspace.",
+  SettingsServerBackedNotice: "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
   WebhookNotice: "Webhook test payload delivered successfully.",
   ConnectionNotice: "Connection OK.",
 } as const;
@@ -190,6 +190,7 @@ async function validateSettingsScreen(): Promise<void> {
       timeoutMs: ValidationConfig.UiPollingTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs
     });
+    assertPersistedWorkspaceSettings(stubServer.state.workspaceSettings);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -220,6 +221,9 @@ async function validateSettingsScreen(): Promise<void> {
 
     await clickNamedButton(page, "Notifications");
     await waitForInputValue(page, "settings-webhook-url", ValidationText.NotificationsUrl);
+    await clickNamedButton(page, "API Access");
+    await waitForInputValue(page, "settings-server-url", ValidationConfig.StubApiBaseUrl);
+    await waitForInputValue(page, "settings-auth-token", DefaultServerConnection.authToken);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -241,6 +245,18 @@ async function validateSettingsScreen(): Promise<void> {
       ValidationText.ScreenTitle,
       ValidationText.AnthropicProfileName
     ]);
+    await clickNamedButton(secondPage, "Workflow Limits");
+    await waitForInputValue(secondPage, "settings-max-loops", "21");
+    await waitForSwitchValue(secondPage, "settings-external-calls", false);
+    await waitForSwitchValue(secondPage, "settings-infinite-loops", true);
+    await clickNamedButton(secondPage, "Notifications");
+    await waitForInputValue(secondPage, "settings-webhook-url", ValidationText.NotificationsUrl);
+    await waitForSwitchValue(secondPage, "settings-sound-enabled", true);
+    await clickNamedButton(secondPage, "API Access");
+    await waitForInputValue(secondPage, "settings-server-url", ValidationConfig.StubApiBaseUrl);
+    await waitForInputValue(secondPage, "settings-auth-token", DefaultServerConnection.authToken);
+    await clickNamedButton(secondPage, "Providers");
+    await waitForPageText(secondPage, ValidationText.AnthropicProfileName);
     await clickElementContainingText(secondPage, "button", ValidationText.AnthropicProfileName);
     await waitForInputValue(secondPage, "settings-provider-model", ValidationText.AnthropicModelId);
     await clickNamedButton(secondPage, "General");
@@ -549,6 +565,10 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
     notifications: {
       soundEnabled: true,
       webhookUrl: ""
+    },
+    serverConnection: {
+      serverUrl: ValidationConfig.StubApiBaseUrl,
+      authToken: DefaultServerConnection.authToken
     }
   };
 }
@@ -564,6 +584,47 @@ function assertProviderSyncRequest(request: ProviderSettingsRequestRecord | unde
 
   if (request.providerId !== ProviderKind.CodexCli) {
     throw new Error(`Unexpected provider id in provider sync: ${request.providerId}`);
+  }
+}
+
+function assertPersistedWorkspaceSettings(settings: Record<string, unknown>): void {
+  if (!isRecord(settings["workflowLimits"])) {
+    throw new Error("Expected workflow limits to persist in workspace settings.");
+  }
+
+  const workflowLimits = settings["workflowLimits"];
+  if (workflowLimits["maxLoops"] !== 21) {
+    throw new Error(`Expected persisted maxLoops to be 21, received ${String(workflowLimits["maxLoops"])}`);
+  }
+  if (workflowLimits["infiniteLoops"] !== true) {
+    throw new Error("Expected persisted infiniteLoops to be true.");
+  }
+  if (workflowLimits["externalCalls"] !== false) {
+    throw new Error("Expected persisted externalCalls to be false.");
+  }
+
+  if (!isRecord(settings["notifications"])) {
+    throw new Error("Expected notifications to persist in workspace settings.");
+  }
+
+  const notifications = settings["notifications"];
+  if (notifications["webhookUrl"] !== ValidationText.NotificationsUrl) {
+    throw new Error(`Expected persisted webhookUrl to be ${ValidationText.NotificationsUrl}.`);
+  }
+  if (notifications["soundEnabled"] !== true) {
+    throw new Error("Expected persisted soundEnabled to remain true.");
+  }
+
+  if (!isRecord(settings["serverConnection"])) {
+    throw new Error("Expected serverConnection to persist in workspace settings.");
+  }
+
+  const serverConnection = settings["serverConnection"];
+  if (serverConnection["serverUrl"] !== ValidationConfig.StubApiBaseUrl) {
+    throw new Error(`Expected persisted serverUrl to be ${ValidationConfig.StubApiBaseUrl}.`);
+  }
+  if (serverConnection["authToken"] !== DefaultServerConnection.authToken) {
+    throw new Error(`Expected persisted authToken to be ${DefaultServerConnection.authToken}.`);
   }
 }
 

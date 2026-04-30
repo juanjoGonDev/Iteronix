@@ -29,6 +29,8 @@ describe("settings storage", () => {
     expect(snapshot.providerProfiles[0]?.providerKind).toBe(ProviderKind.CodexCli);
     expect(snapshot.workflowLimits.maxLoops).toBe(50);
     expect(snapshot.notifications.soundEnabled).toBe(true);
+    expect(snapshot.serverConnection.serverUrl).toBe("http://localhost:4000");
+    expect(snapshot.serverConnection.authToken).toBe("dev-token");
   });
 
   it("persists settings without storing secrets", () => {
@@ -58,6 +60,10 @@ describe("settings storage", () => {
         notifications: {
           soundEnabled: false,
           webhookUrl: "https://example.com/webhook"
+        },
+        serverConnection: {
+          serverUrl: "https://server.example.com",
+          authToken: "server-token"
         }
       },
       storage
@@ -69,6 +75,8 @@ describe("settings storage", () => {
     expect(reloaded.providerProfiles[0]?.name).toBe("OpenAI planner");
     expect(reloaded.workflowLimits.infiniteLoops).toBe(true);
     expect(reloaded.notifications.webhookUrl).toBe("https://example.com/webhook");
+    expect(reloaded.serverConnection.serverUrl).toBe("https://server.example.com");
+    expect(reloaded.serverConnection.authToken).toBe("server-token");
     expect(JSON.stringify(reloaded)).not.toContain("apiKey");
   });
 

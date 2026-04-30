@@ -26,7 +26,7 @@ import {
 } from "../shared/server-config.js";
 import {
   DefaultSettingsProfileId,
-  createSettingsStorage,
+  createDefaultSettingsSnapshot,
   hydrateSettingsSnapshot,
   type NotificationsSettings,
   type SettingsSnapshot,
@@ -98,12 +98,14 @@ const TestWebhookPayload = {
 } as const;
 
 export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
-  private readonly settingsStorage = createSettingsStorage();
   private readonly settingsClient = createSettingsClient();
   private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
-    const snapshot = createSettingsStorage().load();
+    const snapshot = {
+      ...createDefaultSettingsSnapshot(),
+      serverConnection: readServerConnection()
+    };
     const selectedProviderId = snapshot.providerProfiles[0]?.id ?? null;
 
     super(props, {
@@ -113,7 +115,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       selectedProviderId,
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
-      serverConnection: readServerConnection(),
+      serverConnection: snapshot.serverConnection,
       currentProject: null,
       projectSession: readProjectSession(),
       runtimeProviders: [],
@@ -236,7 +238,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           createElement("div", { className: "flex flex-col gap-1" }, [
             createElement("h2", { className: "text-lg font-semibold text-white" }, ["Persistence policy"]),
             createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Provider profiles, workflow limits and notifications persist on the current server workspace. Server URL and auth token remain per-device connection settings. Secrets stay session-only in the browser."
+              "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace. Session-only provider secrets stay in the browser."
             ])
           ]),
           createElement(StatusBadge, { status: "info" }, ["web mode"])
@@ -245,7 +247,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           renderReadOnlyCell("Provider profiles", String(this.state.providerProfiles.length)),
           renderReadOnlyCell("Current namespace", this.state.profileId || DefaultSettingsProfileId),
           renderReadOnlyCell("Sound notifications", this.state.notifications.soundEnabled ? "Enabled" : "Disabled"),
-          renderReadOnlyCell("External calls", this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked")
+          renderReadOnlyCell("External calls", this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked"),
+          renderReadOnlyCell("Workspace server", this.state.serverConnection.serverUrl)
         ]),
         createElement("div", {
           className: "mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
@@ -547,7 +550,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       createElement("div", { className: "flex flex-col gap-1" }, [
         createElement("h2", { className: "text-lg font-semibold text-white" }, ["API access"]),
         createElement("p", { className: "text-sm text-text-secondary" }, [
-          "These values back the existing web UI connection contract and are reused by every server-first screen."
+          "These values are part of the shared workspace snapshot so every client connected to the same server sees the same API target and token."
         ])
       ]),
       createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
@@ -647,7 +650,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         providerProfiles: snapshot.providerProfiles,
         selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
         workflowLimits: snapshot.workflowLimits,
-        notifications: snapshot.notifications
+        notifications: snapshot.notifications,
+        serverConnection: snapshot.serverConnection
       });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
@@ -847,14 +851,28 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         profileId: this.state.profileId || DefaultSettingsProfileId,
         providerProfiles: this.state.providerProfiles,
         workflowLimits: this.state.workflowLimits,
-        notifications: this.state.notifications
+        notifications: this.state.notifications,
+        serverConnection: this.state.serverConnection
       };
 
-      this.settingsStorage.save(snapshot);
-      await this.workspaceStateClient.update({
+      const workspaceState = await this.workspaceStateClient.update({
         settings: snapshot
       });
-      writeServerConnection(this.state.serverConnection);
+      hydrateWorkspaceStateClients(workspaceState);
+      const persistedSettings = workspaceState.settings;
+      const selectedProviderId = persistedSettings.providerProfiles.some(
+        (profile) => profile.id === this.state.selectedProviderId
+      )
+        ? this.state.selectedProviderId
+        : persistedSettings.providerProfiles[0]?.id ?? null;
+      this.setState({
+        profileId: persistedSettings.profileId,
+        providerProfiles: persistedSettings.providerProfiles,
+        selectedProviderId,
+        workflowLimits: persistedSettings.workflowLimits,
+        notifications: persistedSettings.notifications,
+        serverConnection: persistedSettings.serverConnection
+      });
 
       let syncedCount = 0;
       if (this.state.currentProject) {
@@ -894,21 +912,22 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       return;
     }
 
-    const snapshot = this.settingsStorage.reset();
-    const serverConnection = writeServerConnection(DefaultServerConnection);
+    const snapshot = createDefaultSettingsSnapshot();
 
     try {
-      await this.workspaceStateClient.update({
+      const workspaceState = await this.workspaceStateClient.update({
         settings: snapshot
       });
+      hydrateWorkspaceStateClients(workspaceState);
+      const persistedSettings = workspaceState.settings;
       this.setState({
         activeTab: "provider",
-        profileId: snapshot.profileId,
-        providerProfiles: snapshot.providerProfiles,
-        selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
-        workflowLimits: snapshot.workflowLimits,
-        notifications: snapshot.notifications,
-        serverConnection,
+        profileId: persistedSettings.profileId,
+        providerProfiles: persistedSettings.providerProfiles,
+        selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
+        workflowLimits: persistedSettings.workflowLimits,
+        notifications: persistedSettings.notifications,
+        serverConnection: persistedSettings.serverConnection,
         sessionSecrets: {}
       });
       this.pushToast("success", "Settings restored to defaults.");
