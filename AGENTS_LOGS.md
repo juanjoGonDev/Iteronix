@@ -2273,3 +2273,26 @@
   - El `workspaceId` sigue derivándose en la UI desde catálogo/workspace actual hasta que el servidor exponga un identificador canónico directo.
 - Next:
   - Esperar validación visual del usuario para mantener `06.3` en progreso o pasar a `06.4` si el editor base queda aceptado.
+### 2026-05-06 23:42 (Europe/Madrid) — Workflows 06.3 Connection UX Refinement
+
+- Summary: Refinada la UX de conexión de nodos en `Workflows` para acercarla al comportamiento de `n8n` antes de abrir `06.4`.
+- Decisions:
+  - Mantener el fallback por click-to-connect, pero promover `drag-to-connect` como interacción principal.
+  - Resolver el preview temporal del cable y el hover de puertos dentro del canvas actual sin cambiar todavía el contrato de edges o el mapping de `06.4`.
+  - Permitir un ajuste mínimo en el primitive `Component` para soportar `mouseenter` y `mouseleave`, porque el hover de puertos depende de ello.
+- Changes:
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: puertos input/output más visibles, estados hover/active, hint inline, preview wire temporal, cancelación con `Esc`, y soporte de drag-to-connect n8n-like.
+  - **Updated apps/web-ui/src/shared/Component.ts**: soporte de `onMouseEnter` y `onMouseLeave` en el helper DOM compartido.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: la validación browser ahora comprueba hint + preview y realiza la conexión mediante drag real antes de guardar y recargar.
+  - **Updated PLAN.md**: documentado el refinamiento de UX de conexión previo a `06.4`.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - El editor sigue sin mapping visual de datos por edge ni editor JSON profundo; eso permanece en `06.4`.
+  - La interacción ya es n8n-like en conexión básica, pero aún no hay fan-out/fan-in avanzado con tooling semántico adicional sobre cada edge.
+- Next:
+  - Esperar validación visual del usuario sobre `06.3` ya refinada; si queda aceptada, pasar a `06.4` con contratos JSON, mapping y guardrails reutilizables.

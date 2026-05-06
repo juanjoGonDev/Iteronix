@@ -60,6 +60,8 @@ const ResponseHeader = {
 const WorkflowSelector = {
   Root: "workflows-editor-root",
   CanvasViewport: "workflows-canvas-viewport",
+  ConnectionHint: "workflows-connection-hint",
+  ConnectionPreview: "workflows-connection-preview",
   WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowNameInput: "workflows-name-input",
@@ -236,7 +238,9 @@ const ValidationText = {
   ProviderNodeLabel: "Codex run",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
-  ConnectionAddedNotice: "Connection added."
+  ConnectionAddedNotice: "Connection added.",
+  ConnectionHintTitle: "Connect nodes",
+  ConnectionModeTitle: "Connection mode"
 } as const;
 
 const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
@@ -293,6 +297,8 @@ async function validateWorkflowsScreen(): Promise<void> {
 
     await clickByTestId(page, WorkflowSelector.WorkflowCreate);
     await waitForPageText(page, ValidationText.WorkflowCreatedNotice);
+    await waitForTestId(page, WorkflowSelector.ConnectionHint);
+    await waitForPageText(page, ValidationText.ConnectionHintTitle);
 
     await clickByTestId(page, WorkflowSelector.SectionNodes);
     await waitForNodePalette(page);
@@ -323,8 +329,10 @@ async function validateWorkflowsScreen(): Promise<void> {
       intervalMs: ValidationConfig.UiPollingIntervalMs
     });
 
-    await clickPortWithinNodeCard(page, triggerCardTestId, "output · Run");
-    await clickPortWithinNodeCard(page, promptCardTestId, "input · Context");
+    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await waitForPageText(page, ValidationText.ConnectionModeTitle);
+    await waitForTestId(page, WorkflowSelector.ConnectionPreview);
+    await finishConnectionDragOnNodePort(page, promptCardTestId, "input · Context");
     await waitForPageText(page, ValidationText.ConnectionAddedNotice);
 
     await clickCanvasBackground(page);
@@ -997,34 +1005,103 @@ async function dragNodeCard(
   }
 }
 
-async function clickPortWithinNodeCard(
+async function startConnectionDragFromNodePort(
   page: Page,
   testId: string,
   title: string
 ): Promise<void> {
-  const clicked = await page.evaluate(
-    (payload: { testId: string; title: string }) => {
-      const card = document.querySelector(`[data-testid="${payload.testId}"]`);
-      if (!(card instanceof HTMLElement)) {
-        return false;
-      }
-      const port = Array.from(card.querySelectorAll("button")).find(
-        (button) => button.getAttribute("title") === payload.title
-      );
-      if (!(port instanceof HTMLButtonElement)) {
-        return false;
-      }
-      port.click();
-      return true;
-    },
-    {
-      testId,
-      title
+  const started = await page.evaluate((payload: { testId: string; title: string; viewportTestId: string }) => {
+    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
+    if (!(card instanceof HTMLElement)) {
+      return false;
     }
-  );
 
-  if (!clicked) {
-    throw new Error(`Could not click port "${title}" in ${testId}.`);
+    const source = Array.from(card.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === payload.title
+    );
+    if (!(source instanceof HTMLButtonElement)) {
+      return false;
+    }
+
+    const rect = source.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+
+    source.dispatchEvent(new MouseEvent("mouseenter", {
+      bubbles: true,
+      clientX,
+      clientY
+    }));
+    source.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      clientX,
+      clientY
+    }));
+    const viewport = document.querySelector(`[data-testid="${payload.viewportTestId}"]`);
+    if (viewport instanceof HTMLElement) {
+      viewport.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: clientX + 120,
+        clientY: clientY + 12
+      }));
+    }
+    return true;
+  }, {
+    testId,
+    title,
+    viewportTestId: WorkflowSelector.CanvasViewport
+  });
+
+  if (!started) {
+    throw new Error(`Could not start a connection drag from ${title} in ${testId}.`);
+  }
+}
+
+async function finishConnectionDragOnNodePort(
+  page: Page,
+  testId: string,
+  title: string
+): Promise<void> {
+  const finished = await page.evaluate((payload: { testId: string; title: string }) => {
+    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
+    if (!(card instanceof HTMLElement)) {
+      return false;
+    }
+
+    const target = Array.from(card.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === payload.title
+    );
+    if (!(target instanceof HTMLButtonElement)) {
+      return false;
+    }
+
+    const rect = target.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+
+    target.dispatchEvent(new MouseEvent("mouseenter", {
+      bubbles: true,
+      clientX,
+      clientY
+    }));
+    target.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      clientX,
+      clientY
+    }));
+    window.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      clientX,
+      clientY
+    }));
+    return true;
+  }, {
+    testId,
+    title
+  });
+
+  if (!finished) {
+    throw new Error(`Could not finish a connection drag on ${title} in ${testId}.`);
   }
 }
 

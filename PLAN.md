@@ -635,6 +635,11 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - The MVP canvas supports pan/zoom, draggable nodes, connectable ports, workflow/node/asset inspectors and responsive compact switching
     - Workflow definition list/create/load/save/delete is wired to the server, and the MVP node palette is visible with unsupported deeper features explicitly disabled with explanation
     - Deterministic browser coverage now exists in `pnpm -C apps/web-ui validate:workflows` for create -> edit -> drag -> connect -> save -> reload
+  - Connection UX refinement completed on `2026-05-06` before `06.4`:
+    - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
+    - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow
+    - The canvas now shows a temporary preview wire plus an inline connection hint panel and clearer footer guidance when no connection is active or when connection mode is armed
+    - Browser validation for `Workflows` now asserts the hint and preview wire during an actual drag connection before save/reload
   - Phase decomposition created in Notion on `2026-05-06`:
     - `06.1 Workflows contracts and MVP boundary lock`
     - `06.2 Server-first workflow persistence and reusable asset model`

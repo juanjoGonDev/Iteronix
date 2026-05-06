@@ -60,6 +60,8 @@ const WorkflowScreenSelector = {
   WorkflowSave: "workflows-save",
   WorkflowDelete: "workflows-delete",
   WorkflowSelect: "workflows-select",
+  ConnectionHint: "workflows-connection-hint",
+  ConnectionPreview: "workflows-connection-preview",
   SectionWorkflows: "workflows-section-definitions",
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
@@ -109,9 +111,22 @@ type WorkflowSelection =
   | { type: "node"; id: string }
   | { type: "asset"; id: string };
 
+type PortSide = "input" | "output";
+
 type PendingConnection = {
   nodeId: string;
   portId: string;
+};
+
+type HoveredPort = {
+  nodeId: string;
+  portId: string;
+  side: PortSide;
+};
+
+type ConnectionPreviewPoint = {
+  x: number;
+  y: number;
 };
 
 interface WorkflowsScreenState {
@@ -130,6 +145,8 @@ interface WorkflowsScreenState {
   dirtyWorkflow: boolean;
   dirtyAssetIds: ReadonlyArray<string>;
   pendingConnection: PendingConnection | null;
+  hoveredPort: HoveredPort | null;
+  connectionPreviewPoint: ConnectionPreviewPoint | null;
   guardrailAttachAssetId: string | null;
   errorMessage: string | null;
   noticeMessage: string | null;
@@ -140,6 +157,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private readonly workflowClient = createWorkflowClient();
   private draggingNodeId: string | null = null;
   private dragPointerOffset: { x: number; y: number } | null = null;
+  private connectionDragging = false;
+  private suppressNextPortClick = false;
   private panning = false;
   private panOrigin: { x: number; y: number } | null = null;
   private panViewportOrigin: WorkflowViewportRecord | null = null;
@@ -161,6 +180,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       dirtyWorkflow: false,
       dirtyAssetIds: [],
       pendingConnection: null,
+      hoveredPort: null,
+      connectionPreviewPoint: null,
       guardrailAttachAssetId: null,
       errorMessage: null,
       noticeMessage: null
@@ -171,6 +192,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("mousemove", this.handleGlobalMouseMove);
     window.addEventListener("mouseup", this.handleGlobalMouseUp);
+    window.addEventListener("keydown", this.handleGlobalKeyDown);
     void this.hydrateState();
   }
 
@@ -178,6 +200,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("mousemove", this.handleGlobalMouseMove);
     window.removeEventListener("mouseup", this.handleGlobalMouseUp);
+    window.removeEventListener("keydown", this.handleGlobalKeyDown);
   }
 
   override render(): HTMLElement {
@@ -599,6 +622,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private renderCanvasPanel(): HTMLElement {
     const workflow = this.state.draftWorkflow;
     const viewport = workflow?.viewport ?? { x: 0, y: 0, zoom: 1 };
+    const previewPath = workflow ? this.readConnectionPreviewPath(workflow) : null;
 
     return createElement("section", {
       className: "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#11161d]"
@@ -608,6 +632,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         ? createElement("div", {
             className: "relative min-h-0 flex-1 overflow-hidden",
             onMouseDown: (event: Event) => this.handleCanvasMouseDown(event as MouseEvent),
+            onMouseMove: (event: Event) => this.handleCanvasMouseMove(event as MouseEvent),
             onWheel: (event: Event) => this.handleCanvasWheel(event as WheelEvent),
             "data-testid": WorkflowScreenSelector.CanvasViewport,
             style: readCanvasBackgroundStyle(viewport)
@@ -622,13 +647,43 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               }, [
                 createElement("g", {
                   transform: `translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`
-                }, [workflow.edges.map((edge) => this.renderEdgePath(edge, workflow.nodes))])
+                }, [
+                  workflow.edges.map((edge) => this.renderEdgePath(edge, workflow.nodes)),
+                  previewPath
+                    ? createElement("g", {
+                        "data-testid": WorkflowScreenSelector.ConnectionPreview
+                      }, [
+                        createElement("path", {
+                          d: previewPath.path,
+                          stroke: previewPath.stroke,
+                          "stroke-width": "3",
+                          "stroke-linecap": "round",
+                          "stroke-dasharray": "10 8",
+                          fill: "none"
+                        }),
+                        createElement("circle", {
+                          cx: String(previewPath.target.x),
+                          cy: String(previewPath.target.y),
+                          r: "8",
+                          fill: previewPath.stroke,
+                          opacity: "0.28"
+                        }),
+                        createElement("circle", {
+                          cx: String(previewPath.target.x),
+                          cy: String(previewPath.target.y),
+                          r: "3.5",
+                          fill: previewPath.stroke
+                        })
+                      ])
+                    : ""
+                ])
               ]),
               createElement("div", {
                 className: "absolute inset-0",
                 style: `transform: translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom}); transform-origin: 0 0;`
               }, [workflow.nodes.map((node) => this.renderCanvasNode(node))])
             ]),
+            this.renderConnectionHint(),
             this.renderCanvasFooter()
           ])
         : createElement("div", {
@@ -652,7 +707,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         this.state.pendingConnection
           ? createElement(StatusBadge, {
               status: "warning"
-            }, ["Connect to an input port"])
+            }, ["Select an input port"])
+          : createElement(StatusBadge, {
+              status: "info"
+            }, ["Click output to connect"])
+      ]),
+      createElement("div", { className: "flex min-w-0 items-center gap-3" }, [
+        this.state.pendingConnection
+          ? createElement("span", { className: "truncate text-xs text-amber-200" }, [
+              "Connection mode active. Choose a compatible input port or press Esc to cancel."
+            ])
           : ""
       ]),
       createElement("div", { className: "flex items-center gap-2" }, [
@@ -683,23 +747,47 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
   private renderCanvasFooter(): HTMLElement {
     const viewport = this.state.draftWorkflow?.viewport;
+    const footerLabel = this.readCanvasFooterLabel();
 
     return createElement("div", {
       className: "absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-border-dark bg-[#151a20] px-3 py-2 text-xs text-text-secondary"
     }, [
       createElement("span", {}, [viewport ? `${Math.round(viewport.zoom * 100)}%` : "100%"]),
       createElement("span", { className: "text-slate-500" }, ["•"]),
-      createElement("span", {}, [this.panning ? "Panning" : this.draggingNodeId ? "Dragging node" : "Drag canvas or nodes"])
+      createElement("span", {}, [footerLabel])
+    ]);
+  }
+
+  private renderConnectionHint(): HTMLElement {
+    const hintTitle = this.state.pendingConnection
+      ? "Connection mode"
+      : "Connect nodes";
+    const hintBody = this.state.pendingConnection
+      ? "Pick an input port on another node. Hover highlights valid targets and the preview wire follows the cursor."
+      : "Start from any output port, then click a target input port. Ports stay visible on every node so the graph behaves more like n8n.";
+
+    return createElement("div", {
+      className: "pointer-events-none absolute left-4 top-4 max-w-md rounded-xl border border-border-dark bg-[#151a20]/95 px-4 py-3 shadow-[0_12px_32px_rgba(3,7,18,0.28)]",
+      "data-testid": WorkflowScreenSelector.ConnectionHint
+    }, [
+      createElement("div", { className: "flex items-center gap-2" }, [
+        createElement("span", {
+          className: `material-symbols-outlined text-[18px] ${this.state.pendingConnection ? "text-amber-300" : "text-primary"}`
+        }, [this.state.pendingConnection ? "alt_route" : "tips_and_updates"]),
+        createElement("span", { className: "text-sm font-semibold text-white" }, [hintTitle])
+      ]),
+      createElement("p", { className: "mt-2 text-xs leading-5 text-text-secondary" }, [hintBody])
     ]);
   }
 
   private renderCanvasNode(node: WorkflowNodeRecord): HTMLElement {
     const selected = this.state.selection.type === "node" && this.state.selection.id === node.id;
     const asset = node.config.assetId ? this.state.assets.find((entry) => entry.id === node.config.assetId) ?? null : null;
+    const canAcceptConnection = this.state.pendingConnection !== null && node.inputPorts.length > 0;
 
     return createElement("div", {
       key: node.id,
-      className: `absolute flex flex-col rounded-lg border bg-[#1a1f27] shadow-[0_8px_24px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : "border-border-dark hover:border-slate-500"}`,
+      className: `absolute flex flex-col rounded-xl border bg-[#1a1f27] shadow-[0_8px_24px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : canAcceptConnection ? "border-slate-500/90 shadow-[0_10px_30px_rgba(59,130,246,0.12)]" : "border-border-dark hover:border-slate-500"}`,
       style: `left:${node.position.x}px; top:${node.position.y}px; width:${node.width}px;`,
       dataset: {
         nodeId: node.id,
@@ -707,7 +795,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       }
     }, [
       createElement("div", {
-        className: `h-1 rounded-t-lg ${readNodeAccentClassName(node.kind)}`
+        className: `h-1.5 rounded-t-xl ${readNodeAccentClassName(node.kind)}`
       }),
       createElement("div", {
         className: "cursor-move px-3 py-3",
@@ -732,6 +820,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           })
         ])
       ]),
+      createElement("div", {
+        className: "flex items-center justify-between border-t border-border-dark/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+      }, [
+        createElement("span", {}, [node.inputPorts.length === 0 ? "No inputs" : `${node.inputPorts.length} input${node.inputPorts.length === 1 ? "" : "s"}`]),
+        createElement("span", {}, [node.outputPorts.length === 0 ? "No outputs" : `${node.outputPorts.length} output${node.outputPorts.length === 1 ? "" : "s"}`])
+      ]),
       node.inputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "input", index, node.inputPorts.length)),
       node.outputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "output", index, node.outputPorts.length))
     ]);
@@ -741,28 +835,74 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     node: WorkflowNodeRecord,
     portId: string,
     name: string,
-    side: "input" | "output",
+    side: PortSide,
     index: number,
     total: number
   ): HTMLElement {
     const topOffset = readPortOffset(index, total);
     const active = this.state.pendingConnection?.nodeId === node.id && this.state.pendingConnection?.portId === portId;
+    const hovered = this.state.hoveredPort?.nodeId === node.id &&
+      this.state.hoveredPort?.portId === portId &&
+      this.state.hoveredPort.side === side;
+    const compatibleTarget = side === "input" && this.state.pendingConnection !== null;
+    const incompatiblePort = side === "output" && this.state.pendingConnection !== null && !active;
+    const labelClassName = active
+      ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
+      : hovered
+        ? side === "input"
+          ? "border-primary/60 bg-primary/10 text-white"
+          : "border-emerald-400/60 bg-emerald-400/10 text-white"
+        : compatibleTarget
+          ? "border-primary/30 bg-[#182130] text-slate-100"
+          : "border-border-dark bg-[#11161d] text-text-secondary";
+    const pinClassName = active
+      ? "border-amber-300 bg-amber-400 shadow-[0_0_0_6px_rgba(245,158,11,0.18)]"
+      : hovered
+        ? side === "input"
+          ? "border-sky-200 bg-primary shadow-[0_0_0_6px_rgba(59,130,246,0.18)]"
+          : "border-emerald-200 bg-emerald-400 shadow-[0_0_0_6px_rgba(52,211,153,0.18)]"
+        : compatibleTarget
+          ? "border-sky-300 bg-sky-500/80"
+          : side === "input"
+            ? "border-slate-300 bg-slate-500"
+            : incompatiblePort
+              ? "border-emerald-200/40 bg-emerald-400/40"
+              : "border-emerald-200 bg-emerald-400";
+    const stemClassName = active
+      ? "bg-amber-400/70"
+      : hovered
+        ? side === "input"
+          ? "bg-primary/80"
+          : "bg-emerald-400/80"
+        : compatibleTarget
+          ? "bg-primary/50"
+          : "bg-slate-600";
 
     return createElement("button", {
       type: "button",
       title: `${side} · ${name}`,
-      className: `absolute flex items-center gap-2 ${side === "input" ? "-left-2" : "-right-2"}`,
+      className: `absolute flex items-center gap-2 transition-transform duration-150 ${side === "input" ? "-left-5 pl-1" : "-right-5 pr-1"} ${hovered || active ? "scale-[1.03]" : ""}`,
       style: `top: ${topOffset}px;`,
-      onClick: () => this.handlePortClick(node.id, portId, side)
+      onClick: () => this.handlePortClick(node.id, portId, side),
+      onMouseDown: (event: Event) => this.handlePortMouseDown(event as MouseEvent, node.id, portId, side),
+      onMouseUp: (event: Event) => this.handlePortMouseUp(event as MouseEvent, node.id, portId, side),
+      onMouseEnter: () => this.handlePortHover(node.id, portId, side),
+      onMouseLeave: () => this.handlePortHoverEnd(node.id, portId, side)
     }, [
       side === "output"
-        ? createElement("span", { className: "rounded-md bg-[#11161d] px-2 py-1 text-[10px] uppercase tracking-wide text-text-secondary" }, [name])
+        ? createElement("span", { className: `rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${labelClassName}` }, [name])
         : "",
       createElement("span", {
-        className: `block h-4 w-4 rounded-full border-2 border-[#11161d] ${active ? "bg-primary" : side === "input" ? "bg-slate-400" : "bg-emerald-400"}`
+        className: `block h-px w-3 ${stemClassName}`
+      }),
+      createElement("span", {
+        className: `block h-5 w-5 rounded-full border-2 transition-all duration-150 ${pinClassName}`
+      }),
+      createElement("span", {
+        className: `block h-px w-3 ${stemClassName}`
       }),
       side === "input"
-        ? createElement("span", { className: "rounded-md bg-[#11161d] px-2 py-1 text-[10px] uppercase tracking-wide text-text-secondary" }, [name])
+        ? createElement("span", { className: `rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${labelClassName}` }, [name])
         : ""
     ]);
   }
@@ -779,24 +919,71 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
     const sourcePortIndex = sourceNode.outputPorts.findIndex((port) => port.id === edge.sourcePortId);
     const targetPortIndex = targetNode.inputPorts.findIndex((port) => port.id === edge.targetPortId);
-    const source = {
-      x: sourceNode.position.x + sourceNode.width + 8,
-      y: sourceNode.position.y + readPortOffset(Math.max(sourcePortIndex, 0), sourceNode.outputPorts.length) + 8
-    };
-    const target = {
-      x: targetNode.position.x - 8,
-      y: targetNode.position.y + readPortOffset(Math.max(targetPortIndex, 0), targetNode.inputPorts.length) + 8
-    };
-    const delta = Math.max(96, Math.abs(target.x - source.x) / 2);
-    const path = `M ${source.x} ${source.y} C ${source.x + delta} ${source.y}, ${target.x - delta} ${target.y}, ${target.x} ${target.y}`;
+    const source = readPortAnchorPoint(sourceNode, "output", Math.max(sourcePortIndex, 0), sourceNode.outputPorts.length);
+    const target = readPortAnchorPoint(targetNode, "input", Math.max(targetPortIndex, 0), targetNode.inputPorts.length);
+    const path = readEdgeCurvePath(source, target);
 
     return createElement("path", {
       key: edge.id,
       d: path,
-      stroke: "#5f6b79",
-      "stroke-width": "2",
+      stroke: "#6f7f92",
+      "stroke-width": "2.5",
+      "stroke-linecap": "round",
       fill: "none"
     });
+  }
+
+  private readConnectionPreviewPath(
+    workflow: WorkflowDefinitionUpsertInput
+  ): { path: string; stroke: string; target: ConnectionPreviewPoint } | null {
+    const source = this.state.pendingConnection;
+    if (!source) {
+      return null;
+    }
+
+    const sourceNode = workflow.nodes.find((node) => node.id === source.nodeId);
+    if (!sourceNode) {
+      return null;
+    }
+
+    const sourcePortIndex = sourceNode.outputPorts.findIndex((port) => port.id === source.portId);
+    if (sourcePortIndex < 0) {
+      return null;
+    }
+
+    const sourcePoint = readPortAnchorPoint(sourceNode, "output", sourcePortIndex, sourceNode.outputPorts.length);
+    const hoveredInput = this.state.hoveredPort?.side === "input" ? this.state.hoveredPort : null;
+    const targetPoint = hoveredInput
+      ? readHoveredInputAnchorPoint(workflow.nodes, hoveredInput)
+      : this.state.connectionPreviewPoint;
+
+    if (!targetPoint) {
+      return null;
+    }
+
+    return {
+      path: readEdgeCurvePath(sourcePoint, targetPoint),
+      stroke: hoveredInput ? "#60a5fa" : "#f59e0b",
+      target: targetPoint
+    };
+  }
+
+  private readCanvasFooterLabel(): string {
+    if (this.panning) {
+      return "Panning canvas";
+    }
+
+    if (this.draggingNodeId) {
+      return "Dragging node";
+    }
+
+    if (this.state.pendingConnection) {
+      return this.state.hoveredPort?.side === "input"
+        ? "Release the click flow on this input to create the connection"
+        : "Connection mode active";
+    }
+
+    return "Drag the canvas, drag nodes, or click outputs to start a connection";
   }
 
   private renderInspectorPanel(): HTMLElement {
@@ -1712,7 +1899,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       y: event.clientY
     };
     this.panViewportOrigin = { ...viewport };
-    this.setState({ selection: { type: "workflow", id: this.readCurrentWorkflowRecord()?.id ?? null } });
+    this.setState({
+      selection: { type: "workflow", id: this.readCurrentWorkflowRecord()?.id ?? null },
+      pendingConnection: null,
+      hoveredPort: null,
+      connectionPreviewPoint: null
+    });
   }
 
   private handleCanvasWheel(event: WheelEvent): void {
@@ -1724,28 +1916,54 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.handleZoom(event.deltaY > 0 ? -0.08 : 0.08);
   }
 
+  private handleCanvasMouseMove(event: MouseEvent): void {
+    if (!this.state.pendingConnection || !this.state.draftWorkflow) {
+      return;
+    }
+
+    const previewPoint = this.readCanvasPoint(event.clientX, event.clientY);
+    if (!previewPoint) {
+      return;
+    }
+
+    this.setState({
+      connectionPreviewPoint: previewPoint
+    });
+  }
+
   private handlePortClick(
     nodeId: string,
     portId: string,
-    side: "input" | "output"
+    side: PortSide
   ): void {
+    if (this.suppressNextPortClick) {
+      this.suppressNextPortClick = false;
+      return;
+    }
+
     if (!this.state.draftWorkflow) {
       return;
     }
 
     if (side === "output") {
-      this.setState({
-        pendingConnection: {
-          nodeId,
-          portId
-        },
-        selection: { type: "node", id: nodeId }
-      });
+      const isActiveSource = this.state.pendingConnection?.nodeId === nodeId &&
+        this.state.pendingConnection?.portId === portId;
+      if (isActiveSource) {
+        this.setState({
+          pendingConnection: null,
+          hoveredPort: null,
+          connectionPreviewPoint: null,
+          noticeMessage: "Connection mode cancelled.",
+          errorMessage: null
+        });
+        return;
+      }
+
+      this.startConnectionMode(nodeId, portId);
       return;
     }
 
-    const source = this.state.pendingConnection;
-    if (!source) {
+    if (!this.state.pendingConnection) {
       this.setState({
         noticeMessage: "Choose an output port first.",
         errorMessage: null
@@ -1753,6 +1971,95 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       return;
     }
 
+    this.completeConnection(nodeId, portId);
+  }
+
+  private handlePortMouseDown(
+    event: MouseEvent,
+    nodeId: string,
+    portId: string,
+    side: PortSide
+  ): void {
+    if (side !== "output") {
+      return;
+    }
+
+    event.preventDefault();
+    this.suppressNextPortClick = true;
+    this.connectionDragging = true;
+    this.startConnectionMode(nodeId, portId);
+  }
+
+  private handlePortMouseUp(
+    event: MouseEvent,
+    nodeId: string,
+    portId: string,
+    side: PortSide
+  ): void {
+    if (side !== "input" || !this.connectionDragging || this.state.pendingConnection === null) {
+      return;
+    }
+
+    event.preventDefault();
+    this.suppressNextPortClick = true;
+    this.connectionDragging = false;
+    this.completeConnection(nodeId, portId);
+  }
+
+  private handlePortHover(
+    nodeId: string,
+    portId: string,
+    side: PortSide
+  ): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    const nextHoveredPort: HoveredPort = {
+      nodeId,
+      portId,
+      side
+    };
+
+    const nextState: Partial<WorkflowsScreenState> = {
+      hoveredPort: nextHoveredPort
+    };
+
+    if (this.state.pendingConnection && side === "input") {
+      const point = readHoveredInputAnchorPoint(this.state.draftWorkflow.nodes, nextHoveredPort);
+      if (point) {
+        nextState.connectionPreviewPoint = point;
+      }
+    }
+
+    this.setState(nextState);
+  }
+
+  private handlePortHoverEnd(
+    nodeId: string,
+    portId: string,
+    side: PortSide
+  ): void {
+    const hoveredPort = this.state.hoveredPort;
+    if (!hoveredPort) {
+      return;
+    }
+
+    if (hoveredPort.nodeId !== nodeId || hoveredPort.portId !== portId || hoveredPort.side !== side) {
+      return;
+    }
+
+    this.setState({
+      hoveredPort: null
+    });
+  }
+
+  private completeConnection(nodeId: string, portId: string): void {
+    if (!this.state.draftWorkflow || !this.state.pendingConnection) {
+      return;
+    }
+
+    const source = this.state.pendingConnection;
     const nextDefinition = connectWorkflowNodes(this.state.draftWorkflow, {
       sourceNodeId: source.nodeId,
       sourcePortId: source.portId,
@@ -1762,8 +2069,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.updateDraftWorkflow(nextDefinition, { type: "node", id: nodeId });
     this.setState({
       pendingConnection: null,
+      hoveredPort: null,
+      connectionPreviewPoint: null,
       noticeMessage: "Connection added.",
       errorMessage: null
+    });
+  }
+
+  private startConnectionMode(nodeId: string, portId: string): void {
+    this.setState({
+      pendingConnection: {
+        nodeId,
+        portId
+      },
+      selection: { type: "node", id: nodeId },
+      hoveredPort: null,
+      connectionPreviewPoint: this.readPortPreviewOrigin(nodeId, portId)
     });
   }
 
@@ -1936,6 +2257,38 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     return element instanceof HTMLElement ? element.getBoundingClientRect() : null;
   }
 
+  private readCanvasPoint(clientX: number, clientY: number): ConnectionPreviewPoint | null {
+    const viewport = this.state.draftWorkflow?.viewport;
+    const surfaceRect = this.readCanvasSurfaceRect();
+    if (!viewport || !surfaceRect) {
+      return null;
+    }
+
+    return {
+      x: Number((((clientX - surfaceRect.left) - viewport.x) / viewport.zoom).toFixed(2)),
+      y: Number((((clientY - surfaceRect.top) - viewport.y) / viewport.zoom).toFixed(2))
+    };
+  }
+
+  private readPortPreviewOrigin(nodeId: string, portId: string): ConnectionPreviewPoint | null {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow) {
+      return null;
+    }
+
+    const node = workflow.nodes.find((entry) => entry.id === nodeId);
+    if (!node) {
+      return null;
+    }
+
+    const portIndex = node.outputPorts.findIndex((port) => port.id === portId);
+    if (portIndex < 0) {
+      return null;
+    }
+
+    return readPortAnchorPoint(node, "output", portIndex, node.outputPorts.length);
+  }
+
   private readonly handleResize = (): void => {
     const isCompactViewport = readIsCompactViewport();
     if (isCompactViewport === this.state.isCompactViewport) {
@@ -1974,11 +2327,36 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   };
 
   private readonly handleGlobalMouseUp = (): void => {
+    if (this.connectionDragging) {
+      const hoveredPort = this.state.hoveredPort;
+      if (hoveredPort?.side === "input") {
+        this.suppressNextPortClick = true;
+        this.connectionDragging = false;
+        this.completeConnection(hoveredPort.nodeId, hoveredPort.portId);
+      } else {
+        this.connectionDragging = false;
+      }
+    }
+
     this.draggingNodeId = null;
     this.dragPointerOffset = null;
     this.panning = false;
     this.panOrigin = null;
     this.panViewportOrigin = null;
+  };
+
+  private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || this.state.pendingConnection === null) {
+      return;
+    }
+
+    this.setState({
+      pendingConnection: null,
+      hoveredPort: null,
+      connectionPreviewPoint: null,
+      noticeMessage: "Connection mode cancelled.",
+      errorMessage: null
+    });
   };
 }
 
@@ -2050,6 +2428,41 @@ const readPortOffset = (index: number, total: number): number => {
   const spacing = 44;
   const start = 60;
   return start + Math.max(0, Math.floor((3 - safeTotal) * 10)) + index * spacing;
+};
+
+const readPortAnchorPoint = (
+  node: WorkflowNodeRecord,
+  side: PortSide,
+  index: number,
+  total: number
+): ConnectionPreviewPoint => ({
+  x: side === "output" ? node.position.x + node.width + 4 : node.position.x - 4,
+  y: node.position.y + readPortOffset(index, total) + 10
+});
+
+const readHoveredInputAnchorPoint = (
+  nodes: ReadonlyArray<WorkflowNodeRecord>,
+  hoveredPort: HoveredPort
+): ConnectionPreviewPoint | null => {
+  const node = nodes.find((entry) => entry.id === hoveredPort.nodeId);
+  if (!node || hoveredPort.side !== "input") {
+    return null;
+  }
+
+  const index = node.inputPorts.findIndex((port) => port.id === hoveredPort.portId);
+  if (index < 0) {
+    return null;
+  }
+
+  return readPortAnchorPoint(node, "input", index, node.inputPorts.length);
+};
+
+const readEdgeCurvePath = (
+  source: ConnectionPreviewPoint,
+  target: ConnectionPreviewPoint
+): string => {
+  const delta = Math.max(96, Math.abs(target.x - source.x) / 2);
+  return `M ${source.x} ${source.y} C ${source.x + delta} ${source.y}, ${target.x - delta} ${target.y}, ${target.x} ${target.y}`;
 };
 
 const readCanvasBackgroundStyle = (viewport: WorkflowViewportRecord): string => {

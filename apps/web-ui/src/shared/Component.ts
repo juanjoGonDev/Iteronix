@@ -118,6 +118,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('mouseup', value as EventListener);
     } else if (key === 'onMouseMove' && typeof value === 'function') {
       element.addEventListener('mousemove', value as EventListener);
+    } else if (key === 'onMouseEnter' && typeof value === 'function') {
+      element.addEventListener('mouseenter', value as EventListener);
+    } else if (key === 'onMouseLeave' && typeof value === 'function') {
+      element.addEventListener('mouseleave', value as EventListener);
     } else if (key === 'onContextMenu' && typeof value === 'function') {
       element.addEventListener('contextmenu', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {
