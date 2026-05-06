@@ -2143,3 +2143,41 @@
   - Ejecutar gates completos y validaciones relevantes, luego commit manual y revisión del usuario.
 
 
+### 2026-05-06 11:15 (Europe/Madrid) — Settings Accepted, Workflows Scoped
+
+- Summary: El usuario aceptó `Settings`; la tarjeta de Notion se movió a `Listo` y se creó una nueva tarea prioritaria para rehacer `Workflows` como editor integrado estilo n8n.
+- Decisions:
+  - `Settings` deja de ser la pantalla activa y puede tratarse como cerrada.
+  - El siguiente foco único será `Workflows`, no otras pantallas en paralelo.
+  - La especificación de `Workflows` debe vivir primero en Notion y cubrir reutilización, costes, contexto entre proveedores e integraciones tipo n8n.
+- Changes:
+  - **Updated Notion task `02. Settings screen end-to-end`**: movida a `Listo` y comentada como aceptada por el usuario.
+  - **Created Notion task `06. Workflows screen n8n-style integrated editor [P0]`** con alcance detallado y criterios de aceptación.
+  - **Updated PLAN.md** para reflejar la aceptación de `Settings` y el nuevo foco único de `Workflows`.
+- Commands:
+  - `Get-Content AGENTS.md -TotalCount 80`
+  - `Get-Content PLAN.md -Tail 80`
+  - `Get-Content AGENTS_LOGS.md -Tail 60`
+- Issues/Risks:
+  - El tablero actual no tiene propiedad explícita de prioridad; la prioridad P0 quedó reflejada en el título y contenido de la nueva tarea.
+- Next:
+  - Descomponer `Workflows` en fases implementables antes de tocar código UI/server.
+### 2026-05-06 17:35 (Europe/Madrid) — Workflows Scope Extended
+
+- Summary: Añadidos al alcance de `Workflows` el contrato JSON visual por nodo, el mapeo fácil entre output/input y el modelo de múltiples guardrails con severidades y límite de validaciones.
+- Decisions:
+  - Los nodos de prompt/instruction/guardrail deberán declarar un JSON de salida esperado con validación en tiempo real.
+  - Cada nodo podrá tener múltiples guardrails; `error` invalida, `warn` es permisivo y `success` expresa validación positiva.
+  - Cada guardrail tendrá como máximo 4 validaciones, añadidas una a una desde la UI.
+- Changes:
+  - **Updated Notion task `06. Workflows screen n8n-style integrated editor [P0]`** con el nuevo alcance funcional y criterios de aceptación.
+  - **Updated PLAN.md** para reflejar estos requisitos nuevos dentro del foco único de `Workflows`.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - El modelo exacto de mapeo de datos entre nodos y el editor visual del contrato JSON siguen siendo decisiones de diseño abiertas antes de empezar la implementación.
+- Next:
+  - Descomponer `Workflows` en fases y subtareas antes de tocar `apps/web-ui`, `apps/server-api` o `packages/agents`.

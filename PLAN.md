@@ -624,6 +624,23 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Global feedback fix on `2026-04-29`: `PageNoticeStack` now publishes all screen notices as fixed global toasts with auto-dismiss and close controls, and the `Projects` browser validation guards against the legacy inline alert returning
   - Explorer toast gap fix on `2026-04-29`: `Explorer` no longer wraps global notice toasts in a padded inline container, so refreshing/reloading the tree does not leave the old alert space above the editor
   - Server-backed settings hardening on `2026-04-30`: `Workflow Limits`, `Notifications` and `API Access` now persist through the workspace state before the screen hydrates any local cache, and the browser harness verifies those subtabs from a second browser context plus the raw stubbed server snapshot
+  - User acceptance completed on `2026-05-06`: Settings is accepted and can be treated as done; the Notion card was moved to `Listo`
+- [ ] Workflows:
+  - Next single-screen focus after Settings acceptance: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
+  - Task created in Notion on `2026-05-06`: `06. Workflows screen n8n-style integrated editor [P0]`
+  - Required product scope captured in Notion:
+    - Integrated canvas UX like n8n and as shell-integrated as Explorer
+    - Draggable/connectable/reusable nodes with multi-input and multi-output
+    - Reusable prompts, guardrails and instructions across projects with usage graph and delete protection
+    - Provider/model/thinking/temperature/verbosity controls per runnable AI node
+    - Codex CLI default compatibility plus functional test action
+    - Cross-provider/model context continuity within the same workflow
+    - Visual JSON output contracts per prompt/instruction/guardrail node with live validation
+    - Easy output/input concatenation and mapping between connected nodes
+    - Multiple guardrails per node with `warn`/`error`/`success` severities
+    - At most 4 validations per guardrail, added one by one from the UI
+    - Execution alerts, warnings, full history, deletable runs, tokens, runtime and EUR cost totals
+    - Trigger and integration concepts for schedule, events, init and API/app calls
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows
