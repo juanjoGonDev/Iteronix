@@ -692,6 +692,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflow execution history is stored separately from definitions and normalizes runtime cost totals to EUR
     - Cross-provider continuity is server-owned through a normalized `WorkflowContextEnvelope`, not raw transcript reuse
     - Manual trigger is the only active trigger in the MVP; `schedule`, `webhook`, `event` and `init` remain schema-reserved until `06.7`
+  - Connection interaction hardening on `2026-05-07`:
+    - Workflows canvas now uses pointer-native drag/drop for node movement and output-to-input connections
+    - Input-side drop is tolerant on the target node rail instead of requiring pixel-perfect release on the socket
+    - The browser validation harness now emits pointer events so the deterministic flow matches the real editor runtime
   - `06.2` server-first foundation implemented on `2026-05-06`:
     - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
     - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history

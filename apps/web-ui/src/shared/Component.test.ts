@@ -147,6 +147,42 @@ describe("createElement", () => {
     expect(recorded).toContain("listener:scroll");
   });
 
+  it("binds onPointerDown handlers to the native pointerdown event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("button", {
+        onPointerDown: () => {
+          recorded.push("handled");
+        }
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:pointerdown");
+  });
+
   it("passes children into component props when using a component tag", () => {
     const recorded: string[] = [];
     const originalDocument = globalThis.document;

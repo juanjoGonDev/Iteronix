@@ -917,13 +917,17 @@ async function clickCanvasBackground(page: Page): Promise<void> {
       return false;
     }
     const rect = element.getBoundingClientRect();
-    element.dispatchEvent(new MouseEvent("mousedown", {
+    element.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX: rect.left + 40,
       clientY: rect.top + 40
     }));
-    window.dispatchEvent(new MouseEvent("mouseup", {
+    window.dispatchEvent(new PointerEvent("pointerup", {
       bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX: rect.left + 40,
       clientY: rect.top + 40
     }));
@@ -982,18 +986,24 @@ async function dragNodeCard(
     const rect = handle.getBoundingClientRect();
     const startX = rect.left + rect.width / 2;
     const startY = rect.top + Math.min(rect.height / 2, 24);
-    handle.dispatchEvent(new MouseEvent("mousedown", {
+    handle.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX: startX,
       clientY: startY
     }));
-    window.dispatchEvent(new MouseEvent("mousemove", {
+    window.dispatchEvent(new PointerEvent("pointermove", {
       bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX: startX + payload.deltaX,
       clientY: startY + payload.deltaY
     }));
-    window.dispatchEvent(new MouseEvent("mouseup", {
+    window.dispatchEvent(new PointerEvent("pointerup", {
       bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX: startX + payload.deltaX,
       clientY: startY + payload.deltaY
     }));
@@ -1014,19 +1024,7 @@ async function startConnectionDragFromNodePort(
   testId: string,
   title: string
 ): Promise<void> {
-  const source = await readPortCenter(page, testId, title);
-  await page.mouse.move(source.x, source.y);
-  await page.mouse.down();
-}
-
-async function finishConnectionDragOnNodePort(
-  page: Page,
-  testId: string,
-  title: string
-): Promise<void> {
-  const target = await readPortCenter(page, testId, title);
-  await page.mouse.move(target.x, target.y, { steps: 10 });
-  const released = await page.evaluate((payload: { testId: string; title: string }) => {
+  const started = await page.evaluate((payload: { testId: string; title: string }) => {
     const card = document.querySelector(`[data-testid="${payload.testId}"]`);
     if (!(card instanceof HTMLElement)) {
       return false;
@@ -1040,20 +1038,12 @@ async function finishConnectionDragOnNodePort(
     }
 
     const rect = port.getBoundingClientRect();
-    const clientX = rect.left + rect.width / 2;
+    const clientX = rect.right - Math.min(18, rect.width * 0.14);
     const clientY = rect.top + rect.height / 2;
-    port.dispatchEvent(new MouseEvent("mouseenter", {
+    port.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
-      clientX,
-      clientY
-    }));
-    port.dispatchEvent(new MouseEvent("mouseup", {
-      bubbles: true,
-      clientX,
-      clientY
-    }));
-    window.dispatchEvent(new MouseEvent("mouseup", {
-      bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
       clientX,
       clientY
     }));
@@ -1063,46 +1053,62 @@ async function finishConnectionDragOnNodePort(
     title
   });
 
-  if (!released) {
-    throw new Error(`Could not release the connection on ${title} in ${testId}.`);
+  if (!started) {
+    throw new Error(`Could not start connection drag from ${title} in ${testId}.`);
   }
-
-  await page.mouse.up();
 }
 
-async function readPortCenter(
+async function finishConnectionDragOnNodePort(
   page: Page,
   testId: string,
   title: string
-): Promise<{ x: number; y: number }> {
-  const center = await page.evaluate((payload: { testId: string; title: string }) => {
+): Promise<void> {
+  const finished = await page.evaluate((payload: { testId: string; title: string }) => {
     const card = document.querySelector(`[data-testid="${payload.testId}"]`);
     if (!(card instanceof HTMLElement)) {
-      return null;
+      return false;
     }
 
     const port = Array.from(card.querySelectorAll("button")).find(
       (button) => button.getAttribute("title") === payload.title
     );
     if (!(port instanceof HTMLButtonElement)) {
-      return null;
+      return false;
     }
 
     const rect = port.getBoundingClientRect();
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
-    };
+    const clientX = rect.left + Math.min(18, rect.width * 0.14);
+    const clientY = rect.top + rect.height / 2;
+    window.dispatchEvent(new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      clientX,
+      clientY
+    }));
+    port.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      clientX,
+      clientY
+    }));
+    window.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      clientX,
+      clientY
+    }));
+    return true;
   }, {
     testId,
     title
   });
 
-  if (!center) {
-    throw new Error(`Could not find port "${title}" in ${testId}.`);
+  if (!finished) {
+    throw new Error(`Could not finish connection drag on ${title} in ${testId}.`);
   }
-
-  return center;
 }
 
 async function clickEditButtonWithinNodeCard(

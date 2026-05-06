@@ -2320,3 +2320,27 @@
   - La validación browser del drag usa un release asistido sobre el target para mantenerse determinista; la UX real queda soportada en el canvas.
 - Next:
   - Esperar confirmación visual del usuario sobre el comportamiento de conexión ya alineado con `n8n`; sólo entonces cerrar `06.3` y pasar a `06.4`.
+
+### 2026-05-07 00:49 (Europe/Madrid) — Workflows 06.3 Pointer Event Hardening
+
+- Summary: Endurecida la interacción del canvas de `Workflows` para que el drag de nodos y conexiones use `pointer` como canal principal, eliminando la fragilidad del modelo anterior basado sólo en `mouse`.
+- Decisions:
+  - `Workflows` usa `pointerdown`/`pointermove`/`pointerup` en el canvas y en los puertos de conexión.
+  - El drop de conexiones acepta el carril izquierdo del nodo destino y resuelve el input más cercano por posición vertical.
+  - El harness browser de `validate:workflows` emite `PointerEvent` para validar el mismo modelo de interacción que usa el editor real.
+- Changes:
+  - **Updated apps/web-ui/src/shared/Component.ts** y **apps/web-ui/src/shared/Component.test.ts**: soporte nativo de `onPointerDown`, `onPointerMove` y `onPointerUp`.
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: drag/drop del canvas y conexiones migrado a pointer events; el nodo destino expone un carril de entrada tolerante durante el drag.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: drag de nodos, click de canvas y conexión de puertos alineados con pointer events.
+  - **Updated PLAN.md**: registrada la hardening del modelo de interacción antes de `06.4`.
+- Commands:
+  - `pnpm test -- --run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+- Issues/Risks:
+  - Falta aún validación manual tuya sobre el app real para cerrar `06.3`.
+  - `06.4` sigue pendiente y no se ha abierto en este cambio.
+- Next:
+  - Revalidar gates completas sobre este estado exacto, hacer commit y esperar tu revisión visual del editor.
+
