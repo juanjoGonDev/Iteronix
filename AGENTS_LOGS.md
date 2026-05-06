@@ -2296,3 +2296,27 @@
   - La interacción ya es n8n-like en conexión básica, pero aún no hay fan-out/fan-in avanzado con tooling semántico adicional sobre cada edge.
 - Next:
   - Esperar validación visual del usuario sobre `06.3` ya refinada; si queda aceptada, pasar a `06.4` con contratos JSON, mapping y guardrails reutilizables.
+### 2026-05-07 00:18 (Europe/Madrid) — Workflows 06.3 n8n Drag Behavior Fix
+
+- Summary: Corregido el comportamiento de conexión en `Workflows` tras feedback de uso real; el patrón principal ahora es `drag from output -> drop on input`, y un mismo output puede abrir varias conexiones.
+- Decisions:
+  - El canvas deja de depender del click como interacción primaria para conexiones; el modelo a seguir es el de `n8n`.
+  - Los puertos de entrada con `acceptsMany=true` mantienen múltiples edges entrantes; ya no se reemplazan automáticamente al conectar otro source.
+  - La validación browser deja de apoyarse en el toast de éxito y valida directamente el número de edges renderizados/persistidos.
+- Changes:
+  - **Updated apps/web-ui/src/screens/workflows-editor-state.ts** y test asociado: `connectWorkflowNodes` conserva múltiples entradas cuando el puerto destino acepta varias, y el test cubre el fan-in básico.
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: drag-to-connect reforzado con detección del puerto bajo el cursor en `mouseup`, preview wire siguiendo el cursor y handles de puerto identificables por dataset.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: cobertura de dos conexiones saliendo del mismo trigger output y verificación por edge count en el canvas.
+  - **Updated PLAN.md**: reflejada la corrección del comportamiento n8n-like tras feedback del usuario.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - Sigue pendiente `06.4`: editor visual de contracts JSON, mapping por edge y composición semántica de guardrails.
+  - La validación browser del drag usa un release asistido sobre el target para mantenerse determinista; la UX real queda soportada en el canvas.
+- Next:
+  - Esperar confirmación visual del usuario sobre el comportamiento de conexión ya alineado con `n8n`; sólo entonces cerrar `06.3` y pasar a `06.4`.

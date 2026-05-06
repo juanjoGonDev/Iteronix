@@ -601,12 +601,20 @@ export const connectWorkflowNodes = (
     return stripDefinitionVersionFields(definition);
   }
 
+  const targetNode = definition.nodes.find((node) => node.id === input.targetNodeId);
+  const targetPort = targetNode?.inputPorts.find((port) => port.id === input.targetPortId);
+  const shouldReplaceExistingTargetConnection = targetPort?.acceptsMany === false;
+
   return {
     ...stripDefinitionVersionFields(definition),
     edges: [
-      ...definition.edges.filter((edge) =>
-        !(edge.targetNodeId === input.targetNodeId && edge.targetPortId === input.targetPortId)
-      ),
+      ...definition.edges.filter((edge) => {
+        if (!shouldReplaceExistingTargetConnection) {
+          return true;
+        }
+
+        return !(edge.targetNodeId === input.targetNodeId && edge.targetPortId === input.targetPortId);
+      }),
       {
         id: idFactory(),
         sourceNodeId: input.sourceNodeId,

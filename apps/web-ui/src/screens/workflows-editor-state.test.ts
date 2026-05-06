@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addWorkflowNode,
   WorkflowAssetKind,
   WorkflowNodeKind,
   attachGuardrailToNode,
@@ -96,6 +97,40 @@ describe("workflows editor state", () => {
     expect(moved.nodes[0]?.position).toEqual({ x: 220, y: 140 });
     expect(connected.edges).toHaveLength(1);
     expect(duplicated.edges).toHaveLength(1);
+  });
+
+  it("keeps multiple incoming edges when the target port accepts many", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Multi input"
+    });
+    const withPrompt = addWorkflowNode(definition, WorkflowNodeKind.AssetPrompt, () => "prompt-node");
+    const triggerNode = withPrompt.nodes.find((node) => node.kind === WorkflowNodeKind.TriggerManual);
+    const promptNode = withPrompt.nodes.find((node) => node.kind === WorkflowNodeKind.AssetPrompt);
+    const terminalNode = withPrompt.nodes.find((node) => node.kind === WorkflowNodeKind.TerminalResponse);
+
+    expect(triggerNode).toBeDefined();
+    expect(promptNode).toBeDefined();
+    expect(terminalNode).toBeDefined();
+    if (!triggerNode || !promptNode || !terminalNode) {
+      throw new Error("Expected trigger, prompt and terminal nodes to exist.");
+    }
+
+    const firstConnection = connectWorkflowNodes(withPrompt, {
+      sourceNodeId: triggerNode.id,
+      sourcePortId: triggerNode.outputPorts[0]?.id ?? "",
+      targetNodeId: terminalNode.id,
+      targetPortId: terminalNode.inputPorts[0]?.id ?? ""
+    }, () => "edge-a");
+    const secondConnection = connectWorkflowNodes(firstConnection, {
+      sourceNodeId: promptNode.id,
+      sourcePortId: promptNode.outputPorts[0]?.id ?? "",
+      targetNodeId: terminalNode.id,
+      targetPortId: terminalNode.inputPorts[0]?.id ?? ""
+    }, () => "edge-b");
+
+    expect(secondConnection.edges).toHaveLength(2);
+    expect(secondConnection.edges.map((edge) => edge.id)).toEqual(["edge-a", "edge-b"]);
   });
 
   it("attaches guardrails and removes node edges when a node is deleted", () => {

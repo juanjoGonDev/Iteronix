@@ -640,6 +640,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow
     - The canvas now shows a temporary preview wire plus an inline connection hint panel and clearer footer guidance when no connection is active or when connection mode is armed
     - Browser validation for `Workflows` now asserts the hint and preview wire during an actual drag connection before save/reload
+  - Connection behavior correction completed on `2026-05-07` after real-user feedback:
+    - Dragging now starts directly from the output handle and the preview wire stays attached to the cursor until drop, matching the expected n8n interaction more closely
+    - Reusing the same output handle to create multiple outgoing edges is now allowed when the target ports accept multiple inputs
+    - Browser validation now covers two distinct outgoing connections from the same trigger output before save/reload
   - Phase decomposition created in Notion on `2026-05-06`:
     - `06.1 Workflows contracts and MVP boundary lock`
     - `06.2 Server-first workflow persistence and reusable asset model`

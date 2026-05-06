@@ -333,7 +333,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.ConnectionModeTitle);
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
     await finishConnectionDragOnNodePort(page, promptCardTestId, "input · Context");
-    await waitForPageText(page, ValidationText.ConnectionAddedNotice);
+    await waitForEdgeCount(page, 1);
+    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await waitForTestId(page, WorkflowSelector.ConnectionPreview);
+    await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
+    await waitForEdgeCount(page, 2);
 
     await clickCanvasBackground(page);
     await waitForTestId(page, WorkflowSelector.WorkflowNameInput);
@@ -1010,51 +1014,9 @@ async function startConnectionDragFromNodePort(
   testId: string,
   title: string
 ): Promise<void> {
-  const started = await page.evaluate((payload: { testId: string; title: string; viewportTestId: string }) => {
-    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
-    if (!(card instanceof HTMLElement)) {
-      return false;
-    }
-
-    const source = Array.from(card.querySelectorAll("button")).find(
-      (button) => button.getAttribute("title") === payload.title
-    );
-    if (!(source instanceof HTMLButtonElement)) {
-      return false;
-    }
-
-    const rect = source.getBoundingClientRect();
-    const clientX = rect.left + rect.width / 2;
-    const clientY = rect.top + rect.height / 2;
-
-    source.dispatchEvent(new MouseEvent("mouseenter", {
-      bubbles: true,
-      clientX,
-      clientY
-    }));
-    source.dispatchEvent(new MouseEvent("mousedown", {
-      bubbles: true,
-      clientX,
-      clientY
-    }));
-    const viewport = document.querySelector(`[data-testid="${payload.viewportTestId}"]`);
-    if (viewport instanceof HTMLElement) {
-      viewport.dispatchEvent(new MouseEvent("mousemove", {
-        bubbles: true,
-        clientX: clientX + 120,
-        clientY: clientY + 12
-      }));
-    }
-    return true;
-  }, {
-    testId,
-    title,
-    viewportTestId: WorkflowSelector.CanvasViewport
-  });
-
-  if (!started) {
-    throw new Error(`Could not start a connection drag from ${title} in ${testId}.`);
-  }
+  const source = await readPortCenter(page, testId, title);
+  await page.mouse.move(source.x, source.y);
+  await page.mouse.down();
 }
 
 async function finishConnectionDragOnNodePort(
@@ -1062,29 +1024,30 @@ async function finishConnectionDragOnNodePort(
   testId: string,
   title: string
 ): Promise<void> {
-  const finished = await page.evaluate((payload: { testId: string; title: string }) => {
+  const target = await readPortCenter(page, testId, title);
+  await page.mouse.move(target.x, target.y, { steps: 10 });
+  const released = await page.evaluate((payload: { testId: string; title: string }) => {
     const card = document.querySelector(`[data-testid="${payload.testId}"]`);
     if (!(card instanceof HTMLElement)) {
       return false;
     }
 
-    const target = Array.from(card.querySelectorAll("button")).find(
+    const port = Array.from(card.querySelectorAll("button")).find(
       (button) => button.getAttribute("title") === payload.title
     );
-    if (!(target instanceof HTMLButtonElement)) {
+    if (!(port instanceof HTMLButtonElement)) {
       return false;
     }
 
-    const rect = target.getBoundingClientRect();
+    const rect = port.getBoundingClientRect();
     const clientX = rect.left + rect.width / 2;
     const clientY = rect.top + rect.height / 2;
-
-    target.dispatchEvent(new MouseEvent("mouseenter", {
+    port.dispatchEvent(new MouseEvent("mouseenter", {
       bubbles: true,
       clientX,
       clientY
     }));
-    target.dispatchEvent(new MouseEvent("mouseup", {
+    port.dispatchEvent(new MouseEvent("mouseup", {
       bubbles: true,
       clientX,
       clientY
@@ -1100,9 +1063,46 @@ async function finishConnectionDragOnNodePort(
     title
   });
 
-  if (!finished) {
-    throw new Error(`Could not finish a connection drag on ${title} in ${testId}.`);
+  if (!released) {
+    throw new Error(`Could not release the connection on ${title} in ${testId}.`);
   }
+
+  await page.mouse.up();
+}
+
+async function readPortCenter(
+  page: Page,
+  testId: string,
+  title: string
+): Promise<{ x: number; y: number }> {
+  const center = await page.evaluate((payload: { testId: string; title: string }) => {
+    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
+    if (!(card instanceof HTMLElement)) {
+      return null;
+    }
+
+    const port = Array.from(card.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === payload.title
+    );
+    if (!(port instanceof HTMLButtonElement)) {
+      return null;
+    }
+
+    const rect = port.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }, {
+    testId,
+    title
+  });
+
+  if (!center) {
+    throw new Error(`Could not find port "${title}" in ${testId}.`);
+  }
+
+  return center;
 }
 
 async function clickEditButtonWithinNodeCard(
@@ -1211,6 +1211,18 @@ async function waitForNodeCardCount(page: Page, expectedCount: number): Promise<
   });
 }
 
+async function waitForEdgeCount(page: Page, expectedCount: number): Promise<void> {
+  await waitForCondition(async () => {
+    const count = await page.evaluate(() =>
+      document.querySelectorAll("[data-testid='workflows-edge']").length
+    );
+    return count === expectedCount;
+  }, `workflow edge count ${String(expectedCount)}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
 function assertPersistedWorkflow(state: StubServerState): void {
   if (state.definitions.length !== 1) {
     throw new Error(`Expected one persisted workflow, received ${state.definitions.length}.`);
@@ -1241,8 +1253,8 @@ function assertPersistedWorkflow(state: StubServerState): void {
     throw new Error(`Expected provider node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`);
   }
 
-  if (definition.edges.length !== 1) {
-    throw new Error(`Expected one saved edge, received ${definition.edges.length}.`);
+  if (definition.edges.length !== 2) {
+    throw new Error(`Expected two saved edges, received ${definition.edges.length}.`);
   }
 
   if (state.assets.length !== 1 || state.assets[0]?.kind !== "prompt") {
