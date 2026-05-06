@@ -1,601 +1,2177 @@
-import { Component, createElement, type ComponentProps } from "../shared/Component.js";
 import { Button } from "../components/Button.js";
-import {
-  PageFrame,
-  PageIntro,
-  PageNoticeStack
-} from "../components/PageScaffold.js";
-import {
-  CitationsList,
-  ConfidenceBadge,
-  EmptyStatePanel,
-  EvidenceReportPanel,
-  MemoryList,
-  SectionPanel,
-  WorkflowStepsList,
-  renderWorkbenchMetaCell as renderMetaCell,
-  renderWorkbenchTextField as renderInputField
-} from "../components/WorkbenchPanels.js";
-import { createWorkbenchClient } from "../shared/workbench-client.js";
-import { createWorkbenchHistoryStore } from "../shared/workbench-history.js";
+import { Card, StatusBadge } from "../components/Card.js";
+import { PageNoticeStack } from "../components/PageScaffold.js";
+import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
+import { Component, createElement, type ComponentProps } from "../shared/Component.js";
+import { COMPACT_VIEWPORT_MAX_WIDTH } from "../shared/constants.js";
+import { createWorkflowClient } from "../shared/workflow-client.js";
 import {
   createWorkspaceStateClient,
-  hydrateWorkspaceStateClients
+  type WorkspaceStateSnapshot
 } from "../shared/workspace-state-client.js";
+import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
-  DefaultMemoryQueryLimit,
-  ReviewerDecision,
-  WorkbenchSkillName,
-  type SkillRunResponse,
-  type WorkbenchRunHistoryRecord
-} from "../shared/workbench-types.js";
-import { readServerConnection, writeServerConnection } from "../shared/server-config.js";
+  WorkflowAssetKind,
+  WorkflowAssetScope,
+  WorkflowNodeKind,
+  WorkflowNodeRole,
+  WorkflowReasoningLevel,
+  WorkflowRecordStatus,
+  WorkflowVerbosity,
+  addWorkflowNode,
+  attachGuardrailToNode,
+  connectWorkflowNodes,
+  createEmptyWorkflowDefinition,
+  createWorkflowAssetDraft,
+  detachGuardrailFromNode,
+  moveWorkflowNode,
+  readAssetKindLabel,
+  readAssetScopeLabel,
+  readDefaultWorkflowWorkspaceId,
+  readNodeAccentClassName,
+  readNodeAssetKind,
+  readNodeIcon,
+  readNodeKindLabel,
+  readNodeKindsForPalette,
+  removeWorkflowNode,
+  setWorkflowViewport,
+  stripDefinitionVersionFields,
+  type WorkflowAssetKind as WorkflowAssetKindValue,
+  type WorkflowAssetRecord,
+  type WorkflowAssetScope as WorkflowAssetScopeValue,
+  type WorkflowAssetUsageRecord,
+  type WorkflowAssetUpsertInput,
+  type WorkflowDefinitionRecord,
+  type WorkflowDefinitionUpsertInput,
+  type WorkflowExecutionRecord,
+  type WorkflowNodeKind as WorkflowNodeKindValue,
+  type WorkflowNodeRecord,
+  type WorkflowProviderSelectionRecord,
+  type WorkflowViewportRecord
+} from "./workflows-editor-state.js";
+
+const WorkflowScreenSelector = {
+  Root: "workflows-editor-root",
+  CanvasViewport: "workflows-canvas-viewport",
+  SidebarRail: "workflows-sidebar-rail",
+  SidebarPanel: "workflows-sidebar-panel",
+  InspectorPanel: "workflows-inspector-panel",
+  WorkflowCreate: "workflows-create",
+  WorkflowSave: "workflows-save",
+  WorkflowDelete: "workflows-delete",
+  WorkflowSelect: "workflows-select",
+  SectionWorkflows: "workflows-section-definitions",
+  SectionNodes: "workflows-section-nodes",
+  SectionAssets: "workflows-section-assets",
+  SectionHistory: "workflows-section-history",
+  WorkflowNameInput: "workflows-name-input",
+  WorkflowDescriptionInput: "workflows-description-input",
+  NodeLabelInput: "workflows-node-label-input",
+  NodePalettePrefix: "workflows-node-palette-",
+  AssetCreatePrefix: "workflows-asset-create-",
+  NodeCardPrefix: "workflows-node-card-",
+  InspectorEmpty: "workflows-inspector-empty",
+  CompactSidebar: "workflows-compact-sidebar",
+  CompactCanvas: "workflows-compact-canvas",
+  CompactInspector: "workflows-compact-inspector"
+} as const;
+
+const SidebarSection = {
+  Workflows: "workflows",
+  Nodes: "nodes",
+  Assets: "assets",
+  History: "history"
+} as const;
+
+type SidebarSection = typeof SidebarSection[keyof typeof SidebarSection];
+
+const CompactView = {
+  Sidebar: "sidebar",
+  Canvas: "canvas",
+  Inspector: "inspector"
+} as const;
+
+type CompactView = typeof CompactView[keyof typeof CompactView];
+
+const PendingAction = {
+  Load: "load",
+  CreateWorkflow: "create-workflow",
+  SaveWorkflow: "save-workflow",
+  DeleteWorkflow: "delete-workflow",
+  CreateAsset: "create-asset",
+  DeleteExecution: "delete-execution"
+} as const;
+
+type PendingAction = typeof PendingAction[keyof typeof PendingAction];
+
+type WorkflowSelection =
+  | { type: "workflow"; id: string | null }
+  | { type: "node"; id: string }
+  | { type: "asset"; id: string };
+
+type PendingConnection = {
+  nodeId: string;
+  portId: string;
+};
 
 interface WorkflowsScreenState {
-  serverUrl: string;
-  authToken: string;
-  sessionId: string;
-  skillQuestion: string;
-  workflowQuestion: string;
-  manualReview: boolean;
-  reviewReason: string;
-  latestRun: WorkbenchRunHistoryRecord | null;
-  pendingAction: "connection" | "skill" | "workflow" | "approve" | "deny" | null;
+  currentProject: ProjectRecord | null;
+  workspaceState: WorkspaceStateSnapshot | null;
+  workflows: ReadonlyArray<WorkflowDefinitionRecord>;
+  assets: ReadonlyArray<WorkflowAssetRecord>;
+  assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
+  executions: ReadonlyArray<WorkflowExecutionRecord>;
+  draftWorkflow: WorkflowDefinitionUpsertInput | null;
+  selection: WorkflowSelection;
+  activeSidebarSection: SidebarSection;
+  compactView: CompactView;
+  isCompactViewport: boolean;
+  pendingAction: PendingAction | null;
+  dirtyWorkflow: boolean;
+  dirtyAssetIds: ReadonlyArray<string>;
+  pendingConnection: PendingConnection | null;
+  guardrailAttachAssetId: string | null;
   errorMessage: string | null;
   noticeMessage: string | null;
-  selectedEvidenceSourceId: string | null;
 }
 
 export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenState> {
-  private readonly historyStore = createWorkbenchHistoryStore();
   private readonly workspaceStateClient = createWorkspaceStateClient();
+  private readonly workflowClient = createWorkflowClient();
+  private draggingNodeId: string | null = null;
+  private dragPointerOffset: { x: number; y: number } | null = null;
+  private panning = false;
+  private panOrigin: { x: number; y: number } | null = null;
+  private panViewportOrigin: WorkflowViewportRecord | null = null;
 
   constructor(props: ComponentProps = {}) {
-    super(props);
-    const connection = readServerConnection();
-    const latestRun = this.historyStore.load().runs[0] ?? null;
-    this.state = {
-      serverUrl: connection.serverUrl,
-      authToken: connection.authToken,
-      sessionId: createSessionId(),
-      skillQuestion: "What does Iteronix include?",
-      workflowQuestion: "What is the current AI workbench architecture?",
-      manualReview: true,
-      reviewReason: "",
-      latestRun,
+    super(props, {
+      currentProject: null,
+      workspaceState: null,
+      workflows: [],
+      assets: [],
+      assetUsages: [],
+      executions: [],
+      draftWorkflow: null,
+      selection: { type: "workflow", id: null },
+      activeSidebarSection: SidebarSection.Workflows,
+      compactView: CompactView.Canvas,
+      isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
+      dirtyWorkflow: false,
+      dirtyAssetIds: [],
+      pendingConnection: null,
+      guardrailAttachAssetId: null,
       errorMessage: null,
-      noticeMessage: null,
-      selectedEvidenceSourceId: null
-    };
+      noticeMessage: null
+    });
   }
 
   override onMount(): void {
-    void this.hydrateWorkspaceState();
+    window.addEventListener("resize", this.handleResize);
+    window.addEventListener("mousemove", this.handleGlobalMouseMove);
+    window.addEventListener("mouseup", this.handleGlobalMouseUp);
+    void this.hydrateState();
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("mousemove", this.handleGlobalMouseMove);
+    window.removeEventListener("mouseup", this.handleGlobalMouseUp);
   }
 
   override render(): HTMLElement {
-    return createElement(PageFrame, {}, [
-      createElement(PageIntro, {
-        title: "AI Workbench",
-        description: "Run the example skill, send a workflow through planner, retriever, executor and reviewer, and keep the resulting evidence grounded and inspectable."
-      }),
+    return createElement("div", {
+      className: "flex h-full w-full flex-col bg-[#11161d] text-white",
+      "data-testid": WorkflowScreenSelector.Root
+    }, [
       createElement(PageNoticeStack, {
         errorMessage: this.state.errorMessage,
         noticeMessage: this.state.noticeMessage
       }),
-      createElement("div", { className: "grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]" }, [
-        createElement("div", { className: "flex flex-col gap-6" }, [
-          this.renderConnectionPanel(),
-          this.renderSkillPanel(),
-          this.renderWorkflowPanel()
+      this.renderToolbar(),
+      this.renderSurface()
+    ]);
+  }
+
+  private renderToolbar(): HTMLElement {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    const executionCount = currentWorkflow
+      ? this.state.executions.filter((execution) => execution.workflowId === currentWorkflow.id).length
+      : 0;
+    const hasUnsavedChanges = this.state.dirtyWorkflow || this.state.dirtyAssetIds.length > 0;
+
+    return createElement("div", {
+      className: "flex min-h-14 items-center justify-between gap-4 border-b border-border-dark bg-[#171c22] px-4"
+    }, [
+      createElement("div", { className: "flex min-w-0 items-center gap-3" }, [
+        createElement("div", { className: "flex min-w-0 flex-col" }, [
+          createElement("span", { className: "truncate text-sm font-semibold text-white" }, [
+            currentWorkflow?.name ?? "Workflows"
+          ]),
+          createElement("span", { className: "truncate text-xs text-text-secondary" }, [
+            this.state.currentProject
+              ? `${this.state.currentProject.name} · ${this.state.currentProject.rootPath ?? "workflow-only project"}`
+              : "Select a project from the global sidebar to load the workflow editor."
+          ])
         ]),
-        createElement("div", { className: "flex flex-col gap-6" }, [
-          this.renderLatestRunPanel(),
-          this.renderEvidencePanel()
+        currentWorkflow
+          ? createElement(StatusBadge, {
+              status: hasUnsavedChanges ? "warning" : "success"
+            }, [hasUnsavedChanges ? "unsaved" : "saved"])
+          : "",
+        currentWorkflow
+          ? createElement(StatusBadge, {
+              status: "info"
+            }, [`${executionCount} run${executionCount === 1 ? "" : "s"}`])
+          : ""
+      ]),
+      createElement("div", { className: "flex items-center gap-2" }, [
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled: this.state.currentProject === null || this.state.pendingAction !== null,
+          onClick: () => {
+            void this.handleCreateWorkflow();
+          },
+          children: this.state.pendingAction === PendingAction.CreateWorkflow ? "Creating" : "New workflow",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowCreate
+          }
+        }),
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled: this.state.draftWorkflow === null || this.state.pendingAction !== null || !hasUnsavedChanges,
+          onClick: () => {
+            void this.handleSaveWorkflow();
+          },
+          children: this.state.pendingAction === PendingAction.SaveWorkflow ? "Saving" : "Save",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowSave
+          }
+        }),
+        createElement(Button, {
+          variant: "danger",
+          size: "sm",
+          disabled: currentWorkflow === null || this.state.pendingAction !== null,
+          onClick: () => {
+            void this.handleDeleteWorkflow();
+          },
+          children: this.state.pendingAction === PendingAction.DeleteWorkflow ? "Deleting" : "Delete",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowDelete
+          }
+        })
+      ])
+    ]);
+  }
+
+  private renderSurface(): HTMLElement {
+    if (this.state.currentProject === null) {
+      return createElement("div", {
+        className: "flex flex-1 items-center justify-center p-6"
+      }, [
+        createElement(EmptyStatePanel, {
+          icon: "account_tree",
+          title: "No active project",
+          description: "Open or create a project from the Projects screen. Workflow-only projects are supported, but the editor stays server-first and needs an active project ID."
+        })
+      ]);
+    }
+
+    return createElement("div", {
+      className: "flex min-h-0 flex-1"
+    }, [
+      this.renderActivityRail(),
+      this.shouldShowSidebar() ? this.renderSidebarPanel() : "",
+      this.shouldShowCanvas() ? this.renderCanvasPanel() : "",
+      this.shouldShowInspector() ? this.renderInspectorPanel() : ""
+    ]);
+  }
+
+  private renderActivityRail(): HTMLElement {
+    return createElement("aside", {
+      className: "flex w-12 shrink-0 flex-col items-center border-r border-border-dark bg-[#181d24] py-2",
+      "data-testid": WorkflowScreenSelector.SidebarRail
+    }, [
+      this.renderRailButton("list", "Definitions", this.state.activeSidebarSection === SidebarSection.Workflows, () => this.setState({ activeSidebarSection: SidebarSection.Workflows, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionWorkflows),
+      this.renderRailButton("deployed_code", "Nodes", this.state.activeSidebarSection === SidebarSection.Nodes, () => this.setState({ activeSidebarSection: SidebarSection.Nodes, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionNodes),
+      this.renderRailButton("library_books", "Assets", this.state.activeSidebarSection === SidebarSection.Assets, () => this.setState({ activeSidebarSection: SidebarSection.Assets, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionAssets),
+      this.renderRailButton("history", "History", this.state.activeSidebarSection === SidebarSection.History, () => this.setState({ activeSidebarSection: SidebarSection.History, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionHistory),
+      this.state.isCompactViewport
+        ? createElement("div", { className: "mt-auto flex flex-col gap-1 px-1" }, [
+            this.renderRailButton("left_panel_open", "Sidebar", this.state.compactView === CompactView.Sidebar, () => this.setState({ compactView: CompactView.Sidebar }), WorkflowScreenSelector.CompactSidebar),
+            this.renderRailButton("grid_view", "Canvas", this.state.compactView === CompactView.Canvas, () => this.setState({ compactView: CompactView.Canvas }), WorkflowScreenSelector.CompactCanvas),
+            this.renderRailButton("tune", "Inspector", this.state.compactView === CompactView.Inspector, () => this.setState({ compactView: CompactView.Inspector }), WorkflowScreenSelector.CompactInspector)
+          ])
+        : ""
+    ]);
+  }
+
+  private renderRailButton(
+    icon: string,
+    title: string,
+    active: boolean,
+    onClick: () => void,
+    testId?: string
+  ): HTMLElement {
+    return createElement("button", {
+      type: "button",
+      title,
+      ...(testId ? { "data-testid": testId } : {}),
+      className: `flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${active ? "border-primary/40 bg-primary/10 text-primary" : "border-transparent text-text-secondary hover:bg-[#242b34] hover:text-white"}`,
+      onClick
+    }, [
+      createElement("span", {
+        className: "material-symbols-outlined text-[19px]"
+      }, [icon])
+    ]);
+  }
+
+  private renderSidebarPanel(): HTMLElement {
+    return createElement("aside", {
+      className: this.state.isCompactViewport
+        ? "flex min-h-0 flex-1 flex-col border-r border-border-dark bg-[#1a1f27]"
+        : "flex min-h-0 w-[320px] shrink-0 flex-col border-r border-border-dark bg-[#1a1f27]",
+      "data-testid": WorkflowScreenSelector.SidebarPanel
+    }, [
+      this.renderSidebarHeader(),
+      this.renderSidebarSection()
+    ]);
+  }
+
+  private renderSidebarHeader(): HTMLElement {
+    return createElement("div", {
+      className: "flex items-center justify-between border-b border-border-dark px-3 py-2"
+    }, [
+      createElement("div", { className: "min-w-0 flex-1" }, [
+        createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary" }, [
+          this.state.activeSidebarSection.toUpperCase()
+        ]),
+        createElement("p", { className: "mt-1 truncate text-xs text-slate-400" }, [
+          this.state.currentProject?.name ?? "No project"
         ])
       ])
     ]);
   }
 
-  private renderConnectionPanel(): HTMLElement {
-    return createElement(SectionPanel, {
-      title: "Connection",
-      subtitle: "The workbench uses the same bearer token and base URL stored for the rest of the UI.",
-      actions: createElement(Button, {
-        variant: "secondary",
-        size: "sm",
-        disabled: this.state.pendingAction === "connection",
-        onClick: () => {
-          void this.handleSaveConnection();
-        },
-        children: this.state.pendingAction === "connection" ? "Saving" : "Save"
+  private renderSidebarSection(): HTMLElement {
+    if (this.state.activeSidebarSection === SidebarSection.Nodes) {
+      return this.renderNodePaletteSection();
+    }
+
+    if (this.state.activeSidebarSection === SidebarSection.Assets) {
+      return this.renderAssetLibrarySection();
+    }
+
+    if (this.state.activeSidebarSection === SidebarSection.History) {
+      return this.renderExecutionSection();
+    }
+
+    return this.renderWorkflowListSection();
+  }
+
+  private renderWorkflowListSection(): HTMLElement {
+    return createElement("div", {
+      className: "flex min-h-0 flex-1 flex-col"
+    }, [
+      createElement("div", { className: "border-b border-border-dark px-3 py-3" }, [
+        createElement("label", { className: "flex flex-col gap-2" }, [
+          createElement("span", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, ["Active workflow"]),
+          createElement("select", {
+            className: "h-10 rounded-lg border border-border-dark bg-[#11161d] px-3 text-sm text-white focus:border-primary focus:outline-none",
+            value: this.readCurrentWorkflowRecord()?.id ?? "",
+            "data-testid": WorkflowScreenSelector.WorkflowSelect,
+            onChange: (event: Event) => {
+              const target = event.target;
+              if (target instanceof HTMLSelectElement) {
+                this.handleSelectWorkflow(target.value);
+              }
+            }
+          }, [
+            this.state.workflows.length === 0
+              ? createElement("option", { value: "" }, ["No workflows yet"])
+              : this.state.workflows.map((workflow) =>
+                  createElement("option", {
+                    key: workflow.id,
+                    value: workflow.id
+                  }, [workflow.name])
+                )
+          ])
+        ])
+      ]),
+      this.state.workflows.length === 0
+        ? createElement("div", { className: "flex flex-1 items-center justify-center p-4" }, [
+            createElement(EmptyStatePanel, {
+              icon: "account_tree",
+              title: "No workflow definitions",
+              description: "Create the first workflow from the toolbar. Definitions persist in the server workspace and reload across browser contexts."
+            })
+          ])
+        : createElement("div", { className: "min-h-0 flex-1 overflow-y-auto p-3" }, [
+            this.state.workflows
+              .slice()
+              .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+              .map((workflow) =>
+                createElement("button", {
+                  type: "button",
+                  key: workflow.id,
+                  className: `mb-2 flex w-full flex-col gap-1 rounded-lg border px-3 py-3 text-left transition-colors ${workflow.id === this.readCurrentWorkflowRecord()?.id ? "border-primary bg-primary/10" : "border-border-dark bg-[#11161d] hover:bg-[#20262f]"}`,
+                  onClick: () => this.handleSelectWorkflow(workflow.id)
+                }, [
+                  createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                    createElement("span", { className: "truncate text-sm font-medium text-white" }, [workflow.name]),
+                    createElement(StatusBadge, {
+                      status: workflow.status === WorkflowRecordStatus.Published ? "success" : workflow.status === WorkflowRecordStatus.Archived ? "paused" : "info"
+                    }, [workflow.status])
+                  ]),
+                  createElement("span", { className: "truncate text-xs text-text-secondary" }, [workflow.description || "No description yet"]),
+                  createElement("span", { className: "text-[11px] text-text-secondary" }, [
+                    `${workflow.nodes.length} nodes · ${workflow.edges.length} connections · v${workflow.version}`
+                  ])
+                ])
+              )
+          ])
+    ]);
+  }
+
+  private renderNodePaletteSection(): HTMLElement {
+    return createElement("div", {
+      className: "min-h-0 flex-1 overflow-y-auto p-3"
+    }, [
+      createElement("div", { className: "mb-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
+        "Add the MVP node set to the canvas. Asset-backed nodes create project-scoped assets server-side before they are placed."
+      ]),
+      readNodeKindsForPalette().map((kind) =>
+        createElement("button", {
+          type: "button",
+          key: kind,
+          className: "mb-2 flex w-full items-center gap-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-left transition-colors hover:bg-[#20262f]",
+          disabled: this.state.currentProject === null || this.state.pendingAction !== null,
+          onClick: () => {
+            void this.handleAddNode(kind);
+          },
+          dataset: {
+            testid: `${WorkflowScreenSelector.NodePalettePrefix}${kind}`
+          }
+        }, [
+          createElement("span", {
+            className: "material-symbols-outlined text-[20px] text-white"
+          }, [readNodeIcon(kind)]),
+          createElement("div", { className: "flex min-w-0 flex-1 flex-col" }, [
+            createElement("span", { className: "truncate text-sm font-medium text-white" }, [readNodeKindLabel(kind)]),
+            createElement("span", { className: "text-xs text-text-secondary" }, [readNodePaletteDescription(kind)])
+          ])
+        ])
+      )
+    ]);
+  }
+
+  private renderAssetLibrarySection(): HTMLElement {
+    return createElement("div", {
+      className: "flex min-h-0 flex-1 flex-col"
+    }, [
+      createElement("div", { className: "border-b border-border-dark px-3 py-3" }, [
+        createElement("div", { className: "grid gap-2 sm:grid-cols-3" }, [
+          this.renderCreateAssetButton(WorkflowAssetKind.Prompt),
+          this.renderCreateAssetButton(WorkflowAssetKind.Instruction),
+          this.renderCreateAssetButton(WorkflowAssetKind.Guardrail)
+        ])
+      ]),
+      createElement("div", { className: "min-h-0 flex-1 overflow-y-auto p-3" }, [
+        this.state.assets.length === 0
+          ? createElement(EmptyStatePanel, {
+              icon: "library_add",
+              title: "No reusable assets",
+              description: "Create project-scoped prompt, instruction or guardrail assets here before reusing them across workflow definitions."
+            })
+          : groupAssetsByKind(this.state.assets).map((group) =>
+              createElement("section", {
+                key: group.kind,
+                className: "mb-4 flex flex-col gap-2"
+              }, [
+                createElement("div", { className: "flex items-center justify-between" }, [
+                  createElement("h3", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, [
+                    readAssetKindLabel(group.kind)
+                  ]),
+                  createElement("span", { className: "text-[11px] text-text-secondary" }, [
+                    `${group.assets.length} asset${group.assets.length === 1 ? "" : "s"}`
+                  ])
+                ]),
+                group.assets.map((asset) =>
+                  createElement("button", {
+                    type: "button",
+                    key: asset.id,
+                    className: `flex w-full flex-col gap-1 rounded-lg border px-3 py-3 text-left transition-colors ${this.state.selection.type === "asset" && this.state.selection.id === asset.id ? "border-primary bg-primary/10" : "border-border-dark bg-[#11161d] hover:bg-[#20262f]"}`,
+                    onClick: () => this.setState({ selection: { type: "asset", id: asset.id } })
+                  }, [
+                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                      createElement("span", { className: "truncate text-sm font-medium text-white" }, [asset.name]),
+                      createElement(StatusBadge, {
+                        status: asset.scope === WorkflowAssetScope.Workspace ? "info" : "warning"
+                      }, [readAssetScopeLabel(asset.scope)])
+                    ]),
+                    createElement("span", { className: "truncate text-xs text-text-secondary" }, [asset.description || asset.slug]),
+                    createElement("span", { className: "text-[11px] text-text-secondary" }, [
+                      `${readUsageCount(asset.id, this.state.assetUsages)} use${readUsageCount(asset.id, this.state.assetUsages) === 1 ? "" : "s"}`
+                    ])
+                  ])
+                )
+              ])
+            )
+      ])
+    ]);
+  }
+
+  private renderExecutionSection(): HTMLElement {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    const executions = currentWorkflow
+      ? this.state.executions.filter((execution) => execution.workflowId === currentWorkflow.id)
+      : [];
+
+    return createElement("div", {
+      className: "min-h-0 flex-1 overflow-y-auto p-3"
+    }, [
+      currentWorkflow === null
+        ? createElement(EmptyStatePanel, {
+            icon: "history",
+            title: "Select a workflow",
+            description: "Execution history is already server-backed, but detailed run controls land in phase 06.5. This panel stays read-only for now."
+          })
+        : executions.length === 0
+          ? createElement(EmptyStatePanel, {
+              icon: "history_toggle_off",
+              title: "No recorded runs",
+              description: "The execution rail remains read-only in 06.3. Run history will become first-class in 06.5."
+            })
+          : executions.map((execution) =>
+              createElement(Card, {
+                key: execution.id,
+                className: "mb-3 border border-border-dark bg-[#11161d]",
+                padding: "md",
+                children: [
+                  createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                    createElement("div", { className: "min-w-0" }, [
+                      createElement("p", { className: "truncate text-sm font-medium text-white" }, [execution.id.slice(0, 8)]),
+                      createElement("p", { className: "text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)])
+                    ]),
+                    createElement(StatusBadge, {
+                      status: execution.status === "completed" ? "success" : execution.status === "failed" ? "failed" : execution.status === "awaiting_review" ? "warning" : "info"
+                    }, [execution.status])
+                  ]),
+                  createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
+                    createElement("span", {}, [`${execution.totals.totalTokens} tokens`]),
+                    createElement("span", {}, [`€${execution.totals.estimatedCostEur.toFixed(4)}`]),
+                    createElement("span", {}, [`${execution.warningsCount} warnings`]),
+                    createElement("span", {}, [`${execution.errorsCount} errors`])
+                  ]),
+                  createElement(Button, {
+                    variant: "ghost",
+                    size: "sm",
+                    disabled: this.state.pendingAction !== null,
+                    onClick: () => {
+                      void this.handleDeleteExecution(execution.id);
+                    },
+                    children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run"
+                  })
+                ]
+              })
+            )
+    ]);
+  }
+
+  private renderCreateAssetButton(kind: WorkflowAssetKindValue): HTMLElement {
+    return createElement(Button, {
+      variant: "secondary",
+      size: "sm",
+      disabled: this.state.currentProject === null || this.state.pendingAction !== null,
+      onClick: () => {
+        void this.handleCreateAsset(kind);
+      },
+      children: `Add ${readAssetKindLabel(kind)}`,
+      dataset: {
+        testid: `${WorkflowScreenSelector.AssetCreatePrefix}${kind}`
+      }
+    });
+  }
+
+  private renderCanvasPanel(): HTMLElement {
+    const workflow = this.state.draftWorkflow;
+    const viewport = workflow?.viewport ?? { x: 0, y: 0, zoom: 1 };
+
+    return createElement("section", {
+      className: "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#11161d]"
+    }, [
+      this.renderCanvasHeader(),
+      workflow
+        ? createElement("div", {
+            className: "relative min-h-0 flex-1 overflow-hidden",
+            onMouseDown: (event: Event) => this.handleCanvasMouseDown(event as MouseEvent),
+            onWheel: (event: Event) => this.handleCanvasWheel(event as WheelEvent),
+            "data-testid": WorkflowScreenSelector.CanvasViewport,
+            style: readCanvasBackgroundStyle(viewport)
+          }, [
+            createElement("div", {
+              className: "absolute inset-0"
+            }, [
+              createElement("svg", {
+                className: "pointer-events-none absolute inset-0 h-full w-full overflow-visible",
+                viewBox: "0 0 3200 2200",
+                preserveAspectRatio: "none"
+              }, [
+                createElement("g", {
+                  transform: `translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`
+                }, [workflow.edges.map((edge) => this.renderEdgePath(edge, workflow.nodes))])
+              ]),
+              createElement("div", {
+                className: "absolute inset-0",
+                style: `transform: translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom}); transform-origin: 0 0;`
+              }, [workflow.nodes.map((node) => this.renderCanvasNode(node))])
+            ]),
+            this.renderCanvasFooter()
+          ])
+        : createElement("div", {
+            className: "flex flex-1 items-center justify-center p-6"
+          }, [
+            createElement(EmptyStatePanel, {
+              icon: "account_tree",
+              title: "No workflow loaded",
+              description: "Create a workflow or select one from the definitions panel to start editing the canvas."
+            })
+          ])
+    ]);
+  }
+
+  private renderCanvasHeader(): HTMLElement {
+    return createElement("div", {
+      className: "flex items-center justify-between border-b border-border-dark bg-[#151a20] px-4 py-2"
+    }, [
+      createElement("div", { className: "flex items-center gap-3" }, [
+        createElement("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary" }, ["Canvas"]),
+        this.state.pendingConnection
+          ? createElement(StatusBadge, {
+              status: "warning"
+            }, ["Connect to an input port"])
+          : ""
+      ]),
+      createElement("div", { className: "flex items-center gap-2" }, [
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          disabled: this.state.draftWorkflow === null,
+          onClick: () => this.handleZoom(-0.1),
+          children: "Zoom out"
+        }),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          disabled: this.state.draftWorkflow === null,
+          onClick: () => this.handleResetViewport(),
+          children: "Reset view"
+        }),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          disabled: this.state.draftWorkflow === null,
+          onClick: () => this.handleZoom(0.1),
+          children: "Zoom in"
+        })
+      ])
+    ]);
+  }
+
+  private renderCanvasFooter(): HTMLElement {
+    const viewport = this.state.draftWorkflow?.viewport;
+
+    return createElement("div", {
+      className: "absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-border-dark bg-[#151a20] px-3 py-2 text-xs text-text-secondary"
+    }, [
+      createElement("span", {}, [viewport ? `${Math.round(viewport.zoom * 100)}%` : "100%"]),
+      createElement("span", { className: "text-slate-500" }, ["•"]),
+      createElement("span", {}, [this.panning ? "Panning" : this.draggingNodeId ? "Dragging node" : "Drag canvas or nodes"])
+    ]);
+  }
+
+  private renderCanvasNode(node: WorkflowNodeRecord): HTMLElement {
+    const selected = this.state.selection.type === "node" && this.state.selection.id === node.id;
+    const asset = node.config.assetId ? this.state.assets.find((entry) => entry.id === node.config.assetId) ?? null : null;
+
+    return createElement("div", {
+      key: node.id,
+      className: `absolute flex flex-col rounded-lg border bg-[#1a1f27] shadow-[0_8px_24px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : "border-border-dark hover:border-slate-500"}`,
+      style: `left:${node.position.x}px; top:${node.position.y}px; width:${node.width}px;`,
+      dataset: {
+        nodeId: node.id,
+        testid: `${WorkflowScreenSelector.NodeCardPrefix}${node.id}`
+      }
+    }, [
+      createElement("div", {
+        className: `h-1 rounded-t-lg ${readNodeAccentClassName(node.kind)}`
       }),
-      children: createElement("div", { className: "flex flex-col gap-4" }, [
-        renderInputField({
-          label: "Server URL",
-          value: this.state.serverUrl,
-          placeholder: "http://localhost:4000",
-          testId: "workbench-server-url",
-          onChange: (value) => this.setState({ serverUrl: value })
-        }),
-        renderInputField({
-          label: "Bearer token",
-          value: this.state.authToken,
-          placeholder: "dev-token",
-          testId: "workbench-auth-token",
-          type: "password",
-          onChange: (value) => this.setState({ authToken: value })
-        }),
-        renderInputField({
-          label: "Session ID",
-          value: this.state.sessionId,
-          placeholder: "workbench-session",
-          testId: "workbench-session-id",
-          onChange: (value) => this.setState({ sessionId: value })
-        }),
-        createElement("div", { className: "flex gap-3" }, [
+      createElement("div", {
+        className: "cursor-move px-3 py-3",
+        dataset: {
+          dragHandle: node.id
+        },
+        onMouseDown: (event: Event) => this.handleNodeMouseDown(event as MouseEvent, node.id)
+      }, [
+        createElement("div", { className: "flex items-start justify-between gap-3" }, [
+          createElement("div", { className: "min-w-0 flex-1" }, [
+            createElement("div", { className: "flex items-center gap-2" }, [
+              createElement("span", { className: "material-symbols-outlined text-[18px] text-white/90" }, [readNodeIcon(node.kind)]),
+              createElement("span", { className: "truncate text-sm font-semibold text-white" }, [node.label])
+            ]),
+            createElement("p", { className: "mt-1 truncate text-xs text-text-secondary" }, [asset ? asset.name : readNodeSecondaryText(node)])
+          ]),
           createElement(Button, {
             variant: "ghost",
             size: "sm",
-            onClick: () => this.setState({
-              sessionId: createSessionId(),
-              noticeMessage: "New session prepared.",
-              errorMessage: null
-            }),
-            children: "New session"
-          }),
-          createElement("span", { className: "self-center text-xs text-text-secondary" }, [
-            "Use one session across multiple runs to surface working and episodic memory."
-          ])
+            onClick: () => this.setState({ selection: { type: "node", id: node.id }, compactView: CompactView.Inspector }),
+            children: selected ? "Selected" : "Edit"
+          })
         ])
-      ])
+      ]),
+      node.inputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "input", index, node.inputPorts.length)),
+      node.outputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "output", index, node.outputPorts.length))
+    ]);
+  }
+
+  private renderNodePort(
+    node: WorkflowNodeRecord,
+    portId: string,
+    name: string,
+    side: "input" | "output",
+    index: number,
+    total: number
+  ): HTMLElement {
+    const topOffset = readPortOffset(index, total);
+    const active = this.state.pendingConnection?.nodeId === node.id && this.state.pendingConnection?.portId === portId;
+
+    return createElement("button", {
+      type: "button",
+      title: `${side} · ${name}`,
+      className: `absolute flex items-center gap-2 ${side === "input" ? "-left-2" : "-right-2"}`,
+      style: `top: ${topOffset}px;`,
+      onClick: () => this.handlePortClick(node.id, portId, side)
+    }, [
+      side === "output"
+        ? createElement("span", { className: "rounded-md bg-[#11161d] px-2 py-1 text-[10px] uppercase tracking-wide text-text-secondary" }, [name])
+        : "",
+      createElement("span", {
+        className: `block h-4 w-4 rounded-full border-2 border-[#11161d] ${active ? "bg-primary" : side === "input" ? "bg-slate-400" : "bg-emerald-400"}`
+      }),
+      side === "input"
+        ? createElement("span", { className: "rounded-md bg-[#11161d] px-2 py-1 text-[10px] uppercase tracking-wide text-text-secondary" }, [name])
+        : ""
+    ]);
+  }
+
+  private renderEdgePath(
+    edge: WorkflowDefinitionRecord["edges"][number],
+    nodes: ReadonlyArray<WorkflowNodeRecord>
+  ): HTMLElement {
+    const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
+    const targetNode = nodes.find((node) => node.id === edge.targetNodeId);
+    if (!sourceNode || !targetNode) {
+      return createElement("g", {});
+    }
+
+    const sourcePortIndex = sourceNode.outputPorts.findIndex((port) => port.id === edge.sourcePortId);
+    const targetPortIndex = targetNode.inputPorts.findIndex((port) => port.id === edge.targetPortId);
+    const source = {
+      x: sourceNode.position.x + sourceNode.width + 8,
+      y: sourceNode.position.y + readPortOffset(Math.max(sourcePortIndex, 0), sourceNode.outputPorts.length) + 8
+    };
+    const target = {
+      x: targetNode.position.x - 8,
+      y: targetNode.position.y + readPortOffset(Math.max(targetPortIndex, 0), targetNode.inputPorts.length) + 8
+    };
+    const delta = Math.max(96, Math.abs(target.x - source.x) / 2);
+    const path = `M ${source.x} ${source.y} C ${source.x + delta} ${source.y}, ${target.x - delta} ${target.y}, ${target.x} ${target.y}`;
+
+    return createElement("path", {
+      key: edge.id,
+      d: path,
+      stroke: "#5f6b79",
+      "stroke-width": "2",
+      fill: "none"
     });
   }
 
-  private renderSkillPanel(): HTMLElement {
-    return createElement(SectionPanel, {
-      title: "Example skill",
-      subtitle: "Runs /skills/example-skill against the current repository and stores the response in local history.",
-      actions: createElement(Button, {
-        variant: "primary",
-        size: "sm",
-        disabled: this.state.pendingAction === "skill",
-        onClick: () => {
-          void this.handleRunSkill();
-        },
-        className: "min-w-[128px]",
-        children: this.state.pendingAction === "skill" ? "Running" : "Run skill"
-      }),
-      children: createElement("div", { className: "flex flex-col gap-4" }, [
-        renderInputField({
-          label: "Question",
-          value: this.state.skillQuestion,
-          placeholder: "What does Iteronix include?",
-          testId: "workbench-skill-question",
-          onChange: (value) => this.setState({ skillQuestion: value })
-        }),
-        createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 text-sm text-text-secondary" }, [
-          createElement("p", { className: "text-white" }, [WorkbenchSkillName]),
-          createElement("p", { className: "mt-1 leading-6" }, [
-            "The response is validated, grounded with citations when retrieval is used, and written back as working plus episodic memory."
-          ])
-        ])
-      ])
-    });
+  private renderInspectorPanel(): HTMLElement {
+    return createElement("aside", {
+      className: this.state.isCompactViewport
+        ? "flex min-h-0 flex-1 flex-col border-l border-border-dark bg-[#1a1f27]"
+        : "flex min-h-0 w-[360px] shrink-0 flex-col border-l border-border-dark bg-[#1a1f27]",
+      "data-testid": WorkflowScreenSelector.InspectorPanel
+    }, [
+      createElement("div", {
+        className: "flex items-center justify-between border-b border-border-dark px-4 py-3"
+      }, [
+        createElement("div", { className: "flex min-w-0 flex-col" }, [
+          createElement("span", { className: "text-sm font-semibold text-white" }, [this.readInspectorTitle()]),
+          createElement("span", { className: "truncate text-xs text-text-secondary" }, [this.readInspectorSubtitle()])
+        ]),
+        this.state.selection.type === "node"
+          ? createElement(Button, {
+              variant: "danger",
+              size: "sm",
+              onClick: () => this.handleRemoveSelectedNode(),
+              children: "Delete node"
+            })
+          : ""
+      ]),
+      createElement("div", {
+        className: "min-h-0 flex-1 overflow-y-auto p-4"
+      }, [this.renderInspectorBody()])
+    ]);
   }
 
-  private renderWorkflowPanel(): HTMLElement {
-    return createElement(SectionPanel, {
-      title: "Planner → reviewer workflow",
-      subtitle: "Launches the multi-agent flow using the same skill and either stops at reviewer approval or auto-completes.",
-      actions: createElement(Button, {
-        variant: "primary",
-        size: "sm",
-        disabled: this.state.pendingAction === "workflow",
-        onClick: () => {
-          void this.handleRunWorkflow();
-        },
-        className: "min-w-[152px]",
-        children: this.state.pendingAction === "workflow" ? "Launching" : "Launch workflow"
+  private renderInspectorBody(): HTMLElement {
+    if (this.state.selection.type === "node") {
+      const node = this.readSelectedNode();
+      return node ? this.renderNodeInspector(node) : this.renderEmptyInspector();
+    }
+
+    if (this.state.selection.type === "asset") {
+      const asset = this.readSelectedAsset();
+      return asset ? this.renderAssetInspector(asset) : this.renderEmptyInspector();
+    }
+
+    const workflow = this.state.draftWorkflow;
+    return workflow ? this.renderWorkflowInspector(workflow) : this.renderEmptyInspector();
+  }
+
+  private renderWorkflowInspector(workflow: WorkflowDefinitionUpsertInput): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-4" }, [
+      this.renderInspectorField("Workflow name", workflow.name, (value) => {
+        this.patchDraftWorkflow((current) => ({
+          ...current,
+          name: value
+        }));
+      }, WorkflowScreenSelector.WorkflowNameInput),
+      this.renderInspectorTextArea("Description", workflow.description, (value) => {
+        this.patchDraftWorkflow((current) => ({
+          ...current,
+          description: value
+        }));
+      }, WorkflowScreenSelector.WorkflowDescriptionInput),
+      this.renderInspectorSelect("Status", workflow.status, [
+        WorkflowRecordStatus.Draft,
+        WorkflowRecordStatus.Published,
+        WorkflowRecordStatus.Archived
+      ], (value) => {
+        this.patchDraftWorkflow((current) => ({
+          ...current,
+          status: readWorkflowRecordStatus(value)
+        }));
       }),
-      children: createElement("div", { className: "flex flex-col gap-4" }, [
-        renderInputField({
-          label: "Workflow question",
-          value: this.state.workflowQuestion,
-          placeholder: "What is the current AI workbench architecture?",
-          testId: "workbench-workflow-question",
-          onChange: (value) => this.setState({ workflowQuestion: value })
-        }),
-        createElement("label", {
-          className: "flex items-start gap-3 rounded-lg border border-border-dark bg-background-dark/40 px-3 py-3 text-sm text-text-secondary"
-        }, [
-          createElement("input", {
-            type: "checkbox",
-            checked: this.state.manualReview,
-            onChange: (event: Event) => {
-              const target = event.target;
-              if (target instanceof HTMLInputElement) {
-                this.setState({ manualReview: target.checked });
+      this.renderInspectorField("Language", workflow.defaultContextPolicy.language, (value) => {
+        this.updateDraftWorkflow({
+          ...workflow,
+          defaultContextPolicy: {
+            ...workflow.defaultContextPolicy,
+            language: value
+          }
+        });
+      }),
+      this.renderInlineMetaGrid([
+        { label: "Nodes", value: String(workflow.nodes.length) },
+        { label: "Connections", value: String(workflow.edges.length) },
+        { label: "Zoom", value: `${Math.round(workflow.viewport.zoom * 100)}%` },
+        { label: "Workspace", value: workflow.workspaceId }
+      ])
+    ]);
+  }
+
+  private renderNodeInspector(node: WorkflowNodeRecord): HTMLElement {
+    const compatibleAssetKind = readNodeAssetKind(node.kind);
+    const compatibleAssets = compatibleAssetKind
+      ? this.state.assets.filter((asset) => asset.kind === compatibleAssetKind)
+      : [];
+    const guardrailAssets = this.state.assets.filter((asset) => asset.kind === WorkflowAssetKind.Guardrail);
+    const linkedAsset = node.config.assetId
+      ? compatibleAssets.find((asset) => asset.id === node.config.assetId) ?? null
+      : null;
+
+    return createElement("div", { className: "flex flex-col gap-4" }, [
+      this.renderInspectorField("Node label", node.label, (value) => {
+        this.patchNode(node.id, (current) => ({
+          ...current,
+          label: value
+        }));
+      }, WorkflowScreenSelector.NodeLabelInput),
+      this.renderReadOnlyBadgeRow(node.kind, node.inputPorts.length, node.outputPorts.length),
+      compatibleAssetKind
+        ? createElement("div", { className: "flex flex-col gap-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+            createElement("div", { className: "flex items-center justify-between gap-3" }, [
+              createElement("span", { className: "text-sm font-medium text-white" }, [`${readAssetKindLabel(compatibleAssetKind)} binding`]),
+              createElement(Button, {
+                variant: "ghost",
+                size: "sm",
+                onClick: () => {
+                  void this.handleCreateAsset(compatibleAssetKind, node.id);
+                },
+                children: "New asset"
+              })
+            ]),
+            this.renderInspectorSelect("Asset", linkedAsset?.id ?? "", compatibleAssets.map((asset) => asset.id), (value) => {
+              const asset = compatibleAssets.find((entry) => entry.id === value);
+              if (!asset) {
+                return;
+              }
+              this.patchNode(node.id, (current) => ({
+                ...current,
+                config: {
+                  ...current.config,
+                  assetId: asset.id
+                }
+              }));
+              this.setState({ selection: { type: "node", id: node.id } });
+            }, compatibleAssets.map((asset) => ({ value: asset.id, label: asset.name }))),
+            linkedAsset ? this.renderEmbeddedAssetEditor(linkedAsset) : createElement("p", { className: "text-xs text-text-secondary" }, ["Select or create an asset to author this node."])
+          ])
+        : "",
+      node.kind === WorkflowNodeKind.AiAgent ? this.renderAgentConfig(node) : "",
+      node.kind === WorkflowNodeKind.AiProviderRun ? this.renderProviderRunConfig(node) : "",
+      node.kind === WorkflowNodeKind.HumanReview ? this.renderReviewConfig(node) : "",
+      node.kind === WorkflowNodeKind.LogicCondition || node.kind === WorkflowNodeKind.LogicMerge
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
+            "Mapping editors and structured branch expressions land in phase 06.4. The current MVP keeps these nodes connectable and label-editable, but advanced data routing is intentionally disabled with explanation."
+          ])
+        : "",
+      node.kind !== WorkflowNodeKind.TriggerManual && node.kind !== WorkflowNodeKind.TerminalResponse
+        ? this.renderGuardrailAttachmentSection(node, guardrailAssets)
+        : ""
+    ]);
+  }
+
+  private renderAssetInspector(asset: WorkflowAssetRecord): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-4" }, [
+      this.renderInspectorField("Asset name", asset.name, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          name: value,
+          slug: toSlugValue(value)
+        }));
+      }),
+      this.renderInspectorField("Slug", asset.slug, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          slug: toSlugValue(value)
+        }));
+      }),
+      this.renderInspectorField("Description", asset.description, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          description: value
+        }));
+      }),
+      this.renderInspectorSelect("Scope", asset.scope, [
+        WorkflowAssetScope.Project,
+        WorkflowAssetScope.Workspace
+      ], (value) => {
+        const nextScope = readWorkflowAssetScope(value);
+        const nextProjectId = value === WorkflowAssetScope.Project
+          ? this.state.currentProject?.id
+          : undefined;
+        this.patchAsset(asset.id, (current) => ({
+          ...stripOptionalProjectId(current),
+          scope: nextScope,
+          ...(nextProjectId ? { projectId: nextProjectId } : {})
+        }));
+      }),
+      this.renderInspectorTextArea("Body", asset.body, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          body: value
+        }));
+      }),
+      asset.kind === WorkflowAssetKind.Guardrail && asset.guardrail
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Guardrail validations"]),
+            createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+              `${asset.guardrail.validations.length} validation${asset.guardrail.validations.length === 1 ? "" : "s"} · ${asset.guardrail.severity} severity`
+            ]),
+            createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              asset.guardrail.validations.map((validation) =>
+                createElement("div", {
+                  key: validation.id,
+                  className: "rounded-md border border-border-dark px-3 py-2"
+                }, [
+                  createElement("p", { className: "text-sm font-medium text-white" }, [validation.kind]),
+                  createElement("p", { className: "text-xs text-text-secondary" }, [validation.message])
+                ])
+              )
+            ])
+          ])
+        : "",
+      asset.outputContract
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["JSON output contract"]),
+            createElement("pre", { className: "mt-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-border-dark bg-[#0f1318] px-3 py-3 text-xs text-slate-300" }, [
+              JSON.stringify(asset.outputContract.schema, null, 2)
+            ]),
+            createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [
+              "The visual JSON contract editor is reserved for phase 06.4. The MVP keeps the server-backed schema visible and persisted, but editing is intentionally disabled here."
+            ])
+          ])
+        : "",
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+        createElement("div", { className: "flex items-center justify-between gap-3" }, [
+          createElement("span", { className: "text-sm font-medium text-white" }, ["Usage"]),
+          createElement(StatusBadge, {
+            status: readUsageCount(asset.id, this.state.assetUsages) > 0 ? "info" : "warning"
+          }, [`${readUsageCount(asset.id, this.state.assetUsages)} linked`])
+        ]),
+        readUsageCount(asset.id, this.state.assetUsages) === 0
+          ? createElement("p", { className: "mt-2 text-xs text-text-secondary" }, ["This asset is not linked to any workflow node yet."])
+          : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              this.state.assetUsages
+                .filter((usage) => usage.assetId === asset.id)
+                .map((usage) =>
+                  createElement("div", {
+                    key: `${usage.workflowId}-${usage.nodeId}`,
+                    className: "rounded-md border border-border-dark px-3 py-2 text-xs text-text-secondary"
+                  }, [`${usage.workflowId.slice(0, 8)} · ${usage.nodeKind} · ${usage.role}`])
+                )
+            ])
+      ])
+    ]);
+  }
+
+  private renderEmbeddedAssetEditor(asset: WorkflowAssetRecord): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-3" }, [
+      this.renderInspectorField("Asset name", asset.name, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          name: value,
+          slug: toSlugValue(value)
+        }));
+      }),
+      this.renderInspectorTextArea("Body", asset.body, (value) => {
+        this.patchAsset(asset.id, (current) => ({
+          ...current,
+          body: value
+        }));
+      })
+    ]);
+  }
+
+  private renderAgentConfig(node: WorkflowNodeRecord): HTMLElement {
+    const role = node.config.role ?? WorkflowNodeRole.Planner;
+    const provider = node.config.provider ?? createFallbackProviderSelection();
+
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("p", { className: "mb-3 text-sm font-medium text-white" }, ["Agent configuration"]),
+      this.renderInspectorSelect("Role", role, [
+        WorkflowNodeRole.Planner,
+        WorkflowNodeRole.Retriever,
+        WorkflowNodeRole.Executor,
+        WorkflowNodeRole.Reviewer
+      ], (value) => {
+        this.patchNode(node.id, (current) => ({
+          ...current,
+          config: {
+            ...current.config,
+            role: readWorkflowNodeRole(value),
+            provider: current.config.provider ?? provider
+          }
+        }));
+      }),
+      this.renderProviderSelectionFields(node, provider)
+    ]);
+  }
+
+  private renderProviderRunConfig(node: WorkflowNodeRecord): HTMLElement {
+    const provider = node.config.provider ?? createFallbackProviderSelection();
+
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("p", { className: "mb-3 text-sm font-medium text-white" }, ["Provider run"]),
+      this.renderProviderSelectionFields(node, provider),
+      createElement("p", { className: "mt-3 text-xs text-text-secondary" }, [
+        "Provider capability tests land in phase 06.6. This MVP persists per-node provider, model, reasoning, temperature and verbosity now, but the connection test action remains disabled with explanation."
+      ]),
+      createElement(Button, {
+        variant: "ghost",
+        size: "sm",
+        disabled: true,
+        children: "Provider test in 06.6"
+      })
+    ]);
+  }
+
+  private renderProviderSelectionFields(
+    node: WorkflowNodeRecord,
+    provider: WorkflowProviderSelectionRecord
+  ): HTMLElement {
+    return createElement("div", { className: "grid gap-3" }, [
+      this.renderInspectorField("Provider", provider.providerId, (value) => {
+        this.updateNodeProvider(node.id, {
+          ...provider,
+          providerId: value
+        });
+      }),
+      this.renderInspectorField("Model", provider.modelId, (value) => {
+        this.updateNodeProvider(node.id, {
+          ...provider,
+          modelId: value
+        });
+      }),
+      this.renderInspectorSelect("Reasoning", provider.reasoningLevel, [
+        WorkflowReasoningLevel.Low,
+        WorkflowReasoningLevel.Medium,
+        WorkflowReasoningLevel.High,
+        WorkflowReasoningLevel.Max
+      ], (value) => {
+        this.updateNodeProvider(node.id, {
+          ...provider,
+          reasoningLevel: readWorkflowReasoningLevel(value)
+        });
+      }),
+      this.renderInspectorField("Temperature", provider.temperature.toString(), (value) => {
+        const parsed = Number.parseFloat(value);
+        this.updateNodeProvider(node.id, {
+          ...provider,
+          temperature: Number.isFinite(parsed) ? parsed : provider.temperature
+        });
+      }),
+      this.renderInspectorSelect("Verbosity", provider.verbosity, [
+        WorkflowVerbosity.Low,
+        WorkflowVerbosity.Medium,
+        WorkflowVerbosity.High
+      ], (value) => {
+        this.updateNodeProvider(node.id, {
+          ...provider,
+          verbosity: readWorkflowVerbosity(value)
+        });
+      })
+    ]);
+  }
+
+  private renderReviewConfig(node: WorkflowNodeRecord): HTMLElement {
+    const requireHumanDecision = node.config.reviewPolicy?.requireHumanDecision ?? true;
+
+    return createElement("label", {
+      className: "flex items-start gap-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3"
+    }, [
+      createElement("input", {
+        type: "checkbox",
+        checked: requireHumanDecision,
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          this.patchNode(node.id, (current) => ({
+            ...current,
+            config: {
+              ...current.config,
+              reviewPolicy: {
+                requireHumanDecision: target.checked
               }
             }
-          }),
-          createElement("div", { className: "flex flex-col gap-1" }, [
-            createElement("span", { className: "font-medium text-white" }, ["Stop at reviewer checkpoint"]),
-            createElement("span", {}, [
-              "Checked means the workflow pauses at the reviewer stage so the user can approve or deny the action in the UI."
-            ])
-          ])
-        ])
-      ])
-    });
-  }
-
-  private renderLatestRunPanel(): HTMLElement {
-    const latestRun = this.state.latestRun;
-    if (!latestRun) {
-      return createElement(EmptyStatePanel, {
-        icon: "smart_toy",
-        title: "No runs yet",
-        description: "Run the example skill or launch the workflow to populate this panel with answer text, citations, evidence and session memory."
-      });
-    }
-
-    const finalResult = readFinalResult(latestRun);
-    const awaitingReview = latestRun.kind === "workflow" && latestRun.status === "awaiting_approval";
-    const review = latestRun.kind === "workflow" ? latestRun.review : undefined;
-
-    return createElement(SectionPanel, {
-      title: latestRun.kind === "skill" ? "Latest skill result" : "Latest workflow result",
-      subtitle: `${latestRun.skillName} • ${latestRun.sessionId}`,
-      actions: createElement(ConfidenceBadge, {
-        confidence: finalResult.confidence
+          }));
+        }
       }),
-      children: createElement("div", { className: "flex flex-col gap-5" }, [
-        createElement("div", { className: "grid gap-3 md:grid-cols-3" }, [
-          renderMetaCell("Status", latestRun.status.replace(/_/g, " ")),
-          renderMetaCell("Trace", finalResult.traceId.slice(0, 8)),
-          renderMetaCell("Updated", formatTimestamp(latestRun.updatedAt))
-        ]),
-        createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
-          createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, ["Answer"]),
-          createElement("p", { className: "mt-2 text-sm leading-7 text-white" }, [finalResult.output.answer])
-        ]),
-        latestRun.kind === "workflow"
-          ? createElement("div", { className: "flex flex-col gap-3" }, [
-              createElement("h3", { className: "text-sm font-semibold text-white" }, ["Workflow stages"]),
-              createElement(WorkflowStepsList, {
-                steps: latestRun.result.steps
-              })
-            ])
-          : "",
-        createElement("div", { className: "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" }, [
-          createElement(CitationsList, {
-            citations: finalResult.citations,
-            evidenceSources: finalResult.evidenceReport.retrievedSources,
-            activeSourceId: this.state.selectedEvidenceSourceId,
-            onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
-          }),
-          createElement(SectionPanel, {
-            title: "Session memory",
-            subtitle: "Top working and episodic items for this session.",
-            className: "h-full",
-            children: createElement(MemoryList, {
-              items: latestRun.memory
-            })
-          })
-        ]),
-        awaitingReview ? this.renderReviewerActions(latestRun) : "",
-        review
-          ? createElement("div", {
-              className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4"
-            }, [
-              createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                createElement("p", { className: "text-sm font-semibold text-white" }, ["Reviewer decision"]),
-                createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [review.decision])
-              ]),
-              createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [review.reason]),
-              createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [formatTimestamp(review.decidedAt)])
-            ])
-          : ""
+      createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("span", { className: "text-sm font-medium text-white" }, ["Require manual decision"]),
+        createElement("span", { className: "text-xs text-text-secondary" }, ["This node blocks the workflow until a reviewer approves or requests changes."])
       ])
-    });
+    ]);
   }
 
-  private renderReviewerActions(run: WorkbenchRunHistoryRecord): HTMLElement {
-    const summary = run.kind === "workflow" ? run.result.checkpoint?.summary : undefined;
-
-    return createElement(SectionPanel, {
-      title: "Reviewer checkpoint",
-      subtitle: summary ?? "A manual reviewer action is required.",
-      actions: createElement("span", { className: "text-xs uppercase tracking-wide text-amber-300" }, ["Awaiting review"]),
-      children: createElement("div", { className: "flex flex-col gap-4" }, [
-        renderInputField({
-          label: "Reviewer note",
-          value: this.state.reviewReason,
-          placeholder: "Grounded answer. Safe to continue.",
-          testId: "workbench-review-reason",
-          onChange: (value) => this.setState({ reviewReason: value })
+  private renderGuardrailAttachmentSection(
+    node: WorkflowNodeRecord,
+    guardrailAssets: ReadonlyArray<WorkflowAssetRecord>
+  ): HTMLElement {
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "flex items-center justify-between gap-3" }, [
+        createElement("span", { className: "text-sm font-medium text-white" }, ["Attached guardrails"]),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          onClick: () => {
+            void this.handleCreateAsset(WorkflowAssetKind.Guardrail, node.id, true);
+          },
+          children: "New guardrail"
+        })
+      ]),
+      createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
+        guardrailAssets.length > 0
+          ? this.renderInspectorSelect("Attach asset", this.state.guardrailAttachAssetId ?? "", guardrailAssets.map((asset) => asset.id), (value) => {
+              this.setState({ guardrailAttachAssetId: value });
+            }, guardrailAssets.map((asset) => ({ value: asset.id, label: asset.name })))
+          : createElement("p", { className: "text-xs text-text-secondary" }, ["No guardrail assets yet. Create one to attach it to the selected node."]),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled: !this.state.guardrailAttachAssetId,
+          onClick: () => {
+            if (!this.state.guardrailAttachAssetId || !this.state.draftWorkflow) {
+              return;
+            }
+            const nextWorkflow = attachGuardrailToNode(this.state.draftWorkflow, node.id, this.state.guardrailAttachAssetId);
+            this.updateDraftWorkflow(nextWorkflow);
+          },
+          children: "Attach selected guardrail"
         }),
-        createElement("div", { className: "flex flex-wrap gap-3" }, [
-          createElement(Button, {
-            variant: "primary",
-            size: "sm",
-            disabled: this.state.pendingAction === "approve",
-            onClick: () => {
-              void this.handleApproveWorkflow();
-            },
-            className: "min-w-[144px]",
-            children: this.state.pendingAction === "approve" ? "Approving" : "Approve and continue"
-          }),
-          createElement(Button, {
-            variant: "danger",
-            size: "sm",
-            disabled: this.state.pendingAction === "deny",
-            onClick: () => this.handleDenyWorkflow(),
-            className: "min-w-[128px]",
-            children: this.state.pendingAction === "deny" ? "Saving" : "Request changes"
-          })
-        ])
+        node.attachedGuardrails.length === 0
+          ? createElement("p", { className: "text-xs text-text-secondary" }, ["This node has no attached guardrails yet."])
+          : node.attachedGuardrails.map((guardrail) => {
+              const asset = guardrailAssets.find((entry) => entry.id === guardrail.assetId);
+              return createElement("div", {
+                key: guardrail.assetId,
+                className: "flex items-center justify-between gap-3 rounded-md border border-border-dark px-3 py-2"
+              }, [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement("p", { className: "truncate text-sm font-medium text-white" }, [asset?.name ?? guardrail.assetId]),
+                  createElement("p", { className: "text-xs text-text-secondary" }, [asset?.guardrail?.severity ?? "Guardrail"])
+                ]),
+                createElement(Button, {
+                  variant: "ghost",
+                  size: "sm",
+                  onClick: () => {
+                    if (!this.state.draftWorkflow) {
+                      return;
+                    }
+                    const nextWorkflow = detachGuardrailFromNode(this.state.draftWorkflow, node.id, guardrail.assetId);
+                    this.updateDraftWorkflow(nextWorkflow);
+                  },
+                  children: "Detach"
+                })
+              ]);
+            })
       ])
-    });
+    ]);
   }
 
-  private renderEvidencePanel(): HTMLElement {
-    const latestRun = this.state.latestRun;
-    if (!latestRun) {
-      return createElement(EmptyStatePanel, {
-        icon: "fact_check",
-        title: "Evidence will appear here",
-        description: "Every successful run produces a confidence score, decisions, retrieved sources and usage telemetry."
-      });
-    }
-
-    return createElement(SectionPanel, {
-      title: "Evidence report",
-      subtitle: `Trace ${readFinalResult(latestRun).traceId}`,
-      children: createElement(EvidenceReportPanel, {
-        report: readFinalResult(latestRun).evidenceReport,
-        activeSourceId: this.state.selectedEvidenceSourceId,
-        onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
+  private renderInspectorField(
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    testId?: string
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-sm font-medium text-white" }, [label]),
+      createElement("input", {
+        type: "text",
+        value,
+        className: "h-11 rounded-lg border border-border-dark bg-[#11161d] px-3 text-sm text-white focus:border-primary focus:outline-none",
+        ...(testId ? { "data-testid": testId } : {}),
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            onChange(target.value);
+          }
+        }
       })
-    });
+    ]);
   }
 
-  private async handleSaveConnection(): Promise<void> {
-    this.setState({ pendingAction: "connection", errorMessage: null, noticeMessage: null });
+  private renderInspectorTextArea(
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    testId?: string
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-sm font-medium text-white" }, [label]),
+      createElement("textarea", {
+        className: "min-h-32 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-white focus:border-primary focus:outline-none",
+        ...(testId ? { "data-testid": testId } : {}),
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLTextAreaElement) {
+            onChange(target.value);
+          }
+        }
+      }, [value])
+    ]);
+  }
+
+  private renderInspectorSelect(
+    label: string,
+    value: string,
+    options: ReadonlyArray<string>,
+    onChange: (value: string) => void,
+    customLabels?: ReadonlyArray<{ value: string; label: string }>
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-sm font-medium text-white" }, [label]),
+      createElement("select", {
+        className: "h-11 rounded-lg border border-border-dark bg-[#11161d] px-3 text-sm text-white focus:border-primary focus:outline-none",
+        value,
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLSelectElement) {
+            onChange(target.value);
+          }
+        }
+      }, [
+        createElement("option", { value: "" }, [options.length === 0 ? "No options available" : "Select"]),
+        ...(customLabels
+          ? customLabels.map((option) =>
+              createElement("option", {
+                key: option.value,
+                value: option.value
+              }, [option.label])
+            )
+          : options.map((option) =>
+              createElement("option", {
+                key: option,
+                value: option
+              }, [option])
+            ))
+      ])
+    ]);
+  }
+
+  private renderInlineMetaGrid(items: ReadonlyArray<{ label: string; value: string }>): HTMLElement {
+    return createElement("div", { className: "grid grid-cols-2 gap-3" }, [
+      items.map((item) =>
+        createElement("div", {
+          key: item.label,
+          className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3"
+        }, [
+          createElement("p", { className: "text-[11px] uppercase tracking-wide text-text-secondary" }, [item.label]),
+          createElement("p", { className: "mt-2 text-sm font-medium text-white" }, [item.value])
+        ])
+      )
+    ]);
+  }
+
+  private renderReadOnlyBadgeRow(kind: WorkflowNodeKindValue, inputs: number, outputs: number): HTMLElement {
+    return createElement("div", { className: "grid grid-cols-3 gap-3" }, [
+      createElement(StatusBadge, { status: "info" }, [readNodeKindLabel(kind)]),
+      createElement(StatusBadge, { status: "warning" }, [`${inputs} input${inputs === 1 ? "" : "s"}`]),
+      createElement(StatusBadge, { status: "success" }, [`${outputs} output${outputs === 1 ? "" : "s"}`])
+    ]);
+  }
+
+  private renderEmptyInspector(): HTMLElement {
+    return createElement("div", {
+      className: "flex h-full items-center justify-center",
+      "data-testid": WorkflowScreenSelector.InspectorEmpty
+    }, [
+      createElement(EmptyStatePanel, {
+        icon: "tune",
+        title: "Select something to edit",
+        description: "Choose a workflow, node or reusable asset. The inspector stays intentionally empty until there is a concrete target to edit."
+      })
+    ]);
+  }
+
+  private shouldShowSidebar(): boolean {
+    return !this.state.isCompactViewport || this.state.compactView === CompactView.Sidebar;
+  }
+
+  private shouldShowCanvas(): boolean {
+    return !this.state.isCompactViewport || this.state.compactView === CompactView.Canvas;
+  }
+
+  private shouldShowInspector(): boolean {
+    return !this.state.isCompactViewport || this.state.compactView === CompactView.Inspector;
+  }
+
+  private async hydrateState(): Promise<void> {
+    this.setState({ pendingAction: PendingAction.Load, errorMessage: null, noticeMessage: null });
 
     try {
-      const connection = writeServerConnection({
-        serverUrl: this.state.serverUrl,
-        authToken: this.state.authToken
-      });
+      const workspaceState = await this.workspaceStateClient.load();
+      const currentProject = workspaceState.projects.find((project) => project.id === workspaceState.activeProjectId) ?? null;
       this.setState({
-        serverUrl: connection.serverUrl,
-        authToken: connection.authToken,
+        workspaceState,
+        currentProject,
         pendingAction: null,
-        noticeMessage: "Connection saved.",
+        compactView: currentProject ? CompactView.Canvas : CompactView.Sidebar
+      });
+
+      if (currentProject) {
+        await this.reloadCatalog(currentProject.id, workspaceState);
+      }
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        errorMessage: readErrorMessage(error, "Could not load the workflow editor."),
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async reloadCatalog(projectId: string, workspaceState = this.state.workspaceState): Promise<void> {
+    const workspaceId = readWorkspaceId(workspaceState, this.state.workflows, this.state.assets);
+    const [workflows, assets, assetUsages, executions] = await Promise.all([
+      this.workflowClient.listDefinitions({ projectId }),
+      this.workflowClient.listAssets({ projectId, workspaceId }),
+      this.workflowClient.listAssetUsages({ projectId }),
+      this.workflowClient.listExecutions({ projectId })
+    ]);
+    const currentWorkflowId = this.readCurrentWorkflowRecord()?.id ?? workflows[0]?.id ?? null;
+    const currentWorkflow = currentWorkflowId
+      ? workflows.find((workflow) => workflow.id === currentWorkflowId) ?? workflows[0] ?? null
+      : null;
+
+    this.setState({
+      workflows,
+      assets,
+      assetUsages,
+      executions,
+      draftWorkflow: currentWorkflow ? stripDefinitionVersionFields(currentWorkflow) : null,
+      selection: currentWorkflow
+        ? resolveSelectionAfterReload(this.state.selection, currentWorkflow, assets)
+        : { type: "workflow", id: null },
+      dirtyWorkflow: false,
+      dirtyAssetIds: []
+    });
+  }
+
+  private handleSelectWorkflow(workflowId: string): void {
+    const workflow = this.state.workflows.find((entry) => entry.id === workflowId) ?? null;
+    if (!workflow) {
+      return;
+    }
+
+    this.setState({
+      draftWorkflow: stripDefinitionVersionFields(workflow),
+      selection: { type: "workflow", id: workflow.id },
+      dirtyWorkflow: false,
+      dirtyAssetIds: [],
+      pendingConnection: null,
+      guardrailAttachAssetId: null,
+      compactView: this.state.isCompactViewport ? CompactView.Canvas : this.state.compactView
+    });
+  }
+
+  private async handleCreateWorkflow(): Promise<void> {
+    if (!this.state.currentProject) {
+      return;
+    }
+
+    this.setState({ pendingAction: PendingAction.CreateWorkflow, errorMessage: null, noticeMessage: null });
+
+    try {
+      const created = await this.workflowClient.upsertDefinition({
+        projectId: this.state.currentProject.id,
+        definition: createEmptyWorkflowDefinition({
+          projectId: this.state.currentProject.id,
+          workspaceId: readWorkspaceId(this.state.workspaceState, this.state.workflows, this.state.assets),
+          name: `Workflow ${this.state.workflows.length + 1}`
+        })
+      });
+      await this.reloadCatalog(this.state.currentProject.id);
+      this.handleSelectWorkflow(created.id);
+      this.setState({
+        pendingAction: null,
+        noticeMessage: "Workflow definition created.",
+        errorMessage: null,
+        selection: { type: "workflow", id: created.id }
+      });
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        errorMessage: readErrorMessage(error, "Could not create the workflow definition."),
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handleSaveWorkflow(): Promise<void> {
+    if (!this.state.currentProject || !this.state.draftWorkflow) {
+      return;
+    }
+
+    this.setState({ pendingAction: PendingAction.SaveWorkflow, errorMessage: null, noticeMessage: null });
+
+    try {
+      const dirtyAssets = this.state.assets.filter((asset) => this.state.dirtyAssetIds.includes(asset.id));
+      for (const asset of dirtyAssets) {
+        await this.workflowClient.upsertAsset({
+          projectId: this.state.currentProject.id,
+          asset: stripAssetVersionFields(asset)
+        });
+      }
+
+      const saved = await this.workflowClient.upsertDefinition({
+        projectId: this.state.currentProject.id,
+        definition: this.state.draftWorkflow
+      });
+      await this.reloadCatalog(this.state.currentProject.id);
+      this.handleSelectWorkflow(saved.id);
+      this.setState({
+        pendingAction: null,
+        noticeMessage: "Workflow saved to the server workspace.",
         errorMessage: null
       });
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: error instanceof Error ? error.message : "Could not save connection.",
+        errorMessage: readErrorMessage(error, "Could not save the workflow."),
         noticeMessage: null
       });
     }
   }
 
-  private async handleRunSkill(): Promise<void> {
-    if (!this.state.skillQuestion.trim()) {
-      this.setState({ errorMessage: "A question is required for the example skill.", noticeMessage: null });
+  private async handleDeleteWorkflow(): Promise<void> {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    if (!this.state.currentProject || !currentWorkflow) {
       return;
     }
 
-    this.persistConnection();
-    this.setState({ pendingAction: "skill", errorMessage: null, noticeMessage: null });
+    if (typeof window !== "undefined" && !window.confirm(`Delete ${currentWorkflow.name}?`)) {
+      return;
+    }
+
+    this.setState({ pendingAction: PendingAction.DeleteWorkflow, errorMessage: null, noticeMessage: null });
 
     try {
-      const client = createWorkbenchClient();
-      const question = this.state.skillQuestion.trim();
-      const result = await client.runSkill({
-        skillName: WorkbenchSkillName,
-        sessionId: this.state.sessionId,
-        question
+      await this.workflowClient.deleteDefinition({
+        workflowId: currentWorkflow.id
       });
-      const memory = await client.queryMemory({
-        sessionId: this.state.sessionId,
-        query: question,
-        limit: DefaultMemoryQueryLimit
-      });
-      const record = this.historyStore.saveSkillRun({
-        skillName: WorkbenchSkillName,
-        sessionId: this.state.sessionId,
-        question,
-        result,
-        memory
-      });
-      await this.persistWorkbenchHistory();
+      await this.reloadCatalog(this.state.currentProject.id);
       this.setState({
-        latestRun: record,
         pendingAction: null,
-        noticeMessage: "Skill run completed and stored in History.",
+        noticeMessage: "Workflow deleted.",
         errorMessage: null,
-        reviewReason: "",
-        selectedEvidenceSourceId: null
+        selection: { type: "workflow", id: this.state.workflows[0]?.id ?? null }
       });
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: error instanceof Error ? error.message : "Skill execution failed.",
+        errorMessage: readErrorMessage(error, "Could not delete the workflow."),
         noticeMessage: null
       });
     }
   }
 
-  private async handleRunWorkflow(): Promise<void> {
-    if (!this.state.workflowQuestion.trim()) {
-      this.setState({ errorMessage: "A question is required for the workflow.", noticeMessage: null });
+  private async handleAddNode(kind: WorkflowNodeKindValue): Promise<void> {
+    if (!this.state.draftWorkflow || !this.state.currentProject) {
       return;
     }
 
-    this.persistConnection();
-    this.setState({ pendingAction: "workflow", errorMessage: null, noticeMessage: null });
+    const assetKind = readNodeAssetKind(kind);
+    if (assetKind) {
+      const asset = await this.createAssetForNode(assetKind, undefined, kind === WorkflowNodeKind.AssetGuardrail);
+      if (!asset) {
+        return;
+      }
+      const nextDefinition = addWorkflowNode(this.state.draftWorkflow, kind);
+      const nextNode = nextDefinition.nodes[nextDefinition.nodes.length - 1];
+      if (!nextNode) {
+        return;
+      }
+      this.updateDraftWorkflow({
+        ...nextDefinition,
+        nodes: nextDefinition.nodes.map((node) =>
+          node.id === nextNode.id
+            ? {
+                ...node,
+                config: {
+                  ...node.config,
+                  assetId: asset.id
+                }
+              }
+            : node
+        )
+      }, { type: "node", id: nextNode.id });
+      return;
+    }
+
+    const nextDefinition = addWorkflowNode(this.state.draftWorkflow, kind);
+    const nextNode = nextDefinition.nodes[nextDefinition.nodes.length - 1];
+    this.updateDraftWorkflow(nextDefinition, nextNode ? { type: "node", id: nextNode.id } : undefined);
+  }
+
+  private async handleCreateAsset(
+    kind: WorkflowAssetKindValue,
+    focusNodeId?: string,
+    attachToNode = false
+  ): Promise<void> {
+    if (!this.state.currentProject) {
+      return;
+    }
+
+    await this.createAssetForNode(kind, focusNodeId, attachToNode);
+  }
+
+  private async createAssetForNode(
+    kind: WorkflowAssetKindValue,
+    focusNodeId?: string,
+    attachToNode = false
+  ): Promise<WorkflowAssetRecord | null> {
+    if (!this.state.currentProject) {
+      return null;
+    }
+
+    this.setState({ pendingAction: PendingAction.CreateAsset, errorMessage: null, noticeMessage: null });
 
     try {
-      const client = createWorkbenchClient();
-      const question = this.state.workflowQuestion.trim();
-      const result = await client.runWorkflow({
-        skillName: WorkbenchSkillName,
-        sessionId: this.state.sessionId,
-        question,
-        autoApprove: !this.state.manualReview
+      const asset = await this.workflowClient.upsertAsset({
+        projectId: this.state.currentProject.id,
+        asset: createWorkflowAssetDraft({
+          kind,
+          projectId: this.state.currentProject.id,
+          workspaceId: readWorkspaceId(this.state.workspaceState, this.state.workflows, this.state.assets)
+        })
       });
-      const memory = await client.queryMemory({
-        sessionId: this.state.sessionId,
-        query: question,
-        limit: DefaultMemoryQueryLimit
-      });
-      const record = this.historyStore.saveWorkflowRun({
-        skillName: WorkbenchSkillName,
-        sessionId: this.state.sessionId,
-        question,
-        result,
-        memory
-      });
-      await this.persistWorkbenchHistory();
+      await this.reloadCatalog(this.state.currentProject.id);
+      const nextSelection: WorkflowSelection = attachToNode && focusNodeId
+        ? { type: "node", id: focusNodeId }
+        : { type: "asset", id: asset.id };
       this.setState({
-        latestRun: record,
         pendingAction: null,
-        noticeMessage:
-          result.status === "awaiting_approval"
-            ? "Workflow paused at reviewer checkpoint."
-            : "Workflow completed and stored in History.",
+        noticeMessage: `${readAssetKindLabel(kind)} asset created.`,
         errorMessage: null,
-        reviewReason: "",
-        selectedEvidenceSourceId: null
+        selection: nextSelection
+      });
+      if (attachToNode && focusNodeId && this.state.draftWorkflow) {
+        const nextWorkflow = attachGuardrailToNode(this.state.draftWorkflow, focusNodeId, asset.id);
+        this.updateDraftWorkflow(nextWorkflow, { type: "node", id: focusNodeId });
+      }
+      return asset;
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        errorMessage: readErrorMessage(error, "Could not create the reusable asset."),
+        noticeMessage: null
+      });
+      return null;
+    }
+  }
+
+  private async handleDeleteExecution(executionId: string): Promise<void> {
+    if (!this.state.currentProject) {
+      return;
+    }
+
+    this.setState({ pendingAction: PendingAction.DeleteExecution, errorMessage: null, noticeMessage: null });
+
+    try {
+      await this.workflowClient.deleteExecution({ executionId });
+      await this.reloadCatalog(this.state.currentProject.id);
+      this.setState({
+        pendingAction: null,
+        noticeMessage: "Execution deleted.",
+        errorMessage: null
       });
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: error instanceof Error ? error.message : "Workflow execution failed.",
+        errorMessage: readErrorMessage(error, "Could not delete the execution record."),
         noticeMessage: null
       });
     }
   }
 
-  private async handleApproveWorkflow(): Promise<void> {
-    const latestRun = this.state.latestRun;
-    if (!latestRun || latestRun.kind !== "workflow" || latestRun.status !== "awaiting_approval") {
+  private handleNodeMouseDown(event: MouseEvent, nodeId: string): void {
+    if (!(event.target instanceof HTMLElement)) {
       return;
     }
 
-    this.persistConnection();
-    this.setState({ pendingAction: "approve", errorMessage: null, noticeMessage: null });
-
-    try {
-      const client = createWorkbenchClient();
-      const result = await client.runWorkflow({
-        skillName: WorkbenchSkillName,
-        sessionId: latestRun.sessionId,
-        question: latestRun.question,
-        autoApprove: true
-      });
-      const approvedRecord = this.historyStore.applyWorkflowReviewDecision({
-        runId: latestRun.id,
-        decision: ReviewerDecision.Approved,
-        reason: this.state.reviewReason.trim() || "Approved in the workbench UI.",
-        replacementResult: result
-      });
-      await this.persistWorkbenchHistory();
-      this.setState({
-        latestRun: approvedRecord,
-        pendingAction: null,
-        noticeMessage: "Workflow approved and completed.",
-        errorMessage: null,
-        reviewReason: "",
-        selectedEvidenceSourceId: null
-      });
-    } catch (error) {
-      this.setState({
-        pendingAction: null,
-        errorMessage: error instanceof Error ? error.message : "Could not approve the workflow.",
-        noticeMessage: null
-      });
+    if (event.target.closest("button") && !event.target.closest("[data-drag-handle]")) {
+      return;
     }
+
+    const node = this.state.draftWorkflow?.nodes.find((entry) => entry.id === nodeId);
+    if (!node) {
+      return;
+    }
+
+    const viewport = this.state.draftWorkflow?.viewport;
+    const surfaceRect = this.readCanvasSurfaceRect();
+    if (!surfaceRect || !viewport) {
+      return;
+    }
+
+    this.draggingNodeId = nodeId;
+    this.dragPointerOffset = {
+      x: (event.clientX - surfaceRect.left - viewport.x) / viewport.zoom - node.position.x,
+      y: (event.clientY - surfaceRect.top - viewport.y) / viewport.zoom - node.position.y
+    };
+    this.setState({ selection: { type: "node", id: nodeId }, compactView: this.state.isCompactViewport ? CompactView.Inspector : this.state.compactView });
   }
 
-  private handleDenyWorkflow(): void {
-    const latestRun = this.state.latestRun;
-    if (!latestRun || latestRun.kind !== "workflow" || latestRun.status !== "awaiting_approval") {
+  private handleCanvasMouseDown(event: MouseEvent): void {
+    if (!(event.target instanceof HTMLElement)) {
       return;
     }
 
-    const deniedRecord = this.historyStore.applyWorkflowReviewDecision({
-      runId: latestRun.id,
-      decision: ReviewerDecision.Denied,
-      reason: this.state.reviewReason.trim() || "Changes requested from the reviewer checkpoint."
+    if (event.target.closest("[data-node-id]")) {
+      return;
+    }
+
+    const viewport = this.state.draftWorkflow?.viewport;
+    if (!viewport) {
+      return;
+    }
+
+    this.panning = true;
+    this.panOrigin = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.panViewportOrigin = { ...viewport };
+    this.setState({ selection: { type: "workflow", id: this.readCurrentWorkflowRecord()?.id ?? null } });
+  }
+
+  private handleCanvasWheel(event: WheelEvent): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    event.preventDefault();
+    this.handleZoom(event.deltaY > 0 ? -0.08 : 0.08);
+  }
+
+  private handlePortClick(
+    nodeId: string,
+    portId: string,
+    side: "input" | "output"
+  ): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    if (side === "output") {
+      this.setState({
+        pendingConnection: {
+          nodeId,
+          portId
+        },
+        selection: { type: "node", id: nodeId }
+      });
+      return;
+    }
+
+    const source = this.state.pendingConnection;
+    if (!source) {
+      this.setState({
+        noticeMessage: "Choose an output port first.",
+        errorMessage: null
+      });
+      return;
+    }
+
+    const nextDefinition = connectWorkflowNodes(this.state.draftWorkflow, {
+      sourceNodeId: source.nodeId,
+      sourcePortId: source.portId,
+      targetNodeId: nodeId,
+      targetPortId: portId
     });
-    void this.persistWorkbenchHistory();
+    this.updateDraftWorkflow(nextDefinition, { type: "node", id: nodeId });
     this.setState({
-      latestRun: deniedRecord,
-      pendingAction: null,
-      noticeMessage: "Workflow marked as denied.",
-      errorMessage: null,
-      reviewReason: "",
-      selectedEvidenceSourceId: null
+      pendingConnection: null,
+      noticeMessage: "Connection added.",
+      errorMessage: null
     });
   }
 
-  private persistConnection(): void {
-    const connection = writeServerConnection({
-      serverUrl: this.state.serverUrl,
-      authToken: this.state.authToken
-    });
-
-    this.setState({
-      serverUrl: connection.serverUrl,
-      authToken: connection.authToken
-    });
-  }
-
-  private async hydrateWorkspaceState(): Promise<void> {
-    try {
-      const state = await this.workspaceStateClient.load();
-      hydrateWorkspaceStateClients(state);
-      this.setState({
-        latestRun: this.historyStore.load().runs[0] ?? null
-      });
-    } catch {
+  private handleRemoveSelectedNode(): void {
+    const selectedNode = this.readSelectedNode();
+    if (!selectedNode || !this.state.draftWorkflow) {
       return;
     }
+
+    const nextDefinition = removeWorkflowNode(this.state.draftWorkflow, selectedNode.id);
+    this.updateDraftWorkflow(nextDefinition, { type: "workflow", id: this.readCurrentWorkflowRecord()?.id ?? null });
   }
 
-  private async persistWorkbenchHistory(): Promise<void> {
-    await this.workspaceStateClient.update({
-      workbenchHistory: this.historyStore.load()
+  private handleZoom(delta: number): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    this.updateDraftWorkflow(setWorkflowViewport(this.state.draftWorkflow, {
+      ...this.state.draftWorkflow.viewport,
+      zoom: this.state.draftWorkflow.viewport.zoom + delta
+    }));
+  }
+
+  private handleResetViewport(): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    this.updateDraftWorkflow(setWorkflowViewport(this.state.draftWorkflow, {
+      x: 96,
+      y: 96,
+      zoom: 1
+    }));
+  }
+
+  private updateDraftWorkflow(nextDefinition: WorkflowDefinitionUpsertInput, nextSelection?: WorkflowSelection): void {
+    this.setState({
+      draftWorkflow: nextDefinition,
+      selection: nextSelection ?? this.state.selection,
+      dirtyWorkflow: true
     });
   }
+
+  private patchDraftWorkflow(
+    update: (workflow: WorkflowDefinitionUpsertInput) => WorkflowDefinitionUpsertInput,
+    nextSelection?: WorkflowSelection
+  ): void {
+    const current = this.state.draftWorkflow;
+    if (!current) {
+      return;
+    }
+
+    this.updateDraftWorkflow(update(current), nextSelection);
+  }
+
+  private updateSelectedNode(node: WorkflowNodeRecord): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    this.updateDraftWorkflow({
+      ...this.state.draftWorkflow,
+      nodes: this.state.draftWorkflow.nodes.map((entry) =>
+        entry.id === node.id ? node : entry
+      )
+    }, { type: "node", id: node.id });
+  }
+
+  private patchNode(
+    nodeId: string,
+    update: (node: WorkflowNodeRecord) => WorkflowNodeRecord
+  ): void {
+    const current = this.state.draftWorkflow?.nodes.find((node) => node.id === nodeId);
+    if (!current) {
+      return;
+    }
+
+    this.updateSelectedNode(update(current));
+  }
+
+  private updateNodeProvider(
+    nodeId: string,
+    provider: WorkflowProviderSelectionRecord
+  ): void {
+    this.patchNode(nodeId, (node) => ({
+      ...node,
+      config: {
+        ...node.config,
+        provider
+      }
+    }));
+  }
+
+  private updateAssetDraft(assetId: string, nextAsset: WorkflowAssetRecord): void {
+    this.setState({
+      assets: this.state.assets.map((asset) => asset.id === assetId ? nextAsset : asset),
+      dirtyAssetIds: this.state.dirtyAssetIds.includes(assetId)
+        ? this.state.dirtyAssetIds
+        : [...this.state.dirtyAssetIds, assetId],
+      selection: { type: "asset", id: assetId }
+    });
+  }
+
+  private patchAsset(
+    assetId: string,
+    update: (asset: WorkflowAssetRecord) => WorkflowAssetRecord
+  ): void {
+    const current = this.state.assets.find((asset) => asset.id === assetId);
+    if (!current) {
+      return;
+    }
+
+    this.updateAssetDraft(assetId, update(current));
+  }
+
+  private readCurrentWorkflowRecord(): WorkflowDefinitionRecord | null {
+    const draftId = this.state.draftWorkflow?.id;
+    if (!draftId) {
+      return this.state.workflows[0] ?? null;
+    }
+
+    return this.state.workflows.find((workflow) => workflow.id === draftId) ?? null;
+  }
+
+  private readSelectedNode(): WorkflowNodeRecord | null {
+    if (this.state.selection.type !== "node" || !this.state.draftWorkflow) {
+      return null;
+    }
+
+    return this.state.draftWorkflow.nodes.find((node) => node.id === this.state.selection.id) ?? null;
+  }
+
+  private readSelectedAsset(): WorkflowAssetRecord | null {
+    if (this.state.selection.type !== "asset") {
+      return null;
+    }
+
+    return this.state.assets.find((asset) => asset.id === this.state.selection.id) ?? null;
+  }
+
+  private readInspectorTitle(): string {
+    if (this.state.selection.type === "node") {
+      return this.readSelectedNode()?.label ?? "Selected node";
+    }
+
+    if (this.state.selection.type === "asset") {
+      return this.readSelectedAsset()?.name ?? "Reusable asset";
+    }
+
+    return this.state.draftWorkflow?.name ?? "Workflow";
+  }
+
+  private readInspectorSubtitle(): string {
+    if (this.state.selection.type === "node") {
+      const node = this.readSelectedNode();
+      return node ? readNodeKindLabel(node.kind) : "No node selected";
+    }
+
+    if (this.state.selection.type === "asset") {
+      const asset = this.readSelectedAsset();
+      return asset ? `${readAssetKindLabel(asset.kind)} · ${readAssetScopeLabel(asset.scope)}` : "No asset selected";
+    }
+
+    return "Workflow metadata";
+  }
+
+  private readCanvasSurfaceRect(): DOMRect | null {
+    const element = this.element?.querySelector(`[data-testid="${WorkflowScreenSelector.CanvasViewport}"]`);
+    return element instanceof HTMLElement ? element.getBoundingClientRect() : null;
+  }
+
+  private readonly handleResize = (): void => {
+    const isCompactViewport = readIsCompactViewport();
+    if (isCompactViewport === this.state.isCompactViewport) {
+      return;
+    }
+
+    this.setState({
+      isCompactViewport,
+      compactView: isCompactViewport ? CompactView.Canvas : this.state.compactView
+    });
+  };
+
+  private readonly handleGlobalMouseMove = (event: MouseEvent): void => {
+    if (this.draggingNodeId && this.dragPointerOffset && this.state.draftWorkflow) {
+      const surfaceRect = this.readCanvasSurfaceRect();
+      if (!surfaceRect) {
+        return;
+      }
+      const viewport = this.state.draftWorkflow.viewport;
+      const nextPosition = {
+        x: (event.clientX - surfaceRect.left - viewport.x) / viewport.zoom - this.dragPointerOffset.x,
+        y: (event.clientY - surfaceRect.top - viewport.y) / viewport.zoom - this.dragPointerOffset.y
+      };
+      this.updateDraftWorkflow(moveWorkflowNode(this.state.draftWorkflow, this.draggingNodeId, nextPosition), { type: "node", id: this.draggingNodeId });
+      return;
+    }
+
+    if (this.panning && this.panOrigin && this.panViewportOrigin && this.state.draftWorkflow) {
+      const nextViewport = setWorkflowViewport(this.state.draftWorkflow, {
+        x: this.panViewportOrigin.x + (event.clientX - this.panOrigin.x),
+        y: this.panViewportOrigin.y + (event.clientY - this.panOrigin.y),
+        zoom: this.panViewportOrigin.zoom
+      });
+      this.updateDraftWorkflow(nextViewport);
+    }
+  };
+
+  private readonly handleGlobalMouseUp = (): void => {
+    this.draggingNodeId = null;
+    this.dragPointerOffset = null;
+    this.panning = false;
+    this.panOrigin = null;
+    this.panViewportOrigin = null;
+  };
 }
 
-const readFinalResult = (
-  run: WorkbenchRunHistoryRecord
-): SkillRunResponse =>
-  run.kind === "skill" ? run.result : run.result.final;
+const groupAssetsByKind = (
+  assets: ReadonlyArray<WorkflowAssetRecord>
+): ReadonlyArray<{
+  kind: WorkflowAssetKindValue;
+  assets: ReadonlyArray<WorkflowAssetRecord>;
+}> => [
+  WorkflowAssetKind.Prompt,
+  WorkflowAssetKind.Instruction,
+  WorkflowAssetKind.Guardrail
+].map((kind) => ({
+  kind,
+  assets: assets.filter((asset) => asset.kind === kind)
+}));
 
-const createSessionId = (): string => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `session-${crypto.randomUUID().slice(0, 8)}`;
+const readUsageCount = (
+  assetId: string,
+  usages: ReadonlyArray<WorkflowAssetUsageRecord>
+): number => usages.filter((usage) => usage.assetId === assetId).length;
+
+const readNodeSecondaryText = (node: WorkflowNodeRecord): string => {
+  if (node.kind === WorkflowNodeKind.AiAgent) {
+    return node.config.role ?? "planner";
   }
 
-  return `session-${Date.now().toString(36)}`;
+  if (node.kind === WorkflowNodeKind.AiProviderRun) {
+    return node.config.provider?.providerId ?? "provider";
+  }
+
+  if (node.kind === WorkflowNodeKind.HumanReview) {
+    return node.config.reviewPolicy?.requireHumanDecision ? "manual decision required" : "manual review";
+  }
+
+  return readNodeKindLabel(node.kind);
 };
+
+const readNodePaletteDescription = (kind: WorkflowNodeKindValue): string => {
+  if (kind === WorkflowNodeKind.TriggerManual) {
+    return "Single manual entrypoint for the MVP runtime.";
+  }
+
+  if (kind === WorkflowNodeKind.AssetPrompt || kind === WorkflowNodeKind.AssetInstruction) {
+    return "Server-backed reusable asset node.";
+  }
+
+  if (kind === WorkflowNodeKind.AssetGuardrail) {
+    return "Reusable guardrail pack with severity semantics.";
+  }
+
+  if (kind === WorkflowNodeKind.AiAgent || kind === WorkflowNodeKind.AiProviderRun) {
+    return "Runnable AI node with per-node provider controls.";
+  }
+
+  if (kind === WorkflowNodeKind.HumanReview) {
+    return "Blocking approval checkpoint with two outputs.";
+  }
+
+  if (kind === WorkflowNodeKind.TerminalResponse) {
+    return "Final response sink for API consumers.";
+  }
+
+  return "Logic helper node for the workflow graph.";
+};
+
+const readPortOffset = (index: number, total: number): number => {
+  const safeTotal = Math.max(total, 1);
+  const spacing = 44;
+  const start = 60;
+  return start + Math.max(0, Math.floor((3 - safeTotal) * 10)) + index * spacing;
+};
+
+const readCanvasBackgroundStyle = (viewport: WorkflowViewportRecord): string => {
+  const gridSize = Math.max(14, Math.round(24 * viewport.zoom));
+  const offsetX = Math.round(viewport.x % gridSize);
+  const offsetY = Math.round(viewport.y % gridSize);
+  return `background-color:#11161d;background-image:radial-gradient(circle, rgba(120,132,145,0.22) 1px, transparent 1px);background-size:${gridSize}px ${gridSize}px;background-position:${offsetX}px ${offsetY}px;`;
+};
+
+const readWorkspaceId = (
+  workspaceState: WorkspaceStateSnapshot | null,
+  workflows: ReadonlyArray<WorkflowDefinitionRecord>,
+  assets: ReadonlyArray<WorkflowAssetRecord>
+): string => workflows[0]?.workspaceId ?? assets[0]?.workspaceId ?? workspaceState?.activeProjectId ?? readDefaultWorkflowWorkspaceId();
+
+const resolveSelectionAfterReload = (
+  selection: WorkflowSelection,
+  workflow: WorkflowDefinitionRecord,
+  assets: ReadonlyArray<WorkflowAssetRecord>
+): WorkflowSelection => {
+  if (selection.type === "node" && workflow.nodes.some((node) => node.id === selection.id)) {
+    return selection;
+  }
+
+  if (selection.type === "asset" && assets.some((asset) => asset.id === selection.id)) {
+    return selection;
+  }
+
+  return {
+    type: "workflow",
+    id: workflow.id
+  };
+};
+
+const createFallbackProviderSelection = (): WorkflowProviderSelectionRecord => ({
+  providerId: "codex-cli",
+  modelId: "",
+  reasoningLevel: WorkflowReasoningLevel.Medium,
+  temperature: 0.2,
+  verbosity: WorkflowVerbosity.Medium,
+  testStatus: "unknown"
+});
+
+const stripAssetVersionFields = (
+  asset: WorkflowAssetRecord
+): WorkflowAssetUpsertInput => ({
+  id: asset.id,
+  workspaceId: asset.workspaceId,
+  ...(asset.projectId ? { projectId: asset.projectId } : {}),
+  kind: asset.kind,
+  scope: asset.scope,
+  name: asset.name,
+  slug: asset.slug,
+  description: asset.description,
+  body: asset.body,
+  language: asset.language,
+  tags: asset.tags,
+  ...(asset.outputContract ? { outputContract: asset.outputContract } : {}),
+  ...(asset.guardrail ? { guardrail: asset.guardrail } : {}),
+  ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {})
+});
+
+const stripOptionalProjectId = (
+  asset: WorkflowAssetRecord
+): Omit<WorkflowAssetRecord, "projectId"> | WorkflowAssetRecord => {
+  if (asset.projectId) {
+    return asset;
+  }
+
+  const { projectId: _projectId, ...rest } = asset;
+  return rest;
+};
+
+const readWorkflowAssetScope = (value: string): WorkflowAssetScopeValue =>
+  value === WorkflowAssetScope.Workspace ? WorkflowAssetScope.Workspace : WorkflowAssetScope.Project;
+
+const readWorkflowRecordStatus = (value: string): WorkflowRecordStatus =>
+  value === WorkflowRecordStatus.Published
+    ? WorkflowRecordStatus.Published
+    : value === WorkflowRecordStatus.Archived
+      ? WorkflowRecordStatus.Archived
+      : WorkflowRecordStatus.Draft;
+
+const readWorkflowNodeRole = (value: string): WorkflowNodeRole =>
+  value === WorkflowNodeRole.Retriever
+    ? WorkflowNodeRole.Retriever
+    : value === WorkflowNodeRole.Executor
+      ? WorkflowNodeRole.Executor
+      : value === WorkflowNodeRole.Reviewer
+        ? WorkflowNodeRole.Reviewer
+        : WorkflowNodeRole.Planner;
+
+const readWorkflowReasoningLevel = (value: string): WorkflowReasoningLevel =>
+  value === WorkflowReasoningLevel.Low
+    ? WorkflowReasoningLevel.Low
+    : value === WorkflowReasoningLevel.High
+      ? WorkflowReasoningLevel.High
+      : value === WorkflowReasoningLevel.Max
+        ? WorkflowReasoningLevel.Max
+        : WorkflowReasoningLevel.Medium;
+
+const readWorkflowVerbosity = (value: string): WorkflowVerbosity =>
+  value === WorkflowVerbosity.Low
+    ? WorkflowVerbosity.Low
+    : value === WorkflowVerbosity.High
+      ? WorkflowVerbosity.High
+      : WorkflowVerbosity.Medium;
+
+const readIsCompactViewport = (): boolean =>
+  typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
+
+const readErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 
 const formatTimestamp = (value: string): string => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 };
+
+const toSlugValue = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");

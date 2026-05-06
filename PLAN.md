@@ -629,6 +629,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Active screen focus since `2026-05-06`: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
   - Main task in Notion is `En progreso`: `06. Workflows screen n8n-style integrated editor [P0]`
   - Phase `06.1` contract lock completed on `2026-05-06`; canonical decisions live in `docs/WORKFLOWS_EDITOR_MVP.md`
+  - Phase `06.3` implementation completed on `2026-05-06`, pending explicit user validation before moving the Notion subtask to `Listo`:
+    - `apps/web-ui/src/screens/Workflows.ts` now renders a full-height integrated workbench shell aligned with Explorer instead of the older detached AI-workbench layout
+    - The editor consumes only server-first workflow endpoints for definitions, reusable assets, usage records and execution history
+    - The MVP canvas supports pan/zoom, draggable nodes, connectable ports, workflow/node/asset inspectors and responsive compact switching
+    - Workflow definition list/create/load/save/delete is wired to the server, and the MVP node palette is visible with unsupported deeper features explicitly disabled with explanation
+    - Deterministic browser coverage now exists in `pnpm -C apps/web-ui validate:workflows` for create -> edit -> drag -> connect -> save -> reload
   - Phase decomposition created in Notion on `2026-05-06`:
     - `06.1 Workflows contracts and MVP boundary lock`
     - `06.2 Server-first workflow persistence and reusable asset model`

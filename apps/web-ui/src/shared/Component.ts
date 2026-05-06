@@ -110,6 +110,14 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('change', value as EventListener);
     } else if (key === 'onScroll' && typeof value === 'function') {
       element.addEventListener('scroll', value as EventListener);
+    } else if (key === 'onWheel' && typeof value === 'function') {
+      element.addEventListener('wheel', value as EventListener, { passive: false });
+    } else if (key === 'onMouseDown' && typeof value === 'function') {
+      element.addEventListener('mousedown', value as EventListener);
+    } else if (key === 'onMouseUp' && typeof value === 'function') {
+      element.addEventListener('mouseup', value as EventListener);
+    } else if (key === 'onMouseMove' && typeof value === 'function') {
+      element.addEventListener('mousemove', value as EventListener);
     } else if (key === 'onContextMenu' && typeof value === 'function') {
       element.addEventListener('contextmenu', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {

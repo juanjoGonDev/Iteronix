@@ -2248,3 +2248,28 @@
   - La ejecución real de workflows sigue siendo la demo lineal de `ai-workbench`; `06.2` sólo introduce persistencia e interfaz server-first.
 - Next:
   - Validar gates globales, dejar comentario en Notion y pasar a la siguiente fase sólo tras confirmación del usuario.
+### 2026-05-06 22:39 (Europe/Madrid) — Workflows 06.3 Integrated Editor Shell
+
+- Summary: Implementada la fase `06.3` en `apps/web-ui` con un editor integrado tipo workbench para `Workflows`, consumiendo exclusivamente el catálogo server-first de la fase `06.2`.
+- Decisions:
+  - Mantener `Workflows` sobre el sistema DOM actual del PWA en lugar de introducir React Flow en esta fase, para no romper la arquitectura existente ni mezclar stacks.
+  - Resolver el canvas MVP con nodos absolutos, puertos conectables, drag/pan/zoom e inspector lateral antes de abrir la fase `06.4`.
+  - Corregir un bug real del inspector: varias ediciones encadenadas cerraban sobre snapshots antiguos del workflow/nodo/asset y machacaban cambios previos; las actualizaciones ahora se basan en el estado actual.
+- Changes:
+  - **Created apps/web-ui/src/shared/workflow-client.ts** y test asociado: cliente tipado para definitions/assets/usages/executions.
+  - **Created apps/web-ui/src/screens/workflows-editor-state.ts** y test asociado: tipos locales del editor, helpers de nodos/assets y utilidades puras para el canvas.
+  - **Updated apps/web-ui/src/shared/Component.ts** para soportar `wheel` y eventos de ratón necesarios para drag y pan.
+  - **Replaced apps/web-ui/src/screens/Workflows.ts** con un shell integrado de pantalla completa, rail lateral, panel contextual, canvas editable, inspector workflow/node/asset y estados disabled con explicación.
+  - **Created apps/web-ui/scripts/validate-workflows.ts** y script `validate:workflows`: validación browser determinista de create -> edit -> drag -> connect -> save -> reload.
+  - **Updated PLAN.md** con el estado real de `06.3` y su cobertura browser.
+- Commands:
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - El editor `06.3` deja explícitamente fuera el editor visual profundo de JSON contracts, el mapping detallado entre edges, el test funcional de providers y la ejecución runtime n8n-like; eso queda para `06.4`–`06.6`.
+  - El `workspaceId` sigue derivándose en la UI desde catálogo/workspace actual hasta que el servidor exponga un identificador canónico directo.
+- Next:
+  - Esperar validación visual del usuario para mantener `06.3` en progreso o pasar a `06.4` si el editor base queda aceptado.
