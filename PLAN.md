@@ -626,9 +626,26 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Server-backed settings hardening on `2026-04-30`: `Workflow Limits`, `Notifications` and `API Access` now persist through the workspace state before the screen hydrates any local cache, and the browser harness verifies those subtabs from a second browser context plus the raw stubbed server snapshot
   - User acceptance completed on `2026-05-06`: Settings is accepted and can be treated as done; the Notion card was moved to `Listo`
 - [ ] Workflows:
-  - Next single-screen focus after Settings acceptance: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
-  - Task created in Notion on `2026-05-06`: `06. Workflows screen n8n-style integrated editor [P0]`
-  - Required product scope captured in Notion:
+  - Active screen focus since `2026-05-06`: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
+  - Main task in Notion is `En progreso`: `06. Workflows screen n8n-style integrated editor [P0]`
+  - Phase decomposition created in Notion on `2026-05-06`:
+    - `06.1 Workflows contracts and MVP boundary lock`
+    - `06.2 Server-first workflow persistence and reusable asset model`
+    - `06.3 Integrated n8n-like canvas shell and node editor`
+    - `06.4 JSON contracts, data mapping and guardrail composition UI`
+    - `06.5 Execution rail, history, alerts and EUR cost observability`
+    - `06.6 Codex CLI workflow baseline and provider continuity`
+    - `06.7 Trigger, event and integration expansion`
+  - MVP boundary locked before coding:
+    - Integrated canvas shell and editor
+    - Small but real runnable node set
+    - Reusable prompt/guardrail/instruction foundation
+    - Visual JSON output contracts with live validation
+    - Guardrail severity model with at most 4 validations per guardrail
+    - Codex CLI as default runnable baseline
+    - Execution history, warnings/failures, runtime, tokens and EUR cost display
+    - Deterministic browser validation for one real workflow edit/run path
+  - Required product scope captured in Notion and mirrored here:
     - Integrated canvas UX like n8n and as shell-integrated as Explorer
     - Draggable/connectable/reusable nodes with multi-input and multi-output
     - Reusable prompts, guardrails and instructions across projects with usage graph and delete protection
@@ -641,6 +658,14 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - At most 4 validations per guardrail, added one by one from the UI
     - Execution alerts, warnings, full history, deletable runs, tokens, runtime and EUR cost totals
     - Trigger and integration concepts for schedule, events, init and API/app calls
+  - Phase dependency order:
+    - `06.1` must finish before any UI/server coding
+    - `06.2` is the server-first foundation for the editor
+    - `06.3` depends on `06.2`
+    - `06.4` depends on `06.3`
+    - `06.5` depends on `06.2` + `06.3` + `06.4`
+    - `06.6` depends on `06.2` to `06.5`
+    - `06.7` starts only after the MVP phases are accepted
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

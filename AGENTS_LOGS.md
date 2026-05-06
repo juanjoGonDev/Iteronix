@@ -2181,3 +2181,23 @@
   - El modelo exacto de mapeo de datos entre nodos y el editor visual del contrato JSON siguen siendo decisiones de diseño abiertas antes de empezar la implementación.
 - Next:
   - Descomponer `Workflows` en fases y subtareas antes de tocar `apps/web-ui`, `apps/server-api` o `packages/agents`.
+### 2026-05-06 17:44 (Europe/Madrid) — Workflows Phases Locked Before Coding
+
+- Summary: La tarea principal de `Workflows` pasó a `En progreso` en Notion y quedó descompuesta en fases/subtareas concretas con frontera MVP, dependencias y criterios de salida antes de tocar código.
+- Decisions:
+  - Mantener `Workflows` como único foco activo.
+  - No modificar `apps/web-ui`, `apps/server-api` ni `packages/*` en esta tarea; sólo planificación y alineación documental.
+  - Fijar `06.1` como prerrequisito obligatorio antes de cualquier implementación UI o server-first.
+- Changes:
+  - **Updated Notion task `06. Workflows screen n8n-style integrated editor [P0]`**: movida a `En progreso` y ampliada con fases, MVP boundary y dependencias.
+  - **Created Notion subtasks**: `06.1` a `06.7` como páginas separadas dentro del tablero.
+  - **Updated PLAN.md**: `Workflows` queda como foco activo con fases, dependencia y alcance reflejados localmente.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Sigue abierta la decisión exacta del contrato de handoff de contexto entre proveedores y del UX final del editor visual de JSON; eso pertenece a `06.1`.
+- Next:
+  - Ejecutar la fase `06.1 Workflows contracts and MVP boundary lock` antes de escribir código del editor.
