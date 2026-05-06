@@ -2201,3 +2201,26 @@
   - Sigue abierta la decisión exacta del contrato de handoff de contexto entre proveedores y del UX final del editor visual de JSON; eso pertenece a `06.1`.
 - Next:
   - Ejecutar la fase `06.1 Workflows contracts and MVP boundary lock` antes de escribir código del editor.
+### 2026-05-06 17:40 (Europe/Madrid) — Workflows 06.1 Contract Lock
+
+- Summary: Cerrada la fase `06.1` sin tocar runtime; se fijó el contrato MVP del editor `Workflows` en Notion y en `docs/WORKFLOWS_EDITOR_MVP.md`.
+- Decisions:
+  - El MVP arrancará sólo con `manual trigger`; `schedule`, `webhook`, `event` e `init` quedan reservados en schema hasta `06.7`.
+  - El primer set de nodos será `trigger.manual`, `asset.prompt`, `asset.instruction`, `asset.guardrail`, `ai.agent`, `ai.provider-run`, `logic.condition`, `logic.merge`, `human.review` y `terminal.response`.
+  - La continuidad entre proveedores/modelos será responsabilidad del servidor mediante `WorkflowContextEnvelope`, no por reutilización directa de transcripts crudos.
+  - Los assets reutilizables de prompt/instruction/guardrail serán server-first, con scope `workspace` o `project` y protección de borrado por usage records.
+  - Los contratos JSON de salida usarán un subconjunto serializable y visualmente editable compartido entre UI y servidor.
+  - Los guardrails quedarán limitados a 1-4 validaciones y sus outcomes serán `warn`, `error` o `success`; sólo `error` invalida el nodo.
+- Changes:
+  - **Created docs/WORKFLOWS_EDITOR_MVP.md**: documento canónico del contrato 06.1 y frontera MVP.
+  - **Updated PLAN.md**: reflejado el cierre de `06.1` y resumidas las decisiones que bloquean `06.2`.
+  - **Updated Notion parent task `06. Workflows screen n8n-style integrated editor [P0]`**: añadida la decisión contractual del MVP para no depender del chat.
+- Commands:
+  - `Get-Content apps/web-ui/src/screens/Workflows.ts`
+  - `Get-Content apps/server-api/src/ai-workbench.ts`
+  - `Get-Content packages/agents/src/workflow-orchestrator.ts`
+  - `Get-Content apps/web-ui/src/shared/workbench-types.ts`
+- Issues/Risks:
+  - Los tipos demo actuales de `workbench` siguen siendo lineales; `06.2` deberá introducir contratos nuevos sin intentar forzar compatibilidad con ese shape.
+- Next:
+  - Empezar `06.2` con persistencia server-first y contratos API usando `docs/WORKFLOWS_EDITOR_MVP.md` como única referencia funcional.

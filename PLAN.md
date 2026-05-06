@@ -628,6 +628,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
 - [ ] Workflows:
   - Active screen focus since `2026-05-06`: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
   - Main task in Notion is `En progreso`: `06. Workflows screen n8n-style integrated editor [P0]`
+  - Phase `06.1` contract lock completed on `2026-05-06`; canonical decisions live in `docs/WORKFLOWS_EDITOR_MVP.md`
   - Phase decomposition created in Notion on `2026-05-06`:
     - `06.1 Workflows contracts and MVP boundary lock`
     - `06.2 Server-first workflow persistence and reusable asset model`
@@ -666,6 +667,16 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - `06.5` depends on `06.2` + `06.3` + `06.4`
     - `06.6` depends on `06.2` to `06.5`
     - `06.7` starts only after the MVP phases are accepted
+  - `06.1` decisions now fixed for implementation:
+    - First MVP node set: `trigger.manual`, `asset.prompt`, `asset.instruction`, `asset.guardrail`, `ai.agent`, `ai.provider-run`, `logic.condition`, `logic.merge`, `human.review`, `terminal.response`
+    - Workflow definitions are server-first, versioned graph records with canonical `nodes` and `edges`
+    - Reusable prompt/instruction/guardrail assets support `workspace` or `project` scope and are delete-protected by usage records
+    - Prompt, instruction, agent and provider-run nodes share one constrained visual JSON output contract model
+    - Edge mappings are normalized per connection instead of hidden inside node-local ad-hoc strings
+    - Guardrails are reusable packs of 1 to 4 validations with `warn`, `error` or `success` outcomes; only `error` invalidates a node run
+    - Workflow execution history is stored separately from definitions and normalizes runtime cost totals to EUR
+    - Cross-provider continuity is server-owned through a normalized `WorkflowContextEnvelope`, not raw transcript reuse
+    - Manual trigger is the only active trigger in the MVP; `schedule`, `webhook`, `event` and `init` remain schema-reserved until `06.7`
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows
