@@ -2224,3 +2224,27 @@
   - Los tipos demo actuales de `workbench` siguen siendo lineales; `06.2` deberá introducir contratos nuevos sin intentar forzar compatibilidad con ese shape.
 - Next:
   - Empezar `06.2` con persistencia server-first y contratos API usando `docs/WORKFLOWS_EDITOR_MVP.md` como única referencia funcional.
+### 2026-05-06 21:25 (Europe/Madrid) — Workflows 06.2 Server-first Persistence
+
+- Summary: Implementada la base server-first de `Workflows` sin tocar la UI; el servidor ya persiste definiciones, assets reutilizables, usage records y ejecuciones dentro del workspace state.
+- Decisions:
+  - Los contratos compartidos del editor viven en `packages/shared/src/workflows.ts` y no en tipos locales del servidor o de la UI demo actual.
+  - `packages/agents` pasa a ser dueño del `workflow catalog store`, incluyendo la derivación de usage records y el bloqueo de borrado de assets referenciados.
+  - La persistencia de `assetUsages` se serializa dentro de `workspace-state.json`, aunque en memoria se derive de las definiciones para mantener consistencia.
+  - La API de `06.2` acepta sólo `manual` como trigger válido; el resto de triggers siguen reservados pero rechazados en contrato.
+  - Esta fase no modifica `apps/web-ui`; el siguiente paso es consumir estos endpoints desde el editor integrado.
+- Changes:
+  - **Created packages/shared/src/workflows.ts** y test asociado: contratos tipados del catálogo workflow y helpers MVP.
+  - **Created packages/agents/src/workflow-catalog.ts** y test asociado: store de definiciones, assets, usage records y ejecuciones.
+  - **Created apps/server-api/src/workflows.ts** y test asociado: parsers y operaciones API tipadas para workflow CRUD, asset CRUD/list/usage y execution list/get/delete.
+  - **Updated apps/server-api/src/workspace-state.ts** y tests: persistencia del snapshot `workflows`.
+  - **Updated apps/server-api/src/server.ts** y `constants.ts`: rutas nuevas y wiring del catálogo workflow con guardado en `workspacePersistence`.
+  - **Updated PLAN.md** con el cierre funcional de `06.2`.
+- Commands:
+  - `pnpm exec vitest run packages/shared/src/workflows.test.ts packages/agents/src/workflow-catalog.test.ts apps/server-api/src/workflows.test.ts apps/server-api/src/workspace-state.test.ts`
+  - `pnpm typecheck`
+- Issues/Risks:
+  - Los endpoints existen pero aún no hay cliente web que los consuma; eso pertenece a fases posteriores.
+  - La ejecución real de workflows sigue siendo la demo lineal de `ai-workbench`; `06.2` sólo introduce persistencia e interfaz server-first.
+- Next:
+  - Validar gates globales, dejar comentario en Notion y pasar a la siguiente fase sólo tras confirmación del usuario.

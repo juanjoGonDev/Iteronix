@@ -677,6 +677,14 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflow execution history is stored separately from definitions and normalizes runtime cost totals to EUR
     - Cross-provider continuity is server-owned through a normalized `WorkflowContextEnvelope`, not raw transcript reuse
     - Manual trigger is the only active trigger in the MVP; `schedule`, `webhook`, `event` and `init` remain schema-reserved until `06.7`
+  - `06.2` server-first foundation implemented on `2026-05-06`:
+    - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
+    - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history
+    - `apps/server-api` persists workflow definitions, assets, usage records and executions inside the workspace state snapshot
+    - Typed server endpoints now exist for workflow definition CRUD, asset CRUD/list/usage and execution list/get/delete
+    - Asset deletion is blocked server-side while usage records still reference the asset
+    - Manual trigger remains the only accepted runtime trigger in the API contract during the MVP
+    - Workflows UI is intentionally untouched in this phase
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

@@ -1,0 +1,478 @@
+import type { WorkflowCatalogStore, WorkflowAssetUpsertInput, WorkflowDefinitionUpsertInput } from "../../../packages/agents/src/workflow-catalog";
+import {
+  isWorkflowTriggerKindSupportedInMvp,
+  type WorkflowAssetUsageRecord,
+  type WorkflowAssetRecord,
+  type WorkflowDefinitionRecord,
+  type WorkflowExecutionRecord
+} from "../../../packages/shared/src/workflows";
+import { ErrorMessage, HttpStatus } from "./constants";
+import type { ProjectStore } from "./projects";
+import { ResultType, err, ok, type Result } from "./result";
+
+export type ApiError = {
+  status: number;
+  message: string;
+};
+
+export const executeWorkflowDefinitionUpsert = (
+  input: {
+    projectId: string;
+    definition: WorkflowDefinitionUpsertInput;
+  },
+  dependencies: {
+    projectStore: ProjectStore;
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const project = dependencies.projectStore.getById(input.projectId);
+  if (project.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: project.error.message
+    });
+  }
+
+  return ok(
+    dependencies.catalog.upsertWorkflow({
+      ...input.definition,
+      projectId: project.value.id
+    })
+  );
+};
+
+export const executeWorkflowDefinitionList = (
+  input: {
+    projectId: string;
+  },
+  dependencies: {
+    projectStore: ProjectStore;
+    catalog: WorkflowCatalogStore;
+  }
+): Result<ReadonlyArray<WorkflowDefinitionRecord>, ApiError> => {
+  const project = dependencies.projectStore.getById(input.projectId);
+  if (project.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: project.error.message
+    });
+  }
+
+  return ok(
+    dependencies.catalog.listWorkflows({
+      projectId: project.value.id
+    })
+  );
+};
+
+export const executeWorkflowDefinitionGet = (
+  input: {
+    workflowId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  return ok(workflow);
+};
+
+export const executeWorkflowDefinitionDelete = (
+  input: {
+    workflowId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const workflow = dependencies.catalog.deleteWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  return ok(workflow);
+};
+
+export const executeWorkflowAssetUpsert = (
+  input: {
+    projectId: string;
+    asset: WorkflowAssetUpsertInput;
+  },
+  dependencies: {
+    projectStore: ProjectStore;
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowAssetRecord, ApiError> => {
+  const project = dependencies.projectStore.getById(input.projectId);
+  if (project.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: project.error.message
+    });
+  }
+
+  const assetInput: WorkflowAssetUpsertInput = {
+    ...input.asset
+  };
+  if (input.asset.scope === "project") {
+    assetInput.projectId = project.value.id;
+  }
+
+  return ok(
+    dependencies.catalog.upsertAsset(assetInput)
+  );
+};
+
+export const executeWorkflowAssetList = (
+  input: {
+    projectId: string;
+    workspaceId: string;
+  },
+  dependencies: {
+    projectStore: ProjectStore;
+    catalog: WorkflowCatalogStore;
+  }
+): Result<ReadonlyArray<WorkflowAssetRecord>, ApiError> => {
+  const project = dependencies.projectStore.getById(input.projectId);
+  if (project.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: project.error.message
+    });
+  }
+
+  return ok(
+    dependencies.catalog.listAssets({
+      workspaceId: input.workspaceId,
+      projectId: project.value.id
+    })
+  );
+};
+
+export const executeWorkflowAssetGet = (
+  input: {
+    assetId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowAssetRecord, ApiError> => {
+  const asset = dependencies.catalog.getAsset(input.assetId);
+  if (!asset) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  return ok(asset);
+};
+
+export const executeWorkflowAssetDelete = (
+  input: {
+    assetId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowAssetRecord, ApiError> => {
+  try {
+    return ok(dependencies.catalog.deleteAsset(input.assetId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ErrorMessage.InvalidBody;
+    return err({
+      status: /referenced/i.test(message) ? HttpStatus.Conflict : HttpStatus.NotFound,
+      message
+    });
+  }
+};
+
+export const executeWorkflowAssetUsageList = (
+  input: {
+    assetId?: string;
+    workflowId?: string;
+    projectId?: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<ReadonlyArray<WorkflowAssetUsageRecord>, ApiError> =>
+  ok(dependencies.catalog.listAssetUsages(input));
+
+export const executeWorkflowExecutionList = (
+  input: {
+    projectId: string;
+    workflowId?: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<ReadonlyArray<WorkflowExecutionRecord>, ApiError> =>
+  ok(dependencies.catalog.listExecutions(input));
+
+export const executeWorkflowExecutionGet = (
+  input: {
+    executionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowExecutionRecord, ApiError> => {
+  const execution = dependencies.catalog.getExecution(input.executionId);
+  if (!execution) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  return ok(execution);
+};
+
+export const executeWorkflowExecutionDelete = (
+  input: {
+    executionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  }
+): Result<WorkflowExecutionRecord, ApiError> => {
+  const execution = dependencies.catalog.deleteExecution(input.executionId);
+  if (!execution) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  return ok(execution);
+};
+
+export const parseWorkflowDefinitionUpsertRequest = (
+  value: unknown
+): Result<{ projectId: string; definition: WorkflowDefinitionUpsertInput }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(value, "projectId", ErrorMessage.MissingProjectId);
+  const definition = value["definition"];
+  if (projectId.type === ResultType.Err || !isRecord(definition)) {
+    return invalidBody();
+  }
+
+  const candidate = definition as unknown as WorkflowDefinitionUpsertInput;
+  if (!isWorkflowTriggerKindSupportedInMvp(candidate.trigger.kind)) {
+    return invalidBody();
+  }
+
+  return ok({
+    projectId: projectId.value,
+    definition: candidate
+  });
+};
+
+export const parseWorkflowDefinitionDeleteRequest = (
+  value: unknown
+): Result<{ workflowId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "workflowId");
+
+export const parseWorkflowDefinitionListRequest = (
+  value: unknown
+): Result<{ projectId: string }, ApiError> => parseProjectRequest(value);
+
+export const parseWorkflowDefinitionGetRequest = (
+  value: unknown
+): Result<{ workflowId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "workflowId");
+
+export const parseWorkflowAssetUpsertRequest = (
+  value: unknown
+): Result<{ projectId: string; asset: WorkflowAssetUpsertInput }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(value, "projectId", ErrorMessage.MissingProjectId);
+  const asset = value["asset"];
+  if (projectId.type === ResultType.Err || !isRecord(asset)) {
+    return invalidBody();
+  }
+
+  return ok({
+    projectId: projectId.value,
+    asset: asset as unknown as WorkflowAssetUpsertInput
+  });
+};
+
+export const parseWorkflowAssetDeleteRequest = (
+  value: unknown
+): Result<{ assetId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "assetId");
+
+export const parseWorkflowAssetListRequest = (
+  value: unknown
+): Result<{ projectId: string; workspaceId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(value, "projectId", ErrorMessage.MissingProjectId);
+  const workspaceId = readRequiredString(value, "workspaceId", ErrorMessage.InvalidBody);
+  if (projectId.type === ResultType.Err || workspaceId.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    projectId: projectId.value,
+    workspaceId: workspaceId.value
+  });
+};
+
+export const parseWorkflowAssetGetRequest = (
+  value: unknown
+): Result<{ assetId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "assetId");
+
+export const parseWorkflowAssetUsageListRequest = (
+  value: unknown
+): Result<{ assetId?: string; workflowId?: string; projectId?: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const parsed: { assetId?: string; workflowId?: string; projectId?: string } = {};
+  const assetId = readOptionalString(value, "assetId");
+  const workflowId = readOptionalString(value, "workflowId");
+  const projectId = readOptionalString(value, "projectId");
+
+  if (assetId !== undefined) {
+    parsed.assetId = assetId;
+  }
+
+  if (workflowId !== undefined) {
+    parsed.workflowId = workflowId;
+  }
+
+  if (projectId !== undefined) {
+    parsed.projectId = projectId;
+  }
+
+  return ok(parsed);
+};
+
+export const parseWorkflowExecutionListRequest = (
+  value: unknown
+): Result<{ projectId: string; workflowId?: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(value, "projectId", ErrorMessage.MissingProjectId);
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const parsed: { projectId: string; workflowId?: string } = {
+    projectId: projectId.value
+  };
+  const workflowId = readOptionalString(value, "workflowId");
+  if (workflowId !== undefined) {
+    parsed.workflowId = workflowId;
+  }
+
+  return ok(parsed);
+};
+
+export const parseWorkflowExecutionGetRequest = (
+  value: unknown
+): Result<{ executionId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "executionId");
+
+export const parseWorkflowExecutionDeleteRequest = (
+  value: unknown
+): Result<{ executionId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "executionId");
+
+const parseProjectRequest = (
+  value: unknown
+): Result<{ projectId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const projectId = readRequiredString(value, "projectId", ErrorMessage.MissingProjectId);
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  return ok({
+    projectId: projectId.value
+  });
+};
+
+const parseSingleIdentifierRequest = <TKey extends string>(
+  value: unknown,
+  key: TKey
+): Result<{ [key in TKey]: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const identifier = readRequiredString(value, key, ErrorMessage.InvalidBody);
+  if (identifier.type === ResultType.Err) {
+    return identifier;
+  }
+
+  return ok({
+    [key]: identifier.value
+  } as { [key in TKey]: string });
+};
+
+const invalidBody = <T>(): Result<T, ApiError> =>
+  err({
+    status: HttpStatus.BadRequest,
+    message: ErrorMessage.InvalidBody
+  });
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readRequiredString = (
+  record: Record<string, unknown>,
+  key: string,
+  message: string
+): Result<string, ApiError> => {
+  const value = record[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message
+    });
+  }
+
+  return ok(value.trim());
+};
+
+const readOptionalString = (
+  record: Record<string, unknown>,
+  key: string
+): string | undefined => {
+  const value = record[key];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};

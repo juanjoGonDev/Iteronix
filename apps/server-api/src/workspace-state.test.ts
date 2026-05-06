@@ -7,6 +7,14 @@ import { createKanbanStore } from "./kanban";
 import { createProjectStore } from "./projects";
 import { createProviderStore } from "./providers";
 import {
+  WorkflowAssetKind,
+  WorkflowAssetScope,
+  WorkflowExecutionStatus,
+  WorkflowNodeKind,
+  WorkflowRecordStatus,
+  WorkflowTriggerKind
+} from "../../../packages/shared/src/workflows";
+import {
   WorkspaceStateVersion,
   createDefaultWorkspaceState,
   createFileWorkspaceStateStore
@@ -76,6 +84,110 @@ describe("workspace state persistence", () => {
           }
         ],
         evals: []
+      },
+      workflows: {
+        definitions: [
+          {
+            id: "workflow-1",
+            workspaceId: "workspace-1",
+            projectId: "project-1",
+            name: "Example workflow",
+            description: "Description",
+            status: WorkflowRecordStatus.Draft,
+            version: 1,
+            createdAt: "2026-04-29T10:00:00.000Z",
+            updatedAt: "2026-04-29T10:00:00.000Z",
+            trigger: {
+              kind: WorkflowTriggerKind.Manual,
+              enabled: true,
+              config: {}
+            },
+            viewport: {
+              x: 0,
+              y: 0,
+              zoom: 1
+            },
+            executionPolicy: {
+              maxNodeRetries: 1,
+              allowManualCheckpointResume: true
+            },
+            defaultContextPolicy: {
+              language: "en",
+              carryMessagesLimit: 8,
+              carryArtifactLimit: 8
+            },
+            tags: [],
+            nodes: [
+              {
+                id: "node-1",
+                kind: WorkflowNodeKind.AssetPrompt,
+                label: "Prompt",
+                position: {
+                  x: 0,
+                  y: 0
+                },
+                width: 320,
+                collapsed: false,
+                config: {
+                  assetId: "asset-1"
+                },
+                inputPorts: [],
+                outputPorts: [],
+                attachedGuardrails: []
+              }
+            ],
+            edges: []
+          }
+        ],
+        assets: [
+          {
+            id: "asset-1",
+            workspaceId: "workspace-1",
+            kind: WorkflowAssetKind.Prompt,
+            scope: WorkflowAssetScope.Workspace,
+            name: "Planner prompt",
+            slug: "planner-prompt",
+            description: "Prompt",
+            body: "Plan the task",
+            language: "en",
+            version: 1,
+            tags: [],
+            createdAt: "2026-04-29T10:00:00.000Z",
+            updatedAt: "2026-04-29T10:00:00.000Z"
+          }
+        ],
+        assetUsages: [
+          {
+            assetId: "asset-1",
+            workflowId: "workflow-1",
+            projectId: "project-1",
+            nodeId: "node-1",
+            nodeKind: WorkflowNodeKind.AssetPrompt,
+            role: "primary",
+            createdAt: "2026-04-29T10:00:00.000Z"
+          }
+        ],
+        executions: [
+          {
+            id: "execution-1",
+            workflowId: "workflow-1",
+            projectId: "project-1",
+            triggerKind: WorkflowTriggerKind.Manual,
+            status: WorkflowExecutionStatus.Completed,
+            startedAt: "2026-04-29T10:00:00.000Z",
+            warningsCount: 0,
+            errorsCount: 0,
+            totals: {
+              promptTokens: 10,
+              completionTokens: 20,
+              totalTokens: 30,
+              estimatedCostEur: 0.1,
+              latencyMs: 100
+            },
+            contextSessionId: "context-1",
+            nodeRuns: []
+          }
+        ]
       }
     });
 
@@ -89,9 +201,25 @@ describe("workspace state persistence", () => {
           serverUrl: "https://server.example.com",
           authToken: "server-token"
         }
+      },
+      workflows: {
+        definitions: [
+          {
+            id: "workflow-1"
+          }
+        ],
+        executions: [
+          {
+            id: "execution-1"
+          }
+        ]
       }
     });
     expect(loaded).toEqual(saved);
+    expect(loaded.workflows.definitions).toHaveLength(1);
+    expect(loaded.workflows.assets).toHaveLength(1);
+    expect(loaded.workflows.assetUsages).toHaveLength(1);
+    expect(loaded.workflows.executions).toHaveLength(1);
   });
 
   it("hydrates server stores from a persisted workspace snapshot", () => {

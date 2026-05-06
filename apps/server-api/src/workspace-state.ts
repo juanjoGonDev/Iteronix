@@ -2,6 +2,8 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { HistoryEvent, HistoryRunRecord } from "./history";
 import type { KanbanBoard, KanbanColumn, KanbanTask } from "./kanban";
+import type { WorkflowCatalogState } from "../../../packages/shared/src/workflows";
+import { createDefaultWorkflowCatalogState } from "../../../packages/shared/src/workflows";
 import type { Project } from "./projects";
 import type { ProviderSelection, ProviderSettingsRecord } from "./providers";
 
@@ -62,6 +64,7 @@ export type WorkspaceState = {
     events: ReadonlyArray<HistoryEvent>;
   };
   workbenchHistory: WorkspaceWorkbenchHistory;
+  workflows: WorkflowCatalogState;
   createdAt: string;
   updatedAt: string;
 };
@@ -138,6 +141,7 @@ export const createDefaultWorkspaceState = (): WorkspaceState => {
       runs: [],
       evals: []
     },
+    workflows: createDefaultWorkflowCatalogState(),
     createdAt: now,
     updatedAt: now
   };
@@ -161,6 +165,7 @@ export const parseWorkspaceState = (value: unknown): WorkspaceState => {
     kanban: readKanbanSnapshot(value["kanban"]),
     qualityHistory: readQualityHistory(value["qualityHistory"]),
     workbenchHistory: readWorkbenchHistory(value["workbenchHistory"]),
+    workflows: readWorkflowCatalogState(value["workflows"]),
     createdAt,
     updatedAt: readString(value, "updatedAt") ?? createdAt
   };
@@ -186,6 +191,7 @@ export const createWorkspaceStateFromStores = (input: {
   };
   settings: WorkspaceSettingsSnapshot;
   workbenchHistory: WorkspaceWorkbenchHistory;
+  workflowSnapshot: WorkflowCatalogState;
   previousState?: WorkspaceState;
 }): WorkspaceState => {
   const now = new Date().toISOString();
@@ -202,6 +208,7 @@ export const createWorkspaceStateFromStores = (input: {
       events: input.historySnapshot.events ?? []
     },
     workbenchHistory: input.workbenchHistory,
+    workflows: input.workflowSnapshot,
     createdAt: input.previousState?.createdAt ?? now,
     updatedAt: now
   });
@@ -384,6 +391,19 @@ const readWorkbenchHistory = (value: unknown): WorkspaceWorkbenchHistory => {
   return {
     runs: readJsonRecordArray(value["runs"]),
     evals: readJsonRecordArray(value["evals"])
+  };
+};
+
+const readWorkflowCatalogState = (value: unknown): WorkflowCatalogState => {
+  if (!isRecord(value)) {
+    return createDefaultWorkflowCatalogState();
+  }
+
+  return {
+    definitions: readJsonRecordArray(value["definitions"]) as WorkflowCatalogState["definitions"],
+    assets: readJsonRecordArray(value["assets"]) as WorkflowCatalogState["assets"],
+    assetUsages: readJsonRecordArray(value["assetUsages"]) as WorkflowCatalogState["assetUsages"],
+    executions: readJsonRecordArray(value["executions"]) as WorkflowCatalogState["executions"]
   };
 };
 

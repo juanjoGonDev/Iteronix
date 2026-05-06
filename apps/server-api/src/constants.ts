@@ -58,7 +58,19 @@ export const RoutePath = {
   AiSkillsRun: "/ai/skills/run",
   AiWorkflowsRun: "/ai/workflows/run",
   AiEvalsRun: "/ai/evals/run",
-  AiMemoryQuery: "/ai/memory/query"
+  AiMemoryQuery: "/ai/memory/query",
+  WorkflowDefinitionsList: "/workflows/definitions/list",
+  WorkflowDefinitionsGet: "/workflows/definitions/get",
+  WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",
+  WorkflowDefinitionsDelete: "/workflows/definitions/delete",
+  WorkflowAssetsList: "/workflows/assets/list",
+  WorkflowAssetsGet: "/workflows/assets/get",
+  WorkflowAssetsUpsert: "/workflows/assets/upsert",
+  WorkflowAssetsDelete: "/workflows/assets/delete",
+  WorkflowAssetsUsage: "/workflows/assets/usage",
+  WorkflowExecutionsList: "/workflows/executions/list",
+  WorkflowExecutionsGet: "/workflows/executions/get",
+  WorkflowExecutionsDelete: "/workflows/executions/delete"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -139,7 +151,10 @@ export const ErrorMessage = {
   MissingBranchName: "Missing branchName",
   MissingPaths: "Missing paths",
   InvalidCommitMessage: "Invalid Conventional Commit message",
-  InvalidBranchName: "Invalid Git branch name"
+  InvalidBranchName: "Invalid Git branch name",
+  MissingWorkflowId: "Missing workflowId",
+  MissingAssetId: "Missing assetId",
+  MissingExecutionId: "Missing executionId"
 } as const;
 
 export const MimeType = {
@@ -258,6 +273,16 @@ export const QualityGateField = {
   Gates: "gates",
   Status: "status",
   Limit: "limit"
+} as const;
+
+export const WorkflowField = {
+  ProjectId: "projectId",
+  WorkflowId: "workflowId",
+  AssetId: "assetId",
+  ExecutionId: "executionId",
+  WorkspaceId: "workspaceId",
+  Definition: "definition",
+  Asset: "asset"
 } as const;
 
 export const FileEntryKind = {

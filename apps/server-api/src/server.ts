@@ -128,6 +128,10 @@ import {
   type AiWorkbenchService
 } from "./ai-workbench";
 import {
+  createWorkflowCatalogStore,
+  type WorkflowCatalogStore
+} from "../../../packages/agents/src/workflow-catalog";
+import {
   createCommandRunnerAdapter,
   type CommandRunner
 } from "../../../packages/adapters/src/command-runner/command-runner";
@@ -135,6 +139,32 @@ import {
   createGitCliAdapter,
   type GitRepository
 } from "../../../packages/adapters/src/git/git-adapter";
+import {
+  executeWorkflowAssetDelete,
+  executeWorkflowAssetGet,
+  executeWorkflowAssetList,
+  executeWorkflowAssetUpsert,
+  executeWorkflowAssetUsageList,
+  executeWorkflowDefinitionDelete,
+  executeWorkflowDefinitionGet,
+  executeWorkflowDefinitionList,
+  executeWorkflowDefinitionUpsert,
+  executeWorkflowExecutionDelete,
+  executeWorkflowExecutionGet,
+  executeWorkflowExecutionList,
+  parseWorkflowAssetDeleteRequest,
+  parseWorkflowAssetGetRequest,
+  parseWorkflowAssetListRequest,
+  parseWorkflowAssetUpsertRequest,
+  parseWorkflowDefinitionDeleteRequest,
+  parseWorkflowDefinitionGetRequest,
+  parseWorkflowDefinitionListRequest,
+  parseWorkflowDefinitionUpsertRequest,
+  parseWorkflowAssetUsageListRequest,
+  parseWorkflowExecutionDeleteRequest,
+  parseWorkflowExecutionGetRequest,
+  parseWorkflowExecutionListRequest
+} from "./workflows";
 import {
   createFileWorkspaceStateStore,
   createWorkspaceStateFromStores,
@@ -170,13 +200,15 @@ export const startServer = async (): Promise<void> => {
     settings: initialWorkspaceState.providerSettings
   });
   const kanbanStore = createKanbanStore(initialWorkspaceState.kanban);
+  const workflowCatalog = createWorkflowCatalogStore(initialWorkspaceState.workflows);
   const workspacePersistence = createWorkspacePersistence({
     stateStore: workspaceStateStore,
     initialState: initialWorkspaceState,
     projectStore,
     providerStore,
     kanbanStore,
-    historyStore
+    historyStore,
+    workflowCatalog
   });
   let historySaveQueue = Promise.resolve();
   persistHistoryStoreChange = () => {
@@ -217,7 +249,8 @@ export const startServer = async (): Promise<void> => {
       qualityGateCatalog,
       aiWorkbench,
       git,
-      workspacePersistence
+      workspacePersistence,
+      workflowCatalog
     );
   });
 
@@ -241,6 +274,7 @@ const createWorkspacePersistence = (input: {
   providerStore: ProviderStore;
   kanbanStore: KanbanStore;
   historyStore: HistoryStore;
+  workflowCatalog: WorkflowCatalogStore;
 }): WorkspacePersistence => {
   let state = input.initialState;
 
@@ -253,6 +287,7 @@ const createWorkspacePersistence = (input: {
       providerSnapshot: input.providerStore.snapshot(),
       kanbanSnapshot: input.kanbanStore.snapshot(),
       historySnapshot: input.historyStore.snapshot(),
+      workflowSnapshot: input.workflowCatalog.snapshot(),
       settings: overrides.settings ?? state.settings,
       workbenchHistory: overrides.workbenchHistory ?? state.workbenchHistory,
       previousState: state
@@ -316,7 +351,8 @@ const handleRequest = async (
   qualityGateCatalog: QualityGateCatalog,
   aiWorkbench: AiWorkbenchService,
   git: GitRepository,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
+  workflowCatalog: WorkflowCatalogStore
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -588,6 +624,138 @@ const handleRequest = async (
     }
 
     await handleProviderSettingsUpdate(req, res, projectStore, providerStore, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionList(req, res, projectStore, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionUpsert(
+      req,
+      res,
+      projectStore,
+      workflowCatalog,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetList(req, res, projectStore, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetUpsert(
+      req,
+      res,
+      projectStore,
+      workflowCatalog,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsUsage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetUsageList(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionList(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionDelete(req, res, workflowCatalog, workspacePersistence);
     return;
   }
 
@@ -3750,6 +3918,384 @@ const parseKanbanTaskDeleteRequest = (
     projectId: projectId.value,
     boardId: boardId.value,
     taskId: taskId.value
+  });
+};
+
+const handleWorkflowDefinitionList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionList(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    definitions: result.value
+  });
+};
+
+const handleWorkflowDefinitionGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowDefinitionUpsert = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionUpsertRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionUpsert(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowDefinitionDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowAssetList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetList(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    assets: result.value
+  });
+};
+
+const handleWorkflowAssetGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetUpsert = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetUpsertRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetUpsert(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetUsageList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetUsageListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetUsageList(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    usages: result.value
+  });
+};
+
+const handleWorkflowExecutionList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionList(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    executions: result.value
+  });
+};
+
+const handleWorkflowExecutionGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
+  });
+};
+
+const handleWorkflowExecutionDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
   });
 };
 
