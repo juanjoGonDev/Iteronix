@@ -2344,3 +2344,27 @@
 - Next:
   - Revalidar gates completas sobre este estado exacto, hacer commit y esperar tu revisión visual del editor.
 
+### 2026-05-11 12:27 (Europe/Madrid) — Workflows 06.3 n8n Connection Redesign
+
+- Summary: Reworked the Workflows connection interaction around real browser drag behavior so output sockets show a live directional wire and can create multiple outgoing edges.
+- Decisions:
+  - Keep `06.3` in progress until explicit user acceptance; do not open `06.4` yet.
+  - Treat browser `page.mouse` drag validation as the regression lock instead of synthetic `PointerEvent` dispatch.
+  - Fix the shared DOM renderer to create real SVG namespace elements because workflow edges, markers and preview arrows depend on SVG path geometry.
+- Changes:
+  - **Updated apps/web-ui/src/shared/Component.ts** and test: SVG tags now use `createElementNS`, SVG children append correctly, and SVG `className` maps to the `class` attribute.
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: edge SVG coordinates now align with the canvas transform, mouse fallback is supported alongside pointer events, preview origin is preserved, and input drops use tolerant geometric hit testing.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: validation now drags with real Puppeteer mouse events, verifies preview arrows, verifies rendered SVG edge geometry, and covers two outgoing connections from the same output socket.
+  - **Updated PLAN.md** with the connection rendering hardening status.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+  - `pnpm -C apps/web-ui validate:workflows`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - The user still needs to validate the real running app before `06.3` can move to `Listo`.
+- Next:
+  - Commit and request user acceptance of `06.3` connection behavior.

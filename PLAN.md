@@ -696,6 +696,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflows canvas now uses pointer-native drag/drop for node movement and output-to-input connections
     - Input-side drop is tolerant on the target node rail instead of requiring pixel-perfect release on the socket
     - The browser validation harness now emits pointer events so the deterministic flow matches the real editor runtime
+  - Connection rendering hardening on `2026-05-11`:
+    - The shared component renderer now creates real SVG namespace elements for workflow paths, markers and sockets so arrows and path geometry render correctly
+    - `Workflows` connection drops are resolved by input-port geometry before DOM hit testing, so releasing near the target input creates the edge without pixel-perfect placement
+    - The browser validation now uses real `page.mouse` drag interactions, asserts the live preview arrow, asserts rendered SVG edge geometry, and verifies two outgoing connections from the same output
   - `06.2` server-first foundation implemented on `2026-05-06`:
     - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
     - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history

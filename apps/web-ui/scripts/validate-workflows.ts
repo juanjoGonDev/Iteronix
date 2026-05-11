@@ -332,12 +332,16 @@ async function validateWorkflowsScreen(): Promise<void> {
     await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
     await waitForPageText(page, ValidationText.ConnectionModeTitle);
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
+    await waitForConnectionPreviewArrow(page);
     await finishConnectionDragOnNodePort(page, promptCardTestId, "input · Context");
     await waitForEdgeCount(page, 1);
+    await waitForRenderedEdgeGeometry(page, 1);
     await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
+    await waitForConnectionPreviewArrow(page);
     await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
     await waitForEdgeCount(page, 2);
+    await waitForRenderedEdgeGeometry(page, 2);
 
     await clickCanvasBackground(page);
     await waitForTestId(page, WorkflowSelector.WorkflowNameInput);
@@ -1024,38 +1028,11 @@ async function startConnectionDragFromNodePort(
   testId: string,
   title: string
 ): Promise<void> {
-  const started = await page.evaluate((payload: { testId: string; title: string }) => {
-    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
-    if (!(card instanceof HTMLElement)) {
-      return false;
-    }
-
-    const port = Array.from(card.querySelectorAll("button")).find(
-      (button) => button.getAttribute("title") === payload.title
-    );
-    if (!(port instanceof HTMLButtonElement)) {
-      return false;
-    }
-
-    const rect = port.getBoundingClientRect();
-    const clientX = rect.right - Math.min(18, rect.width * 0.14);
-    const clientY = rect.top + rect.height / 2;
-    port.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX,
-      clientY
-    }));
-    return true;
-  }, {
-    testId,
-    title
-  });
-
-  if (!started) {
-    throw new Error(`Could not start connection drag from ${title} in ${testId}.`);
-  }
+  const source = await readPortInteractionPoint(page, testId, title);
+  await assertPortHandleAtPoint(page, source, title);
+  await page.mouse.move(source.x, source.y);
+  await page.mouse.down();
+  await page.mouse.move(source.x + 120, source.y + 32, { steps: 8 });
 }
 
 async function finishConnectionDragOnNodePort(
@@ -1063,51 +1040,64 @@ async function finishConnectionDragOnNodePort(
   testId: string,
   title: string
 ): Promise<void> {
-  const finished = await page.evaluate((payload: { testId: string; title: string }) => {
+  const target = await readPortInteractionPoint(page, testId, title);
+  await page.mouse.move(target.x, target.y, { steps: 12 });
+  await page.mouse.up();
+}
+
+async function readPortInteractionPoint(
+  page: Page,
+  testId: string,
+  title: string
+): Promise<{ x: number; y: number }> {
+  const point = await page.evaluate((payload: { testId: string; title: string }) => {
     const card = document.querySelector(`[data-testid="${payload.testId}"]`);
     if (!(card instanceof HTMLElement)) {
-      return false;
+      return null;
     }
 
     const port = Array.from(card.querySelectorAll("button")).find(
       (button) => button.getAttribute("title") === payload.title
     );
     if (!(port instanceof HTMLButtonElement)) {
-      return false;
+      return null;
     }
 
     const rect = port.getBoundingClientRect();
-    const clientX = rect.left + Math.min(18, rect.width * 0.14);
-    const clientY = rect.top + rect.height / 2;
-    window.dispatchEvent(new PointerEvent("pointermove", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX,
-      clientY
-    }));
-    port.dispatchEvent(new PointerEvent("pointerup", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX,
-      clientY
-    }));
-    window.dispatchEvent(new PointerEvent("pointerup", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX,
-      clientY
-    }));
-    return true;
+    const side = payload.title.startsWith("input") ? "input" : "output";
+    const horizontalInset = Math.min(18, rect.width * 0.14);
+    return {
+      x: side === "input" ? rect.left + horizontalInset : rect.right - horizontalInset,
+      y: rect.top + rect.height / 2
+    };
   }, {
     testId,
     title
   });
 
-  if (!finished) {
-    throw new Error(`Could not finish connection drag on ${title} in ${testId}.`);
+  if (!point) {
+    throw new Error(`Could not read interaction point for ${title} in ${testId}.`);
+  }
+
+  return point;
+}
+
+async function assertPortHandleAtPoint(
+  page: Page,
+  point: { x: number; y: number },
+  title: string
+): Promise<void> {
+  const actual = await page.evaluate((payload: { x: number; y: number }) => {
+    const element = document.elementFromPoint(payload.x, payload.y);
+    const port = element?.closest("[data-port-handle='true']");
+    return {
+      element: element instanceof HTMLElement ? element.outerHTML.slice(0, 140) : String(element?.nodeName ?? "none"),
+      portTitle: port?.getAttribute("title") ?? null
+    };
+  }, point);
+
+  if (actual.portTitle !== title) {
+    throw new Error(`Expected ${title} port at drag point, got ${actual.portTitle ?? actual.element}.`);
   }
 }
 
@@ -1183,7 +1173,7 @@ async function waitForTestId(page: Page, testId: string): Promise<void> {
   await waitForCondition(async () => {
     const exists = await page.evaluate((selector: string) => {
       const element = document.querySelector(`[data-testid="${selector}"]`);
-      return element instanceof HTMLElement;
+      return element instanceof Element;
     }, testId);
     return exists;
   }, `test id "${testId}"`, {
@@ -1224,6 +1214,38 @@ async function waitForEdgeCount(page: Page, expectedCount: number): Promise<void
     );
     return count === expectedCount;
   }, `workflow edge count ${String(expectedCount)}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForConnectionPreviewArrow(page: Page): Promise<void> {
+  await waitForCondition(async () => {
+    const markerEnd = await page.evaluate((selector: string) => {
+      const preview = document.querySelector(`[data-testid="${selector}"]`);
+      const path = preview?.querySelector("path");
+      return path?.getAttribute("marker-end") ?? "";
+    }, WorkflowSelector.ConnectionPreview);
+    return markerEnd.includes("workflows-preview-arrow");
+  }, "workflow connection preview arrow", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForRenderedEdgeGeometry(page: Page, expectedCount: number): Promise<void> {
+  await waitForCondition(async () => {
+    const visibleEdges = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-testid='workflows-edge']")).filter((edge) => {
+        const markerEnd = edge.getAttribute("marker-end") ?? "";
+        if (!(edge instanceof SVGPathElement)) {
+          return false;
+        }
+        return markerEnd.includes("workflows-edge-arrow") && edge.getTotalLength() >= 48;
+      }).length
+    );
+    return visibleEdges === expectedCount;
+  }, `workflow rendered edge geometry ${String(expectedCount)}`, {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });

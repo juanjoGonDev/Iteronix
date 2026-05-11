@@ -36,7 +36,7 @@ describe("createElement", () => {
       }
     }
 
-    expect(recorded).toEqual(["listener:input"]);
+    expect(recorded).toContain("listener:input");
   });
 
   it("does not write undefined attributes into the element", () => {
@@ -183,6 +183,40 @@ describe("createElement", () => {
     expect(recorded).toContain("listener:pointerdown");
   });
 
+  it("creates svg child elements with the svg namespace", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: (tagName: string) => createFakeElement(recorded, `html:${tagName}`),
+        createElementNS: (namespace: string, tagName: string) => createFakeElement(recorded, `${namespace}:${tagName}`),
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("path", {
+        d: "M 0 0 L 10 10"
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("element:http://www.w3.org/2000/svg:path");
+  });
+
   it("passes children into component props when using a component tag", () => {
     const recorded: string[] = [];
     const originalDocument = globalThis.document;
@@ -221,7 +255,9 @@ class TestChildComponent extends Component<{ children?: unknown }> {
   }
 }
 
-const createFakeElement = (recorded: string[]) => ({
+const createFakeElement = (recorded: string[], elementName = "html:element") => {
+  recorded.push(`element:${elementName}`);
+  return {
   dataset: {} as Record<string, string>,
   appendChild: (child: unknown) => {
     const textContent = readNodeTextContent(child);
@@ -237,7 +273,8 @@ const createFakeElement = (recorded: string[]) => ({
     recorded.push(`attr:${key}=${value}`);
   },
   style: {} as CSSStyleDeclaration
-});
+  };
+};
 
 const readNodeTextContent = (value: unknown): string | null => {
   if (!value || typeof value !== "object") {

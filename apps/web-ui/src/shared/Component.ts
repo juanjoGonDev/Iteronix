@@ -62,6 +62,21 @@ export class Component<TProps extends ComponentProps = ComponentProps, TState = 
   }
 }
 
+const SvgNamespace = "http://www.w3.org/2000/svg";
+const SvgTagNames = new Set([
+  "circle",
+  "defs",
+  "g",
+  "line",
+  "marker",
+  "path",
+  "polygon",
+  "polyline",
+  "rect",
+  "svg",
+  "text"
+]);
+
 // Helper for creating elements with attributes and children
 export function createElement<TProps extends ComponentProps = ComponentProps>(
   tag: string | (new (props?: TProps) => Component<TProps, unknown>),
@@ -80,7 +95,7 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
     component.element = rendered;
     return rendered;
   } else if (typeof tag === 'string') {
-    element = document.createElement(tag);
+    element = createDomElement(tag);
   } else {
     throw new Error(`Invalid tag type: ${typeof tag}`);
   }
@@ -92,7 +107,7 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
     }
 
     if (key === 'className') {
-      element.className = value as string;
+      setClassName(element, value);
     } else if (key === 'textContent') {
       element.textContent = value as string;
     } else if (key === 'innerHTML') {
@@ -147,13 +162,13 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.appendChild(document.createTextNode(String(child)));
     } else if (child instanceof Component) {
       element.appendChild(child.render());
-    } else if (child instanceof HTMLElement) {
+    } else if (isElementNode(child)) {
       element.appendChild(child);
     } else if (Array.isArray(child)) {
       child.forEach(nestedChild => {
         if (typeof nestedChild === 'string' || typeof nestedChild === 'number') {
           element.appendChild(document.createTextNode(String(nestedChild)));
-        } else if (nestedChild instanceof HTMLElement) {
+        } else if (isElementNode(nestedChild)) {
           element.appendChild(nestedChild);
         }
       });
@@ -162,6 +177,31 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
   
   return element;
 }
+
+const createDomElement = (tag: string): HTMLElement => {
+  if (SvgTagNames.has(tag)) {
+    return document.createElementNS(SvgNamespace, tag) as unknown as HTMLElement;
+  }
+
+  return document.createElement(tag);
+};
+
+const setClassName = (element: HTMLElement, value: unknown): void => {
+  if (element.namespaceURI === SvgNamespace) {
+    element.setAttribute("class", String(value));
+    return;
+  }
+
+  element.className = value as string;
+};
+
+const isElementNode = (value: unknown): value is HTMLElement => {
+  if (typeof HTMLElement !== "undefined" && value instanceof HTMLElement) {
+    return true;
+  }
+
+  return typeof SVGElement !== "undefined" && value instanceof SVGElement;
+};
 
 // Event handling helper
 export function addEventListeners(element: HTMLElement, events: Record<string, EventListener>): void {

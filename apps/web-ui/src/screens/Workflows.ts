@@ -196,6 +196,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("pointermove", this.handleGlobalPointerMove);
     window.addEventListener("pointerup", this.handleGlobalPointerUp);
+    window.addEventListener("mousemove", this.handleGlobalPointerMove);
+    window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
     void this.hydrateState();
   }
@@ -204,6 +206,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("pointermove", this.handleGlobalPointerMove);
     window.removeEventListener("pointerup", this.handleGlobalPointerUp);
+    window.removeEventListener("mousemove", this.handleGlobalPointerMove);
+    window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
   }
 
@@ -645,9 +649,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               className: "absolute inset-0"
             }, [
               createElement("svg", {
-                className: "pointer-events-none absolute inset-0 h-full w-full overflow-visible",
+                className: "pointer-events-none absolute left-0 top-0 overflow-visible",
+                width: "3200",
+                height: "2200",
                 viewBox: "0 0 3200 2200",
-                preserveAspectRatio: "none"
+                preserveAspectRatio: "xMinYMin meet",
+                style: `transform: translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom}); transform-origin: 0 0;`
               }, [
                 createElement("defs", {}, [
                   createElement("marker", {
@@ -693,9 +700,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     })
                   ])
                 ]),
-                createElement("g", {
-                  transform: `translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`
-                }, [
+                createElement("g", {}, [
                   workflow.edges.map((edge) => this.renderEdgePath(edge, workflow.nodes)),
                   previewPath
                     ? createElement("g", {
@@ -942,6 +947,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       style: `top: ${topOffset}px;`,
       onPointerDown: (event: Event) => this.handlePortPointerDown(event as PointerEvent, node.id, portId, side),
       onPointerUp: (event: Event) => this.handlePortPointerUp(event as PointerEvent, node.id, portId, side),
+      onMouseDown: (event: Event) => this.handlePortPointerDown(event as MouseEvent, node.id, portId, side),
+      onMouseUp: (event: Event) => this.handlePortPointerUp(event as MouseEvent, node.id, portId, side),
       onMouseEnter: () => this.handlePortHover(node.id, portId, side),
       onMouseLeave: () => this.handlePortHoverEnd(node.id, portId, side),
       dataset: {
@@ -2000,7 +2007,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private handlePortPointerDown(
-    event: PointerEvent,
+    event: MouseEvent,
     nodeId: string,
     portId: string,
     side: PortSide
@@ -2018,13 +2025,15 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.connectionDragging = true;
     this.startConnectionMode(nodeId, portId);
     const previewPoint = this.readCanvasPoint(event.clientX, event.clientY);
-    this.setState({
-      connectionPreviewPoint: previewPoint
-    });
+    if (previewPoint) {
+      this.setState({
+        connectionPreviewPoint: previewPoint
+      });
+    }
   }
 
   private handlePortPointerUp(
-    event: PointerEvent,
+    event: MouseEvent,
     nodeId: string,
     portId: string,
     side: PortSide
@@ -2039,7 +2048,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.completeConnection(nodeId, portId);
   }
 
-  private handleNodeConnectionMouseMove(event: PointerEvent): void {
+  private handleNodeConnectionMouseMove(event: MouseEvent): void {
     if (!this.connectionDragging || this.state.pendingConnection === null) {
       return;
     }
@@ -2067,7 +2076,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     });
   }
 
-  private handleNodeConnectionMouseUp(event: PointerEvent): void {
+  private handleNodeConnectionMouseUp(event: MouseEvent): void {
     if (!this.connectionDragging || this.state.pendingConnection === null) {
       return;
     }
@@ -2394,6 +2403,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private readInputDropTargetAtClientPoint(clientX: number, clientY: number): NodeDropTarget | null {
+    const geometricPort = this.readInputPortDropTargetByGeometry(clientX, clientY);
+    if (geometricPort) {
+      return geometricPort;
+    }
+
     const explicitPort = this.readPortHandleAtClientPoint(clientX, clientY);
     if (explicitPort?.side === "input") {
       return {
@@ -2459,6 +2473,58 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     };
   }
 
+  private readInputPortDropTargetByGeometry(clientX: number, clientY: number): NodeDropTarget | null {
+    if (typeof document === "undefined") {
+      return null;
+    }
+
+    const inputHandles = Array.from(document.querySelectorAll("[data-port-handle='true'][data-port-side='input']"));
+    const closest = inputHandles.reduce<{
+      nodeId: string;
+      portId: string;
+      distance: number;
+    } | null>((currentClosest, handle) => {
+      if (!(handle instanceof HTMLElement)) {
+        return currentClosest;
+      }
+
+      const nodeId = handle.dataset["portNodeId"];
+      const portId = handle.dataset["portId"];
+      if (!nodeId || !portId) {
+        return currentClosest;
+      }
+
+      const rect = handle.getBoundingClientRect();
+      const hitPaddingX = 42;
+      const hitPaddingY = 18;
+      const insideX = clientX >= rect.left - hitPaddingX && clientX <= rect.right + hitPaddingX;
+      const insideY = clientY >= rect.top - hitPaddingY && clientY <= rect.bottom + hitPaddingY;
+      if (!insideX || !insideY) {
+        return currentClosest;
+      }
+
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const distance = Math.abs(clientX - centerX) + Math.abs(clientY - centerY);
+      if (!currentClosest || distance < currentClosest.distance) {
+        return {
+          nodeId,
+          portId,
+          distance
+        };
+      }
+
+      return currentClosest;
+    }, null);
+
+    return closest
+      ? {
+          nodeId: closest.nodeId,
+          portId: closest.portId
+        }
+      : null;
+  }
+
   private readonly handleResize = (): void => {
     const isCompactViewport = readIsCompactViewport();
     if (isCompactViewport === this.state.isCompactViewport) {
@@ -2471,7 +2537,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     });
   };
 
-  private readonly handleGlobalPointerMove = (event: PointerEvent): void => {
+  private readonly handleGlobalPointerMove = (event: MouseEvent): void => {
     if (this.draggingNodeId && this.dragPointerOffset && this.state.draftWorkflow) {
       const surfaceRect = this.readCanvasSurfaceRect();
       if (!surfaceRect) {
@@ -2514,7 +2580,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
   };
 
-  private readonly handleGlobalPointerUp = (event: PointerEvent): void => {
+  private readonly handleGlobalPointerUp = (event: MouseEvent): void => {
     if (this.connectionDragging) {
       const hoveredTarget = this.readInputDropTargetAtClientPoint(event.clientX, event.clientY);
       const hoveredPort = hoveredTarget
