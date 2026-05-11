@@ -81,6 +81,12 @@ const WorkflowScreenSelector = {
   CompactInspector: "workflows-compact-inspector"
 } as const;
 
+const EdgeDeleteButtonSize = 20;
+const EdgeDeleteNodeAvoidancePadding = 12;
+const WorkflowNodeApproximateHeight = 104;
+const EdgeDeleteOffset = 34;
+const EdgeDeleteWideOffset = 58;
+
 const SidebarSection = {
   Workflows: "workflows",
   Nodes: "nodes",
@@ -646,6 +652,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             className: "relative min-h-0 flex-1 overflow-hidden",
             onPointerDown: (event: Event) => this.handleCanvasPointerDown(event as PointerEvent),
             onPointerMove: (event: Event) => this.handleCanvasPointerMove(event as PointerEvent),
+            onMouseMove: (event: Event) => this.handleCanvasMouseMove(event as MouseEvent),
             onWheel: (event: Event) => this.handleCanvasWheel(event as WheelEvent),
             "data-testid": WorkflowScreenSelector.CanvasViewport,
             style: readCanvasBackgroundStyle(viewport)
@@ -1004,8 +1011,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     return createElement("g", {
       key: edge.id,
       className: "pointer-events-auto",
-      onMouseEnter: () => this.handleEdgeHover(edge.id),
-      onMouseLeave: () => this.setState({ hoveredEdgeId: null })
+      onMouseEnter: () => this.handleEdgeHover(edge.id)
     }, [
       createElement("path", {
         d: path,
@@ -1014,6 +1020,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         "stroke-linecap": "round",
         opacity: "0.01",
         fill: "none",
+        style: "pointer-events: stroke;",
         onMouseMove: () => this.handleEdgeHover(edge.id),
         onMouseEnter: () => this.handleEdgeHover(edge.id),
         "data-testid": `${WorkflowScreenSelector.EdgeHitPrefix}${edge.id}`
@@ -1025,6 +1032,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         "stroke-linecap": "round",
         "marker-end": "url(#workflows-edge-arrow)",
         fill: "none",
+        style: "pointer-events: stroke;",
         onMouseMove: () => this.handleEdgeHover(edge.id),
         onMouseEnter: () => this.handleEdgeHover(edge.id),
         "data-testid": "workflows-edge"
@@ -1046,13 +1054,13 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     const targetPortIndex = targetNode.inputPorts.findIndex((port) => port.id === edge.targetPortId);
     const source = readPortAnchorPoint(sourceNode, "output", Math.max(sourcePortIndex, 0), sourceNode.outputPorts.length);
     const target = readPortAnchorPoint(targetNode, "input", Math.max(targetPortIndex, 0), targetNode.inputPorts.length);
-    const point = readEdgeActionPoint(source, target);
+    const point = readEdgeActionPoint(source, target, nodes);
     const hovered = this.state.hoveredEdgeId === edge.id;
 
     return createElement("button", {
       type: "button",
       title: "Remove connection",
-      className: `pointer-events-auto absolute grid h-5 w-5 place-items-center rounded border border-rose-400/80 bg-[#151a20] text-[13px] leading-none text-rose-200 transition-opacity ${hovered ? "opacity-100" : "opacity-70 hover:opacity-100"}`,
+      className: `absolute grid h-5 w-5 place-items-center rounded border border-rose-400/80 bg-[#151a20] text-[13px] leading-none text-rose-200 transition-opacity ${hovered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`,
       style: `left:${point.x - 10}px; top:${point.y - 10}px;`,
       onMouseMove: () => this.handleEdgeHover(edge.id),
       onMouseEnter: () => this.handleEdgeHover(edge.id),
@@ -2070,6 +2078,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     });
   }
 
+  private handleCanvasMouseMove(event: MouseEvent): void {
+    if (this.state.hoveredEdgeId === null || this.connectionDragging || this.state.pendingConnection) {
+      return;
+    }
+
+    const target = event.target instanceof HTMLElement || event.target instanceof SVGElement
+      ? event.target
+      : null;
+    const isStillOnEdgeControl = target?.closest("[data-testid^='workflows-edge-hit-'], [data-testid^='workflows-edge-delete-']") !== null;
+    if (isStillOnEdgeControl) {
+      return;
+    }
+
+    this.setState({ hoveredEdgeId: null });
+  }
+
   private handlePortPointerDown(
     event: MouseEvent,
     nodeId: string,
@@ -2827,10 +2851,48 @@ const readEdgeCurvePath = (
 
 const readEdgeActionPoint = (
   source: ConnectionPreviewPoint,
-  target: ConnectionPreviewPoint
-): ConnectionPreviewPoint => ({
-  x: Number(((source.x + target.x) / 2).toFixed(2)),
-  y: Number(((source.y + target.y) / 2 - 12).toFixed(2))
+  target: ConnectionPreviewPoint,
+  nodes: ReadonlyArray<WorkflowNodeRecord>
+): ConnectionPreviewPoint => {
+  const midpoint = {
+    x: (source.x + target.x) / 2,
+    y: (source.y + target.y) / 2 - EdgeDeleteOffset / 2
+  };
+  const candidates: ReadonlyArray<ConnectionPreviewPoint> = [
+    midpoint,
+    { x: midpoint.x, y: midpoint.y - EdgeDeleteOffset },
+    { x: midpoint.x, y: midpoint.y + EdgeDeleteOffset },
+    { x: midpoint.x - EdgeDeleteOffset, y: midpoint.y },
+    { x: midpoint.x + EdgeDeleteOffset, y: midpoint.y },
+    { x: midpoint.x - EdgeDeleteWideOffset, y: midpoint.y - EdgeDeleteOffset },
+    { x: midpoint.x + EdgeDeleteWideOffset, y: midpoint.y - EdgeDeleteOffset },
+    { x: midpoint.x - EdgeDeleteWideOffset, y: midpoint.y + EdgeDeleteOffset },
+    { x: midpoint.x + EdgeDeleteWideOffset, y: midpoint.y + EdgeDeleteOffset },
+    { x: source.x + EdgeDeleteOffset, y: source.y - EdgeDeleteOffset },
+    { x: source.x + EdgeDeleteWideOffset, y: source.y - EdgeDeleteWideOffset },
+    { x: source.x + EdgeDeleteWideOffset, y: source.y + EdgeDeleteWideOffset },
+    { x: target.x - EdgeDeleteOffset, y: target.y - EdgeDeleteOffset },
+    { x: target.x - EdgeDeleteWideOffset, y: target.y - EdgeDeleteWideOffset },
+    { x: target.x - EdgeDeleteWideOffset, y: target.y + EdgeDeleteWideOffset }
+  ];
+  const preferred = candidates.find((candidate) => !edgeDeletePointOverlapsNode(candidate, nodes)) ?? midpoint;
+
+  return {
+    x: Number(preferred.x.toFixed(2)),
+    y: Number(preferred.y.toFixed(2))
+  };
+};
+
+const edgeDeletePointOverlapsNode = (
+  point: ConnectionPreviewPoint,
+  nodes: ReadonlyArray<WorkflowNodeRecord>
+): boolean => nodes.some((node) => {
+  const halfButton = EdgeDeleteButtonSize / 2;
+  const left = node.position.x - EdgeDeleteNodeAvoidancePadding - halfButton;
+  const right = node.position.x + node.width + EdgeDeleteNodeAvoidancePadding + halfButton;
+  const top = node.position.y - EdgeDeleteNodeAvoidancePadding - halfButton;
+  const bottom = node.position.y + WorkflowNodeApproximateHeight + EdgeDeleteNodeAvoidancePadding + halfButton;
+  return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
 });
 
 const hoveredPortUsesActiveArrow = (hoveredPort: HoveredPort | null): boolean =>

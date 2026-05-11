@@ -71,6 +71,7 @@ const WorkflowSelector = {
   NodeLabelInput: "workflows-node-label-input",
   SectionNodes: "workflows-section-nodes",
   CompactCanvas: "workflows-compact-canvas",
+  NodeCardPrefix: "workflows-node-card-",
   NodePalettePrefix: "workflows-node-palette-"
 } as const;
 
@@ -345,7 +346,9 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForEdgeCount(page, 2);
     await waitForRenderedEdgeGeometry(page, 2);
     await waitForEdgeArrowSize(page);
+    await waitForNoVisibleEdgeDeleteControl(page);
     await hoverFirstWorkflowEdge(page);
+    await waitForVisibleEdgeDeleteControlOutsideNodes(page);
     const deletedEdgeId = await clickFirstWorkflowEdgeDelete(page);
     await waitForEdgeCount(page, 1);
     await waitForDeletedEdgeRemoved(page, deletedEdgeId);
@@ -1273,12 +1276,98 @@ async function waitForRenderedEdgeGeometry(page: Page, expectedCount: number): P
 }
 
 async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
+  const point = await page.evaluate((payload: { edgePrefix: string; nodePrefix: string }) => {
+    const edges = Array.from(document.querySelectorAll(`[data-testid^="${payload.edgePrefix}"]`));
+    const nodeRects = Array.from(document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`))
+      .filter((entry): entry is HTMLElement => entry instanceof HTMLElement)
+      .map((entry) => entry.getBoundingClientRect());
+    for (const edge of edges) {
+      if (!(edge instanceof SVGPathElement)) {
+        continue;
+      }
+
+      const boundingBox = edge.getBBox();
+      const screenRect = edge.getBoundingClientRect();
+      if (boundingBox.width <= 0 || boundingBox.height <= 0 || screenRect.width <= 0 || screenRect.height <= 0) {
+        continue;
+      }
+
+      const samples = [0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88];
+      const totalLength = edge.getTotalLength();
+      for (const sample of samples) {
+        const svgPoint = edge.getPointAtLength(totalLength * sample);
+        const point = {
+          x: screenRect.left + ((svgPoint.x - boundingBox.x) / boundingBox.width) * screenRect.width,
+          y: screenRect.top + ((svgPoint.y - boundingBox.y) / boundingBox.height) * screenRect.height
+        };
+        const insideNode = nodeRects.some((nodeRect) =>
+          point.x >= nodeRect.left &&
+          point.x <= nodeRect.right &&
+          point.y >= nodeRect.top &&
+          point.y <= nodeRect.bottom
+        );
+        if (!insideNode) {
+          return point;
+        }
+      }
+    }
+
+    return null;
+  }, {
+    edgePrefix: WorkflowSelector.EdgeHitPrefix,
+    nodePrefix: WorkflowSelector.NodeCardPrefix
+  });
+
+  if (!point) {
+    throw new Error("Could not find a hoverable workflow edge point.");
+  }
+
+  await page.mouse.move(point.x, point.y);
+}
+
+async function waitForNoVisibleEdgeDeleteControl(page: Page): Promise<void> {
   await waitForCondition(async () => {
-    const exists = await page.evaluate((prefix: string) =>
-      document.querySelector(`[data-testid^="${prefix}"]`) instanceof Element,
+    const visible = await page.evaluate((prefix: string) =>
+      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`)).some((entry) => {
+        if (!(entry instanceof HTMLElement)) {
+          return false;
+        }
+        return Number(getComputedStyle(entry).opacity) > 0.5;
+      }),
     WorkflowSelector.EdgeDeletePrefix);
-    return exists;
-  }, "workflow edge delete affordance", {
+    return !visible;
+  }, "hidden workflow edge delete affordances", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForVisibleEdgeDeleteControlOutsideNodes(page: Page): Promise<void> {
+  await waitForCondition(async () => {
+    const valid = await page.evaluate((payload: { deletePrefix: string; nodePrefix: string }) => {
+      const deleteControl = Array.from(document.querySelectorAll(`[data-testid^="${payload.deletePrefix}"]`)).find((entry) =>
+        entry instanceof HTMLElement && Number(getComputedStyle(entry).opacity) > 0.5
+      );
+      if (!(deleteControl instanceof HTMLElement)) {
+        return false;
+      }
+
+      const deleteRect = deleteControl.getBoundingClientRect();
+      const nodeRects = Array.from(document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`))
+        .filter((entry): entry is HTMLElement => entry instanceof HTMLElement)
+        .map((entry) => entry.getBoundingClientRect());
+      return nodeRects.every((nodeRect) =>
+        deleteRect.right <= nodeRect.left ||
+        deleteRect.left >= nodeRect.right ||
+        deleteRect.bottom <= nodeRect.top ||
+        deleteRect.top >= nodeRect.bottom
+      );
+    }, {
+      deletePrefix: WorkflowSelector.EdgeDeletePrefix,
+      nodePrefix: WorkflowSelector.NodeCardPrefix
+    });
+    return valid;
+  }, "visible workflow edge delete affordance outside nodes", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
@@ -1286,7 +1375,9 @@ async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
 
 async function clickFirstWorkflowEdgeDelete(page: Page): Promise<string> {
   const result = await page.evaluate((prefix: string) => {
-    const deleteControl = document.querySelector(`[data-testid^="${prefix}"]`);
+    const deleteControl = Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`)).find((entry) =>
+      entry instanceof HTMLElement && Number(getComputedStyle(entry).opacity) > 0.5
+    );
     if (!(deleteControl instanceof HTMLElement)) {
       return null;
     }

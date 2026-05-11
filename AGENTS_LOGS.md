@@ -2416,3 +2416,27 @@
   - `06.3` remains in progress until explicit user acceptance in the real running app.
 - Next:
   - Commit this focused fix and ask for real-app validation.
+
+### 2026-05-11 13:15 (Europe/Madrid) — Workflows 06.3 Edge Delete Hover Placement
+
+- Summary: Refined the Workflows edge delete affordance so the trash button appears only from edge hover and avoids overlaying node cards when a connection passes near another node.
+- Decisions:
+  - Keep the fix inside `06.3`; do not start `06.4` until user acceptance.
+  - Hidden delete controls no longer receive pointer events, so invisible controls cannot block edge hover.
+  - Browser validation maps SVG path samples through rendered screen bounds, because the canvas uses CSS transforms that raw SVG coordinates do not capture.
+- Changes:
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: edge hit paths opt into stroke pointer events, hidden delete controls are pointer-inert, and delete control placement tries wider non-overlapping candidates around the edge/source/target.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: validation proves delete controls are hidden before hover, become visible outside node rectangles after hovering the rendered edge, and deletes the visible trash control rather than an arbitrary hidden DOM control.
+  - **Updated PLAN.md** with this hover-placement hardening note.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.3` remains in progress until explicit user acceptance in the real running app.
+- Next:
+  - Commit, then request real-app validation of edge delete hover placement before closing `06.3`.
