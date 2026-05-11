@@ -2368,3 +2368,28 @@
   - The user still needs to validate the real running app before `06.3` can move to `Listo`.
 - Next:
   - Commit and request user acceptance of `06.3` connection behavior.
+### 2026-05-11 12:44 (Europe/Madrid) — Workflows 06.3 Connection Deletion
+
+- Summary: Added edge deletion to the Workflows canvas and reduced SVG arrow marker size after user feedback.
+- Decisions:
+  - Keep this inside `06.3`; do not open `06.4` yet.
+  - Use a compact always-available edge delete affordance on the connection line so deletion is discoverable and does not depend on pixel-perfect hover behavior.
+  - Keep the deletion model pure in editor state and validate it before wiring UI behavior.
+- Changes:
+  - **Updated apps/web-ui/src/screens/workflows-editor-state.ts** with `removeWorkflowEdge`.
+  - **Updated apps/web-ui/src/screens/workflows-editor-state.test.ts** with a regression test proving one edge can be removed while other connections and nodes remain intact.
+  - **Updated apps/web-ui/src/screens/Workflows.ts** with smaller SVG markers, edge delete controls, and pointer layering that keeps nodes draggable while edge controls are clickable.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts** so browser validation creates two outgoing connections, verifies smaller arrows, deletes one edge, and saves the one-edge result.
+  - **Updated PLAN.md** with the connection deletion refinement.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+  - `pnpm lint`
+  - `pnpm test`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.3` remains in progress until explicit user acceptance.
+- Next:
+  - Commit, then ask for real-app acceptance.

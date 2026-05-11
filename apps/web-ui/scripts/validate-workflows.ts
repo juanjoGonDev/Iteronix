@@ -62,6 +62,8 @@ const WorkflowSelector = {
   CanvasViewport: "workflows-canvas-viewport",
   ConnectionHint: "workflows-connection-hint",
   ConnectionPreview: "workflows-connection-preview",
+  EdgeDeletePrefix: "workflows-edge-delete-",
+  EdgeHitPrefix: "workflows-edge-hit-",
   WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowNameInput: "workflows-name-input",
@@ -342,6 +344,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
     await waitForEdgeCount(page, 2);
     await waitForRenderedEdgeGeometry(page, 2);
+    await waitForEdgeArrowSize(page);
+    await hoverFirstWorkflowEdge(page);
+    await clickFirstWorkflowEdgeDelete(page);
+    await waitForEdgeCount(page, 1);
+    await waitForRenderedEdgeGeometry(page, 1);
 
     await clickCanvasBackground(page);
     await waitForTestId(page, WorkflowSelector.WorkflowNameInput);
@@ -1233,6 +1240,19 @@ async function waitForConnectionPreviewArrow(page: Page): Promise<void> {
   });
 }
 
+async function waitForEdgeArrowSize(page: Page): Promise<void> {
+  await waitForCondition(async () => {
+    const markerWidth = await page.evaluate(() => {
+      const marker = document.querySelector("#workflows-edge-arrow");
+      return marker?.getAttribute("markerWidth") ?? "";
+    });
+    return markerWidth === "8";
+  }, "workflow edge arrow size", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
 async function waitForRenderedEdgeGeometry(page: Page, expectedCount: number): Promise<void> {
   await waitForCondition(async () => {
     const visibleEdges = await page.evaluate(() =>
@@ -1249,6 +1269,39 @@ async function waitForRenderedEdgeGeometry(page: Page, expectedCount: number): P
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+}
+
+async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
+  await waitForCondition(async () => {
+    const exists = await page.evaluate((prefix: string) =>
+      document.querySelector(`[data-testid^="${prefix}"]`) instanceof Element,
+    WorkflowSelector.EdgeDeletePrefix);
+    return exists;
+  }, "workflow edge delete affordance", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function clickFirstWorkflowEdgeDelete(page: Page): Promise<void> {
+  const point = await page.evaluate((prefix: string) => {
+    const deleteControl = document.querySelector(`[data-testid^="${prefix}"]`);
+    if (!(deleteControl instanceof HTMLElement)) {
+      return null;
+    }
+
+    const rect = deleteControl.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }, WorkflowSelector.EdgeDeletePrefix);
+
+  if (!point) {
+    throw new Error("Could not read workflow edge delete control.");
+  }
+
+  await page.mouse.click(point.x, point.y);
 }
 
 function assertPersistedWorkflow(state: StubServerState): void {
@@ -1281,8 +1334,8 @@ function assertPersistedWorkflow(state: StubServerState): void {
     throw new Error(`Expected provider node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`);
   }
 
-  if (definition.edges.length !== 2) {
-    throw new Error(`Expected two saved edges, received ${definition.edges.length}.`);
+  if (definition.edges.length !== 1) {
+    throw new Error(`Expected one saved edge after deletion, received ${definition.edges.length}.`);
   }
 
   if (state.assets.length !== 1 || state.assets[0]?.kind !== "prompt") {

@@ -528,6 +528,14 @@ export const removeWorkflowNode = (
   )
 });
 
+export const removeWorkflowEdge = (
+  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
+  edgeId: string
+): WorkflowDefinitionUpsertInput => ({
+  ...stripDefinitionVersionFields(definition),
+  edges: definition.edges.filter((edge) => edge.id !== edgeId)
+});
+
 export const attachGuardrailToNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   nodeId: string,

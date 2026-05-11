@@ -9,6 +9,7 @@ import {
   createWorkflowAssetDraft,
   moveWorkflowNode,
   readNodeAssetKind,
+  removeWorkflowEdge,
   removeWorkflowNode,
   setWorkflowViewport
 } from "./workflows-editor-state.js";
@@ -131,6 +132,41 @@ describe("workflows editor state", () => {
 
     expect(secondConnection.edges).toHaveLength(2);
     expect(secondConnection.edges.map((edge) => edge.id)).toEqual(["edge-a", "edge-b"]);
+  });
+
+  it("removes a selected edge without touching other connections", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Removable edge"
+    });
+    const triggerNode = definition.nodes[0];
+    const terminalNode = definition.nodes[1];
+    if (!triggerNode || !terminalNode) {
+      throw new Error("Expected default workflow nodes to exist.");
+    }
+    const withPrompt = addWorkflowNode(definition, WorkflowNodeKind.AssetPrompt, () => "node-prompt");
+    const promptNode = withPrompt.nodes.find((node) => node.id === "node-prompt");
+    if (!promptNode) {
+      throw new Error("Expected prompt node to exist.");
+    }
+
+    const firstConnection = connectWorkflowNodes(withPrompt, {
+      sourceNodeId: triggerNode.id,
+      sourcePortId: triggerNode.outputPorts[0]?.id ?? "",
+      targetNodeId: terminalNode.id,
+      targetPortId: terminalNode.inputPorts[0]?.id ?? ""
+    }, () => "edge-a");
+    const secondConnection = connectWorkflowNodes(firstConnection, {
+      sourceNodeId: promptNode.id,
+      sourcePortId: promptNode.outputPorts[0]?.id ?? "",
+      targetNodeId: terminalNode.id,
+      targetPortId: terminalNode.inputPorts[0]?.id ?? ""
+    }, () => "edge-b");
+
+    const removed = removeWorkflowEdge(secondConnection, "edge-a");
+
+    expect(removed.edges.map((edge) => edge.id)).toEqual(["edge-b"]);
+    expect(removed.nodes).toHaveLength(secondConnection.nodes.length);
   });
 
   it("attaches guardrails and removes node edges when a node is deleted", () => {
