@@ -704,6 +704,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflow edges now expose a compact delete affordance on the connection line and remove only the selected edge from the draft definition
     - Edge arrow markers were reduced to user-space SVG markers so the direction indicator no longer renders oversized
     - Browser validation now creates two outgoing edges, deletes one connection, and persists the remaining single-edge workflow
+    - Follow-up hardening: the edge delete control now uses a trash icon and stops pointer propagation so clicking it removes both the connection record and rendered line instead of starting canvas pan/selection
   - `06.2` server-first foundation implemented on `2026-05-06`:
     - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
     - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history

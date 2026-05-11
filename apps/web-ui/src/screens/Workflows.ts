@@ -1056,12 +1056,14 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       style: `left:${point.x - 10}px; top:${point.y - 10}px;`,
       onMouseMove: () => this.handleEdgeHover(edge.id),
       onMouseEnter: () => this.handleEdgeHover(edge.id),
+      onMouseDown: (event: Event) => this.handleEdgeDeletePointerStart(event),
+      onPointerDown: (event: Event) => this.handleEdgeDeletePointerStart(event),
       onClick: (event: Event) => this.handleRemoveEdge(event, edge.id),
       "data-testid": `${WorkflowScreenSelector.EdgeDeletePrefix}${edge.id}`
     }, [
       createElement("span", {
         className: "material-symbols-outlined text-[13px]"
-      }, ["close"])
+      }, ["delete"])
     ]);
   }
 
@@ -2251,6 +2253,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       noticeMessage: "Connection removed.",
       errorMessage: null
     });
+  }
+
+  private handleEdgeDeletePointerStart(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   private handleEdgeHover(edgeId: string): void {

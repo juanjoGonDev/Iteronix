@@ -346,8 +346,9 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForRenderedEdgeGeometry(page, 2);
     await waitForEdgeArrowSize(page);
     await hoverFirstWorkflowEdge(page);
-    await clickFirstWorkflowEdgeDelete(page);
+    const deletedEdgeId = await clickFirstWorkflowEdgeDelete(page);
     await waitForEdgeCount(page, 1);
+    await waitForDeletedEdgeRemoved(page, deletedEdgeId);
     await waitForRenderedEdgeGeometry(page, 1);
 
     await clickCanvasBackground(page);
@@ -1283,25 +1284,49 @@ async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
   });
 }
 
-async function clickFirstWorkflowEdgeDelete(page: Page): Promise<void> {
-  const point = await page.evaluate((prefix: string) => {
+async function clickFirstWorkflowEdgeDelete(page: Page): Promise<string> {
+  const result = await page.evaluate((prefix: string) => {
     const deleteControl = document.querySelector(`[data-testid^="${prefix}"]`);
     if (!(deleteControl instanceof HTMLElement)) {
       return null;
     }
 
+    if (deleteControl.textContent?.trim() !== "delete") {
+      return null;
+    }
+
     const rect = deleteControl.getBoundingClientRect();
     return {
+      edgeId: deleteControl.getAttribute("data-testid")?.slice(prefix.length) ?? "",
       x: rect.left + rect.width / 2,
       y: rect.top + rect.height / 2
     };
   }, WorkflowSelector.EdgeDeletePrefix);
 
-  if (!point) {
-    throw new Error("Could not read workflow edge delete control.");
+  if (!result || result.edgeId.length === 0) {
+    throw new Error("Could not read workflow edge trash control.");
   }
 
-  await page.mouse.click(point.x, point.y);
+  await page.mouse.click(result.x, result.y);
+  return result.edgeId;
+}
+
+async function waitForDeletedEdgeRemoved(page: Page, edgeId: string): Promise<void> {
+  await waitForCondition(async () => {
+    const removed = await page.evaluate((payload: { hitPrefix: string; deletePrefix: string; edgeId: string }) => {
+      const hit = document.querySelector(`[data-testid="${payload.hitPrefix}${payload.edgeId}"]`);
+      const deleteControl = document.querySelector(`[data-testid="${payload.deletePrefix}${payload.edgeId}"]`);
+      return hit === null && deleteControl === null;
+    }, {
+      hitPrefix: WorkflowSelector.EdgeHitPrefix,
+      deletePrefix: WorkflowSelector.EdgeDeletePrefix,
+      edgeId
+    });
+    return removed;
+  }, "deleted workflow edge removed from canvas", {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 }
 
 function assertPersistedWorkflow(state: StubServerState): void {

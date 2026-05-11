@@ -2393,3 +2393,26 @@
   - `06.3` remains in progress until explicit user acceptance.
 - Next:
   - Commit, then ask for real-app acceptance.
+### 2026-05-11 12:53 (Europe/Madrid) — Workflows 06.3 Trash Delete Hardening
+
+- Summary: Hardened the Workflows connection delete affordance after live feedback that clicking the control did not reliably remove the connection.
+- Decisions:
+  - Keep the behavior in `06.3` and use a trash icon rather than a close icon for clearer intent.
+  - Stop `pointerdown`/`mousedown` propagation on the edge delete control so the canvas pan/selection handler cannot consume the click path before deletion.
+  - Extend browser validation to assert the trash icon and verify the removed edge's visible line, hit-area and delete control are gone.
+- Changes:
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: edge delete control now renders `delete` and blocks pointer propagation before invoking `removeWorkflowEdge`.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: validation reads the deleted edge id, clicks the trash control, then waits for that exact edge line and control to disappear.
+  - **Updated PLAN.md** with this follow-up hardening note.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+  - `pnpm lint`
+  - `pnpm test`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.3` remains in progress until explicit user acceptance in the real running app.
+- Next:
+  - Commit this focused fix and ask for real-app validation.
