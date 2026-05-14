@@ -635,6 +635,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - The MVP canvas supports pan/zoom, draggable nodes, connectable ports, workflow/node/asset inspectors and responsive compact switching
     - Workflow definition list/create/load/save/delete is wired to the server, and the MVP node palette is visible with unsupported deeper features explicitly disabled with explanation
     - Deterministic browser coverage now exists in `pnpm -C apps/web-ui validate:workflows` for create -> edit -> drag -> connect -> save -> reload
+  - Phase `06.4` implementation progress on `2026-05-15` (still `En progreso` in Notion pending explicit user acceptance):
+    - Node-level JSON output contract editing now has deterministic selectors separated from reusable asset contract editors, so prompt/instruction/agent/provider-capable nodes can add validated fields and persist them through save/reload
+    - Edge mappings can now add explicit persisted `node_output` entries from upstream schema paths instead of staying in passthrough-only mode
+    - Attached guardrails can now be created and reopened from the node inspector with reusable assets, `warn`/`error`/`success` severity, up to four validations, and blocking rules only for `error` guardrails
+    - Browser validation now covers create/edit/save/reload for JSON contracts, edge mappings and guardrail attachments, including reopening the attached guardrail editor after reload
+    - Quality gates green on this 06.4 slice: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

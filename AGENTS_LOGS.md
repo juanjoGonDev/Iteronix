@@ -2534,3 +2534,69 @@
   - Temporary validation writes were restored through the workflow definition API after persistence checks.
 - Next:
   - Start `06.4 JSON contracts, data mapping and guardrail composition UI` only after the user confirms the next prompt.
+### 2026-05-14 23:33 (Europe/Madrid) — Codex RTK Global Setup
+
+- Summary: Installed RTK support for Codex global instructions after verifying the existing RTK version did not support `--codex`.
+- Decisions:
+  - Updated RTK through Cargo because installed `rtk 0.28.2` lacked the `--codex` init flag.
+  - Used Codex-specific setup instead of Claude hook setup; Codex mode writes `RTK.md` and references it from Codex `AGENTS.md`.
+- Changes:
+  - Updated global RTK binary at `C:\Users\juanj\.cargo\bin\rtk.exe` to `rtk 0.34.3`.
+  - Created `C:\Users\juanj\.codex\RTK.md`.
+  - Added `@C:\Users\juanj\.codex\RTK.md` to `C:\Users\juanj\.codex\AGENTS.md`.
+- Commands:
+  - `rtk --version`
+  - `rtk init --help`
+  - `rtk init -g --codex --dry-run -v`
+  - `cargo install --git https://github.com/rtk-ai/rtk --force`
+  - `rtk init -g --codex`
+  - `rtk init --show`
+- Issues/Risks:
+  - `rtk init --show` still emphasizes Claude hook status; for Codex this is expected because Codex setup uses AGENTS.md + RTK.md rather than Claude settings hooks.
+- Next:
+  - Restart Codex so the new global RTK instruction is loaded.
+### 2026-05-14 23:56 (Europe/Madrid) — Caveman Skill Registry Refresh
+
+- Summary: Refreshed the skill registry after discovering Caveman skills under `.agents/skills` and configured Caveman default mode for token-efficient Codex usage.
+- Decisions:
+  - Caveman maximum practical default is `ultra`, not `wenyan-ultra`, because returned prompts must remain natural and prompt-engineered.
+  - Cavecrew compact rules are now part of the registry so sub-agent launches can receive compressed-output standards.
+  - `.opencode/skill` remains included because `AGENTS.md` defines it as the project skill location.
+- Changes:
+  - Updated `.atl/skill-registry.md` with Caveman, Cavecrew, Caveman commit/review/compress/help/stats compact rules.
+  - Set `C:\Users\juanj\.config\caveman\config.json` to `{"defaultMode":"ultra"}`.
+  - Saved the updated registry and Caveman preference to Engram.
+- Commands:
+  - `Get-Content C:\Users\juanj\.codex\skills\skill-registry\SKILL.md -Raw`
+  - Scanned known skill directories, including `C:\Users\juanj\.agents\skills`.
+  - Read Caveman-family `SKILL.md` files.
+- Issues/Risks:
+  - Caveman still may not appear in Codex `<available_skills>` until the runtime rescans/restarts, but registry and memory now know where it lives.
+- Next:
+  - Inject Caveman/Cavecrew compact rules into future sub-agent prompts when delegating.
+### 2026-05-15 00:23 (Europe/Madrid) — Workflows 06.4 Contracts, Mapping and Guardrail Validation
+
+- Summary: Continued only `06.4` and fixed the real regression chain in the Workflows editor: JSON contracts now persist through save/reload, edge mappings can add explicit upstream output entries, and attached guardrails can be reopened and edited reliably from the node inspector.
+- Decisions:
+  - Keep `06.4 JSON contracts, data mapping and guardrail composition UI` in `En progreso` until explicit user acceptance; do not move it to `Listo` yet.
+  - Separate node-level JSON contract test selectors from embedded reusable-asset contract selectors so deterministic browser validation targets the intended editor instead of an ambiguous duplicate control.
+  - Treat the attached guardrail reopen path as the canonical browser proof for guardrail persistence after reload instead of assuming the validation message stays visible in the node inspector without reopening the asset.
+- Changes:
+  - **Updated `apps/web-ui/src/screens/Workflows.ts`**: added visual JSON contract editing, persisted edge mapping authoring, guardrail composition/attachment editing, and deterministic selector separation for node vs reusable asset output-contract editors.
+  - **Updated `apps/web-ui/src/screens/workflows-editor-state.ts`**: added pure helpers for contract validation, output-contract field creation, edge mapping persistence, guardrail validation limits, and severity/blocking rules.
+  - **Updated `apps/web-ui/src/screens/workflows-editor-state.test.ts`**: added focused regression coverage for JSON contracts, node-output mappings, and guardrail validity semantics.
+  - **Updated `apps/web-ui/scripts/validate-workflows.ts`**: extended browser validation to cover create/edit/save/reload of JSON contracts, mappings, and attached guardrails, including reopening the attached guardrail editor after reload.
+  - **Updated `PLAN.md`**: recorded `06.4` progress while keeping the phase explicitly in progress.
+  - **Added Notion comment** on `06.4 JSON contracts, data mapping and guardrail composition UI`: progress recorded, status intentionally kept in progress.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.4` is functionally green for this slice, but the Notion subtask remains open until the user accepts the behavior in the real task flow.
+  - `.atl/skill-registry.md` remains a separate pre-existing local diff and is not part of this 06.4 implementation scope.
+- Next:
+  - Create the focused conventional commit for the 06.4 slice and wait for user acceptance before closing the Notion subtask.

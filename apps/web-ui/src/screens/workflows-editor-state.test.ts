@@ -1,17 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   addWorkflowNode,
+  addWorkflowEdgeMappingEntry,
+  addWorkflowGuardrailValidation,
   WorkflowAssetKind,
   WorkflowNodeKind,
+  WorkflowGuardrailSeverity,
   attachGuardrailToNode,
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
+  createWorkflowOutputContractField,
+  readJsonContractValidation,
+  readGuardrailDefinitionValidity,
   moveWorkflowNode,
   readNodeAssetKind,
   removeWorkflowEdge,
   removeWorkflowNode,
-  setWorkflowViewport
+  setWorkflowViewport,
+  updateWorkflowAssetGuardrail,
+  updateWorkflowNodeOutputContract
 } from "./workflows-editor-state.js";
 
 describe("workflows editor state", () => {
@@ -228,4 +236,100 @@ describe("workflows editor state", () => {
     expect(readNodeAssetKind(WorkflowNodeKind.AssetPrompt)).toBe(WorkflowAssetKind.Prompt);
     expect(readNodeAssetKind(WorkflowNodeKind.AiAgent)).toBeNull();
   });
+
+  it("updates node JSON output contracts and validates required object fields", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Contracts"
+    });
+    const withAgent = addWorkflowNode(definition, WorkflowNodeKind.AiAgent, () => "agent-node");
+    const withContract = updateWorkflowNodeOutputContract(withAgent, "agent-node", (contract) => ({
+      ...contract,
+      name: "Planner result",
+      schema: createWorkflowOutputContractField({
+        name: "summary",
+        type: "string",
+        required: true
+      }, contract.schema)
+    }));
+    const agentNode = withContract.nodes.find((node) => node.id === "agent-node");
+
+    expect(agentNode?.outputContract?.name).toBe("Planner result");
+    expect(agentNode?.outputContract?.schema.required).toContain("summary");
+    expect(agentNode?.outputContract?.schema.properties?.["summary"]?.type).toBe("string");
+    expect(readJsonContractValidation(agentNode?.outputContract ?? null).valid).toBe(true);
+  });
+
+  it("adds edge mapping entries for prior node outputs", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Mapped workflow"
+    });
+    const triggerNode = definition.nodes[0];
+    const terminalNode = definition.nodes[1];
+    if (!triggerNode || !terminalNode) {
+      throw new Error("Expected default workflow nodes to exist.");
+    }
+    const connected = connectWorkflowNodes(definition, {
+      sourceNodeId: triggerNode.id,
+      sourcePortId: triggerNode.outputPorts[0]?.id ?? "",
+      targetNodeId: terminalNode.id,
+      targetPortId: terminalNode.inputPorts[0]?.id ?? ""
+    }, () => "edge-1");
+    const mapped = addWorkflowEdgeMappingEntry(connected, "edge-1", {
+      targetPath: "$.context",
+      source: {
+        kind: "node_output",
+        nodeId: triggerNode.id,
+        path: "$.result"
+      }
+    });
+
+    expect(mapped.edges[0]?.mapping.mode).toBe("object");
+    expect(mapped.edges[0]?.mapping.entries).toEqual([
+      {
+        targetPath: "$.context",
+        source: {
+          kind: "node_output",
+          nodeId: triggerNode.id,
+          path: "$.result"
+        }
+      }
+    ]);
+  });
+
+  it("limits guardrail validations to four and treats warnings as permissive", () => {
+    const guardrail = createWorkflowAssetDraft({
+      kind: WorkflowAssetKind.Guardrail,
+      projectId: "project-1",
+      idFactory: createSequentialIdFactory("guardrail")
+    });
+    const warnGuardrail = updateWorkflowAssetGuardrail(guardrail, (definition) => ({
+      ...definition,
+      severity: WorkflowGuardrailSeverity.Warn,
+      validations: []
+    }));
+    const first = addWorkflowGuardrailValidation(warnGuardrail, () => "validation-1");
+    const second = addWorkflowGuardrailValidation(first, () => "validation-2");
+    const third = addWorkflowGuardrailValidation(second, () => "validation-3");
+    const fourth = addWorkflowGuardrailValidation(third, () => "validation-4");
+    const ignored = addWorkflowGuardrailValidation(fourth, () => "validation-5");
+
+    expect(ignored.guardrail?.validations).toHaveLength(4);
+    expect(readGuardrailDefinitionValidity(warnGuardrail.guardrail ?? null).blocking).toBe(false);
+    expect(readGuardrailDefinitionValidity({
+      id: "error-guardrail",
+      severity: WorkflowGuardrailSeverity.Error,
+      operator: "all",
+      validations: []
+    }).blocking).toBe(true);
+  });
 });
+
+const createSequentialIdFactory = (prefix: string): (() => string) => {
+  let index = 0;
+  return () => {
+    index += 1;
+    return `${prefix}-${index}`;
+  };
+};

@@ -75,7 +75,22 @@ const WorkflowSelector = {
   NodePromptInput: "workflows-node-prompt-input",
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
+  OutputContractFieldNameInput: "workflows-output-contract-field-name-input",
+  OutputContractFieldTypeSelect: "workflows-output-contract-field-type-select",
+  OutputContractAddField: "workflows-output-contract-add-field",
+  MappingTargetPathInput: "workflows-mapping-target-path-input",
+  MappingSourcePathInput: "workflows-mapping-source-path-input",
+  MappingAddEntry: "workflows-mapping-add-entry",
+  GuardrailNewForNode: "workflows-guardrail-new-for-node",
+  GuardrailAttachmentEditPrefix: "workflows-guardrail-attachment-edit-",
+  GuardrailSeveritySelect: "workflows-guardrail-severity-select",
+  GuardrailValidationKindSelect: "workflows-guardrail-validation-kind-select",
+  GuardrailValidationTargetSelect: "workflows-guardrail-validation-target-select",
+  GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
+  GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
+  GuardrailAddValidation: "workflows-guardrail-add-validation",
   SectionNodes: "workflows-section-nodes",
+  SectionAssets: "workflows-section-assets",
   CompactCanvas: "workflows-compact-canvas",
   NodeCardPrefix: "workflows-node-card-",
   NodePalettePrefix: "workflows-node-palette-"
@@ -247,6 +262,11 @@ const ValidationText = {
   PromptNodeLabel: "Primary prompt",
   ProviderNodeLabel: "Codex run",
   ProviderPrompt: "Summarize the connected context and return a concise answer.",
+  OutputContractField: "summary",
+  MappingTargetPath: "$.promptSummary",
+  MappingSourcePath: "$.result",
+  GuardrailValidationPath: "$.summary",
+  GuardrailValidationMessage: "Summary must be present before continuing.",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
   ConnectionAddedNotice: "Connection added.",
@@ -321,6 +341,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AssetPrompt}`);
     await waitForPageText(page, "Prompt asset created.");
     await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
+    await setInputValueByTestId(page, WorkflowSelector.OutputContractFieldNameInput, ValidationText.OutputContractField);
+    await setSelectValueByTestId(page, WorkflowSelector.OutputContractFieldTypeSelect, "string");
+    await clickByTestId(page, WorkflowSelector.OutputContractAddField);
+    await waitForPageText(page, "$.summary");
     await waitForNodeCardText(page, ValidationText.PromptNodeLabel);
 
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AiProviderRun}`);
@@ -375,6 +399,25 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForEdgeCount(page, 1);
     await waitForDeletedEdgeRemoved(page, deletedEdgeId);
     await waitForRenderedEdgeGeometry(page, 1);
+    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await waitForTestId(page, WorkflowSelector.ConnectionPreview);
+    await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
+    await clickEditButtonWithinNodeCard(page, providerCardTestId);
+    await setInputValueByTestId(page, WorkflowSelector.MappingTargetPathInput, ValidationText.MappingTargetPath);
+    await setSelectValueByTestId(page, WorkflowSelector.MappingSourcePathInput, ValidationText.MappingSourcePath);
+    await clickByTestId(page, WorkflowSelector.MappingAddEntry);
+    await waitForPageText(page, ValidationText.MappingTargetPath);
+    await clickByTestId(page, WorkflowSelector.GuardrailNewForNode);
+    await waitForPageText(page, "Guardrail asset created.");
+    await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await setSelectValueByTestId(page, WorkflowSelector.GuardrailSeveritySelect, "warn");
+    await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationKindSelect, "field_exists");
+    await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationTargetSelect, "output");
+    await setInputValueByTestId(page, WorkflowSelector.GuardrailValidationPathInput, ValidationText.GuardrailValidationPath);
+    await setInputValueByTestId(page, WorkflowSelector.GuardrailValidationMessageInput, ValidationText.GuardrailValidationMessage);
+    await clickByTestId(page, WorkflowSelector.GuardrailAddValidation);
+    await waitForPageText(page, ValidationText.GuardrailValidationMessage);
 
     await clickCanvasBackground(page);
     await waitForTestId(page, WorkflowSelector.WorkflowNameInput);
@@ -401,6 +444,13 @@ async function validateWorkflowsScreen(): Promise<void> {
       ValidationText.ProviderNodeLabel
     ]);
     await waitForInputValue(page, WorkflowSelector.WorkflowNameInput, ValidationText.WorkflowName);
+    await clickEditButtonWithinNodeCard(page, providerCardTestId);
+    await waitForPageText(page, ValidationText.MappingTargetPath);
+    await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await waitForPageText(page, ValidationText.GuardrailValidationMessage);
+    await clickEditButtonWithinNodeCard(page, promptCardTestId);
+    await waitForPageText(page, "$.summary");
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -893,6 +943,32 @@ async function clickByTestId(page: Page, testId: string): Promise<void> {
   if (!clicked) {
     throw new Error(`Could not click ${testId}.`);
   }
+}
+
+async function clickFirstByTestIdPrefix(page: Page, prefix: string): Promise<void> {
+  const clicked = await page.evaluate((selectorPrefix: string) => {
+    const element = Array.from(document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`))
+      .find((entry) => entry instanceof HTMLElement);
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+    element.click();
+    return true;
+  }, prefix);
+
+  if (!clicked) {
+    throw new Error(`Could not click first element with prefix ${prefix}.`);
+  }
+}
+
+async function waitForFirstByTestIdPrefix(page: Page, prefix: string): Promise<void> {
+  await waitForCondition(async () => page.evaluate((selectorPrefix: string) => (
+    Array.from(document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`))
+      .some((entry) => entry instanceof HTMLElement)
+  ), prefix), `first test id prefix ${prefix}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
 }
 
 async function setInputValueByTestId(
@@ -1517,12 +1593,45 @@ function assertPersistedWorkflow(state: StubServerState): void {
     throw new Error(`Expected provider verbosity to persist. Received: ${String(providerNode.config.provider?.["verbosity"])}`);
   }
 
-  if (definition.edges.length !== 1) {
-    throw new Error(`Expected one saved edge after deletion, received ${definition.edges.length}.`);
+  if (definition.edges.length < 1) {
+    throw new Error(`Expected saved edges after deletion and remapping, received ${definition.edges.length}.`);
   }
 
-  if (state.assets.length !== 1 || state.assets[0]?.kind !== "prompt") {
-    throw new Error("Expected one persisted prompt asset.");
+  const savedEdge = definition.edges.find((edge) => edge.mapping.entries.length > 0);
+  if (!savedEdge || savedEdge.mapping.entries.length !== 1) {
+    throw new Error("Expected one saved edge mapping entry.");
+  }
+
+  const mappingEntry = savedEdge.mapping.entries[0];
+  if (!isRecord(mappingEntry) || mappingEntry["targetPath"] !== ValidationText.MappingTargetPath) {
+    throw new Error("Expected explicit target mapping path to persist.");
+  }
+
+  const promptNode = definition.nodes.find((node) => node.label === ValidationText.PromptNodeLabel);
+  if (!promptNode) {
+    throw new Error("Expected prompt node to persist.");
+  }
+
+  const outputContract = promptNode.outputContract;
+  if (!isRecord(outputContract) || !JSON.stringify(outputContract).includes(ValidationText.OutputContractField)) {
+    throw new Error("Expected prompt output contract field to persist.");
+  }
+
+  const guardrailAsset = state.assets.find((asset) => asset.kind === "guardrail");
+  if (!guardrailAsset || !isRecord(guardrailAsset.guardrail)) {
+    throw new Error("Expected one persisted guardrail asset.");
+  }
+
+  if (guardrailAsset.guardrail["severity"] !== "warn") {
+    throw new Error(`Expected warn guardrail severity, received ${String(guardrailAsset.guardrail["severity"])}.`);
+  }
+
+  if (!JSON.stringify(guardrailAsset.guardrail).includes(ValidationText.GuardrailValidationMessage)) {
+    throw new Error("Expected added guardrail validation to persist.");
+  }
+
+  if (!providerNode.attachedGuardrails.some((guardrail) => guardrail.assetId === guardrailAsset.id)) {
+    throw new Error("Expected provider node to keep the guardrail attachment.");
   }
 }
 

@@ -357,6 +357,7 @@ const DefaultWorkspaceId = "iteronix-workspace";
 const DefaultReasoningLevel = WorkflowReasoningLevel.Medium;
 const DefaultVerbosity = WorkflowVerbosity.Medium;
 const DefaultTemperature = 0.2;
+const GuardrailValidationLimit = 4;
 
 export const readDefaultWorkflowWorkspaceId = (): string => DefaultWorkspaceId;
 
@@ -583,9 +584,186 @@ export const detachGuardrailFromNode = (
               order: index
             }))
         }
+        : node
+  )
+});
+
+export type JsonContractValidationResult = {
+  valid: boolean;
+  message: string;
+};
+
+export type GuardrailValidityResult = {
+  valid: boolean;
+  blocking: boolean;
+  message: string;
+};
+
+export const updateWorkflowNodeOutputContract = (
+  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
+  nodeId: string,
+  updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord
+): WorkflowDefinitionUpsertInput => ({
+  ...stripDefinitionVersionFields(definition),
+  nodes: definition.nodes.map((node) =>
+    node.id === nodeId
+      ? {
+          ...node,
+          outputContract: updater(node.outputContract ?? createDefaultOutputContract(`${node.label} output`))
+        }
       : node
   )
 });
+
+export const createWorkflowOutputContractField = (
+  input: {
+    name: string;
+    type: JsonSchemaNodeRecord["type"];
+    required: boolean;
+  },
+  rootSchema: JsonSchemaNodeRecord
+): JsonSchemaNodeRecord => {
+  const fieldName = input.name.trim();
+  if (fieldName.length === 0) {
+    return rootSchema;
+  }
+
+  const currentRequired = rootSchema.required ?? [];
+  const nextRequired = input.required
+    ? [...new Set([...currentRequired, fieldName])]
+    : currentRequired.filter((entry) => entry !== fieldName);
+
+  return {
+    ...rootSchema,
+    type: "object",
+    properties: {
+      ...(rootSchema.properties ?? {}),
+      [fieldName]: {
+        type: input.type,
+        title: toTitle(fieldName)
+      }
+    },
+    required: nextRequired
+  };
+};
+
+export const readJsonContractValidation = (
+  contract: JsonOutputContractRecord | null
+): JsonContractValidationResult => {
+  if (!contract) {
+    return {
+      valid: false,
+      message: "No output contract is configured."
+    };
+  }
+
+  if (contract.rootType !== "object" || contract.schema.type !== "object") {
+    return {
+      valid: false,
+      message: "The contract root must be an object."
+    };
+  }
+
+  const properties = contract.schema.properties ?? {};
+  const missingRequired = (contract.schema.required ?? []).filter((fieldName) => !properties[fieldName]);
+  if (missingRequired.length > 0) {
+    return {
+      valid: false,
+      message: `Required fields missing from properties: ${missingRequired.join(", ")}.`
+    };
+  }
+
+  return {
+    valid: true,
+    message: "Output contract is valid."
+  };
+};
+
+export const addWorkflowEdgeMappingEntry = (
+  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
+  edgeId: string,
+  entry: EdgeMappingEntryRecord
+): WorkflowDefinitionUpsertInput => ({
+  ...stripDefinitionVersionFields(definition),
+  edges: definition.edges.map((edge) =>
+    edge.id === edgeId
+      ? {
+          ...edge,
+          mapping: {
+            mode: "object",
+            entries: [...edge.mapping.entries, entry]
+          }
+        }
+      : edge
+  )
+});
+
+export const updateWorkflowAssetGuardrail = (
+  asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
+  updater: (definition: GuardrailDefinitionRecord) => GuardrailDefinitionRecord
+): WorkflowAssetUpsertInput => ({
+  ...stripAssetPersistenceFields(asset),
+  guardrail: updater(asset.guardrail ?? createDefaultGuardrailDefinition())
+});
+
+export const addWorkflowGuardrailValidation = (
+  asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
+  idFactory: () => string = () => crypto.randomUUID()
+): WorkflowAssetUpsertInput => {
+  const guardrail = asset.guardrail ?? createDefaultGuardrailDefinition(idFactory);
+  if (guardrail.validations.length >= GuardrailValidationLimit) {
+    return stripAssetPersistenceFields(asset);
+  }
+
+  return {
+    ...stripAssetPersistenceFields(asset),
+    guardrail: {
+      ...guardrail,
+      validations: [
+        ...guardrail.validations,
+        createDefaultGuardrailValidation(idFactory)
+      ]
+    }
+  };
+};
+
+export const readGuardrailDefinitionValidity = (
+  guardrail: GuardrailDefinitionRecord | null
+): GuardrailValidityResult => {
+  if (!guardrail) {
+    return {
+      valid: false,
+      blocking: false,
+      message: "No guardrail definition is configured."
+    };
+  }
+
+  if (guardrail.validations.length === 0) {
+    return {
+      valid: false,
+      blocking: guardrail.severity === WorkflowGuardrailSeverity.Error,
+      message: guardrail.severity === WorkflowGuardrailSeverity.Error
+        ? "Error guardrails need at least one validation before the node can be considered valid."
+        : "Add at least one validation to make this guardrail actionable."
+    };
+  }
+
+  if (guardrail.validations.length > GuardrailValidationLimit) {
+    return {
+      valid: false,
+      blocking: guardrail.severity === WorkflowGuardrailSeverity.Error,
+      message: `Guardrails support at most ${GuardrailValidationLimit.toString()} validations.`
+    };
+  }
+
+  return {
+    valid: true,
+    blocking: false,
+    message: guardrail.severity === WorkflowGuardrailSeverity.Error
+      ? "Error severity blocks node validity only when a validation triggers."
+      : "Warnings and success signals are permissive."
+  };
+};
 
 export const connectWorkflowNodes = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
@@ -677,6 +855,25 @@ export const stripDefinitionVersionFields = (
   executionPolicy: definition.executionPolicy,
   defaultContextPolicy: definition.defaultContextPolicy,
   tags: definition.tags
+});
+
+export const stripAssetPersistenceFields = (
+  asset: WorkflowAssetRecord | WorkflowAssetUpsertInput
+): WorkflowAssetUpsertInput => ({
+  ...(asset.id ? { id: asset.id } : {}),
+  workspaceId: asset.workspaceId,
+  ...(asset.projectId ? { projectId: asset.projectId } : {}),
+  kind: asset.kind,
+  scope: asset.scope,
+  name: asset.name,
+  slug: asset.slug,
+  description: asset.description,
+  body: asset.body,
+  language: asset.language,
+  tags: asset.tags,
+  ...(asset.outputContract ? { outputContract: asset.outputContract } : {}),
+  ...(asset.guardrail ? { guardrail: asset.guardrail } : {}),
+  ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {})
 });
 
 export const readNodeTemplate = (
@@ -984,6 +1181,25 @@ const createDefaultOutputContract = (
   sampleOutput: "{\n  \"result\": \"\"\n}"
 });
 
+const createDefaultGuardrailDefinition = (
+  idFactory: () => string = () => crypto.randomUUID()
+): GuardrailDefinitionRecord => ({
+  id: idFactory(),
+  severity: WorkflowGuardrailSeverity.Error,
+  operator: WorkflowGuardrailOperator.All,
+  validations: []
+});
+
+const createDefaultGuardrailValidation = (
+  idFactory: () => string = () => crypto.randomUUID()
+): GuardrailValidationRecord => ({
+  id: idFactory(),
+  kind: "field_exists",
+  target: "output",
+  path: "$.result",
+  message: "Expected $.result to be present."
+});
+
 const createDefaultProviderSelection = (): WorkflowProviderSelectionRecord => ({
   providerId: ProviderKind.CodexCli,
   modelId: "",
@@ -1023,3 +1239,10 @@ const toSlug = (value: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+const toTitle = (value: string): string =>
+  value
+    .split(/[-_\s]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");

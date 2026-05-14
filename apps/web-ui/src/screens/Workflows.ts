@@ -14,21 +14,28 @@ import type { ProviderProfileRecord } from "./settings-state.js";
 import {
   WorkflowAssetKind,
   WorkflowAssetScope,
+  WorkflowGuardrailOperator,
+  WorkflowGuardrailSeverity,
   WorkflowNodeKind,
   WorkflowNodeRole,
   WorkflowReasoningLevel,
   WorkflowRecordStatus,
   WorkflowVerbosity,
   addWorkflowNode,
+  addWorkflowEdgeMappingEntry,
+  addWorkflowGuardrailValidation,
   attachGuardrailToNode,
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
+  createWorkflowOutputContractField,
   detachGuardrailFromNode,
   moveWorkflowNode,
   readAssetKindLabel,
   readAssetScopeLabel,
   readDefaultWorkflowWorkspaceId,
+  readGuardrailDefinitionValidity,
+  readJsonContractValidation,
   readNodeAccentClassName,
   readNodeAssetKind,
   readNodeIcon,
@@ -38,6 +45,12 @@ import {
   removeWorkflowNode,
   setWorkflowViewport,
   stripDefinitionVersionFields,
+  updateWorkflowAssetGuardrail,
+  updateWorkflowNodeOutputContract,
+  type EdgeMappingEntryRecord,
+  type GuardrailValidationRecord,
+  type JsonOutputContractRecord,
+  type JsonSchemaNodeRecord,
   type WorkflowAssetKind as WorkflowAssetKindValue,
   type WorkflowAssetRecord,
   type WorkflowAssetScope as WorkflowAssetScopeValue,
@@ -81,8 +94,33 @@ const WorkflowScreenSelector = {
   NodeProviderSelect: "workflows-node-provider-select",
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
+  OutputContractNameInput: "workflows-output-contract-name-input",
+  OutputContractFieldNameInput: "workflows-output-contract-field-name-input",
+  OutputContractFieldTypeSelect: "workflows-output-contract-field-type-select",
+  OutputContractFieldRequiredToggle: "workflows-output-contract-field-required-toggle",
+  OutputContractAddField: "workflows-output-contract-add-field",
+  OutputContractStatus: "workflows-output-contract-status",
+  AssetOutputContractNameInput: "workflows-asset-output-contract-name-input",
+  AssetOutputContractFieldNameInput: "workflows-asset-output-contract-field-name-input",
+  AssetOutputContractFieldTypeSelect: "workflows-asset-output-contract-field-type-select",
+  AssetOutputContractFieldRequiredToggle: "workflows-asset-output-contract-field-required-toggle",
+  AssetOutputContractAddField: "workflows-asset-output-contract-add-field",
+  AssetOutputContractStatus: "workflows-asset-output-contract-status",
+  MappingTargetPathInput: "workflows-mapping-target-path-input",
+  MappingSourcePathInput: "workflows-mapping-source-path-input",
+  MappingAddEntry: "workflows-mapping-add-entry",
+  GuardrailNewForNode: "workflows-guardrail-new-for-node",
+  GuardrailAttachmentEditPrefix: "workflows-guardrail-attachment-edit-",
+  GuardrailSeveritySelect: "workflows-guardrail-severity-select",
+  GuardrailOperatorSelect: "workflows-guardrail-operator-select",
+  GuardrailValidationKindSelect: "workflows-guardrail-validation-kind-select",
+  GuardrailValidationTargetSelect: "workflows-guardrail-validation-target-select",
+  GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
+  GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
+  GuardrailAddValidation: "workflows-guardrail-add-validation",
   NodePalettePrefix: "workflows-node-palette-",
   AssetCreatePrefix: "workflows-asset-create-",
+  AssetCardPrefix: "workflows-asset-card-",
   NodeCardPrefix: "workflows-node-card-",
   InspectorEmpty: "workflows-inspector-empty",
   CompactSidebar: "workflows-compact-sidebar",
@@ -157,6 +195,35 @@ type NodeDropTarget = {
   portId: string;
 };
 
+type GuardrailValidationKindValue = GuardrailValidationRecord["kind"];
+type GuardrailValidationTargetValue = GuardrailValidationRecord["target"];
+type OutputContractEditorSelectorSet = {
+  nameInput: string;
+  fieldNameInput: string;
+  fieldTypeSelect: string;
+  fieldRequiredToggle: string;
+  addFieldButton: string;
+  status: string;
+};
+
+const NodeOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
+  nameInput: WorkflowScreenSelector.OutputContractNameInput,
+  fieldNameInput: WorkflowScreenSelector.OutputContractFieldNameInput,
+  fieldTypeSelect: WorkflowScreenSelector.OutputContractFieldTypeSelect,
+  fieldRequiredToggle: WorkflowScreenSelector.OutputContractFieldRequiredToggle,
+  addFieldButton: WorkflowScreenSelector.OutputContractAddField,
+  status: WorkflowScreenSelector.OutputContractStatus
+};
+
+const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
+  nameInput: WorkflowScreenSelector.AssetOutputContractNameInput,
+  fieldNameInput: WorkflowScreenSelector.AssetOutputContractFieldNameInput,
+  fieldTypeSelect: WorkflowScreenSelector.AssetOutputContractFieldTypeSelect,
+  fieldRequiredToggle: WorkflowScreenSelector.AssetOutputContractFieldRequiredToggle,
+  addFieldButton: WorkflowScreenSelector.AssetOutputContractAddField,
+  status: WorkflowScreenSelector.AssetOutputContractStatus
+};
+
 interface WorkflowsScreenState {
   currentProject: ProjectRecord | null;
   workspaceState: WorkspaceStateSnapshot | null;
@@ -177,6 +244,15 @@ interface WorkflowsScreenState {
   hoveredEdgeId: string | null;
   connectionPreviewPoint: ConnectionPreviewPoint | null;
   guardrailAttachAssetId: string | null;
+  outputContractFieldName: string;
+  outputContractFieldType: JsonSchemaNodeRecord["type"];
+  outputContractFieldRequired: boolean;
+  mappingTargetPath: string;
+  mappingSourcePath: string;
+  guardrailValidationKind: GuardrailValidationKindValue;
+  guardrailValidationTarget: GuardrailValidationTargetValue;
+  guardrailValidationPath: string;
+  guardrailValidationMessage: string;
   errorMessage: string | null;
   noticeMessage: string | null;
 }
@@ -212,6 +288,15 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       hoveredEdgeId: null,
       connectionPreviewPoint: null,
       guardrailAttachAssetId: null,
+      outputContractFieldName: "summary",
+      outputContractFieldType: "string",
+      outputContractFieldRequired: true,
+      mappingTargetPath: "$.context",
+      mappingSourcePath: "$.result",
+      guardrailValidationKind: "field_exists",
+      guardrailValidationTarget: "output",
+      guardrailValidationPath: "$.result",
+      guardrailValidationMessage: "Expected $.result to be present.",
       errorMessage: null,
       noticeMessage: null
     });
@@ -560,7 +645,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     type: "button",
                     key: asset.id,
                     className: `flex w-full flex-col gap-1 rounded-lg border px-3 py-3 text-left transition-colors ${this.state.selection.type === "asset" && this.state.selection.id === asset.id ? "border-primary bg-primary/10" : "border-border-dark bg-[#11161d] hover:bg-[#20262f]"}`,
-                    onClick: () => this.setState({ selection: { type: "asset", id: asset.id } })
+                    onClick: () => this.setState({ selection: { type: "asset", id: asset.id } }),
+                    dataset: {
+                      testid: `${WorkflowScreenSelector.AssetCardPrefix}${asset.id}`
+                    }
                   }, [
                     createElement("div", { className: "flex items-center justify-between gap-3" }, [
                       createElement("span", { className: "truncate text-sm font-medium text-white" }, [asset.name]),
@@ -1288,14 +1376,125 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       node.kind === WorkflowNodeKind.AiAgent ? this.renderAgentConfig(node) : "",
       node.kind === WorkflowNodeKind.AiProviderRun ? this.renderProviderRunConfig(node) : "",
       node.kind === WorkflowNodeKind.HumanReview ? this.renderReviewConfig(node) : "",
-      node.kind === WorkflowNodeKind.LogicCondition || node.kind === WorkflowNodeKind.LogicMerge
-        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
-            "Mapping editors and structured branch expressions land in phase 06.4. The current MVP keeps these nodes connectable and label-editable, but advanced data routing is intentionally disabled with explanation."
-          ])
+      isOutputContractCapableNode(node.kind)
+        ? this.renderNodeOutputContractSection(node)
         : "",
+      this.renderNodeInputMappingSection(node),
       node.kind !== WorkflowNodeKind.TriggerManual && node.kind !== WorkflowNodeKind.TerminalResponse
         ? this.renderGuardrailAttachmentSection(node, guardrailAssets)
         : ""
+    ]);
+  }
+
+  private renderNodeOutputContractSection(node: WorkflowNodeRecord): HTMLElement {
+    const contract = node.outputContract ?? null;
+
+    return this.renderOutputContractEditor({
+      title: "JSON output contract",
+      description: "Define the structured object this node must produce. Downstream mappings can select these paths.",
+      contract,
+      selectors: NodeOutputContractEditorSelectors,
+      onRename: (name) => {
+        if (!this.state.draftWorkflow) {
+          return;
+        }
+        this.updateDraftWorkflow(updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, (current) => ({
+          ...current,
+          name
+        })), { type: "node", id: node.id });
+      },
+      onAddField: () => {
+        if (!this.state.draftWorkflow) {
+          return;
+        }
+        const nextWorkflow = updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, (current) => ({
+          ...current,
+          schema: createWorkflowOutputContractField({
+            name: this.state.outputContractFieldName,
+            type: this.state.outputContractFieldType,
+            required: this.state.outputContractFieldRequired
+          }, current.schema)
+        }));
+        this.updateDraftWorkflow(nextWorkflow, { type: "node", id: node.id });
+      }
+    });
+  }
+
+  private renderNodeInputMappingSection(node: WorkflowNodeRecord): HTMLElement {
+    const workflow = this.state.draftWorkflow;
+    const incomingEdges = workflow?.edges.filter((edge) => edge.targetNodeId === node.id) ?? [];
+
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "flex items-start justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, ["Input mapping"]),
+          createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+            "Map prior node outputs into this node input. Passthrough remains valid when no explicit entry is configured."
+          ])
+        ]),
+        createElement(StatusBadge, { status: incomingEdges.length > 0 ? "info" : "warning" }, [
+          `${incomingEdges.length} input${incomingEdges.length === 1 ? "" : "s"}`
+        ])
+      ]),
+      createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
+        incomingEdges.length === 0
+          ? createElement("p", { className: "rounded-md border border-dashed border-border-dark px-3 py-3 text-xs text-text-secondary" }, [
+              "Connect an upstream node before configuring mappings."
+            ])
+          : incomingEdges.map((edge) => this.renderEdgeMappingEditor(edge))
+      ])
+    ]);
+  }
+
+  private renderEdgeMappingEditor(edge: WorkflowDefinitionUpsertInput["edges"][number]): HTMLElement {
+    const workflow = this.state.draftWorkflow;
+    const sourceNode = workflow?.nodes.find((node) => node.id === edge.sourceNodeId);
+    const sourcePaths = sourceNode?.outputContract
+      ? readSchemaPaths(sourceNode.outputContract.schema)
+      : ["$.result"];
+
+    return createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-3" }, [
+      createElement("div", { className: "flex items-center justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "truncate text-sm font-medium text-white" }, [
+            sourceNode ? `${sourceNode.label} output` : edge.sourceNodeId
+          ]),
+          createElement("p", { className: "text-xs text-text-secondary" }, [
+            `${edge.mapping.mode} · ${edge.mapping.entries.length} mapping${edge.mapping.entries.length === 1 ? "" : "s"}`
+          ])
+        ])
+      ]),
+      createElement("div", { className: "mt-3 grid gap-3 sm:grid-cols-2" }, [
+        this.renderInspectorField("Target path", this.state.mappingTargetPath, (value) => {
+          this.setState({ mappingTargetPath: value });
+        }, WorkflowScreenSelector.MappingTargetPathInput),
+        this.renderInspectorSelect("Source path", this.state.mappingSourcePath, sourcePaths, (value) => {
+          this.setState({ mappingSourcePath: value });
+        }, sourcePaths.map((path) => ({ value: path, label: path })), WorkflowScreenSelector.MappingSourcePathInput)
+      ]),
+      createElement(Button, {
+        variant: "secondary",
+        size: "sm",
+        className: "mt-3",
+        disabled: this.state.mappingTargetPath.trim().length === 0 || this.state.mappingSourcePath.trim().length === 0,
+        onClick: () => this.handleAddMappingEntry(edge),
+        children: "Add mapping",
+        dataset: {
+          testid: WorkflowScreenSelector.MappingAddEntry
+        }
+      }),
+      edge.mapping.entries.length === 0
+        ? createElement("p", { className: "mt-3 text-xs text-text-secondary" }, ["No explicit entries yet. The edge currently forwards the upstream payload."])
+        : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+            edge.mapping.entries.map((entry, index) =>
+              createElement("div", {
+                key: `${entry.targetPath}-${index.toString()}`,
+                className: "rounded border border-border-dark px-3 py-2 text-xs text-text-secondary"
+              }, [
+                `${entry.targetPath} ← ${entry.source.path ?? entry.source.value ?? entry.source.kind}`
+              ])
+            )
+          ])
     ]);
   }
 
@@ -1341,34 +1540,41 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         }));
       }),
       asset.kind === WorkflowAssetKind.Guardrail && asset.guardrail
-        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
-            createElement("p", { className: "text-sm font-medium text-white" }, ["Guardrail validations"]),
-            createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-              `${asset.guardrail.validations.length} validation${asset.guardrail.validations.length === 1 ? "" : "s"} · ${asset.guardrail.severity} severity`
-            ]),
-            createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
-              asset.guardrail.validations.map((validation) =>
-                createElement("div", {
-                  key: validation.id,
-                  className: "rounded-md border border-border-dark px-3 py-2"
-                }, [
-                  createElement("p", { className: "text-sm font-medium text-white" }, [validation.kind]),
-                  createElement("p", { className: "text-xs text-text-secondary" }, [validation.message])
-                ])
-              )
-            ])
-          ])
+        ? this.renderGuardrailDefinitionEditor(asset)
         : "",
       asset.outputContract
-        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
-            createElement("p", { className: "text-sm font-medium text-white" }, ["JSON output contract"]),
-            createElement("pre", { className: "mt-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-border-dark bg-[#0f1318] px-3 py-3 text-xs text-slate-300" }, [
-              JSON.stringify(asset.outputContract.schema, null, 2)
-            ]),
-            createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [
-              "The visual JSON contract editor is reserved for phase 06.4. The MVP keeps the server-backed schema visible and persisted, but editing is intentionally disabled here."
-            ])
-          ])
+        ? this.renderOutputContractEditor({
+            title: "JSON output contract",
+            description: "Reusable prompt and instruction assets can publish structured output paths for downstream nodes.",
+            contract: asset.outputContract,
+            selectors: AssetOutputContractEditorSelectors,
+            onRename: (name) => {
+              this.patchAsset(asset.id, (current) => current.outputContract
+                ? {
+                    ...current,
+                    outputContract: {
+                      ...current.outputContract,
+                      name
+                    }
+                  }
+                : current);
+            },
+            onAddField: () => {
+              this.patchAsset(asset.id, (current) => current.outputContract
+                ? {
+                    ...current,
+                    outputContract: {
+                      ...current.outputContract,
+                      schema: createWorkflowOutputContractField({
+                        name: this.state.outputContractFieldName,
+                        type: this.state.outputContractFieldType,
+                        required: this.state.outputContractFieldRequired
+                      }, current.outputContract.schema)
+                    }
+                  }
+                : current);
+            }
+          })
         : "",
       createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
@@ -1393,6 +1599,188 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     ]);
   }
 
+  private renderOutputContractEditor(input: {
+    title: string;
+    description: string;
+    contract: JsonOutputContractRecord | null;
+    selectors: OutputContractEditorSelectorSet;
+    onRename: (name: string) => void;
+    onAddField: () => void;
+  }): HTMLElement {
+    const validation = readJsonContractValidation(input.contract);
+    const paths = input.contract ? readSchemaPaths(input.contract.schema) : [];
+
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "flex items-start justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, [input.title]),
+          createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [input.description])
+        ]),
+        createElement(StatusBadge, {
+          status: validation.valid ? "success" : "warning"
+        }, [validation.valid ? "Valid" : "Needs work"])
+      ]),
+      input.contract
+        ? createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
+            this.renderInspectorField("Contract name", input.contract.name, input.onRename, input.selectors.nameInput),
+            createElement("div", { className: "grid gap-3 sm:grid-cols-[1fr_132px_auto]" }, [
+              this.renderInspectorField("Field name", this.state.outputContractFieldName, (value) => {
+                this.setState({ outputContractFieldName: value });
+              }, input.selectors.fieldNameInput),
+              this.renderInspectorSelect("Type", this.state.outputContractFieldType, readJsonSchemaTypes(), (value) => {
+                this.setState({ outputContractFieldType: readJsonSchemaType(value) });
+              }, undefined, input.selectors.fieldTypeSelect),
+              createElement("label", { className: "flex min-h-10 items-center gap-2 self-end rounded-lg border border-border-dark bg-[#10151b] px-3 py-2 text-sm text-white" }, [
+                createElement("input", {
+                  type: "checkbox",
+                  checked: this.state.outputContractFieldRequired,
+                  onChange: (event: Event) => {
+                    const target = event.target;
+                    if (target instanceof HTMLInputElement) {
+                      this.setState({ outputContractFieldRequired: target.checked });
+                    }
+                  },
+                  "data-testid": input.selectors.fieldRequiredToggle
+                }),
+                "Required"
+              ])
+            ]),
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled: this.state.outputContractFieldName.trim().length === 0,
+              onClick: input.onAddField,
+              children: "Add field",
+              dataset: {
+                testid: input.selectors.addFieldButton
+              }
+            }),
+            createElement("div", {
+              className: `rounded-md border px-3 py-2 text-xs ${validation.valid ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100" : "border-amber-500/40 bg-amber-500/10 text-amber-100"}`,
+              "data-testid": input.selectors.status
+            }, [validation.message]),
+            createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-2" }, [
+              createElement("p", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, ["Available paths"]),
+              paths.length === 0
+                ? createElement("p", { className: "mt-2 text-xs text-text-secondary" }, ["No fields yet."])
+                : createElement("div", { className: "mt-2 flex flex-wrap gap-2" }, paths.map((path) =>
+                    createElement("span", {
+                      key: path,
+                      className: "rounded-full border border-border-dark bg-[#151a20] px-2 py-1 text-xs text-slate-200"
+                    }, [path])
+                  ))
+            ])
+          ])
+        : createElement("p", { className: "mt-3 rounded-md border border-dashed border-border-dark px-3 py-3 text-xs text-text-secondary" }, [
+            "This node does not expose a JSON output contract."
+          ])
+    ]);
+  }
+
+  private renderGuardrailDefinitionEditor(asset: WorkflowAssetRecord): HTMLElement {
+    const guardrail = asset.guardrail;
+    if (!guardrail) {
+      return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-text-secondary" }, [
+        "This guardrail asset has no definition yet."
+      ]);
+    }
+
+    const validity = readGuardrailDefinitionValidity(guardrail);
+    const maxReached = guardrail.validations.length >= 4;
+
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "flex items-start justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, ["Guardrail composition"]),
+          createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+            "Warnings are permissive. Error guardrails block node validity only when one of their validations triggers."
+          ])
+        ]),
+        createElement(StatusBadge, {
+          status: validity.blocking ? "failed" : validity.valid ? "success" : "warning"
+        }, [validity.blocking ? "Blocking" : validity.valid ? "Ready" : "Permissive"])
+      ]),
+      createElement("div", { className: "mt-3 grid gap-3 sm:grid-cols-2" }, [
+        this.renderInspectorSelect("Severity", guardrail.severity, [
+          WorkflowGuardrailSeverity.Warn,
+          WorkflowGuardrailSeverity.Error,
+          WorkflowGuardrailSeverity.Success
+        ], (value) => {
+          this.patchGuardrailAsset(asset.id, (current) => ({
+            ...current,
+            severity: readWorkflowGuardrailSeverity(value)
+          }));
+        }, undefined, WorkflowScreenSelector.GuardrailSeveritySelect),
+        this.renderInspectorSelect("Operator", guardrail.operator, [
+          WorkflowGuardrailOperator.All,
+          WorkflowGuardrailOperator.Any
+        ], (value) => {
+          this.patchGuardrailAsset(asset.id, (current) => ({
+            ...current,
+            operator: readWorkflowGuardrailOperator(value)
+          }));
+        }, undefined, WorkflowScreenSelector.GuardrailOperatorSelect)
+      ]),
+      createElement("div", { className: "mt-3 grid gap-3 sm:grid-cols-2" }, [
+        this.renderInspectorSelect("Validation", this.state.guardrailValidationKind, readGuardrailValidationKinds(), (value) => {
+          this.setState({ guardrailValidationKind: readGuardrailValidationKind(value) });
+        }, undefined, WorkflowScreenSelector.GuardrailValidationKindSelect),
+        this.renderInspectorSelect("Target", this.state.guardrailValidationTarget, readGuardrailValidationTargets(), (value) => {
+          this.setState({ guardrailValidationTarget: readGuardrailValidationTarget(value) });
+        }, undefined, WorkflowScreenSelector.GuardrailValidationTargetSelect),
+        this.renderInspectorField("Path", this.state.guardrailValidationPath, (value) => {
+          this.setState({ guardrailValidationPath: value });
+        }, WorkflowScreenSelector.GuardrailValidationPathInput),
+        this.renderInspectorField("Message", this.state.guardrailValidationMessage, (value) => {
+          this.setState({ guardrailValidationMessage: value });
+        }, WorkflowScreenSelector.GuardrailValidationMessageInput)
+      ]),
+      createElement(Button, {
+        variant: "secondary",
+        size: "sm",
+        className: "mt-3",
+        disabled: maxReached || this.state.guardrailValidationMessage.trim().length === 0,
+        onClick: () => this.handleAddGuardrailValidation(asset.id),
+        children: maxReached ? "Maximum 4 validations" : "Add validation",
+        dataset: {
+          testid: WorkflowScreenSelector.GuardrailAddValidation
+        }
+      }),
+      createElement("div", { className: "mt-3 rounded-md border border-border-dark bg-[#0f1318] px-3 py-2 text-xs text-text-secondary" }, [
+        validity.message
+      ]),
+      createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+        guardrail.validations.map((validation) => this.renderGuardrailValidationRow(asset, validation))
+      ])
+    ]);
+  }
+
+  private renderGuardrailValidationRow(
+    asset: WorkflowAssetRecord,
+    validation: GuardrailValidationRecord
+  ): HTMLElement {
+    return createElement("div", {
+      key: validation.id,
+      className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-2"
+    }, [
+      createElement("div", { className: "flex items-center justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "truncate text-sm font-medium text-white" }, [validation.kind]),
+          createElement("p", { className: "text-xs text-text-secondary" }, [
+            `${validation.target}${validation.path ? ` · ${validation.path}` : ""}`
+          ])
+        ]),
+        createElement(Button, {
+          variant: "danger",
+          size: "sm",
+          onClick: () => this.handleRemoveGuardrailValidation(asset.id, validation.id),
+          children: "Remove"
+        })
+      ]),
+      createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [validation.message])
+    ]);
+  }
+
   private renderEmbeddedAssetEditor(asset: WorkflowAssetRecord): HTMLElement {
     return createElement("div", { className: "flex flex-col gap-3" }, [
       this.renderInspectorField("Asset name", asset.name, (value) => {
@@ -1407,7 +1795,41 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           ...current,
           body: value
         }));
-      })
+      }),
+      asset.outputContract
+        ? this.renderOutputContractEditor({
+            title: "Asset output contract",
+            description: "Expose fields that later nodes can map from this reusable asset.",
+            contract: asset.outputContract,
+            selectors: AssetOutputContractEditorSelectors,
+            onRename: (name) => {
+              this.patchAsset(asset.id, (current) => current.outputContract
+                ? {
+                    ...current,
+                    outputContract: {
+                      ...current.outputContract,
+                      name
+                    }
+                  }
+                : current);
+            },
+            onAddField: () => {
+              this.patchAsset(asset.id, (current) => current.outputContract
+                ? {
+                    ...current,
+                    outputContract: {
+                      ...current.outputContract,
+                      schema: createWorkflowOutputContractField({
+                        name: this.state.outputContractFieldName,
+                        type: this.state.outputContractFieldType,
+                        required: this.state.outputContractFieldRequired
+                      }, current.outputContract.schema)
+                    }
+                  }
+                : current);
+            }
+          })
+        : ""
     ]);
   }
 
@@ -1564,7 +1986,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           onClick: () => {
             void this.handleCreateAsset(WorkflowAssetKind.Guardrail, node.id, true);
           },
-          children: "New guardrail"
+          children: "New guardrail",
+          dataset: {
+            testid: WorkflowScreenSelector.GuardrailNewForNode
+          }
         })
       ]),
       createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
@@ -1598,18 +2023,31 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   createElement("p", { className: "truncate text-sm font-medium text-white" }, [asset?.name ?? guardrail.assetId]),
                   createElement("p", { className: "text-xs text-text-secondary" }, [asset?.guardrail?.severity ?? "Guardrail"])
                 ]),
-                createElement(Button, {
-                  variant: "ghost",
-                  size: "sm",
-                  onClick: () => {
-                    if (!this.state.draftWorkflow) {
-                      return;
+                createElement("div", { className: "flex items-center gap-2" }, [
+                  createElement(Button, {
+                    variant: "ghost",
+                    size: "sm",
+                    onClick: () => {
+                      this.setState({ selection: { type: "asset", id: guardrail.assetId }, compactView: CompactView.Inspector });
+                    },
+                    children: "Edit",
+                    dataset: {
+                      testid: `${WorkflowScreenSelector.GuardrailAttachmentEditPrefix}${guardrail.assetId}`
                     }
-                    const nextWorkflow = detachGuardrailFromNode(this.state.draftWorkflow, node.id, guardrail.assetId);
-                    this.updateDraftWorkflow(nextWorkflow);
-                  },
-                  children: "Detach"
-                })
+                  }),
+                  createElement(Button, {
+                    variant: "ghost",
+                    size: "sm",
+                    onClick: () => {
+                      if (!this.state.draftWorkflow) {
+                        return;
+                      }
+                      const nextWorkflow = detachGuardrailFromNode(this.state.draftWorkflow, node.id, guardrail.assetId);
+                      this.updateDraftWorkflow(nextWorkflow);
+                    },
+                    children: "Detach"
+                  })
+                ])
               ]);
             })
       ])
@@ -1810,6 +2248,19 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     });
   }
 
+  private async reloadAssetCatalog(projectId: string, workspaceState = this.state.workspaceState): Promise<void> {
+    const workspaceId = readWorkspaceId(workspaceState, this.state.workflows, this.state.assets);
+    const [assets, assetUsages] = await Promise.all([
+      this.workflowClient.listAssets({ projectId, workspaceId }),
+      this.workflowClient.listAssetUsages({ projectId })
+    ]);
+
+    this.setState({
+      assets,
+      assetUsages
+    });
+  }
+
   private handleSelectWorkflow(workflowId: string): void {
     const workflow = this.state.workflows.find((entry) => entry.id === workflowId) ?? null;
     if (!workflow) {
@@ -1998,7 +2449,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           workspaceId: readWorkspaceId(this.state.workspaceState, this.state.workflows, this.state.assets)
         })
       });
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadAssetCatalog(this.state.currentProject.id);
+      const nextDraftWorkflow = attachToNode && focusNodeId && this.state.draftWorkflow
+        ? attachGuardrailToNode(this.state.draftWorkflow, focusNodeId, asset.id)
+        : this.state.draftWorkflow;
       const nextSelection: WorkflowSelection = attachToNode && focusNodeId
         ? { type: "node", id: focusNodeId }
         : { type: "asset", id: asset.id };
@@ -2006,12 +2460,15 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         pendingAction: null,
         noticeMessage: `${readAssetKindLabel(kind)} asset created.`,
         errorMessage: null,
-        selection: nextSelection
+        selection: nextSelection,
+        guardrailAttachAssetId: kind === WorkflowAssetKind.Guardrail ? asset.id : this.state.guardrailAttachAssetId,
+        ...(nextDraftWorkflow
+          ? {
+              draftWorkflow: nextDraftWorkflow,
+              dirtyWorkflow: attachToNode ? true : this.state.dirtyWorkflow
+            }
+          : {})
       });
-      if (attachToNode && focusNodeId && this.state.draftWorkflow) {
-        const nextWorkflow = attachGuardrailToNode(this.state.draftWorkflow, focusNodeId, asset.id);
-        this.updateDraftWorkflow(nextWorkflow, { type: "node", id: focusNodeId });
-      }
       return asset;
     } catch (error) {
       this.setState({
@@ -2333,6 +2790,66 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     });
   }
 
+  private handleAddMappingEntry(edge: WorkflowDefinitionUpsertInput["edges"][number]): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    const mappingEntry: EdgeMappingEntryRecord = {
+      targetPath: this.state.mappingTargetPath.trim(),
+      source: {
+        kind: "node_output",
+        nodeId: edge.sourceNodeId,
+        path: this.state.mappingSourcePath.trim()
+      }
+    };
+    const nextWorkflow = addWorkflowEdgeMappingEntry(this.state.draftWorkflow, edge.id, mappingEntry);
+    this.updateDraftWorkflow(nextWorkflow, this.state.selection);
+  }
+
+  private handleAddGuardrailValidation(assetId: string): void {
+    const current = this.state.assets.find((asset) => asset.id === assetId);
+    if (!current) {
+      return;
+    }
+
+    const nextBaseAsset = addWorkflowGuardrailValidation(current);
+    const nextGuardrail = nextBaseAsset.guardrail;
+    if (!nextGuardrail) {
+      return;
+    }
+
+    const validation = nextGuardrail.validations[nextGuardrail.validations.length - 1];
+    if (!validation) {
+      return;
+    }
+
+    this.updateAssetDraft(assetId, {
+      ...current,
+      guardrail: {
+        ...nextGuardrail,
+        validations: nextGuardrail.validations.map((entry) =>
+          entry.id === validation.id
+            ? {
+                ...entry,
+                kind: this.state.guardrailValidationKind,
+                target: this.state.guardrailValidationTarget,
+                path: this.state.guardrailValidationPath.trim(),
+                message: this.state.guardrailValidationMessage.trim()
+              }
+            : entry
+        )
+      }
+    });
+  }
+
+  private handleRemoveGuardrailValidation(assetId: string, validationId: string): void {
+    this.patchGuardrailAsset(assetId, (guardrail) => ({
+      ...guardrail,
+      validations: guardrail.validations.filter((validation) => validation.id !== validationId)
+    }));
+  }
+
   private handleEdgeDeletePointerStart(event: Event): void {
     event.preventDefault();
     event.stopPropagation();
@@ -2460,6 +2977,23 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
 
     this.updateAssetDraft(assetId, update(current));
+  }
+
+  private patchGuardrailAsset(
+    assetId: string,
+    update: (guardrail: NonNullable<WorkflowAssetRecord["guardrail"]>) => NonNullable<WorkflowAssetRecord["guardrail"]>
+  ): void {
+    this.patchAsset(assetId, (asset) => {
+      const nextAsset = updateWorkflowAssetGuardrail(asset, update);
+      if (!nextAsset.guardrail) {
+        return asset;
+      }
+
+      return {
+        ...asset,
+        guardrail: nextAsset.guardrail
+      };
+    });
   }
 
   private readCurrentWorkflowRecord(): WorkflowDefinitionRecord | null {
@@ -3080,6 +3614,107 @@ const readWorkflowVerbosity = (value: string): WorkflowVerbosity =>
     : value === WorkflowVerbosity.High
       ? WorkflowVerbosity.High
       : WorkflowVerbosity.Medium;
+
+const readWorkflowGuardrailSeverity = (value: string): WorkflowGuardrailSeverity =>
+  value === WorkflowGuardrailSeverity.Warn
+    ? WorkflowGuardrailSeverity.Warn
+    : value === WorkflowGuardrailSeverity.Success
+      ? WorkflowGuardrailSeverity.Success
+      : WorkflowGuardrailSeverity.Error;
+
+const readWorkflowGuardrailOperator = (value: string): WorkflowGuardrailOperator =>
+  value === WorkflowGuardrailOperator.Any ? WorkflowGuardrailOperator.Any : WorkflowGuardrailOperator.All;
+
+const readJsonSchemaTypes = (): ReadonlyArray<JsonSchemaNodeRecord["type"]> => [
+  "string",
+  "number",
+  "integer",
+  "boolean",
+  "array",
+  "object"
+];
+
+const readJsonSchemaType = (value: string): JsonSchemaNodeRecord["type"] => {
+  if (value === "number" || value === "integer" || value === "boolean" || value === "array" || value === "object") {
+    return value;
+  }
+
+  return "string";
+};
+
+const readGuardrailValidationKinds = (): ReadonlyArray<GuardrailValidationKindValue> => [
+  "field_exists",
+  "field_equals",
+  "contains",
+  "not_contains",
+  "regex",
+  "json_schema",
+  "number_gte",
+  "number_lte"
+];
+
+const readGuardrailValidationKind = (value: string): GuardrailValidationKindValue => {
+  if (
+    value === "json_schema" ||
+    value === "regex" ||
+    value === "contains" ||
+    value === "not_contains" ||
+    value === "field_equals" ||
+    value === "number_gte" ||
+    value === "number_lte"
+  ) {
+    return value;
+  }
+
+  return "field_exists";
+};
+
+const readGuardrailValidationTargets = (): ReadonlyArray<GuardrailValidationTargetValue> => [
+  "input",
+  "output",
+  "context",
+  "metadata"
+];
+
+const readGuardrailValidationTarget = (value: string): GuardrailValidationTargetValue => {
+  if (value === "input" || value === "context" || value === "metadata") {
+    return value;
+  }
+
+  return "output";
+};
+
+const isOutputContractCapableNode = (kind: WorkflowNodeKindValue): boolean =>
+  kind === WorkflowNodeKind.AssetPrompt ||
+  kind === WorkflowNodeKind.AssetInstruction ||
+  kind === WorkflowNodeKind.AssetGuardrail ||
+  kind === WorkflowNodeKind.AiAgent ||
+  kind === WorkflowNodeKind.AiProviderRun;
+
+const readSchemaPaths = (schema: JsonSchemaNodeRecord): ReadonlyArray<string> => {
+  if (schema.type !== "object" || !schema.properties) {
+    return ["$"];
+  }
+
+  const paths = Object.keys(schema.properties)
+    .sort((left, right) => left.localeCompare(right))
+    .flatMap((key) => readSchemaNodePaths(schema.properties?.[key] ?? { type: "string" }, `$.${key}`));
+  return paths.length > 0 ? paths : ["$"];
+};
+
+const readSchemaNodePaths = (
+  schema: JsonSchemaNodeRecord,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (schema.type !== "object" || !schema.properties) {
+    return [prefix];
+  }
+
+  const nestedPaths = Object.keys(schema.properties)
+    .sort((left, right) => left.localeCompare(right))
+    .flatMap((key) => readSchemaNodePaths(schema.properties?.[key] ?? { type: "string" }, `${prefix}.${key}`));
+  return [prefix, ...nestedPaths];
+};
 
 const formatProviderProfileLabel = (profile: ProviderProfileRecord): string => {
   const model = profile.modelId.trim().length > 0 ? ` · ${profile.modelId}` : "";
