@@ -99,6 +99,8 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
   } else {
     throw new Error(`Invalid tag type: ${typeof tag}`);
   }
+
+  let pendingValue: string | null = null;
   
   // Set attributes
   Object.entries(attributes).forEach(([key, value]) => {
@@ -123,6 +125,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('input', value as EventListener);
     } else if (key === 'onChange' && typeof value === 'function') {
       element.addEventListener('change', value as EventListener);
+    } else if (key === 'onBlur' && typeof value === 'function') {
+      element.addEventListener('blur', value as EventListener);
+    } else if (key === 'onKeyDown' && typeof value === 'function') {
+      element.addEventListener('keydown', value as EventListener);
     } else if (key === 'onScroll' && typeof value === 'function') {
       element.addEventListener('scroll', value as EventListener);
     } else if (key === 'onWheel' && typeof value === 'function') {
@@ -147,6 +153,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('contextmenu', value as EventListener);
     } else if (key === 'onSubmit' && typeof value === 'function') {
       element.addEventListener('submit', value as EventListener);
+    } else if (key === 'value') {
+      pendingValue = String(value);
+    } else if (key === 'checked') {
+      Reflect.set(element, "checked", Boolean(value));
     } else if (typeof value === 'boolean') {
       if (value) {
         element.setAttribute(key, '');
@@ -174,6 +184,10 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       });
     }
   });
+
+  if (pendingValue !== null) {
+    Reflect.set(element, "value", pendingValue);
+  }
   
   return element;
 }

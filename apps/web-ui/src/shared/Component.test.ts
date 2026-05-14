@@ -75,6 +75,118 @@ describe("createElement", () => {
     expect(recorded).not.toContain("attr:onClick=undefined");
   });
 
+  it("writes form values to DOM properties instead of inert attributes", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("select", {
+        value: "planner"
+      });
+      createElement("input", {
+        checked: true
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("property:value=planner");
+    expect(recorded).toContain("property:checked=true");
+    expect(recorded).not.toContain("attr:value=planner");
+    expect(recorded).not.toContain("attr:checked=");
+  });
+
+  it("binds onBlur handlers to the native blur event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("input", {
+        onBlur: () => {
+          recorded.push("handled");
+        }
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:blur");
+  });
+
+  it("binds onKeyDown handlers to the native keydown event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value
+        })
+      }
+    });
+
+    try {
+      createElement("input", {
+        onKeyDown: () => {
+          recorded.push("handled");
+        }
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:keydown");
+  });
+
   it("binds onContextMenu handlers to the native contextmenu event", () => {
     const recorded: string[] = [];
     const originalDocument = globalThis.document;
@@ -258,6 +370,12 @@ class TestChildComponent extends Component<{ children?: unknown }> {
 const createFakeElement = (recorded: string[], elementName = "html:element") => {
   recorded.push(`element:${elementName}`);
   return {
+  set value(value: string) {
+    recorded.push(`property:value=${value}`);
+  },
+  set checked(value: boolean) {
+    recorded.push(`property:checked=${String(value)}`);
+  },
   dataset: {} as Record<string, string>,
   appendChild: (child: unknown) => {
     const textContent = readNodeTextContent(child);

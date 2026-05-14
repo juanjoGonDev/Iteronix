@@ -60,6 +60,9 @@ const ResponseHeader = {
 const WorkflowSelector = {
   Root: "workflows-editor-root",
   CanvasViewport: "workflows-canvas-viewport",
+  CanvasZoomOut: "workflows-canvas-zoom-out",
+  CanvasResetView: "workflows-canvas-reset-view",
+  CanvasZoomIn: "workflows-canvas-zoom-in",
   ConnectionHint: "workflows-connection-hint",
   ConnectionPreview: "workflows-connection-preview",
   EdgeDeletePrefix: "workflows-edge-delete-",
@@ -69,6 +72,9 @@ const WorkflowSelector = {
   WorkflowNameInput: "workflows-name-input",
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
+  NodePromptInput: "workflows-node-prompt-input",
+  NodeReasoningSelect: "workflows-node-reasoning-select",
+  NodeVerbositySelect: "workflows-node-verbosity-select",
   SectionNodes: "workflows-section-nodes",
   CompactCanvas: "workflows-compact-canvas",
   NodeCardPrefix: "workflows-node-card-",
@@ -128,6 +134,7 @@ type StubWorkflowNodeRecord = {
   config: {
     assetId?: string;
     role?: string;
+    prompt?: string;
     provider?: Record<string, unknown>;
     reviewPolicy?: {
       requireHumanDecision: boolean;
@@ -239,6 +246,7 @@ const ValidationText = {
   WorkflowDescription: "Server-backed workflow for the integrated editor.",
   PromptNodeLabel: "Primary prompt",
   ProviderNodeLabel: "Codex run",
+  ProviderPrompt: "Summarize the connected context and return a concise answer.",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
   ConnectionAddedNotice: "Connection added.",
@@ -301,6 +309,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, WorkflowSelector.WorkflowCreate);
     await waitForPageText(page, ValidationText.WorkflowCreatedNotice);
     await waitForTestId(page, WorkflowSelector.ConnectionHint);
+    await waitForTestId(page, WorkflowSelector.CanvasZoomOut);
+    await waitForTestId(page, WorkflowSelector.CanvasResetView);
+    await waitForTestId(page, WorkflowSelector.CanvasZoomIn);
+    await clickByTestId(page, WorkflowSelector.CanvasZoomIn);
+    await clickByTestId(page, WorkflowSelector.CanvasResetView);
     await waitForPageText(page, ValidationText.ConnectionHintTitle);
 
     await clickByTestId(page, WorkflowSelector.SectionNodes);
@@ -321,7 +334,16 @@ async function validateWorkflowsScreen(): Promise<void> {
     }
     await clickEditButtonWithinNodeCard(page, providerCardTestId);
     await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.ProviderNodeLabel);
+    await setTextAreaValueByTestId(page, WorkflowSelector.NodePromptInput, ValidationText.ProviderPrompt);
+    await setSelectValueByTestId(page, WorkflowSelector.NodeReasoningSelect, "high");
+    await setSelectValueByTestId(page, WorkflowSelector.NodeVerbositySelect, "low");
     await waitForNodeCardText(page, ValidationText.ProviderNodeLabel);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-provider-config",
+      artifactName: "workflows"
+    });
     const beforePosition = await readNodeCardPosition(page, providerCardTestId);
     await dragNodeCard(page, providerCardTestId, 140, 96);
     await waitForCondition(async () => {
@@ -886,6 +908,7 @@ async function setInputValueByTestId(
       }
       element.value = payload.value;
       element.dispatchEvent(new Event("change", { bubbles: true }));
+      element.dispatchEvent(new Event("blur", { bubbles: true }));
       return true;
     },
     {
@@ -912,6 +935,7 @@ async function setTextAreaValueByTestId(
       }
       element.value = payload.value;
       element.dispatchEvent(new Event("change", { bubbles: true }));
+      element.dispatchEvent(new Event("blur", { bubbles: true }));
       return true;
     },
     {
@@ -922,6 +946,32 @@ async function setTextAreaValueByTestId(
 
   if (!updated) {
     throw new Error(`Could not set textarea ${testId}.`);
+  }
+}
+
+async function setSelectValueByTestId(
+  page: Page,
+  testId: string,
+  value: string
+): Promise<void> {
+  const updated = await page.evaluate(
+    (payload: { testId: string; value: string }) => {
+      const element = document.querySelector(`[data-testid="${payload.testId}"]`);
+      if (!(element instanceof HTMLSelectElement)) {
+        return false;
+      }
+      element.value = payload.value;
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return element.value === payload.value;
+    },
+    {
+      testId,
+      value
+    }
+  );
+
+  if (!updated) {
+    throw new Error(`Could not set select ${testId} to ${value}.`);
   }
 }
 
@@ -1450,6 +1500,23 @@ function assertPersistedWorkflow(state: StubServerState): void {
     throw new Error(`Expected provider node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`);
   }
 
+  const providerNode = definition.nodes.find((node) => node.label === ValidationText.ProviderNodeLabel);
+  if (!providerNode) {
+    throw new Error("Expected provider node to persist.");
+  }
+
+  if (providerNode.config.prompt !== ValidationText.ProviderPrompt) {
+    throw new Error(`Expected provider prompt to persist. Received: ${String(providerNode.config.prompt)}`);
+  }
+
+  if (providerNode.config.provider?.["reasoningLevel"] !== "high") {
+    throw new Error(`Expected provider reasoning to persist. Received: ${String(providerNode.config.provider?.["reasoningLevel"])}`);
+  }
+
+  if (providerNode.config.provider?.["verbosity"] !== "low") {
+    throw new Error(`Expected provider verbosity to persist. Received: ${String(providerNode.config.provider?.["verbosity"])}`);
+  }
+
   if (definition.edges.length !== 1) {
     throw new Error(`Expected one saved edge after deletion, received ${definition.edges.length}.`);
   }
@@ -1647,6 +1714,7 @@ function readNodeConfigRecord(
 ): StubWorkflowNodeRecord["config"] {
   const assetId = readOptionalString(value, "assetId");
   const role = readOptionalString(value, "role");
+  const prompt = readOptionalString(value, "prompt");
   const provider = readOptionalRecord(value, "provider");
   const reviewPolicyValue = readOptionalRecord(value, "reviewPolicy");
   const reviewPolicy = reviewPolicyValue
@@ -1658,6 +1726,7 @@ function readNodeConfigRecord(
   return {
     ...(assetId ? { assetId } : {}),
     ...(role ? { role } : {}),
+    ...(prompt ? { prompt } : {}),
     ...(provider ? { provider } : {}),
     ...(reviewPolicy ? { reviewPolicy } : {})
   };

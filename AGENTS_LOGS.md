@@ -2461,3 +2461,54 @@
   - Browser validation commands beyond the required finish gates were detected in CI but not run for this init-only change.
 - Next:
   - Continue SDD with `/sdd-new <change>` or `/sdd-explore <topic>` using Engram artifacts.
+
+
+### 2026-05-14 12:45 (Europe/Madrid) — Skill Registry Refresh
+
+- Summary: Refreshed the delegator skill registry using the explicit `skill-registry` workflow.
+- Decisions:
+  - `.opencode/skill` remains included because `AGENTS.md` defines it as the project skill location, even though the shared registry template also scans plural skill directories.
+  - `.atl/` is treated as generated agent runtime state and is ignored by git per the skill-registry contract.
+- Changes:
+  - Updated `.atl/skill-registry.md` to the canonical delegator registry format with user skills, compact rules, and project conventions.
+  - Added `.atl/` to `.gitignore`.
+  - Saved the refreshed registry to Engram.
+- Commands:
+  - `git status --short`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Browser/eval validations from CI are outside this registry-only refresh unless a later code/UI change needs them.
+- Next:
+  - Use this registry for future sub-agent skill injection.
+
+### 2026-05-14 13:51 (Europe/Madrid) — Workflows 06.3 Inspector UX SDD
+
+- Summary: Applied a focused SDD cycle to Workflows inspector UX after user feedback on text-only zoom controls, broken selectors and missing prompt authoring.
+- Decisions:
+  - Keep this inside `06.3` and do not open `06.4` until explicit acceptance.
+  - Fix the shared component renderer because select stability depends on applying DOM `value` after options are mounted.
+  - Treat AI node prompt editing as MVP authoring data and persist it in node config.
+- Changes:
+  - **Updated apps/web-ui/src/shared/Component.ts** and tests: form `value`/`checked` are written as DOM properties, `value` is applied after children, and `blur`/`keydown` handlers are supported.
+  - **Updated apps/web-ui/src/screens/Workflows.ts**: canvas zoom actions now use icon buttons, inspector select controls use a stable native UI, AI provider/agent nodes include a prompt textarea, and provider field updates merge partial patches to avoid stale selector writes.
+  - **Updated apps/web-ui/scripts/validate-workflows.ts**: browser validation now checks zoom icon controls, prompt persistence, and reasoning/verbosity selector persistence.
+  - **Updated packages/shared/src/workflows.ts** and local workflow state with optional node `prompt`.
+  - **Updated PLAN.md** with the inspector UX hardening status.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts`
+  - `pnpm exec vitest run apps/web-ui/src/shared/Component.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts packages/shared/src/workflows.test.ts`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows -- --preserve-screenshots`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.3` remains in progress until user validates the real running app.
+- Next:
+  - Commit, then request validation of the Workflows inspector UX before closing `06.3`.

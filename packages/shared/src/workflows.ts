@@ -134,6 +134,7 @@ export type WorkflowNodeConfigRecord = {
   assetId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
+  prompt?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
   };

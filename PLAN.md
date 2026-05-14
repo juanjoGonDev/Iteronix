@@ -706,6 +706,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Browser validation now creates two outgoing edges, deletes one connection, and persists the remaining single-edge workflow
     - Follow-up hardening: the edge delete control now uses a trash icon and stops pointer propagation so clicking it removes both the connection record and rendered line instead of starting canvas pan/selection
     - Hover placement hardening: the trash affordance is hidden until the connection is hovered, uses SVG hit geometry mapped to screen coordinates, and is positioned away from node cards so it remains clickable without overlaying intermediate nodes
+    - Inspector UX hardening: canvas zoom controls now use icon buttons, native select values are applied after options render, AI nodes expose a prompt textarea, and provider/reasoning/verbosity edits persist through the server-backed workflow save path
   - `06.2` server-first foundation implemented on `2026-05-06`:
     - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
     - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history

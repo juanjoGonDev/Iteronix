@@ -1,4 +1,4 @@
-import { Button } from "../components/Button.js";
+import { Button, IconButton } from "../components/Button.js";
 import { Card, StatusBadge } from "../components/Card.js";
 import { PageNoticeStack } from "../components/PageScaffold.js";
 import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
@@ -10,6 +10,7 @@ import {
   type WorkspaceStateSnapshot
 } from "../shared/workspace-state-client.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
+import type { ProviderProfileRecord } from "./settings-state.js";
 import {
   WorkflowAssetKind,
   WorkflowAssetScope,
@@ -61,6 +62,9 @@ const WorkflowScreenSelector = {
   WorkflowSave: "workflows-save",
   WorkflowDelete: "workflows-delete",
   WorkflowSelect: "workflows-select",
+  CanvasZoomOut: "workflows-canvas-zoom-out",
+  CanvasResetView: "workflows-canvas-reset-view",
+  CanvasZoomIn: "workflows-canvas-zoom-in",
   ConnectionHint: "workflows-connection-hint",
   ConnectionPreview: "workflows-connection-preview",
   EdgeDeletePrefix: "workflows-edge-delete-",
@@ -72,6 +76,11 @@ const WorkflowScreenSelector = {
   WorkflowNameInput: "workflows-name-input",
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
+  NodePromptInput: "workflows-node-prompt-input",
+  NodeRoleSelect: "workflows-node-role-select",
+  NodeProviderSelect: "workflows-node-provider-select",
+  NodeReasoningSelect: "workflows-node-reasoning-select",
+  NodeVerbositySelect: "workflows-node-verbosity-select",
   NodePalettePrefix: "workflows-node-palette-",
   AssetCreatePrefix: "workflows-asset-create-",
   NodeCardPrefix: "workflows-node-card-",
@@ -86,6 +95,11 @@ const EdgeDeleteNodeAvoidancePadding = 12;
 const WorkflowNodeApproximateHeight = 104;
 const EdgeDeleteOffset = 34;
 const EdgeDeleteWideOffset = 58;
+const InspectorInputClassName = "w-full rounded-lg border border-border-dark bg-[#10151b] px-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-primary focus:ring-1 focus:ring-primary/40";
+const InspectorTextInputClassName = `h-10 ${InspectorInputClassName}`;
+const InspectorTextAreaClassName = `min-h-32 resize-y py-3 leading-6 ${InspectorInputClassName}`;
+const InspectorSelectClassName = `h-10 appearance-none pr-10 ${InspectorInputClassName}`;
+const ProviderFallbackId = "codex-cli";
 
 const SidebarSection = {
   Workflows: "workflows",
@@ -788,27 +802,36 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             ])
           : ""
       ]),
-      createElement("div", { className: "flex items-center gap-2" }, [
-        createElement(Button, {
-          variant: "ghost",
-          size: "sm",
+      createElement("div", { className: "flex items-center gap-1" }, [
+        createElement(IconButton, {
+          icon: "zoom_out",
+          tooltip: "Zoom out",
           disabled: this.state.draftWorkflow === null,
           onClick: () => this.handleZoom(-0.1),
-          children: "Zoom out"
+          className: "h-9 w-9 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]",
+          dataset: {
+            testid: WorkflowScreenSelector.CanvasZoomOut
+          }
         }),
-        createElement(Button, {
-          variant: "ghost",
-          size: "sm",
+        createElement(IconButton, {
+          icon: "center_focus_strong",
+          tooltip: "Reset view",
           disabled: this.state.draftWorkflow === null,
           onClick: () => this.handleResetViewport(),
-          children: "Reset view"
+          className: "h-9 w-9 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]",
+          dataset: {
+            testid: WorkflowScreenSelector.CanvasResetView
+          }
         }),
-        createElement(Button, {
-          variant: "ghost",
-          size: "sm",
+        createElement(IconButton, {
+          icon: "zoom_in",
+          tooltip: "Zoom in",
           disabled: this.state.draftWorkflow === null,
           onClick: () => this.handleZoom(0.1),
-          children: "Zoom in"
+          className: "h-9 w-9 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]",
+          dataset: {
+            testid: WorkflowScreenSelector.CanvasZoomIn
+          }
         })
       ])
     ]);
@@ -1132,7 +1155,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     return createElement("aside", {
       className: this.state.isCompactViewport
         ? "flex min-h-0 flex-1 flex-col border-l border-border-dark bg-[#1a1f27]"
-        : "flex min-h-0 w-[360px] shrink-0 flex-col border-l border-border-dark bg-[#1a1f27]",
+        : "flex min-h-0 w-[420px] shrink-0 flex-col border-l border-border-dark bg-[#1a1f27] xl:w-[460px]",
       "data-testid": WorkflowScreenSelector.InspectorPanel
     }, [
       createElement("div", {
@@ -1392,8 +1415,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     const role = node.config.role ?? WorkflowNodeRole.Planner;
     const provider = node.config.provider ?? createFallbackProviderSelection();
 
-    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
-      createElement("p", { className: "mb-3 text-sm font-medium text-white" }, ["Agent configuration"]),
+    return createElement("div", { className: "flex flex-col gap-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "mb-3 flex flex-col gap-1" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Agent configuration"]),
+        createElement("p", { className: "text-xs text-text-secondary" }, ["Set the prompt and runtime profile used by this node."])
+      ]),
       this.renderInspectorSelect("Role", role, [
         WorkflowNodeRole.Planner,
         WorkflowNodeRole.Retriever,
@@ -1408,7 +1434,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             provider: current.config.provider ?? provider
           }
         }));
-      }),
+      }, undefined, WorkflowScreenSelector.NodeRoleSelect),
+      this.renderNodePromptField(node),
       this.renderProviderSelectionFields(node, provider)
     ]);
   }
@@ -1416,8 +1443,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private renderProviderRunConfig(node: WorkflowNodeRecord): HTMLElement {
     const provider = node.config.provider ?? createFallbackProviderSelection();
 
-    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
-      createElement("p", { className: "mb-3 text-sm font-medium text-white" }, ["Provider run"]),
+    return createElement("div", { className: "flex flex-col gap-3 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "mb-3 flex flex-col gap-1" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Provider run"]),
+        createElement("p", { className: "text-xs text-text-secondary" }, ["Run one prompt through a selected provider profile."])
+      ]),
+      this.renderNodePromptField(node),
       this.renderProviderSelectionFields(node, provider),
       createElement("p", { className: "mt-3 text-xs text-text-secondary" }, [
         "Provider capability tests land in phase 06.6. This MVP persists per-node provider, model, reasoning, temperature and verbosity now, but the connection test action remains disabled with explanation."
@@ -1435,16 +1466,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     node: WorkflowNodeRecord,
     provider: WorkflowProviderSelectionRecord
   ): HTMLElement {
-    return createElement("div", { className: "grid gap-3" }, [
-      this.renderInspectorField("Provider", provider.providerId, (value) => {
+    const providerOptions = this.readProviderProfileOptions(provider.providerId);
+
+    return createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+      this.renderInspectorSelect("Provider profile", provider.providerId, providerOptions.map((option) => option.value), (value) => {
         this.updateNodeProvider(node.id, {
-          ...provider,
           providerId: value
         });
-      }),
+      }, providerOptions, WorkflowScreenSelector.NodeProviderSelect),
       this.renderInspectorField("Model", provider.modelId, (value) => {
         this.updateNodeProvider(node.id, {
-          ...provider,
           modelId: value
         });
       }),
@@ -1455,14 +1486,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         WorkflowReasoningLevel.Max
       ], (value) => {
         this.updateNodeProvider(node.id, {
-          ...provider,
           reasoningLevel: readWorkflowReasoningLevel(value)
         });
-      }),
+      }, undefined, WorkflowScreenSelector.NodeReasoningSelect),
       this.renderInspectorField("Temperature", provider.temperature.toString(), (value) => {
         const parsed = Number.parseFloat(value);
         this.updateNodeProvider(node.id, {
-          ...provider,
           temperature: Number.isFinite(parsed) ? parsed : provider.temperature
         });
       }),
@@ -1472,11 +1501,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         WorkflowVerbosity.High
       ], (value) => {
         this.updateNodeProvider(node.id, {
-          ...provider,
           verbosity: readWorkflowVerbosity(value)
         });
-      })
+      }, undefined, WorkflowScreenSelector.NodeVerbositySelect)
     ]);
+  }
+
+  private renderNodePromptField(node: WorkflowNodeRecord): HTMLElement {
+    return this.renderInspectorTextArea("Prompt", node.config.prompt ?? "", (value) => {
+      this.patchNode(node.id, (current) => ({
+        ...current,
+        config: {
+          ...current.config,
+          prompt: value
+        }
+      }));
+    }, WorkflowScreenSelector.NodePromptInput);
   }
 
   private renderReviewConfig(node: WorkflowNodeRecord): HTMLElement {
@@ -1582,19 +1622,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     onChange: (value: string) => void,
     testId?: string
   ): HTMLElement {
+    const commitValue = (event: Event): void => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement) {
+        onChange(target.value);
+      }
+    };
+
     return createElement("label", { className: "flex flex-col gap-2" }, [
       createElement("span", { className: "text-sm font-medium text-white" }, [label]),
       createElement("input", {
         type: "text",
         value,
-        className: "h-11 rounded-lg border border-border-dark bg-[#11161d] px-3 text-sm text-white focus:border-primary focus:outline-none",
+        className: InspectorTextInputClassName,
         ...(testId ? { "data-testid": testId } : {}),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        }
+        onBlur: commitValue,
+        onChange: commitValue
       })
     ]);
   }
@@ -1605,18 +1648,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     onChange: (value: string) => void,
     testId?: string
   ): HTMLElement {
+    const commitValue = (event: Event): void => {
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement) {
+        onChange(target.value);
+      }
+    };
+
     return createElement("label", { className: "flex flex-col gap-2" }, [
       createElement("span", { className: "text-sm font-medium text-white" }, [label]),
       createElement("textarea", {
-        className: "min-h-32 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-sm text-white focus:border-primary focus:outline-none",
+        value,
+        className: InspectorTextAreaClassName,
         ...(testId ? { "data-testid": testId } : {}),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLTextAreaElement) {
-            onChange(target.value);
-          }
-        }
-      }, [value])
+        onBlur: commitValue,
+        onChange: commitValue
+      })
     ]);
   }
 
@@ -1625,34 +1672,41 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     value: string,
     options: ReadonlyArray<string>,
     onChange: (value: string) => void,
-    customLabels?: ReadonlyArray<{ value: string; label: string }>
+    customLabels?: ReadonlyArray<{ value: string; label: string }>,
+    testId?: string
   ): HTMLElement {
     return createElement("label", { className: "flex flex-col gap-2" }, [
       createElement("span", { className: "text-sm font-medium text-white" }, [label]),
-      createElement("select", {
-        className: "h-11 rounded-lg border border-border-dark bg-[#11161d] px-3 text-sm text-white focus:border-primary focus:outline-none",
-        value,
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLSelectElement) {
-            onChange(target.value);
+      createElement("div", { className: "relative" }, [
+        createElement("select", {
+          className: InspectorSelectClassName,
+          value,
+          ...(testId ? { "data-testid": testId } : {}),
+          onChange: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLSelectElement) {
+              onChange(target.value);
+            }
           }
-        }
-      }, [
-        createElement("option", { value: "" }, [options.length === 0 ? "No options available" : "Select"]),
-        ...(customLabels
-          ? customLabels.map((option) =>
-              createElement("option", {
-                key: option.value,
-                value: option.value
-              }, [option.label])
-            )
-          : options.map((option) =>
-              createElement("option", {
-                key: option,
-                value: option
-              }, [option])
-            ))
+        }, [
+          createElement("option", { value: "" }, [options.length === 0 ? "No options available" : "Select"]),
+          ...(customLabels
+            ? customLabels.map((option) =>
+                createElement("option", {
+                  key: option.value,
+                  value: option.value
+                }, [option.label])
+              )
+            : options.map((option) =>
+                createElement("option", {
+                  key: option,
+                  value: option
+                }, [formatSelectOptionLabel(option)])
+              ))
+        ]),
+        createElement("span", {
+          className: "material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-text-secondary"
+        }, ["expand_more"])
       ])
     ]);
   }
@@ -2372,13 +2426,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
   private updateNodeProvider(
     nodeId: string,
-    provider: WorkflowProviderSelectionRecord
+    providerPatch: Partial<WorkflowProviderSelectionRecord>
   ): void {
     this.patchNode(nodeId, (node) => ({
       ...node,
       config: {
         ...node.config,
-        provider
+        provider: {
+          ...(node.config.provider ?? createFallbackProviderSelection()),
+          ...providerPatch
+        }
       }
     }));
   }
@@ -2428,6 +2485,26 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
 
     return this.state.assets.find((asset) => asset.id === this.state.selection.id) ?? null;
+  }
+
+  private readProviderProfileOptions(currentProviderId: string): ReadonlyArray<{ value: string; label: string }> {
+    const profiles = this.state.workspaceState?.settings.providerProfiles ?? [];
+    const profileOptions = profiles.map((profile) => ({
+      value: profile.id,
+      label: formatProviderProfileLabel(profile)
+    }));
+    const fallbackExists = profileOptions.some((option) => option.value === currentProviderId);
+
+    if (currentProviderId.trim().length === 0 || fallbackExists) {
+      return profileOptions.length > 0
+        ? profileOptions
+        : [{ value: ProviderFallbackId, label: "Codex CLI" }];
+    }
+
+    return [
+      ...profileOptions,
+      { value: currentProviderId, label: currentProviderId === ProviderFallbackId ? "Codex CLI" : currentProviderId }
+    ];
   }
 
   private readInspectorTitle(): string {
@@ -2931,7 +3008,7 @@ const resolveSelectionAfterReload = (
 };
 
 const createFallbackProviderSelection = (): WorkflowProviderSelectionRecord => ({
-  providerId: "codex-cli",
+  providerId: ProviderFallbackId,
   modelId: "",
   reasoningLevel: WorkflowReasoningLevel.Medium,
   temperature: 0.2,
@@ -3003,6 +3080,18 @@ const readWorkflowVerbosity = (value: string): WorkflowVerbosity =>
     : value === WorkflowVerbosity.High
       ? WorkflowVerbosity.High
       : WorkflowVerbosity.Medium;
+
+const formatProviderProfileLabel = (profile: ProviderProfileRecord): string => {
+  const model = profile.modelId.trim().length > 0 ? ` · ${profile.modelId}` : "";
+  return `${profile.name} · ${profile.providerKind}${model}`;
+};
+
+const formatSelectOptionLabel = (value: string): string =>
+  value
+    .split(/[-_.]/u)
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;

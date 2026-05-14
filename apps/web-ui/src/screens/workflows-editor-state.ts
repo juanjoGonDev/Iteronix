@@ -86,6 +86,7 @@ export type WorkflowNodeConfigRecord = {
   assetId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
+  prompt?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
   };
@@ -730,7 +731,8 @@ export const readNodeTemplate = (
       label: "Agent step",
       config: {
         role: WorkflowNodeRole.Planner,
-        provider: createDefaultProviderSelection()
+        provider: createDefaultProviderSelection(),
+        prompt: ""
       },
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [createPort("output", "Output", true)],
@@ -742,7 +744,8 @@ export const readNodeTemplate = (
     return {
       label: "Provider run",
       config: {
-        provider: createDefaultProviderSelection()
+        provider: createDefaultProviderSelection(),
+        prompt: ""
       },
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [createPort("output", "Output", true)],
