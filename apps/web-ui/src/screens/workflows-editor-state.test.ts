@@ -1,25 +1,35 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   addWorkflowNode,
   addWorkflowEdgeMappingEntry,
   addWorkflowGuardrailValidation,
+  JsonSchemaItemsSegment,
   WorkflowAssetKind,
   WorkflowNodeKind,
   WorkflowGuardrailSeverity,
   attachGuardrailToNode,
+  compileJsonContractSchema,
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   createWorkflowOutputContractField,
+  createJsonSchemaNode,
+  removeJsonSchemaProperty,
+  renameJsonSchemaProperty,
   readJsonContractValidation,
   readGuardrailDefinitionValidity,
+  safeParseJsonContractValue,
+  serializeJsonContractForProvider,
   moveWorkflowNode,
   readNodeAssetKind,
   removeWorkflowEdge,
   removeWorkflowNode,
   setWorkflowViewport,
+  updateJsonSchemaNode,
   updateWorkflowAssetGuardrail,
-  updateWorkflowNodeOutputContract
+  updateWorkflowNodeOutputContract,
+  upsertJsonSchemaProperty
 } from "./workflows-editor-state.js";
 
 describe("workflows editor state", () => {
@@ -323,6 +333,133 @@ describe("workflows editor state", () => {
       operator: "all",
       validations: []
     }).blocking).toBe(true);
+  });
+
+  it("supports nested contract editing, zod validation, and compact provider serialization", () => {
+    const prompt = createWorkflowAssetDraft({
+      kind: WorkflowAssetKind.Prompt,
+      projectId: "project-1",
+      idFactory: createSequentialIdFactory("contract")
+    });
+    const contract = prompt.outputContract;
+    if (!contract) {
+      throw new Error("Expected prompt assets to include an output contract.");
+    }
+
+    let schema = renameJsonSchemaProperty(contract.schema, [], "result", "summary");
+    schema = upsertJsonSchemaProperty(schema, [], {
+      name: "meta",
+      node: createJsonSchemaNode("object"),
+      required: false
+    });
+    schema = upsertJsonSchemaProperty(schema, ["meta"], {
+      name: "email",
+      node: createJsonSchemaNode("string"),
+      required: true
+    });
+    schema = updateJsonSchemaNode(schema, ["meta", "email"], (node) => ({
+      ...node,
+      format: "email"
+    }));
+    schema = upsertJsonSchemaProperty(schema, [], {
+      name: "tags",
+      node: createJsonSchemaNode("array"),
+      required: false
+    });
+    schema = updateJsonSchemaNode(schema, ["tags", JsonSchemaItemsSegment], (node) => ({
+      ...node,
+      type: "string",
+      minLength: 2
+    }));
+    schema = removeJsonSchemaProperty(schema, [], "result");
+
+    const nestedContract = {
+      ...contract,
+      schema
+    };
+    const providerSchema = serializeJsonContractForProvider(nestedContract);
+
+    expect(readJsonContractValidation(nestedContract)).toEqual({
+      valid: true,
+      message: "Output contract is valid."
+    });
+    const compiledSchema = compileJsonContractSchema(nestedContract);
+    const buildZodSchema = new Function("z", `return ${compiledSchema.zodExpression};`) as (input: typeof z) => {
+      safeParse: (value: unknown) => { success: boolean };
+    };
+    const zodSchema = buildZodSchema(z);
+
+    expect(zodSchema.safeParse({
+      summary: "Done",
+      meta: { email: "ops@example.com" },
+      tags: ["ok"]
+    }).success).toBe(true);
+    expect(safeParseJsonContractValue(nestedContract, {
+      summary: "Done",
+      meta: { email: "not-an-email" }
+    }).success).toBe(false);
+    expect(providerSchema).toEqual({
+      t: "o",
+      p: {
+        summary: { t: "s", r: 1 },
+        meta: {
+          t: "o",
+          p: {
+            email: { t: "s", r: 1, f: "email" }
+          }
+        },
+        tags: {
+          t: "a",
+          i: { t: "s", min: 2 }
+        }
+      }
+    });
+  });
+
+  it("keeps nested required flags in sync when properties are renamed or removed", () => {
+    let schema = createJsonSchemaNode("object");
+    schema = upsertJsonSchemaProperty(schema, [], {
+      name: "details",
+      node: createJsonSchemaNode("object"),
+      required: true
+    });
+    schema = upsertJsonSchemaProperty(schema, ["details"], {
+      name: "email",
+      node: createJsonSchemaNode("string"),
+      required: true
+    });
+    schema = renameJsonSchemaProperty(schema, ["details"], "email", "contactEmail");
+    schema = removeJsonSchemaProperty(schema, [], "details");
+
+    expect(schema.required).not.toContain("details");
+    expect(schema.properties?.["details"]).toBeUndefined();
+  });
+
+  it("flags invalid schema constraints before save", () => {
+    const prompt = createWorkflowAssetDraft({
+      kind: WorkflowAssetKind.Prompt,
+      projectId: "project-1",
+      idFactory: createSequentialIdFactory("invalid")
+    });
+    const contract = prompt.outputContract;
+    if (!contract) {
+      throw new Error("Expected prompt assets to include an output contract.");
+    }
+
+    const invalidContract = {
+      ...contract,
+      schema: updateJsonSchemaNode(contract.schema, ["result"], (node) => ({
+        ...node,
+        minLength: 8,
+        maxLength: 3,
+        pattern: "["
+      }))
+    };
+
+    const validation = readJsonContractValidation(invalidContract);
+
+    expect(validation.valid).toBe(false);
+    expect(validation.message).toContain("result");
   });
 });
 

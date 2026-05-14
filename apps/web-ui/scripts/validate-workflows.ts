@@ -75,9 +75,14 @@ const WorkflowSelector = {
   NodePromptInput: "workflows-node-prompt-input",
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
-  OutputContractFieldNameInput: "workflows-output-contract-field-name-input",
-  OutputContractFieldTypeSelect: "workflows-output-contract-field-type-select",
   OutputContractAddField: "workflows-output-contract-add-field",
+  OutputContractPropertyNamePrefix: "workflows-output-contract-property-name-",
+  OutputContractPropertyTypePrefix: "workflows-output-contract-property-type-",
+  OutputContractPropertyAddChildPrefix: "workflows-output-contract-property-add-child-",
+  OutputContractPropertyFormatPrefix: "workflows-output-contract-property-format-",
+  OutputContractPropertyMinPrefix: "workflows-output-contract-property-min-",
+  OutputContractPropertyPatternPrefix: "workflows-output-contract-property-pattern-",
+  OutputContractStatus: "workflows-output-contract-status",
   MappingTargetPathInput: "workflows-mapping-target-path-input",
   MappingSourcePathInput: "workflows-mapping-source-path-input",
   MappingAddEntry: "workflows-mapping-add-entry",
@@ -263,6 +268,9 @@ const ValidationText = {
   ProviderNodeLabel: "Codex run",
   ProviderPrompt: "Summarize the connected context and return a concise answer.",
   OutputContractField: "summary",
+  OutputContractNestedField: "meta",
+  OutputContractNestedEmailField: "email",
+  OutputContractArrayField: "tags",
   MappingTargetPath: "$.promptSummary",
   MappingSourcePath: "$.result",
   GuardrailValidationPath: "$.summary",
@@ -341,11 +349,107 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AssetPrompt}`);
     await waitForPageText(page, "Prompt asset created.");
     await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
-    await setInputValueByTestId(page, WorkflowSelector.OutputContractFieldNameInput, ValidationText.OutputContractField);
-    await setSelectValueByTestId(page, WorkflowSelector.OutputContractFieldTypeSelect, "string");
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["result"])}`,
+      ValidationText.OutputContractField
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`
+    );
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`,
+      "["
+    );
+    await waitForPageText(page, "invalid pattern");
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`,
+      ""
+    );
+    await waitForPageText(page, "Output contract is valid.");
     await clickByTestId(page, WorkflowSelector.OutputContractAddField);
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`
+    );
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
+      ValidationText.OutputContractNestedField
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+    );
+    await setSelectValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`,
+      "object"
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken([ValidationText.OutputContractNestedField, "field"])}`
+    );
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken([ValidationText.OutputContractNestedField, "field"])}`,
+      ValidationText.OutputContractNestedEmailField
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyFormatPrefix}${toContractPathToken([ValidationText.OutputContractNestedField, ValidationText.OutputContractNestedEmailField])}`
+    );
+    await setSelectValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyFormatPrefix}${toContractPathToken([ValidationText.OutputContractNestedField, ValidationText.OutputContractNestedEmailField])}`,
+      "email"
+    );
+    await clickByTestId(page, WorkflowSelector.OutputContractAddField);
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`
+    );
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
+      ValidationText.OutputContractArrayField
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractArrayField])}`
+    );
+    await setSelectValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractArrayField])}`,
+      "array"
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`
+    );
+    await setInputValueByTestId(
+      page,
+      `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`,
+      "2"
+    );
     await waitForPageText(page, "$.summary");
+    await waitForPageText(page, "$.meta.email");
+    await waitForPageText(page, "$.tags[]");
     await waitForNodeCardText(page, ValidationText.PromptNodeLabel);
+    await scrollInspector(page, 520);
+    await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
+    await waitForInspectorScrollToStayBelow(page, 160);
 
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AiProviderRun}`);
     await waitForNodeCardCount(page, 4);
@@ -411,6 +515,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, "Guardrail asset created.");
     await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await waitForTestId(page, WorkflowSelector.GuardrailSeveritySelect);
     await setSelectValueByTestId(page, WorkflowSelector.GuardrailSeveritySelect, "warn");
     await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationKindSelect, "field_exists");
     await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationTargetSelect, "output");
@@ -451,6 +556,8 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
     await clickEditButtonWithinNodeCard(page, promptCardTestId);
     await waitForPageText(page, "$.summary");
+    await waitForPageText(page, "$.meta.email");
+    await waitForPageText(page, "$.tags[]");
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -1286,6 +1393,30 @@ async function waitForInputValue(
   });
 }
 
+async function scrollInspector(page: Page, top: number): Promise<void> {
+  await page.evaluate((nextTop) => {
+    const element = document.querySelector<HTMLElement>("[data-preserve-scroll-key='workflows-inspector-scroll']");
+    if (!element) {
+      throw new Error("Expected inspector scroll container.");
+    }
+
+    element.scrollTop = nextTop;
+  }, top);
+}
+
+async function waitForInspectorScrollToStayBelow(page: Page, minimum: number): Promise<void> {
+  await waitForCondition(async () => {
+    const top = await page.evaluate(() => {
+      const element = document.querySelector<HTMLElement>("[data-preserve-scroll-key='workflows-inspector-scroll']");
+      return element?.scrollTop ?? 0;
+    });
+    return top >= minimum;
+  }, `inspector scroll >= ${minimum.toString()}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
 async function waitForPageText(page: Page, text: string): Promise<void> {
   await waitForCondition(async () => {
     const bodyText = await page.evaluate(() => document.body.innerText);
@@ -1304,6 +1435,15 @@ async function waitForPageTexts(page: Page, texts: ReadonlyArray<string>): Promi
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+}
+
+function toContractPathToken(path: ReadonlyArray<string>): string {
+  return path.length === 0
+    ? "root"
+    : path
+      .map((segment) => segment === "items" ? "items" : segment)
+      .join("__")
+      .replace(/[^a-zA-Z0-9_-]+/gu, "-");
 }
 
 async function waitForTestId(page: Page, testId: string): Promise<void> {

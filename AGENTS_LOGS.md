@@ -2600,3 +2600,29 @@
   - `.atl/skill-registry.md` remains a separate pre-existing local diff and is not part of this 06.4 implementation scope.
 - Next:
   - Create the focused conventional commit for the 06.4 slice and wait for user acceptance before closing the Notion subtask.
+### 2026-05-15 01:22 (Europe/Madrid) — Workflows 06.4 Contract Editor Redesign
+
+- Summary:
+  - Continued only `06.4` on the current branch with the accepted size exception and rebuilt the JSON contract authoring flow around a nested schema tree, while fixing the inspector scroll/focus reset bug caused by full DOM replacement on rerenders.
+- Decisions:
+  - Keep `06.4 JSON contracts, data mapping and guardrail composition UI` in `En progreso` until explicit user acceptance; do not move it to `Listo`.
+  - Avoid a browser-time `zod` import because `apps/web-ui` ships raw ESM from `tsc`; the contract model now emits a Zod-compatible schema expression plus a compact provider payload while browser validation uses the same canonical schema tree without adding a bundling dependency.
+  - Preserve scroll and focus generically in `Component.setState()` / `updateProps()` using restore selectors and explicit scroll-preservation keys instead of adding another Workflows-only rerender workaround.
+- Changes:
+  - Updated `apps/web-ui/src/shared/Component.ts` to preserve focused controls and scroll containers across component rerenders.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.ts` with canonical nested schema helpers, contract validation, provider serialization and Zod-compatible schema expression generation.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.test.ts` with nested schema, provider payload and Zod-expression coverage.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to replace the flat contract form with a tree editor supporting rename/type/add-child/delete actions, arrays, constraints and predefined formats.
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` to cover invalid-pattern recovery, nested object authoring, array authoring, scroll preservation and save/reload persistence.
+  - Updated `PLAN.md` with the redesign progress while keeping the phase explicitly in progress.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - The Zod output is currently emitted as a compatible schema expression rather than a browser-imported runtime schema because the current web build is not bundled; that tradeoff keeps the live editor working now without violating the raw-ESM delivery constraint.
+  - `.atl/skill-registry.md` remains an unrelated pre-existing diff and is still out of scope for this 06.4 slice.
+- Next:
+  - Get explicit user acceptance on the redesigned contract editor before changing the Notion subtask status or creating the requested manual conventional commit.

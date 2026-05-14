@@ -21,16 +21,18 @@ import {
   WorkflowReasoningLevel,
   WorkflowRecordStatus,
   WorkflowVerbosity,
+  JsonSchemaItemsSegment,
   addWorkflowNode,
   addWorkflowEdgeMappingEntry,
   addWorkflowGuardrailValidation,
   attachGuardrailToNode,
+  createJsonSchemaNode,
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
-  createWorkflowOutputContractField,
   detachGuardrailFromNode,
   moveWorkflowNode,
+  readJsonSchemaPaths,
   readAssetKindLabel,
   readAssetScopeLabel,
   readDefaultWorkflowWorkspaceId,
@@ -43,10 +45,15 @@ import {
   readNodeKindsForPalette,
   removeWorkflowEdge,
   removeWorkflowNode,
+  removeJsonSchemaProperty,
+  renameJsonSchemaProperty,
   setWorkflowViewport,
+  serializeJsonContractForProvider,
   stripDefinitionVersionFields,
+  updateJsonSchemaNode,
   updateWorkflowAssetGuardrail,
   updateWorkflowNodeOutputContract,
+  upsertJsonSchemaProperty,
   type EdgeMappingEntryRecord,
   type GuardrailValidationRecord,
   type JsonOutputContractRecord,
@@ -95,17 +102,29 @@ const WorkflowScreenSelector = {
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
   OutputContractNameInput: "workflows-output-contract-name-input",
-  OutputContractFieldNameInput: "workflows-output-contract-field-name-input",
-  OutputContractFieldTypeSelect: "workflows-output-contract-field-type-select",
-  OutputContractFieldRequiredToggle: "workflows-output-contract-field-required-toggle",
   OutputContractAddField: "workflows-output-contract-add-field",
   OutputContractStatus: "workflows-output-contract-status",
+  OutputContractPropertyNamePrefix: "workflows-output-contract-property-name-",
+  OutputContractPropertyTypePrefix: "workflows-output-contract-property-type-",
+  OutputContractPropertyRequiredPrefix: "workflows-output-contract-property-required-",
+  OutputContractPropertyDeletePrefix: "workflows-output-contract-property-delete-",
+  OutputContractPropertyAddChildPrefix: "workflows-output-contract-property-add-child-",
+  OutputContractPropertyFormatPrefix: "workflows-output-contract-property-format-",
+  OutputContractPropertyMinPrefix: "workflows-output-contract-property-min-",
+  OutputContractPropertyMaxPrefix: "workflows-output-contract-property-max-",
+  OutputContractPropertyPatternPrefix: "workflows-output-contract-property-pattern-",
   AssetOutputContractNameInput: "workflows-asset-output-contract-name-input",
-  AssetOutputContractFieldNameInput: "workflows-asset-output-contract-field-name-input",
-  AssetOutputContractFieldTypeSelect: "workflows-asset-output-contract-field-type-select",
-  AssetOutputContractFieldRequiredToggle: "workflows-asset-output-contract-field-required-toggle",
   AssetOutputContractAddField: "workflows-asset-output-contract-add-field",
   AssetOutputContractStatus: "workflows-asset-output-contract-status",
+  AssetOutputContractPropertyNamePrefix: "workflows-asset-output-contract-property-name-",
+  AssetOutputContractPropertyTypePrefix: "workflows-asset-output-contract-property-type-",
+  AssetOutputContractPropertyRequiredPrefix: "workflows-asset-output-contract-property-required-",
+  AssetOutputContractPropertyDeletePrefix: "workflows-asset-output-contract-property-delete-",
+  AssetOutputContractPropertyAddChildPrefix: "workflows-asset-output-contract-property-add-child-",
+  AssetOutputContractPropertyFormatPrefix: "workflows-asset-output-contract-property-format-",
+  AssetOutputContractPropertyMinPrefix: "workflows-asset-output-contract-property-min-",
+  AssetOutputContractPropertyMaxPrefix: "workflows-asset-output-contract-property-max-",
+  AssetOutputContractPropertyPatternPrefix: "workflows-asset-output-contract-property-pattern-",
   MappingTargetPathInput: "workflows-mapping-target-path-input",
   MappingSourcePathInput: "workflows-mapping-source-path-input",
   MappingAddEntry: "workflows-mapping-add-entry",
@@ -199,29 +218,47 @@ type GuardrailValidationKindValue = GuardrailValidationRecord["kind"];
 type GuardrailValidationTargetValue = GuardrailValidationRecord["target"];
 type OutputContractEditorSelectorSet = {
   nameInput: string;
-  fieldNameInput: string;
-  fieldTypeSelect: string;
-  fieldRequiredToggle: string;
   addFieldButton: string;
   status: string;
+  propertyNamePrefix: string;
+  propertyTypePrefix: string;
+  propertyRequiredPrefix: string;
+  propertyDeletePrefix: string;
+  propertyAddChildPrefix: string;
+  propertyFormatPrefix: string;
+  propertyMinPrefix: string;
+  propertyMaxPrefix: string;
+  propertyPatternPrefix: string;
 };
 
 const NodeOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
   nameInput: WorkflowScreenSelector.OutputContractNameInput,
-  fieldNameInput: WorkflowScreenSelector.OutputContractFieldNameInput,
-  fieldTypeSelect: WorkflowScreenSelector.OutputContractFieldTypeSelect,
-  fieldRequiredToggle: WorkflowScreenSelector.OutputContractFieldRequiredToggle,
   addFieldButton: WorkflowScreenSelector.OutputContractAddField,
-  status: WorkflowScreenSelector.OutputContractStatus
+  status: WorkflowScreenSelector.OutputContractStatus,
+  propertyNamePrefix: WorkflowScreenSelector.OutputContractPropertyNamePrefix,
+  propertyTypePrefix: WorkflowScreenSelector.OutputContractPropertyTypePrefix,
+  propertyRequiredPrefix: WorkflowScreenSelector.OutputContractPropertyRequiredPrefix,
+  propertyDeletePrefix: WorkflowScreenSelector.OutputContractPropertyDeletePrefix,
+  propertyAddChildPrefix: WorkflowScreenSelector.OutputContractPropertyAddChildPrefix,
+  propertyFormatPrefix: WorkflowScreenSelector.OutputContractPropertyFormatPrefix,
+  propertyMinPrefix: WorkflowScreenSelector.OutputContractPropertyMinPrefix,
+  propertyMaxPrefix: WorkflowScreenSelector.OutputContractPropertyMaxPrefix,
+  propertyPatternPrefix: WorkflowScreenSelector.OutputContractPropertyPatternPrefix
 };
 
 const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
   nameInput: WorkflowScreenSelector.AssetOutputContractNameInput,
-  fieldNameInput: WorkflowScreenSelector.AssetOutputContractFieldNameInput,
-  fieldTypeSelect: WorkflowScreenSelector.AssetOutputContractFieldTypeSelect,
-  fieldRequiredToggle: WorkflowScreenSelector.AssetOutputContractFieldRequiredToggle,
   addFieldButton: WorkflowScreenSelector.AssetOutputContractAddField,
-  status: WorkflowScreenSelector.AssetOutputContractStatus
+  status: WorkflowScreenSelector.AssetOutputContractStatus,
+  propertyNamePrefix: WorkflowScreenSelector.AssetOutputContractPropertyNamePrefix,
+  propertyTypePrefix: WorkflowScreenSelector.AssetOutputContractPropertyTypePrefix,
+  propertyRequiredPrefix: WorkflowScreenSelector.AssetOutputContractPropertyRequiredPrefix,
+  propertyDeletePrefix: WorkflowScreenSelector.AssetOutputContractPropertyDeletePrefix,
+  propertyAddChildPrefix: WorkflowScreenSelector.AssetOutputContractPropertyAddChildPrefix,
+  propertyFormatPrefix: WorkflowScreenSelector.AssetOutputContractPropertyFormatPrefix,
+  propertyMinPrefix: WorkflowScreenSelector.AssetOutputContractPropertyMinPrefix,
+  propertyMaxPrefix: WorkflowScreenSelector.AssetOutputContractPropertyMaxPrefix,
+  propertyPatternPrefix: WorkflowScreenSelector.AssetOutputContractPropertyPatternPrefix
 };
 
 interface WorkflowsScreenState {
@@ -244,9 +281,6 @@ interface WorkflowsScreenState {
   hoveredEdgeId: string | null;
   connectionPreviewPoint: ConnectionPreviewPoint | null;
   guardrailAttachAssetId: string | null;
-  outputContractFieldName: string;
-  outputContractFieldType: JsonSchemaNodeRecord["type"];
-  outputContractFieldRequired: boolean;
   mappingTargetPath: string;
   mappingSourcePath: string;
   guardrailValidationKind: GuardrailValidationKindValue;
@@ -288,9 +322,6 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       hoveredEdgeId: null,
       connectionPreviewPoint: null,
       guardrailAttachAssetId: null,
-      outputContractFieldName: "summary",
-      outputContractFieldType: "string",
-      outputContractFieldRequired: true,
       mappingTargetPath: "$.context",
       mappingSourcePath: "$.result",
       guardrailValidationKind: "field_exists",
@@ -1263,7 +1294,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           : ""
       ]),
       createElement("div", {
-        className: "min-h-0 flex-1 overflow-y-auto p-4"
+        className: "min-h-0 flex-1 overflow-y-auto p-4",
+        "data-preserve-scroll-key": "workflows-inspector-scroll"
       }, [this.renderInspectorBody()])
     ]);
   }
@@ -1403,19 +1435,14 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           name
         })), { type: "node", id: node.id });
       },
-      onAddField: () => {
+      onChangeContract: (updater) => {
         if (!this.state.draftWorkflow) {
           return;
         }
-        const nextWorkflow = updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, (current) => ({
-          ...current,
-          schema: createWorkflowOutputContractField({
-            name: this.state.outputContractFieldName,
-            type: this.state.outputContractFieldType,
-            required: this.state.outputContractFieldRequired
-          }, current.schema)
-        }));
-        this.updateDraftWorkflow(nextWorkflow, { type: "node", id: node.id });
+        this.updateDraftWorkflow(
+          updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, updater),
+          { type: "node", id: node.id }
+        );
       }
     });
   }
@@ -1450,7 +1477,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     const workflow = this.state.draftWorkflow;
     const sourceNode = workflow?.nodes.find((node) => node.id === edge.sourceNodeId);
     const sourcePaths = sourceNode?.outputContract
-      ? readSchemaPaths(sourceNode.outputContract.schema)
+      ? readJsonSchemaPaths(sourceNode.outputContract.schema)
       : ["$.result"];
 
     return createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-3" }, [
@@ -1559,18 +1586,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   }
                 : current);
             },
-            onAddField: () => {
+            onChangeContract: (updater) => {
               this.patchAsset(asset.id, (current) => current.outputContract
                 ? {
                     ...current,
-                    outputContract: {
-                      ...current.outputContract,
-                      schema: createWorkflowOutputContractField({
-                        name: this.state.outputContractFieldName,
-                        type: this.state.outputContractFieldType,
-                        required: this.state.outputContractFieldRequired
-                      }, current.outputContract.schema)
-                    }
+                    outputContract: updater(current.outputContract)
                   }
                 : current);
             }
@@ -1605,10 +1625,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     contract: JsonOutputContractRecord | null;
     selectors: OutputContractEditorSelectorSet;
     onRename: (name: string) => void;
-    onAddField: () => void;
+    onChangeContract: (updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord) => void;
   }): HTMLElement {
     const validation = readJsonContractValidation(input.contract);
-    const paths = input.contract ? readSchemaPaths(input.contract.schema) : [];
+    const paths = input.contract ? readJsonSchemaPaths(input.contract.schema) : [];
+    const providerSchema = input.contract ? serializeJsonContractForProvider(input.contract) : null;
 
     return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
       createElement("div", { className: "flex items-start justify-between gap-3" }, [
@@ -1623,34 +1644,21 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       input.contract
         ? createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
             this.renderInspectorField("Contract name", input.contract.name, input.onRename, input.selectors.nameInput),
-            createElement("div", { className: "grid gap-3 sm:grid-cols-[1fr_132px_auto]" }, [
-              this.renderInspectorField("Field name", this.state.outputContractFieldName, (value) => {
-                this.setState({ outputContractFieldName: value });
-              }, input.selectors.fieldNameInput),
-              this.renderInspectorSelect("Type", this.state.outputContractFieldType, readJsonSchemaTypes(), (value) => {
-                this.setState({ outputContractFieldType: readJsonSchemaType(value) });
-              }, undefined, input.selectors.fieldTypeSelect),
-              createElement("label", { className: "flex min-h-10 items-center gap-2 self-end rounded-lg border border-border-dark bg-[#10151b] px-3 py-2 text-sm text-white" }, [
-                createElement("input", {
-                  type: "checkbox",
-                  checked: this.state.outputContractFieldRequired,
-                  onChange: (event: Event) => {
-                    const target = event.target;
-                    if (target instanceof HTMLInputElement) {
-                      this.setState({ outputContractFieldRequired: target.checked });
-                    }
-                  },
-                  "data-testid": input.selectors.fieldRequiredToggle
-                }),
-                "Required"
-              ])
-            ]),
             createElement(Button, {
               variant: "secondary",
               size: "sm",
-              disabled: this.state.outputContractFieldName.trim().length === 0,
-              onClick: input.onAddField,
-              children: "Add field",
+              icon: "add",
+              onClick: () => {
+                input.onChangeContract((current) => ({
+                  ...current,
+                  schema: upsertJsonSchemaProperty(current.schema, [], {
+                    name: readNextContractPropertyName(current.schema),
+                    node: createJsonSchemaNode("string"),
+                    required: false
+                  })
+                }));
+              },
+              children: "Add property",
               dataset: {
                 testid: input.selectors.addFieldButton
               }
@@ -1659,6 +1667,20 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               className: `rounded-md border px-3 py-2 text-xs ${validation.valid ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100" : "border-amber-500/40 bg-amber-500/10 text-amber-100"}`,
               "data-testid": input.selectors.status
             }, [validation.message]),
+            createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-3" }, [
+              createElement("div", { className: "mb-3 flex items-center justify-between gap-3" }, [
+                createElement("p", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, ["Schema tree"]),
+                createElement("span", { className: "text-xs text-text-secondary" }, ["Objects can nest properties. Arrays expose an editable item schema."])
+              ]),
+              this.renderOutputContractSchemaNode({
+                schema: input.contract.schema,
+                path: [],
+                propertyName: null,
+                required: true,
+                selectors: input.selectors,
+                onChangeContract: input.onChangeContract
+              })
+            ]),
             createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-2" }, [
               createElement("p", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, ["Available paths"]),
               paths.length === 0
@@ -1669,11 +1691,392 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                       className: "rounded-full border border-border-dark bg-[#151a20] px-2 py-1 text-xs text-slate-200"
                     }, [path])
                   ))
+            ]),
+            createElement("div", { className: "rounded-md border border-border-dark bg-[#0f1318] px-3 py-2" }, [
+              createElement("p", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, ["Compact provider payload"]),
+              createElement("pre", {
+                className: "mt-2 overflow-x-auto whitespace-pre-wrap break-all text-[11px] leading-5 text-slate-200"
+              }, [providerSchema ? JSON.stringify(providerSchema, null, 2) : "{}"])
             ])
           ])
         : createElement("p", { className: "mt-3 rounded-md border border-dashed border-border-dark px-3 py-3 text-xs text-text-secondary" }, [
             "This node does not expose a JSON output contract."
           ])
+    ]);
+  }
+
+  private renderOutputContractSchemaNode(input: {
+    schema: JsonSchemaNodeRecord;
+    path: ReadonlyArray<string>;
+    propertyName: string | null;
+    required: boolean;
+    selectors: OutputContractEditorSelectorSet;
+    onChangeContract: (updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord) => void;
+  }): HTMLElement {
+    const isRoot = input.propertyName === null && input.path.length === 0;
+    const propertyToken = toContractPathToken(input.path);
+    const parentPath = input.path.slice(0, -1);
+    const propertyKey = input.propertyName ?? "";
+    const isArrayItem = input.path.at(-1) === JsonSchemaItemsSegment;
+    const showPropertyControls = !isRoot && !isArrayItem;
+    const typeLabel = isRoot ? "Root object" : isArrayItem ? "Item schema" : "Property";
+    const childEntries = input.schema.type === "object"
+      ? Object.entries(input.schema.properties ?? {}).sort(([left], [right]) => left.localeCompare(right))
+      : [];
+
+    return createElement("div", {
+      className: `${isRoot ? "flex flex-col gap-3" : "rounded-md border border-border-dark bg-[#11161d] px-3 py-3"}`
+    }, [
+      isRoot
+        ? ""
+        : createElement("div", { className: "flex flex-col gap-3" }, [
+            createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
+              createElement("span", { className: "text-xs font-medium uppercase tracking-wide text-text-secondary" }, [typeLabel]),
+              createElement("div", { className: "min-w-[180px] flex-1" }, [
+                showPropertyControls
+                  ? this.renderContractInlineInput({
+                      value: propertyKey,
+                      testId: `${input.selectors.propertyNamePrefix}${propertyToken}`,
+                      onCommit: (value) => {
+                        const nextName = value.trim();
+                        if (nextName.length === 0 || nextName === propertyKey) {
+                          return;
+                        }
+                        input.onChangeContract((current) => ({
+                          ...current,
+                          schema: renameJsonSchemaProperty(current.schema, parentPath, propertyKey, nextName)
+                        }));
+                      }
+                    })
+                  : createElement("div", { className: "rounded-md border border-border-dark bg-[#10151b] px-3 py-2 text-sm text-white" }, [
+                      "Array item"
+                    ])
+              ]),
+              this.renderContractInlineSelect({
+                value: input.schema.type,
+                options: readJsonSchemaTypes(),
+                testId: `${input.selectors.propertyTypePrefix}${propertyToken}`,
+                onChange: (value) => {
+                  input.onChangeContract((current) => ({
+                    ...current,
+                    schema: updateJsonSchemaNode(current.schema, input.path, (node) => preserveSchemaPresentation(node, createJsonSchemaNode(readJsonSchemaType(value))))
+                  }));
+                }
+              }),
+              showPropertyControls
+                ? createElement("label", { className: "flex items-center gap-2 rounded-md border border-border-dark bg-[#10151b] px-3 py-2 text-xs text-slate-200" }, [
+                    createElement("input", {
+                      type: "checkbox",
+                      checked: input.required,
+                      onChange: (event: Event) => {
+                        const target = event.target;
+                        if (!(target instanceof HTMLInputElement)) {
+                          return;
+                        }
+                        input.onChangeContract((current) => ({
+                          ...current,
+                          schema: setContractPropertyRequired(current.schema, parentPath, propertyKey, target.checked)
+                        }));
+                      },
+                      "data-testid": `${input.selectors.propertyRequiredPrefix}${propertyToken}`
+                    }),
+                    "Required"
+                  ])
+                : "",
+              input.schema.type === "object"
+                ? createElement(IconButton, {
+                    icon: "subdirectory_arrow_right",
+                    tooltip: "Add nested property",
+                    onClick: () => {
+                      input.onChangeContract((current) => ({
+                        ...current,
+                        schema: upsertJsonSchemaProperty(current.schema, input.path, {
+                          name: readNextContractPropertyName(input.schema),
+                          node: createJsonSchemaNode("string"),
+                          required: false
+                        })
+                      }));
+                    },
+                    dataset: {
+                      testid: `${input.selectors.propertyAddChildPrefix}${propertyToken}`
+                    }
+                  })
+                : "",
+              showPropertyControls
+                ? createElement(IconButton, {
+                    icon: "delete",
+                    tooltip: "Delete property",
+                    onClick: () => {
+                      input.onChangeContract((current) => ({
+                        ...current,
+                        schema: removeJsonSchemaProperty(current.schema, parentPath, propertyKey)
+                      }));
+                    },
+                    dataset: {
+                      testid: `${input.selectors.propertyDeletePrefix}${propertyToken}`
+                    }
+                  })
+                : ""
+            ]),
+            this.renderOutputContractConstraintEditor({
+              schema: input.schema,
+              path: input.path,
+              selectors: input.selectors,
+              onChangeContract: input.onChangeContract
+            })
+          ]),
+      input.schema.type === "object"
+        ? createElement("div", { className: `${isRoot ? "flex flex-col gap-3" : "mt-3 flex flex-col gap-3 border-l border-border-dark pl-4"}` }, [
+            childEntries.length === 0
+              ? createElement("p", { className: "text-xs text-text-secondary" }, ["No properties yet. Add one to define this object."])
+              : childEntries.map(([key, value]) =>
+                  this.renderOutputContractSchemaNode({
+                    schema: value,
+                    path: [...input.path, key],
+                    propertyName: key,
+                    required: (input.schema.required ?? []).includes(key),
+                    selectors: input.selectors,
+                    onChangeContract: input.onChangeContract
+                  })
+                )
+          ])
+        : "",
+      input.schema.type === "array"
+        ? createElement("div", { className: "mt-3 border-l border-border-dark pl-4" }, [
+            this.renderOutputContractSchemaNode({
+              schema: input.schema.items ?? createJsonSchemaNode("string"),
+              path: [...input.path, JsonSchemaItemsSegment],
+              propertyName: null,
+              required: true,
+              selectors: input.selectors,
+              onChangeContract: input.onChangeContract
+            })
+          ])
+        : ""
+    ]);
+  }
+
+  private renderOutputContractConstraintEditor(input: {
+    schema: JsonSchemaNodeRecord;
+    path: ReadonlyArray<string>;
+    selectors: OutputContractEditorSelectorSet;
+    onChangeContract: (updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord) => void;
+  }): HTMLElement {
+    const propertyToken = toContractPathToken(input.path);
+    if (input.schema.type === "string") {
+      return createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+        this.renderContractSelectField("Format", input.schema.format ?? "", readJsonSchemaFormats(), (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                format: readJsonSchemaFormat(value)
+              })
+            )
+          }));
+        }, `${input.selectors.propertyFormatPrefix}${propertyToken}`),
+        this.renderContractNumberField("Min length", input.schema.minLength, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                minLength: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMinPrefix}${propertyToken}`),
+        this.renderContractNumberField("Max length", input.schema.maxLength, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                maxLength: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMaxPrefix}${propertyToken}`),
+        this.renderContractTextField("Pattern", input.schema.pattern ?? "", (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                pattern: value.trim().length > 0 ? value : undefined
+              })
+            )
+          }));
+        }, `${input.selectors.propertyPatternPrefix}${propertyToken}`)
+      ]);
+    }
+
+    if (input.schema.type === "number" || input.schema.type === "integer") {
+      return createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+        this.renderContractNumberField("Minimum", input.schema.minimum, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                minimum: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMinPrefix}${propertyToken}`),
+        this.renderContractNumberField("Maximum", input.schema.maximum, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                maximum: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMaxPrefix}${propertyToken}`)
+      ]);
+    }
+
+    if (input.schema.type === "array") {
+      return createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+        this.renderContractNumberField("Min items", input.schema.minItems, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                minItems: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMinPrefix}${propertyToken}`),
+        this.renderContractNumberField("Max items", input.schema.maxItems, (value) => {
+          input.onChangeContract((current) => ({
+            ...current,
+            schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
+              patchSchemaNodeOptional(node, {
+                maxItems: value
+              })
+            )
+          }));
+        }, `${input.selectors.propertyMaxPrefix}${propertyToken}`)
+      ]);
+    }
+
+    return createElement("div", { className: "text-xs text-text-secondary" }, [
+      input.schema.type === "boolean"
+        ? "Boolean values only need required/optional semantics."
+        : input.schema.type === "object"
+          ? "Nested objects can publish additional reusable paths."
+          : "Configure this schema through the type selector."
+    ]);
+  }
+
+  private renderContractInlineInput(input: {
+    value: string;
+    onCommit: (value: string) => void;
+    testId: string;
+  }): HTMLElement {
+    const commitValue = (event: Event): void => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement) {
+        input.onCommit(target.value);
+      }
+    };
+
+    return createElement("input", {
+      type: "text",
+      value: input.value,
+      className: InspectorTextInputClassName,
+      "data-testid": input.testId,
+      onBlur: commitValue,
+      onChange: commitValue
+    });
+  }
+
+  private renderContractInlineSelect(input: {
+    value: string;
+    options: ReadonlyArray<string>;
+    onChange: (value: string) => void;
+    testId: string;
+  }): HTMLElement {
+    return createElement("div", { className: "relative min-w-[128px]" }, [
+      createElement("select", {
+        className: InspectorSelectClassName,
+        value: input.value,
+        "data-testid": input.testId,
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLSelectElement) {
+            input.onChange(target.value);
+          }
+        }
+      }, input.options.map((option) =>
+        createElement("option", { value: option }, [formatSelectOptionLabel(option)])
+      )),
+      createElement("span", {
+        className: "pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-text-secondary"
+      }, ["▾"])
+    ]);
+  }
+
+  private renderContractTextField(
+    label: string,
+    value: string,
+    onCommit: (value: string) => void,
+    testId: string
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-xs font-medium text-white" }, [label]),
+      this.renderContractInlineInput({
+        value,
+        onCommit,
+        testId
+      })
+    ]);
+  }
+
+  private renderContractNumberField(
+    label: string,
+    value: number | undefined,
+    onCommit: (value: number | undefined) => void,
+    testId: string
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-xs font-medium text-white" }, [label]),
+      createElement("input", {
+        type: "number",
+        value: value === undefined ? "" : value.toString(),
+        className: InspectorTextInputClassName,
+        "data-testid": testId,
+        onBlur: (event: Event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          onCommit(readOptionalNumber(target.value));
+        },
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          onCommit(readOptionalNumber(target.value));
+        }
+      })
+    ]);
+  }
+
+  private renderContractSelectField(
+    label: string,
+    value: string,
+    options: ReadonlyArray<string>,
+    onChange: (value: string) => void,
+    testId: string
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement("span", { className: "text-xs font-medium text-white" }, [label]),
+      this.renderContractInlineSelect({
+        value,
+        options,
+        onChange,
+        testId
+      })
     ]);
   }
 
@@ -1813,18 +2216,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   }
                 : current);
             },
-            onAddField: () => {
+            onChangeContract: (updater) => {
               this.patchAsset(asset.id, (current) => current.outputContract
                 ? {
                     ...current,
-                    outputContract: {
-                      ...current.outputContract,
-                      schema: createWorkflowOutputContractField({
-                        name: this.state.outputContractFieldName,
-                        type: this.state.outputContractFieldType,
-                        required: this.state.outputContractFieldRequired
-                      }, current.outputContract.schema)
-                    }
+                    outputContract: updater(current.outputContract)
                   }
                 : current);
             }
@@ -3642,6 +4038,24 @@ const readJsonSchemaType = (value: string): JsonSchemaNodeRecord["type"] => {
   return "string";
 };
 
+const readJsonSchemaFormats = (): ReadonlyArray<string> => [
+  "",
+  "email",
+  "url",
+  "uuid",
+  "nif"
+];
+
+const readJsonSchemaFormat = (
+  value: string
+): JsonSchemaNodeRecord["format"] | undefined => {
+  if (value === "email" || value === "url" || value === "uuid" || value === "nif") {
+    return value;
+  }
+
+  return undefined;
+};
+
 const readGuardrailValidationKinds = (): ReadonlyArray<GuardrailValidationKindValue> => [
   "field_exists",
   "field_equals",
@@ -3691,42 +4105,138 @@ const isOutputContractCapableNode = (kind: WorkflowNodeKindValue): boolean =>
   kind === WorkflowNodeKind.AiAgent ||
   kind === WorkflowNodeKind.AiProviderRun;
 
-const readSchemaPaths = (schema: JsonSchemaNodeRecord): ReadonlyArray<string> => {
-  if (schema.type !== "object" || !schema.properties) {
-    return ["$"];
-  }
-
-  const paths = Object.keys(schema.properties)
-    .sort((left, right) => left.localeCompare(right))
-    .flatMap((key) => readSchemaNodePaths(schema.properties?.[key] ?? { type: "string" }, `$.${key}`));
-  return paths.length > 0 ? paths : ["$"];
-};
-
-const readSchemaNodePaths = (
-  schema: JsonSchemaNodeRecord,
-  prefix: string
-): ReadonlyArray<string> => {
-  if (schema.type !== "object" || !schema.properties) {
-    return [prefix];
-  }
-
-  const nestedPaths = Object.keys(schema.properties)
-    .sort((left, right) => left.localeCompare(right))
-    .flatMap((key) => readSchemaNodePaths(schema.properties?.[key] ?? { type: "string" }, `${prefix}.${key}`));
-  return [prefix, ...nestedPaths];
-};
-
 const formatProviderProfileLabel = (profile: ProviderProfileRecord): string => {
   const model = profile.modelId.trim().length > 0 ? ` · ${profile.modelId}` : "";
   return `${profile.name} · ${profile.providerKind}${model}`;
 };
 
 const formatSelectOptionLabel = (value: string): string =>
-  value
-    .split(/[-_.]/u)
-    .filter((part) => part.length > 0)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
+  value.length === 0
+    ? "None"
+    : value
+      .split(/[-_.]/u)
+      .filter((part) => part.length > 0)
+      .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+
+const setContractPropertyRequired = (
+  schema: JsonSchemaNodeRecord,
+  parentPath: ReadonlyArray<string>,
+  propertyName: string,
+  required: boolean
+): JsonSchemaNodeRecord => updateJsonSchemaNode(schema, parentPath, (node) => {
+  if (node.type !== "object") {
+    return node;
+  }
+
+  return {
+    ...node,
+    required: required
+      ? [...new Set([...(node.required ?? []), propertyName])]
+      : (node.required ?? []).filter((entry) => entry !== propertyName)
+  };
+});
+
+const preserveSchemaPresentation = (
+  previous: JsonSchemaNodeRecord,
+  next: JsonSchemaNodeRecord
+): JsonSchemaNodeRecord => ({
+  ...next,
+  ...(previous.title ? { title: previous.title } : {}),
+  ...(previous.description ? { description: previous.description } : {})
+});
+
+const patchSchemaNodeOptional = (
+  node: JsonSchemaNodeRecord,
+  patch: {
+    format?: JsonSchemaNodeRecord["format"] | undefined;
+    minLength?: number | undefined;
+    maxLength?: number | undefined;
+    pattern?: string | undefined;
+    minimum?: number | undefined;
+    maximum?: number | undefined;
+    minItems?: number | undefined;
+    maxItems?: number | undefined;
+  }
+): JsonSchemaNodeRecord => {
+  const {
+    format: _previousFormat,
+    minLength: _previousMinLength,
+    maxLength: _previousMaxLength,
+    pattern: _previousPattern,
+    minimum: _previousMinimum,
+    maximum: _previousMaximum,
+    minItems: _previousMinItems,
+    maxItems: _previousMaxItems,
+    ...rest
+  } = node;
+  const {
+    format,
+    minLength,
+    maxLength,
+    pattern,
+    minimum,
+    maximum,
+    minItems,
+    maxItems
+  } = patch;
+
+  return {
+    ...rest,
+    ...(!("format" in patch) ? (_previousFormat !== undefined ? { format: _previousFormat } : {}) : format !== undefined ? { format } : {}),
+    ...(minLength !== undefined ? { minLength } : {}),
+    ...(!("minLength" in patch) && _previousMinLength !== undefined ? { minLength: _previousMinLength } : {}),
+    ...(maxLength !== undefined ? { maxLength } : {}),
+    ...(!("maxLength" in patch) && _previousMaxLength !== undefined ? { maxLength: _previousMaxLength } : {}),
+    ...(pattern !== undefined ? { pattern } : {}),
+    ...(!("pattern" in patch) && _previousPattern !== undefined ? { pattern: _previousPattern } : {}),
+    ...(minimum !== undefined ? { minimum } : {}),
+    ...(!("minimum" in patch) && _previousMinimum !== undefined ? { minimum: _previousMinimum } : {}),
+    ...(maximum !== undefined ? { maximum } : {}),
+    ...(!("maximum" in patch) && _previousMaximum !== undefined ? { maximum: _previousMaximum } : {}),
+    ...(minItems !== undefined ? { minItems } : {}),
+    ...(!("minItems" in patch) && _previousMinItems !== undefined ? { minItems: _previousMinItems } : {}),
+    ...(maxItems !== undefined ? { maxItems } : {}),
+    ...(!("maxItems" in patch) && _previousMaxItems !== undefined ? { maxItems: _previousMaxItems } : {})
+  };
+};
+
+const readNextContractPropertyName = (
+  schema: JsonSchemaNodeRecord
+): string => {
+  const existingNames = new Set(Object.keys(schema.properties ?? {}));
+  let index = existingNames.has("field") ? 2 : 1;
+  let candidate = "field";
+
+  while (existingNames.has(candidate)) {
+    candidate = `field${index.toString()}`;
+    index += 1;
+  }
+
+  return candidate;
+};
+
+const readOptionalNumber = (
+  value: string
+): number | undefined => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toContractPathToken = (
+  path: ReadonlyArray<string>
+): string =>
+  path.length === 0
+    ? "root"
+    : path
+      .map((segment) => segment === JsonSchemaItemsSegment ? "items" : segment)
+      .join("__")
+      .replace(/[^a-zA-Z0-9_-]+/gu, "-");
 
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;

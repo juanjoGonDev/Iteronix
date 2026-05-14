@@ -641,6 +641,11 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Attached guardrails can now be created and reopened from the node inspector with reusable assets, `warn`/`error`/`success` severity, up to four validations, and blocking rules only for `error` guardrails
     - Browser validation now covers create/edit/save/reload for JSON contracts, edge mappings and guardrail attachments, including reopening the attached guardrail editor after reload
     - Quality gates green on this 06.4 slice: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
+    - Contract editing redesign completed on `2026-05-15` while keeping `06.4` in progress:
+      - Inspector rerenders now preserve focus and the inspector scroll position through contract edits instead of jumping back to the top on every change
+      - The output-contract model is now a canonical nested schema tree with object nesting, array item schemas, required flags, min/max constraints, regex patterns and predefined formats (`email`, `url`, `uuid`, `nif`)
+      - The same schema tree now emits a compact provider-facing payload and a Zod-compatible schema expression while local runtime validation stays browser-safe without adding a bundle dependency
+      - The visual contract editor is now tree-based with per-property icon actions for add child, delete, rename, type changes and constraint editing, plus deterministic browser coverage for nested object and array authoring
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

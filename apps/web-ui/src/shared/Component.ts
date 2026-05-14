@@ -23,11 +23,7 @@ export class Component<TProps extends ComponentProps = ComponentProps, TState = 
   setState(newState: Partial<TState>): void {
     this.state = { ...this.state, ...newState };
     requestAnimationFrame(() => {
-      if (this.element?.parentNode) {
-        const newElement = this.render();
-        this.element.parentNode.replaceChild(newElement, this.element);
-        this.element = newElement;
-      }
+      this.replaceRenderedElement();
     });
   }
 
@@ -54,11 +50,19 @@ export class Component<TProps extends ComponentProps = ComponentProps, TState = 
   // Update props
   updateProps(newProps: ComponentProps): void {
     this.props = { ...this.props, ...newProps };
-    if (this.element?.parentNode) {
-      const newElement = this.render();
-      this.element.parentNode.replaceChild(newElement, this.element);
-      this.element = newElement;
+    this.replaceRenderedElement();
+  }
+
+  private replaceRenderedElement(): void {
+    if (!this.element?.parentNode) {
+      return;
     }
+
+    const preservedState = capturePreservedDomState(this.element);
+    const newElement = this.render();
+    this.element.parentNode.replaceChild(newElement, this.element);
+    this.element = newElement;
+    restorePreservedDomState(newElement, preservedState);
   }
 }
 
@@ -215,6 +219,124 @@ const isElementNode = (value: unknown): value is HTMLElement => {
   }
 
   return typeof SVGElement !== "undefined" && value instanceof SVGElement;
+};
+
+type PreservedDomState = {
+  focusTarget: {
+    selector: string;
+    selectionStart?: number;
+    selectionEnd?: number;
+  } | null;
+  scrollTargets: ReadonlyArray<{
+    key: string;
+    top: number;
+    left: number;
+  }>;
+};
+
+const PreserveScrollAttribute = "data-preserve-scroll-key";
+
+const capturePreservedDomState = (root: HTMLElement): PreservedDomState => ({
+  focusTarget: readFocusTarget(root),
+  scrollTargets: readScrollTargets(root)
+});
+
+const restorePreservedDomState = (
+  root: HTMLElement,
+  state: PreservedDomState
+): void => {
+  state.scrollTargets.forEach((target) => {
+    const element = root.querySelector<HTMLElement>(`[${PreserveScrollAttribute}="${target.key}"]`);
+    if (!element) {
+      return;
+    }
+
+    element.scrollTop = target.top;
+    element.scrollLeft = target.left;
+  });
+
+  if (!state.focusTarget) {
+    return;
+  }
+
+  const focusedElement = root.querySelector<HTMLElement>(state.focusTarget.selector);
+  if (!focusedElement || typeof focusedElement.focus !== "function") {
+    return;
+  }
+
+  focusedElement.focus();
+  if (
+    (focusedElement instanceof HTMLInputElement || focusedElement instanceof HTMLTextAreaElement) &&
+    state.focusTarget.selectionStart !== undefined &&
+    state.focusTarget.selectionEnd !== undefined
+  ) {
+    focusedElement.setSelectionRange(state.focusTarget.selectionStart, state.focusTarget.selectionEnd);
+  }
+};
+
+const readFocusTarget = (
+  root: HTMLElement
+): PreservedDomState["focusTarget"] => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement) || !root.contains(activeElement)) {
+    return null;
+  }
+
+  const selector = readElementRestoreSelector(activeElement);
+  if (!selector) {
+    return null;
+  }
+
+  if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+    return {
+      selector,
+      ...(activeElement.selectionStart !== null ? { selectionStart: activeElement.selectionStart } : {}),
+      ...(activeElement.selectionEnd !== null ? { selectionEnd: activeElement.selectionEnd } : {})
+    };
+  }
+
+  return {
+    selector
+  };
+};
+
+const readScrollTargets = (
+  root: HTMLElement
+): PreservedDomState["scrollTargets"] => {
+  const elements = [
+    ...(root.hasAttribute(PreserveScrollAttribute) ? [root] : []),
+    ...Array.from(root.querySelectorAll<HTMLElement>(`[${PreserveScrollAttribute}]`))
+  ];
+
+  return elements.map((element) => ({
+    key: element.getAttribute(PreserveScrollAttribute) ?? "",
+    top: element.scrollTop,
+    left: element.scrollLeft
+  })).filter((target) => target.key.length > 0);
+};
+
+const readElementRestoreSelector = (
+  element: HTMLElement
+): string | null => {
+  const testId = element.getAttribute("data-testid");
+  if (testId) {
+    return `[data-testid="${testId}"]`;
+  }
+
+  if (element.id) {
+    return `#${element.id}`;
+  }
+
+  const name = element.getAttribute("name");
+  if (name) {
+    return `${element.tagName.toLowerCase()}[name="${name}"]`;
+  }
+
+  return null;
 };
 
 // Event handling helper

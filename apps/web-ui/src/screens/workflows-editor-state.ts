@@ -154,6 +154,53 @@ export type JsonSchemaNodeRecord = {
   items?: JsonSchemaNodeRecord;
   enum?: ReadonlyArray<string>;
   nullable?: boolean;
+  format?: "email" | "url" | "uuid" | "nif";
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  minItems?: number;
+  maxItems?: number;
+};
+
+export const JsonSchemaItemsSegment = "$items" as const;
+
+export type JsonContractProviderSchemaRecord =
+  | {
+      t: "o";
+      p?: Readonly<Record<string, JsonContractProviderSchemaRecord & { r?: 1 }>>;
+      n?: 1;
+    }
+  | {
+      t: "a";
+      i: JsonContractProviderSchemaRecord;
+      min?: number;
+      max?: number;
+      n?: 1;
+    }
+  | {
+      t: "s" | "n" | "i" | "b";
+      f?: "email" | "url" | "uuid" | "nif";
+      min?: number;
+      max?: number;
+      re?: string;
+      e?: ReadonlyArray<string>;
+      n?: 1;
+      r?: 1;
+    };
+
+export type JsonContractCompiledSchema = {
+  zodExpression: string;
+  safeParse: (value: unknown) => {
+    success: true;
+    data: unknown;
+  } | {
+    success: false;
+    error: {
+      issues: ReadonlyArray<string>;
+    };
+  };
 };
 
 export type JsonOutputContractRecord = {
@@ -628,23 +675,14 @@ export const createWorkflowOutputContractField = (
     return rootSchema;
   }
 
-  const currentRequired = rootSchema.required ?? [];
-  const nextRequired = input.required
-    ? [...new Set([...currentRequired, fieldName])]
-    : currentRequired.filter((entry) => entry !== fieldName);
-
-  return {
-    ...rootSchema,
-    type: "object",
-    properties: {
-      ...(rootSchema.properties ?? {}),
-      [fieldName]: {
-        type: input.type,
-        title: toTitle(fieldName)
-      }
-    },
-    required: nextRequired
-  };
+  return upsertJsonSchemaProperty(rootSchema, [], {
+    name: fieldName,
+    required: input.required,
+    node: {
+      ...createJsonSchemaNode(input.type),
+      title: toTitle(fieldName)
+    }
+  });
 };
 
 export const readJsonContractValidation = (
@@ -664,12 +702,11 @@ export const readJsonContractValidation = (
     };
   }
 
-  const properties = contract.schema.properties ?? {};
-  const missingRequired = (contract.schema.required ?? []).filter((fieldName) => !properties[fieldName]);
-  if (missingRequired.length > 0) {
+  const issues = readJsonSchemaIssues(contract.schema, "$");
+  if (issues.length > 0) {
     return {
       valid: false,
-      message: `Required fields missing from properties: ${missingRequired.join(", ")}.`
+      message: issues[0] ?? "The JSON contract is invalid."
     };
   }
 
@@ -678,6 +715,178 @@ export const readJsonContractValidation = (
     message: "Output contract is valid."
   };
 };
+
+export const createJsonSchemaNode = (
+  type: JsonSchemaNodeRecord["type"]
+): JsonSchemaNodeRecord => {
+  if (type === "object") {
+    return {
+      type,
+      properties: {},
+      required: []
+    };
+  }
+
+  if (type === "array") {
+    return {
+      type,
+      items: createJsonSchemaNode("string")
+    };
+  }
+
+  return {
+    type
+  };
+};
+
+export const upsertJsonSchemaProperty = (
+  rootSchema: JsonSchemaNodeRecord,
+  parentPath: ReadonlyArray<string>,
+  input: {
+    name: string;
+    node: JsonSchemaNodeRecord;
+    required: boolean;
+  }
+): JsonSchemaNodeRecord => {
+  const fieldName = input.name.trim();
+  if (fieldName.length === 0) {
+    return rootSchema;
+  }
+
+  return updateJsonSchemaNode(rootSchema, parentPath, (parentNode) => {
+    const normalizedParent = parentNode.type === "object"
+      ? parentNode
+      : createJsonSchemaNode("object");
+    const nextRequired = input.required
+      ? appendUniqueString(normalizedParent.required, fieldName)
+      : removeStringEntry(normalizedParent.required, fieldName);
+
+    return {
+      ...normalizedParent,
+      properties: {
+        ...(normalizedParent.properties ?? {}),
+        [fieldName]: cloneJsonSchemaNode(input.node)
+      },
+      required: nextRequired
+    };
+  });
+};
+
+export const renameJsonSchemaProperty = (
+  rootSchema: JsonSchemaNodeRecord,
+  parentPath: ReadonlyArray<string>,
+  previousName: string,
+  nextName: string
+): JsonSchemaNodeRecord => {
+  const previousKey = previousName.trim();
+  const nextKey = nextName.trim();
+  if (previousKey.length === 0 || nextKey.length === 0 || previousKey === nextKey) {
+    return rootSchema;
+  }
+
+  return updateJsonSchemaNode(rootSchema, parentPath, (parentNode) => {
+    if (parentNode.type !== "object") {
+      return parentNode;
+    }
+
+    const currentProperty = parentNode.properties?.[previousKey];
+    if (!currentProperty) {
+      return parentNode;
+    }
+
+    const nextProperties = { ...(parentNode.properties ?? {}) };
+    delete nextProperties[previousKey];
+    nextProperties[nextKey] = cloneJsonSchemaNode(currentProperty);
+
+    const required = parentNode.required ?? [];
+    const nextRequired = required.includes(previousKey)
+      ? appendUniqueString(removeStringEntry(required, previousKey), nextKey)
+      : removeStringEntry(required, previousKey);
+
+    return {
+      ...parentNode,
+      properties: nextProperties,
+      required: nextRequired
+    };
+  });
+};
+
+export const removeJsonSchemaProperty = (
+  rootSchema: JsonSchemaNodeRecord,
+  parentPath: ReadonlyArray<string>,
+  propertyName: string
+): JsonSchemaNodeRecord =>
+  updateJsonSchemaNode(rootSchema, parentPath, (parentNode) => {
+    if (parentNode.type !== "object") {
+      return parentNode;
+    }
+
+    const fieldName = propertyName.trim();
+    if (!parentNode.properties?.[fieldName]) {
+      return parentNode;
+    }
+
+    const nextProperties = { ...(parentNode.properties ?? {}) };
+    delete nextProperties[fieldName];
+
+    return {
+      ...parentNode,
+      properties: nextProperties,
+      required: removeStringEntry(parentNode.required, fieldName)
+    };
+  });
+
+export const updateJsonSchemaNode = (
+  rootSchema: JsonSchemaNodeRecord,
+  path: ReadonlyArray<string>,
+  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord
+): JsonSchemaNodeRecord => updateJsonSchemaNodeAtPath(rootSchema, path, updater);
+
+export const readJsonSchemaPaths = (
+  schema: JsonSchemaNodeRecord
+): ReadonlyArray<string> => {
+  const paths = readJsonSchemaNodePaths(schema, "$");
+  return paths.length > 0 ? paths : ["$"];
+};
+
+export const compileJsonContractSchema = (
+  contract: JsonOutputContractRecord
+): JsonContractCompiledSchema => {
+  const issues = readJsonSchemaIssues(contract.schema, "$");
+  if (issues.length > 0) {
+    throw new Error(issues.join(" "));
+  }
+
+  return {
+    zodExpression: buildJsonSchemaZodExpression(contract.schema),
+    safeParse: (value: unknown) => {
+      const runtimeIssues = validateJsonSchemaValue(contract.schema, value, "$");
+      if (runtimeIssues.length > 0) {
+        return {
+          success: false,
+          error: {
+            issues: runtimeIssues
+          }
+        };
+      }
+
+      return {
+        success: true,
+        data: value
+      };
+    }
+  };
+};
+
+export const safeParseJsonContractValue = (
+  contract: JsonOutputContractRecord,
+  value: unknown
+): ReturnType<JsonContractCompiledSchema["safeParse"]> =>
+  compileJsonContractSchema(contract).safeParse(value);
+
+export const serializeJsonContractForProvider = (
+  contract: JsonOutputContractRecord
+): JsonContractProviderSchemaRecord => serializeJsonSchemaNode(contract.schema);
 
 export const addWorkflowEdgeMappingEntry = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
@@ -1246,3 +1455,453 @@ const toTitle = (value: string): string =>
     .filter((part) => part.length > 0)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+
+const updateJsonSchemaNodeAtPath = (
+  rootSchema: JsonSchemaNodeRecord,
+  path: ReadonlyArray<string>,
+  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord
+): JsonSchemaNodeRecord => {
+  if (path.length === 0) {
+    return cloneJsonSchemaNode(updater(cloneJsonSchemaNode(rootSchema)));
+  }
+
+  const [segment, ...restPath] = path;
+  if (!segment) {
+    return rootSchema;
+  }
+
+  if (segment === JsonSchemaItemsSegment) {
+    if (rootSchema.type !== "array") {
+      return rootSchema;
+    }
+
+    return {
+      ...rootSchema,
+      items: updateJsonSchemaNodeAtPath(
+        cloneJsonSchemaNode(rootSchema.items ?? createJsonSchemaNode("string")),
+        restPath,
+        updater
+      )
+    };
+  }
+
+  if (rootSchema.type !== "object") {
+    return rootSchema;
+  }
+
+  const currentChild = rootSchema.properties?.[segment];
+  if (!currentChild) {
+    return rootSchema;
+  }
+
+  return {
+    ...rootSchema,
+    properties: {
+      ...(rootSchema.properties ?? {}),
+      [segment]: updateJsonSchemaNodeAtPath(currentChild, restPath, updater)
+    }
+  };
+};
+
+const cloneJsonSchemaNode = (
+  node: JsonSchemaNodeRecord
+): JsonSchemaNodeRecord => ({
+  ...node,
+  ...(node.required ? { required: [...node.required] } : {}),
+  ...(node.properties
+    ? {
+        properties: Object.fromEntries(
+          Object.entries(node.properties).map(([key, value]) => [key, cloneJsonSchemaNode(value)])
+        )
+      }
+    : {}),
+  ...(node.items ? { items: cloneJsonSchemaNode(node.items) } : {}),
+  ...(node.enum ? { enum: [...node.enum] } : {})
+});
+
+const appendUniqueString = (
+  values: ReadonlyArray<string> | undefined,
+  value: string
+): ReadonlyArray<string> => [...new Set([...(values ?? []), value])];
+
+const removeStringEntry = (
+  values: ReadonlyArray<string> | undefined,
+  value: string
+): ReadonlyArray<string> => (values ?? []).filter((entry) => entry !== value);
+
+const readJsonSchemaNodePaths = (
+  schema: JsonSchemaNodeRecord,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (schema.type === "object") {
+    const nestedPaths = Object.keys(schema.properties ?? {})
+      .sort((left, right) => left.localeCompare(right))
+      .flatMap((key) => readJsonSchemaNodePaths(schema.properties?.[key] ?? createJsonSchemaNode("string"), `${prefix}.${key}`));
+    return [prefix, ...nestedPaths];
+  }
+
+  if (schema.type === "array") {
+    const itemPrefix = `${prefix}[]`;
+    const itemPaths = schema.items
+      ? readJsonSchemaNodePaths(schema.items, itemPrefix)
+      : [itemPrefix];
+    return [prefix, ...itemPaths];
+  }
+
+  return [prefix];
+};
+
+const readJsonSchemaIssues = (
+  schema: JsonSchemaNodeRecord,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (schema.type === "object") {
+    const properties = schema.properties ?? {};
+    const missingRequired = (schema.required ?? []).filter((fieldName) => !properties[fieldName]);
+    if (missingRequired.length > 0) {
+      return [`${prefix} references required fields that do not exist: ${missingRequired.join(", ")}.`];
+    }
+
+    return Object.entries(properties).flatMap(([key, value]) => readJsonSchemaIssues(value, `${prefix}.${key}`));
+  }
+
+  if (schema.type === "array") {
+    const issues = readRangeIssues(prefix, schema.minItems, schema.maxItems, "items");
+    if (issues.length > 0) {
+      return issues;
+    }
+
+    if (!schema.items) {
+      return [`${prefix} arrays need an item schema.`];
+    }
+
+    return readJsonSchemaIssues(schema.items, `${prefix}[]`);
+  }
+
+  if (schema.type === "string") {
+    const lengthIssues = readRangeIssues(prefix, schema.minLength, schema.maxLength, "length");
+    if (lengthIssues.length > 0) {
+      return lengthIssues;
+    }
+
+    if (schema.pattern) {
+      try {
+        void new RegExp(schema.pattern, "u");
+      } catch {
+        return [`${prefix} has an invalid pattern.`];
+      }
+    }
+
+    return [];
+  }
+
+  if (schema.type === "number" || schema.type === "integer") {
+    return readRangeIssues(prefix, schema.minimum, schema.maximum, "value");
+  }
+
+  return [];
+};
+
+const readRangeIssues = (
+  prefix: string,
+  minimum: number | undefined,
+  maximum: number | undefined,
+  label: string
+): ReadonlyArray<string> => {
+  if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+    return [`${prefix} has a ${label} minimum greater than its maximum.`];
+  }
+
+  return [];
+};
+
+const buildJsonSchemaZodExpression = (
+  schema: JsonSchemaNodeRecord
+): string => {
+  const baseExpression = buildJsonSchemaZodExpressionCore(schema);
+  return schema.nullable ? `${baseExpression}.nullable()` : baseExpression;
+};
+
+const buildJsonSchemaZodExpressionCore = (
+  schema: JsonSchemaNodeRecord
+): string => {
+  if (schema.type === "object") {
+    const required = new Set(schema.required ?? []);
+    const shapeEntries = Object.entries(schema.properties ?? {}).map(([key, value]) => {
+      const nestedExpression = buildJsonSchemaZodExpression(value);
+      return `${JSON.stringify(key)}: ${required.has(key) ? nestedExpression : `${nestedExpression}.optional()`}`;
+    });
+    return `z.object({${shapeEntries.join(", ")}}).strict()`;
+  }
+
+  if (schema.type === "array") {
+    let arrayExpression = `z.array(${buildJsonSchemaZodExpression(schema.items ?? createJsonSchemaNode("string"))})`;
+    if (schema.minItems !== undefined) {
+      arrayExpression = `${arrayExpression}.min(${schema.minItems.toString()})`;
+    }
+    if (schema.maxItems !== undefined) {
+      arrayExpression = `${arrayExpression}.max(${schema.maxItems.toString()})`;
+    }
+    return arrayExpression;
+  }
+
+  if (schema.type === "string") {
+    let stringExpression = "z.string()";
+    if (schema.minLength !== undefined) {
+      stringExpression = `${stringExpression}.min(${schema.minLength.toString()})`;
+    }
+    if (schema.maxLength !== undefined) {
+      stringExpression = `${stringExpression}.max(${schema.maxLength.toString()})`;
+    }
+    if (schema.pattern) {
+      stringExpression = `${stringExpression}.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`;
+    }
+    if (schema.format === "email") {
+      stringExpression = `${stringExpression}.email()`;
+    }
+    if (schema.format === "url") {
+      stringExpression = `${stringExpression}.url()`;
+    }
+    if (schema.format === "uuid") {
+      stringExpression = `${stringExpression}.uuid()`;
+    }
+    if (schema.format === "nif") {
+      stringExpression = `${stringExpression}.regex(/^(?:\\\\d{8}|[XYZ]\\\\d{7})[A-Z]$/iu)`;
+    }
+    if (schema.enum && schema.enum.length > 0) {
+      stringExpression = `${stringExpression}.refine((value) => ${JSON.stringify(schema.enum)}.includes(value))`;
+    }
+    return stringExpression;
+  }
+
+  if (schema.type === "number") {
+    let numberExpression = "z.number()";
+    if (schema.minimum !== undefined) {
+      numberExpression = `${numberExpression}.min(${schema.minimum.toString()})`;
+    }
+    if (schema.maximum !== undefined) {
+      numberExpression = `${numberExpression}.max(${schema.maximum.toString()})`;
+    }
+    return numberExpression;
+  }
+
+  if (schema.type === "integer") {
+    let integerExpression = "z.number().int()";
+    if (schema.minimum !== undefined) {
+      integerExpression = `${integerExpression}.min(${schema.minimum.toString()})`;
+    }
+    if (schema.maximum !== undefined) {
+      integerExpression = `${integerExpression}.max(${schema.maximum.toString()})`;
+    }
+    return integerExpression;
+  }
+
+  return "z.boolean()";
+};
+
+const validateJsonSchemaValue = (
+  schema: JsonSchemaNodeRecord,
+  value: unknown,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (value === null) {
+    return schema.nullable ? [] : [`${prefix} does not allow null values.`];
+  }
+
+  if (schema.type === "object") {
+    if (!isRecordValue(value)) {
+      return [`${prefix} must be an object.`];
+    }
+
+    const required = schema.required ?? [];
+    const missingRequired = required.filter((fieldName) => !(fieldName in value));
+    if (missingRequired.length > 0) {
+      return [`${prefix} is missing required fields: ${missingRequired.join(", ")}.`];
+    }
+
+    const properties = schema.properties ?? {};
+    const unknownKeys = Object.keys(value).filter((key) => !properties[key]);
+    if (unknownKeys.length > 0) {
+      return [`${prefix} contains unknown fields: ${unknownKeys.join(", ")}.`];
+    }
+
+    return Object.entries(properties).flatMap(([key, propertySchema]) =>
+      key in value
+        ? validateJsonSchemaValue(propertySchema, value[key], `${prefix}.${key}`)
+        : []
+    );
+  }
+
+  if (schema.type === "array") {
+    if (!Array.isArray(value)) {
+      return [`${prefix} must be an array.`];
+    }
+
+    const minItemsIssue = schema.minItems !== undefined && value.length < schema.minItems
+      ? [`${prefix} must contain at least ${schema.minItems.toString()} items.`]
+      : [];
+    if (minItemsIssue.length > 0) {
+      return minItemsIssue;
+    }
+
+    const maxItemsIssue = schema.maxItems !== undefined && value.length > schema.maxItems
+      ? [`${prefix} must contain at most ${schema.maxItems.toString()} items.`]
+      : [];
+    if (maxItemsIssue.length > 0) {
+      return maxItemsIssue;
+    }
+
+    return value.flatMap((entry, index) =>
+      validateJsonSchemaValue(schema.items ?? createJsonSchemaNode("string"), entry, `${prefix}[${index.toString()}]`)
+    );
+  }
+
+  if (schema.type === "string") {
+    return validateJsonSchemaStringValue(schema, value, prefix);
+  }
+
+  if (schema.type === "number" || schema.type === "integer") {
+    return validateJsonSchemaNumberValue(schema, value, prefix);
+  }
+
+  return typeof value === "boolean" ? [] : [`${prefix} must be a boolean.`];
+};
+
+const validateJsonSchemaStringValue = (
+  schema: JsonSchemaNodeRecord,
+  value: unknown,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (typeof value !== "string") {
+    return [`${prefix} must be a string.`];
+  }
+
+  if (schema.minLength !== undefined && value.length < schema.minLength) {
+    return [`${prefix} must be at least ${schema.minLength.toString()} characters long.`];
+  }
+
+  if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+    return [`${prefix} must be at most ${schema.maxLength.toString()} characters long.`];
+  }
+
+  if (schema.pattern && !(new RegExp(schema.pattern, "u")).test(value)) {
+    return [`${prefix} does not match the configured pattern.`];
+  }
+
+  if (schema.enum && schema.enum.length > 0 && !schema.enum.includes(value)) {
+    return [`${prefix} must be one of: ${schema.enum.join(", ")}.`];
+  }
+
+  if (schema.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) {
+    return [`${prefix} must be a valid email.`];
+  }
+
+  if (schema.format === "url") {
+    try {
+      void new URL(value);
+    } catch {
+      return [`${prefix} must be a valid url.`];
+    }
+  }
+
+  if (schema.format === "uuid" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) {
+    return [`${prefix} must be a valid uuid.`];
+  }
+
+  if (schema.format === "nif" && !/^(?:\d{8}|[XYZ]\d{7})[A-Z]$/iu.test(value)) {
+    return [`${prefix} must be a valid nif.`];
+  }
+
+  return [];
+};
+
+const validateJsonSchemaNumberValue = (
+  schema: JsonSchemaNodeRecord,
+  value: unknown,
+  prefix: string
+): ReadonlyArray<string> => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return [`${prefix} must be a number.`];
+  }
+
+  if (schema.type === "integer" && !Number.isInteger(value)) {
+    return [`${prefix} must be an integer.`];
+  }
+
+  if (schema.minimum !== undefined && value < schema.minimum) {
+    return [`${prefix} must be greater than or equal to ${schema.minimum.toString()}.`];
+  }
+
+  if (schema.maximum !== undefined && value > schema.maximum) {
+    return [`${prefix} must be less than or equal to ${schema.maximum.toString()}.`];
+  }
+
+  return [];
+};
+
+const isRecordValue = (
+  value: unknown
+): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const serializeJsonSchemaNode = (
+  schema: JsonSchemaNodeRecord
+): JsonContractProviderSchemaRecord => {
+  if (schema.type === "object") {
+    const required = new Set(schema.required ?? []);
+    const properties = Object.fromEntries(
+      Object.entries(schema.properties ?? {}).map(([key, value]) => [
+        key,
+        {
+          ...serializeJsonSchemaNode(value),
+          ...(required.has(key) ? { r: 1 as const } : {})
+        }
+      ])
+    );
+    return {
+      t: "o",
+      ...(Object.keys(properties).length > 0 ? { p: properties } : {}),
+      ...(schema.nullable ? { n: 1 as const } : {})
+    };
+  }
+
+  if (schema.type === "array") {
+    return {
+      t: "a",
+      i: serializeJsonSchemaNode(schema.items ?? createJsonSchemaNode("string")),
+      ...(schema.minItems !== undefined ? { min: schema.minItems } : {}),
+      ...(schema.maxItems !== undefined ? { max: schema.maxItems } : {}),
+      ...(schema.nullable ? { n: 1 as const } : {})
+    };
+  }
+
+  return {
+    t: readCompactPrimitiveType(schema.type),
+    ...(schema.format ? { f: schema.format } : {}),
+    ...(schema.minLength !== undefined ? { min: schema.minLength } : {}),
+    ...(schema.maxLength !== undefined ? { max: schema.maxLength } : {}),
+    ...(schema.minimum !== undefined ? { min: schema.minimum } : {}),
+    ...(schema.maximum !== undefined ? { max: schema.maximum } : {}),
+    ...(schema.pattern ? { re: schema.pattern } : {}),
+    ...(schema.enum && schema.enum.length > 0 ? { e: [...schema.enum] } : {}),
+    ...(schema.nullable ? { n: 1 as const } : {})
+  };
+};
+
+const readCompactPrimitiveType = (
+  type: JsonSchemaNodeRecord["type"]
+): "s" | "n" | "i" | "b" => {
+  if (type === "string") {
+    return "s";
+  }
+
+  if (type === "number") {
+    return "n";
+  }
+
+  if (type === "integer") {
+    return "i";
+  }
+
+  return "b";
+};
