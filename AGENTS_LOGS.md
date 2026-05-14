@@ -2512,3 +2512,25 @@
   - `06.3` remains in progress until user validates the real running app.
 - Next:
   - Commit, then request validation of the Workflows inspector UX before closing `06.3`.
+
+
+### 2026-05-14 17:13 (Europe/Madrid) — Workflows 06.3 Real-App Acceptance
+
+- Summary: Validated the real running Workflows editor against the 06.3 inspector UX acceptance criteria and accepted the subtask.
+- Decisions:
+  - `06.3 Integrated n8n-like canvas shell and node editor` is accepted and was moved to `Listo` in Notion.
+  - Keep the next work focused on Workflows and only then start `06.4`.
+- Changes:
+  - Updated `PLAN.md` to record 06.3 acceptance and the real-app validation evidence.
+  - Added a Notion comment with the validation outcome and screenshot paths.
+- Commands:
+  - Real running app Puppeteer validation against `http://127.0.0.1:4000/workflows` and server API `http://127.0.0.1:4001`.
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - Temporary validation writes were restored through the workflow definition API after persistence checks.
+- Next:
+  - Start `06.4 JSON contracts, data mapping and guardrail composition UI` only after the user confirms the next prompt.

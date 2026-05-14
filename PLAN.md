@@ -629,7 +629,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Active screen focus since `2026-05-06`: rebuild `apps/web-ui` Workflows into an integrated n8n-like editor instead of the current detached layout
   - Main task in Notion is `En progreso`: `06. Workflows screen n8n-style integrated editor [P0]`
   - Phase `06.1` contract lock completed on `2026-05-06`; canonical decisions live in `docs/WORKFLOWS_EDITOR_MVP.md`
-  - Phase `06.3` implementation completed on `2026-05-06`, pending explicit user validation before moving the Notion subtask to `Listo`:
+  - Phase `06.3` implementation accepted on `2026-05-14` after real running app validation; the Notion subtask was moved to `Listo`:
     - `apps/web-ui/src/screens/Workflows.ts` now renders a full-height integrated workbench shell aligned with Explorer instead of the older detached AI-workbench layout
     - The editor consumes only server-first workflow endpoints for definitions, reusable assets, usage records and execution history
     - The MVP canvas supports pan/zoom, draggable nodes, connectable ports, workflow/node/asset inspectors and responsive compact switching
@@ -707,6 +707,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Follow-up hardening: the edge delete control now uses a trash icon and stops pointer propagation so clicking it removes both the connection record and rendered line instead of starting canvas pan/selection
     - Hover placement hardening: the trash affordance is hidden until the connection is hovered, uses SVG hit geometry mapped to screen coordinates, and is positioned away from node cards so it remains clickable without overlaying intermediate nodes
     - Inspector UX hardening: canvas zoom controls now use icon buttons, native select values are applied after options render, AI nodes expose a prompt textarea, and provider/reasoning/verbosity edits persist through the server-backed workflow save path
+    - Real-app acceptance validation on `2026-05-14`: Puppeteer verified icon zoom controls, native provider/reasoning/verbosity selectors, prompt textarea persistence after save/reload, and compact inspector usability on a narrow viewport
   - `06.2` server-first foundation implemented on `2026-05-06`:
     - Shared workflow contracts now live in `packages/shared/src/workflows.ts`
     - `packages/agents` now owns a workflow catalog store for definitions, reusable assets, derived usage records and execution history
