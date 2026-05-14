@@ -2440,3 +2440,24 @@
   - `06.3` remains in progress until explicit user acceptance in the real running app.
 - Next:
   - Commit, then request real-app validation of edge delete hover placement before closing `06.3`.
+
+### 2026-05-14 12:37 (Europe/Madrid) — SDD Init
+
+- Summary: Initialized SDD in Engram mode by detecting the real Iteronix stack, testing capabilities, strict TDD status, and skill registry.
+- Decisions:
+  - Persistence mode is Engram only; `openspec/` was not created.
+  - Strict TDD is active because the chat marker and `AGENTS.md` require it for core/domain/shared/orchestration work.
+  - Project-level `.opencode/skill` entries take precedence over user-level `C:\Users\juanj\.codex\skills` entries in `.atl/skill-registry.md`.
+- Changes:
+  - Added `.atl/skill-registry.md` with compact rules and trigger table for project/user skills.
+  - Saved SDD init context, testing capabilities, and skill registry to Engram.
+- Commands:
+  - `git status --short`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks:
+  - Browser validation commands beyond the required finish gates were detected in CI but not run for this init-only change.
+- Next:
+  - Continue SDD with `/sdd-new <change>` or `/sdd-explore <topic>` using Engram artifacts.
