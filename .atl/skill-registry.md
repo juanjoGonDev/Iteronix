@@ -7,12 +7,19 @@ See `C:\Users\juanj\.codex\skills\_shared\skill-resolver.md` for the full resolu
 Generated: 2026-05-14
 Project: iteronix
 Root: D:\projects\Iteronix
-Resolution: project skills take precedence over user skills; `.opencode/skill` is included because `AGENTS.md` defines it as the project skill location. Skipped `sdd-*`, `_shared`, and `skill-registry`.
+Resolution: project skills take precedence over user skills; `.opencode/skill` is included because `AGENTS.md` defines it as the project skill location. User skill scan includes `.agents/skills`, where Caveman is installed. Skipped `sdd-*`, `_shared`, and `skill-registry`.
 
 ## User Skills
 
 | Trigger | Skill | Source | Path |
 | --- | --- | --- | --- |
+| save context, compressed agent output, delegate to caveman-style subagents | cavecrew | user | `C:\Users\juanj\.agents\skills\cavecrew\SKILL.md` |
+| caveman mode, use caveman, less tokens, be brief, token efficiency | caveman | user | `C:\Users\juanj\.agents\skills\caveman\SKILL.md` |
+| write a commit, commit message, generate commit, staging changes | caveman-commit | user | `C:\Users\juanj\.agents\skills\caveman-commit\SKILL.md` |
+| /caveman-compress FILEPATH, compress memory file | caveman-compress | user | `C:\Users\juanj\.agents\skills\caveman-compress\SKILL.md` |
+| /caveman-help, caveman help, what caveman commands | caveman-help | user | `C:\Users\juanj\.agents\skills\caveman-help\SKILL.md` |
+| review this PR, code review, review diff, /review | caveman-review | user | `C:\Users\juanj\.agents\skills\caveman-review\SKILL.md` |
+| /caveman-stats | caveman-stats | user | `C:\Users\juanj\.agents\skills\caveman-stats\SKILL.md` |
 | Prevent scope creep and unrelated refactors during live coding | change-scope-guard | project | `D:\projects\Iteronix\.opencode\skill\change-scope-guard\SKILL.md` |
 | Run the same checks as CI before finishing a live coding task | ci-parity-finalizer | project | `D:\projects\Iteronix\.opencode\skill\ci-parity-finalizer\SKILL.md` |
 | Identify and use the repository’s real test/lint/typecheck commands | command-discovery | project | `D:\projects\Iteronix\.opencode\skill\command-discovery\SKILL.md` |
@@ -27,23 +34,77 @@ Resolution: project skills take precedence over user skills; `.opencode/skill` i
 | Write changes using strict TDD with tests as the source of truth | tdd-red-green-refactor | project | `D:\projects\Iteronix\.opencode\skill\tdd-red-green-refactor\SKILL.md` |
 | Implement a UI screen from a PNG + HTML spec without breaking global UI invariants | ui-implementation-from-spec | project | `D:\projects\Iteronix\.opencode\skill\ui-implementations\SKILL.md` |
 | creating, opening, or preparing PRs for review. | branch-pr | user | `C:\Users\juanj\.config\opencode\skills\branch-pr\SKILL.md` |
-| PRs over 400 lines, stacked PRs, review slices. Split oversized changes into chained PRs that protect review focus. | chained-pr | user | `C:\Users\juanj\.config\opencode\skills\chained-pr\SKILL.md` |
+| PRs over 400 lines, stacked PRs, review slices. | chained-pr | user | `C:\Users\juanj\.config\opencode\skills\chained-pr\SKILL.md` |
 | writing guides, READMEs, RFCs, onboarding, architecture, or review-facing docs. | cognitive-doc-design | user | `C:\Users\juanj\.config\opencode\skills\cognitive-doc-design\SKILL.md` |
 | PR feedback, issue replies, reviews, Slack messages, or GitHub comments. | comment-writer | user | `C:\Users\juanj\.config\opencode\skills\comment-writer\SKILL.md` |
-| Go tests, go test coverage, Bubbletea teatest, golden files. Apply focused Go testing patterns. | go-testing | user | `C:\Users\juanj\.config\opencode\skills\go-testing\SKILL.md` |
-| Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas. | imagegen | user | `C:\Users\juanj\.codex\skills\.system\imagegen\SKILL.md` |
+| Go tests, go test coverage, Bubbletea teatest, golden files. | go-testing | user | `C:\Users\juanj\.config\opencode\skills\go-testing\SKILL.md` |
+| Generate or edit raster images. | imagegen | user | `C:\Users\juanj\.codex\skills\.system\imagegen\SKILL.md` |
 | creating GitHub issues, bug reports, or feature requests. | issue-creation | user | `C:\Users\juanj\.config\opencode\skills\issue-creation\SKILL.md` |
-| judgment day, dual review, adversarial review, juzgar. Run blind dual review, fix confirmed issues, then re-judge. | judgment-day | user | `C:\Users\juanj\.config\opencode\skills\judgment-day\SKILL.md` |
-| Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any fallback browsing to official OpenAI domains. | openai-docs | user | `C:\Users\juanj\.codex\skills\.system\openai-docs\SKILL.md` |
-| Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, and baseline placeholders you can edit before publishing or testing. Use when Codex needs to create a new local plugin, add optional plugin structure, or generate or update repo-root `.agents/plugins/marketplace.json` entries for plugin ordering and availability metadata. | plugin-creator | user | `C:\Users\juanj\.codex\skills\.system\plugin-creator\SKILL.md` |
-| new skills, agent instructions, documenting AI usage patterns. Create LLM-first skills with valid frontmatter. | skill-creator | user | `C:\Users\juanj\.config\opencode\skills\skill-creator\SKILL.md` |
-| Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). | skill-installer | user | `C:\Users\juanj\.codex\skills\.system\skill-installer\SKILL.md` |
-| Prevents generic AI/Codex UI patterns when generating frontend code. Use this skill whenever generating HTML, CSS, React, Vue, Svelte, or any frontend UI code to enforce clean, human-designed aesthetics inspired by Linear, Raycast, Stripe, and GitHub instead of typical AI-generated UI. | uncodixfy | user | `C:\Users\juanj\.codex\skills\uncodixfy\SKILL.md` |
+| judgment day, dual review, adversarial review, juzgar. | judgment-day | user | `C:\Users\juanj\.config\opencode\skills\judgment-day\SKILL.md` |
+| OpenAI product/API docs and current model/API guidance. | openai-docs | user | `C:\Users\juanj\.codex\skills\.system\openai-docs\SKILL.md` |
+| Create and scaffold local Codex plugins. | plugin-creator | user | `C:\Users\juanj\.codex\skills\.system\plugin-creator\SKILL.md` |
+| new skills, agent instructions, documenting AI usage patterns. | skill-creator | user | `C:\Users\juanj\.config\opencode\skills\skill-creator\SKILL.md` |
+| Install Codex skills from curated list or GitHub repo. | skill-installer | user | `C:\Users\juanj\.codex\skills\.system\skill-installer\SKILL.md` |
+| frontend UI code; avoid generic AI/Codex UI patterns. | uncodixfy | user | `C:\Users\juanj\.codex\skills\uncodixfy\SKILL.md` |
 | implementation, commit splitting, chained PRs, or keeping tests and docs with code. | work-unit-commits | user | `C:\Users\juanj\.config\opencode\skills\work-unit-commits\SKILL.md` |
 
 ## Compact Rules
 
 Pre-digested rules per skill. Delegators copy matching blocks into sub-agent prompts as `## Project Standards (auto-resolved)`.
+
+### caveman
+
+- Default active mode for user preference: `ultra`; terse, token-efficient, full technical accuracy.
+- Drop filler, pleasantries, hedging, articles where safe; use fragments and short synonyms.
+- Preserve exact technical terms, paths, commands, APIs, code blocks, error strings, and commit/PR formats.
+- Pattern: `[thing] [action] [reason]. [next step].`
+- Auto-clarity: use normal prose for security warnings, irreversible actions, or sequences where compression risks ambiguity; resume after.
+- Deactivate only if user says `stop caveman` or `normal mode`; prompt returns stay natural, prompt-engineered, optimized, low-token.
+
+### cavecrew
+
+- Use cavecrew when delegated output should be compressed before returning to main context.
+- `cavecrew-investigator`: locate definitions/callers/uses; output path:line first, terse notes.
+- `cavecrew-builder`: surgical ≤2-file edit when file/scope known; returns changed path/range + verification.
+- `cavecrew-reviewer`: diff/file review only; findings sorted by file/line with severity totals.
+- Do not use builder for 3+ file features or unknown edit sites; investigate first or use fuller agent.
+- Inject Caveman compact rules into sub-agent prompts; ask for structured terse output, not prose.
+
+### caveman-commit
+
+- Generate Conventional Commit messages only; do not stage/commit/amend.
+- Subject: `<type>(<scope>): <imperative summary>`, ≤50 preferred, hard cap 72, no trailing period.
+- Body only for non-obvious why, breaking changes, migrations, security, reverts, or linked issues.
+- Never include AI attribution, `Co-Authored-By`, emoji, “I/we”, or “This commit…”.
+- Use body for breaking/security/data migrations; future debuggers need context.
+
+### caveman-compress
+
+- Only compress natural language files: `.md`, `.txt`, `.typ`, `.typst`, `.tex`, extensionless.
+- Use adjacent `scripts` CLI from skill dir; backup original as `<file>.original.md` before overwrite.
+- Preserve code blocks, inline code, URLs, file paths, commands, technical terms, dates, versions exactly.
+- Never modify source/config/lock/env/code formats like `.ts`, `.json`, `.yaml`, `.toml`, `.env`, `.sql`, `.sh`.
+- If prose/code mixed, compress prose only; if unsure, leave unchanged.
+
+### caveman-help
+
+- One-shot quick reference only; does not change or persist mode.
+- Show modes, commands, deactivate instructions, and default config location.
+- Default mode resolution: `CAVEMAN_DEFAULT_MODE` > `~/.config/caveman/config.json` > `full`.
+- Keep response in caveman style.
+
+### caveman-review
+
+- Review comments only; one finding per line: `<file>:L<line>: <severity>: <problem>. <fix>.`
+- Severity: 🔴 bug, 🟡 risk, 🔵 nit, ❓ q.
+- Drop hedging and restating code; keep exact line numbers and symbol names.
+- Use normal prose for security findings or architecture disagreements needing rationale, then resume terse.
+- Does not write fixes or approve/request changes.
+
+### caveman-stats
+
+- `/caveman-stats` is hook-delivered; model should not estimate token savings.
+- If hook blocks with stats, surface hook output; otherwise explain stats unavailable, no fabricated numbers.
 
 ### change-scope-guard
 
@@ -151,34 +212,34 @@ Pre-digested rules per skill. Delegators copy matching blocks into sub-agent pro
 
 ### branch-pr
 
-- Check for an approved issue before PR work unless the repo explicitly overrides issue-first flow.
+- Check for an approved issue before PR work unless repo overrides issue-first flow.
 - Use conventional branch names: `feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert/<description>`.
-- Run required checks before opening or declaring a PR ready.
-- Keep the PR body aligned with the repository template.
+- Run required checks before opening or declaring PR ready.
+- Keep PR body aligned with repository template.
 - Never add AI attribution or `Co-Authored-By` trailers for this project.
 
 ### chained-pr
 
-- Split changes above 400 changed lines unless a maintainer accepts `size:exception`.
+- Split changes above 400 changed lines unless maintainer accepts `size:exception`.
 - Keep each PR as one reviewable work unit with tests/docs included.
 - State dependencies, current slice, follow-ups, and out-of-scope items.
 - Do not mix chaining strategies mid-change.
-- Retarget/rebase polluted diffs until each PR shows only its intended slice.
+- Retarget/rebase polluted diffs until each PR shows only intended slice.
 
 ### cognitive-doc-design
 
-- Lead with the answer; put context after the decision/action.
+- Lead with answer; put context after decision/action.
 - Use progressive disclosure: happy path first, details later.
 - Prefer tables, checklists, and examples over dense prose.
 - Group related information into small, scannable sections.
-- Design docs so reviewers can verify intent without reconstructing history.
+- Design docs so reviewers verify intent without reconstructing history.
 
 ### comment-writer
 
-- Start with the actionable point.
+- Start with actionable point.
 - Be warm, direct, and short.
-- Explain the technical reason when requesting changes.
-- Match the user/thread language.
+- Explain technical reason when requesting changes.
+- Match user/thread language.
 - Avoid em dashes and low-value pile-on comments.
 
 ### go-testing
@@ -187,31 +248,31 @@ Pre-digested rules per skill. Delegators copy matching blocks into sub-agent pro
 - Prefer table-driven tests and behavior assertions.
 - Use `t.TempDir()` for filesystem tests.
 - Keep integration tests skippable under short mode.
-- Update golden files only through the repo’s explicit update path.
+- Update golden files only through repo’s explicit update path.
 
 ### imagegen
 
-- Use for AI-created or edited raster images: photos, illustrations, textures, sprites, mockups, or cutouts.
-- Do not use when SVG/vector/code-native assets or HTML/CSS are the right representation.
-- For existing image edits, use the image generation/editing tool unless the user explicitly asks otherwise.
-- Keep transformations scoped to the user request and preserve reference constraints.
+- Use for AI-created/edited raster images: photos, illustrations, textures, sprites, mockups, cutouts.
+- Do not use when SVG/vector/code-native assets or HTML/CSS are right representation.
+- For image edits, use image generation/editing tool unless user explicitly asks otherwise.
+- Keep transformations scoped and preserve reference constraints.
 - After image generation, avoid extra download/summarization/follow-up chatter.
 
 ### issue-creation
 
-- Search for duplicates before creating a new issue.
+- Search for duplicates before creating new issue.
 - Use repository issue templates and fill required fields.
-- Default new issues to review/approval workflow when repo automation supports it.
+- Default new issues to review/approval workflow when automation supports it.
 - Keep bug reports reproducible with expected vs actual behavior.
-- Do not open PR work for an issue-first repo until approval requirements are satisfied.
+- Do not open PR work for issue-first repo until approval requirements are satisfied.
 
 ### judgment-day
 
 - Use only when explicitly requested.
 - Resolve and inject project standards before judge/fix prompts.
-- Run two blind reviewers in parallel against the same target and criteria.
+- Run two blind reviewers in parallel against same target and criteria.
 - Treat one-judge findings as suspect, not automatically confirmed.
-- After fixes, re-run both judges before terminal approval/escalation.
+- After fixes, re-run both judges before approval/escalation.
 
 ### openai-docs
 
@@ -219,45 +280,45 @@ Pre-digested rules per skill. Delegators copy matching blocks into sub-agent pro
 - Prefer official OpenAI docs tooling; fallback browsing must stay on official OpenAI domains.
 - Verify current docs before stating model, API, SDK, or product behavior.
 - Cite official sources for current OpenAI guidance.
-- Keep docs research separate from repo implementation unless the user asks for code changes.
+- Keep docs research separate from repo implementation unless user asks for code changes.
 
 ### plugin-creator
 
-- Use only when creating or updating local Codex plugin structure.
-- Always include a valid `.codex-plugin/plugin.json` when scaffolding a plugin.
-- Create optional plugin folders/files only when requested or required by the plugin design.
-- Update repo-root `.agents/plugins/marketplace.json` only when the user asks for marketplace metadata.
+- Use only when creating/updating local Codex plugin structure.
+- Always include valid `.codex-plugin/plugin.json` when scaffolding plugin.
+- Create optional folders/files only when requested or required.
+- Update `.agents/plugins/marketplace.json` only when user asks for marketplace metadata.
 - Keep plugin metadata valid, local, and testable before presenting it.
 
 ### skill-creator
 
-- Create a skill only for reusable AI execution patterns.
-- Keep `SKILL.md` concise with frontmatter, activation, hard rules, gates, steps, output, and references.
+- Create skill only for reusable AI execution patterns.
+- Keep `SKILL.md` concise with frontmatter, activation, hard rules, gates, steps, output, references.
 - Move long examples, schemas, and background into local `references/` or `assets/`.
-- Preserve trigger words in a one-line quoted description.
+- Preserve trigger words in one-line quoted description.
 - Do not create skills for one-off documentation.
 
 ### skill-installer
 
 - Use for listing/installing Codex skills from curated sources or GitHub repos.
-- Install skills under `$CODEX_HOME/skills` and verify the resulting `SKILL.md` exists.
-- Follow the installer workflow rather than copying partial skill files manually.
+- Install under `$CODEX_HOME/skills` and verify resulting `SKILL.md` exists.
+- Follow installer workflow, not manual partial copies.
 - Use available repo/auth mechanisms for private repos; never expose secrets.
-- Do not install adjacent plugins/tools when the user asked only for a skill.
+- Do not install adjacent plugins/tools when user asked only for skill.
 
 ### uncodixfy
 
-- Avoid generic AI UI: glassmorphism, decorative gradients, oversized radii, pill overload, and dramatic shadows.
+- Avoid generic AI UI: glassmorphism, decorative gradients, oversized radii, pill overload, dramatic shadows.
 - Prefer restrained UI inspired by Linear, Raycast, Stripe, and GitHub.
-- Use normal sidebars, headers, cards, forms, tables, tabs, badges, and spacing.
-- Keep typography simple, hierarchy clear, and iconography monochrome/subtle.
-- Do not invent new layout language when an existing app shell/design system exists.
+- Use normal sidebars, headers, cards, forms, tables, tabs, badges, spacing.
+- Keep typography simple, hierarchy clear, iconography monochrome/subtle.
+- Do not invent new layout language when existing app shell/design system exists.
 
 ### work-unit-commits
 
-- Commit by deliverable work unit, not by file type.
-- Keep tests with the behavior they verify.
-- Keep docs with the user-visible change they explain.
+- Commit by deliverable work unit, not file type.
+- Keep tests with behavior they verify.
+- Keep docs with user-visible change they explain.
 - Ensure each commit can be reviewed and rolled back reasonably.
 - Promote work units into chained PR slices when review budget approaches 400 changed lines.
 
@@ -271,5 +332,6 @@ Pre-digested rules per skill. Delegators copy matching blocks into sub-agent pro
 | .opencode/skill/ | `D:\projects\Iteronix\.opencode\skill` | Referenced by AGENTS.md; project skill definitions with precedence over user skills. |
 | ui-spec/ | `D:\projects\Iteronix\ui-spec` | Referenced by AGENTS.md; PNG/HTML source of truth for UI work. |
 | docs/UI_CHECKLIST.md | `D:\projects\Iteronix\docs\UI_CHECKLIST.md` | Referenced by PLAN.md for UI consistency checks. |
+| Caveman config | `C:\Users\juanj\.config\caveman\config.json` | User default mode: `ultra`; use for main chat and injected sub-agent rules when safe. |
 
 Read the convention files listed above for project-specific patterns and rules. All referenced paths have been extracted so sub-agents do not need to read index files just to discover more context.
