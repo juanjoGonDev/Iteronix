@@ -48,3 +48,6 @@ screenshots/
 
 .iteronix/
 qdrant_storage/
+
+# Generated agent runtime artifacts
+.atl/
