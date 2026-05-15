@@ -75,6 +75,16 @@ const WorkflowSelector = {
   NodePromptInput: "workflows-node-prompt-input",
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
+  DeepEditorOpenPrefix: "workflows-deep-editor-open-",
+  DeepEditorModal: "workflows-deep-editor-modal",
+  DeepEditorClose: "workflows-deep-editor-close",
+  DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
+  DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
+  DeepEditorApplyRawJson: "workflows-deep-editor-apply-raw-json",
+  DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
+  DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
+  DeepEditorTabOutput: "workflows-deep-editor-tab-output",
+  VariableTokenPrefix: "workflows-variable-token-",
   OutputContractAddField: "workflows-output-contract-add-field",
   OutputContractPropertyNamePrefix: "workflows-output-contract-property-name-",
   OutputContractPropertyTypePrefix: "workflows-output-contract-property-type-",
@@ -267,6 +277,7 @@ const ValidationText = {
   PromptNodeLabel: "Primary prompt",
   ProviderNodeLabel: "Codex run",
   ProviderPrompt: "Summarize the connected context and return a concise answer.",
+  ProviderPromptWithVariable: "Summarize the connected context and return a concise answer.{{var|workflow_context||$.workflow.name}}",
   OutputContractField: "summary",
   OutputContractNestedField: "meta",
   OutputContractNestedEmailField: "email",
@@ -349,6 +360,8 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AssetPrompt}`);
     await waitForPageText(page, "Prompt asset created.");
     await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
+    await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}contract`);
+    await waitForTestId(page, WorkflowSelector.DeepEditorModal);
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["result"])}`,
@@ -443,13 +456,17 @@ async function validateWorkflowsScreen(): Promise<void> {
       `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`,
       "2"
     );
-    await waitForPageText(page, "$.summary");
-    await waitForPageText(page, "$.meta.email");
-    await waitForPageText(page, "$.tags[]");
+    await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabJson);
+    await waitForTestId(page, WorkflowSelector.DeepEditorRawJsonInput);
+    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorRawJsonInput, "{");
+    await clickByTestId(page, WorkflowSelector.DeepEditorApplyRawJson);
+    await waitForPageText(page, "Raw JSON is not valid JSON.");
+    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorRawJsonInput, buildPromptContractJsonDocument());
+    await clickByTestId(page, WorkflowSelector.DeepEditorApplyRawJson);
+    await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabVisual);
+    await waitForPageText(page, "Output contract is valid.");
+    await clickByTestId(page, WorkflowSelector.DeepEditorClose);
     await waitForNodeCardText(page, ValidationText.PromptNodeLabel);
-    await scrollInspector(page, 520);
-    await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
-    await waitForInspectorScrollToStayBelow(page, 160);
 
     await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AiProviderRun}`);
     await waitForNodeCardCount(page, 4);
@@ -462,7 +479,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     }
     await clickEditButtonWithinNodeCard(page, providerCardTestId);
     await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.ProviderNodeLabel);
-    await setTextAreaValueByTestId(page, WorkflowSelector.NodePromptInput, ValidationText.ProviderPrompt);
+    await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
+    await waitForTestId(page, WorkflowSelector.DeepEditorPromptInput);
+    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorPromptInput, ValidationText.ProviderPrompt);
+    await clickByTestId(page, `${WorkflowSelector.VariableTokenPrefix}context-workflow-name`);
+    await clickByTestId(page, WorkflowSelector.DeepEditorClose);
     await setSelectValueByTestId(page, WorkflowSelector.NodeReasoningSelect, "high");
     await setSelectValueByTestId(page, WorkflowSelector.NodeVerbositySelect, "low");
     await waitForNodeCardText(page, ValidationText.ProviderNodeLabel);
@@ -554,10 +575,6 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
-    await clickEditButtonWithinNodeCard(page, promptCardTestId);
-    await waitForPageText(page, "$.summary");
-    await waitForPageText(page, "$.meta.email");
-    await waitForPageText(page, "$.tags[]");
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -1117,6 +1134,7 @@ async function setTextAreaValueByTestId(
         return false;
       }
       element.value = payload.value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
       element.dispatchEvent(new Event("change", { bubbles: true }));
       element.dispatchEvent(new Event("blur", { bubbles: true }));
       return true;
@@ -1393,30 +1411,6 @@ async function waitForInputValue(
   });
 }
 
-async function scrollInspector(page: Page, top: number): Promise<void> {
-  await page.evaluate((nextTop) => {
-    const element = document.querySelector<HTMLElement>("[data-preserve-scroll-key='workflows-inspector-scroll']");
-    if (!element) {
-      throw new Error("Expected inspector scroll container.");
-    }
-
-    element.scrollTop = nextTop;
-  }, top);
-}
-
-async function waitForInspectorScrollToStayBelow(page: Page, minimum: number): Promise<void> {
-  await waitForCondition(async () => {
-    const top = await page.evaluate(() => {
-      const element = document.querySelector<HTMLElement>("[data-preserve-scroll-key='workflows-inspector-scroll']");
-      return element?.scrollTop ?? 0;
-    });
-    return top >= minimum;
-  }, `inspector scroll >= ${minimum.toString()}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
-}
-
 async function waitForPageText(page: Page, text: string): Promise<void> {
   await waitForCondition(async () => {
     const bodyText = await page.evaluate(() => document.body.innerText);
@@ -1444,6 +1438,39 @@ function toContractPathToken(path: ReadonlyArray<string>): string {
       .map((segment) => segment === "items" ? "items" : segment)
       .join("__")
       .replace(/[^a-zA-Z0-9_-]+/gu, "-");
+}
+
+function buildPromptContractJsonDocument(): string {
+  return JSON.stringify({
+    name: "Prompt asset output",
+    schemaVersion: 1,
+    rootType: "object",
+    schema: {
+      type: "object",
+      required: ["summary"],
+      properties: {
+        summary: {
+          type: "string"
+        },
+        meta: {
+          type: "object",
+          properties: {
+            email: {
+              type: "string",
+              format: "email"
+            }
+          }
+        },
+        tags: {
+          type: "array",
+          items: {
+            type: "string",
+            minLength: 2
+          }
+        }
+      }
+    }
+  }, null, 2);
 }
 
 async function waitForTestId(page: Page, testId: string): Promise<void> {
@@ -1721,7 +1748,7 @@ function assertPersistedWorkflow(state: StubServerState): void {
     throw new Error("Expected provider node to persist.");
   }
 
-  if (providerNode.config.prompt !== ValidationText.ProviderPrompt) {
+  if (providerNode.config.prompt !== ValidationText.ProviderPromptWithVariable) {
     throw new Error(`Expected provider prompt to persist. Received: ${String(providerNode.config.prompt)}`);
   }
 
@@ -1753,8 +1780,13 @@ function assertPersistedWorkflow(state: StubServerState): void {
   }
 
   const outputContract = promptNode.outputContract;
-  if (!isRecord(outputContract) || !JSON.stringify(outputContract).includes(ValidationText.OutputContractField)) {
-    throw new Error("Expected prompt output contract field to persist.");
+  if (
+    !isRecord(outputContract) ||
+    !JSON.stringify(outputContract).includes(ValidationText.OutputContractField) ||
+    !JSON.stringify(outputContract).includes(ValidationText.OutputContractNestedField) ||
+    !JSON.stringify(outputContract).includes(ValidationText.OutputContractArrayField)
+  ) {
+    throw new Error("Expected prompt output contract shape to persist.");
   }
 
   const guardrailAsset = state.assets.find((asset) => asset.kind === "guardrail");

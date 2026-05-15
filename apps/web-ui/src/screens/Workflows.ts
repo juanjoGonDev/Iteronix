@@ -31,7 +31,10 @@ import {
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   detachGuardrailFromNode,
+  formatJsonOutputContractDocument,
+  insertWorkflowExpressionVariable,
   moveWorkflowNode,
+  parseJsonOutputContractDocument,
   readJsonSchemaPaths,
   readAssetKindLabel,
   readAssetScopeLabel,
@@ -54,6 +57,7 @@ import {
   updateWorkflowAssetGuardrail,
   updateWorkflowNodeOutputContract,
   upsertJsonSchemaProperty,
+  WorkflowExpressionVariableKind,
   type EdgeMappingEntryRecord,
   type GuardrailValidationRecord,
   type JsonOutputContractRecord,
@@ -66,6 +70,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowDefinitionUpsertInput,
   type WorkflowExecutionRecord,
+  type WorkflowExpressionVariableReference,
   type WorkflowNodeKind as WorkflowNodeKindValue,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
@@ -137,6 +142,19 @@ const WorkflowScreenSelector = {
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
   GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
+  DeepEditorOpenPrefix: "workflows-deep-editor-open-",
+  DeepEditorModal: "workflows-deep-editor-modal",
+  DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
+  DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
+  DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
+  DeepEditorTabPrompt: "workflows-deep-editor-tab-prompt",
+  DeepEditorTabOutput: "workflows-deep-editor-tab-output",
+  DeepEditorTabPreview: "workflows-deep-editor-tab-preview",
+  DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
+  DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
+  DeepEditorClose: "workflows-deep-editor-close",
+  DeepEditorApplyRawJson: "workflows-deep-editor-apply-raw-json",
+  VariableTokenPrefix: "workflows-variable-token-",
   NodePalettePrefix: "workflows-node-palette-",
   AssetCreatePrefix: "workflows-asset-create-",
   AssetCardPrefix: "workflows-asset-card-",
@@ -207,6 +225,44 @@ type HoveredPort = {
 type ConnectionPreviewPoint = {
   x: number;
   y: number;
+};
+
+type DeepEditorTarget =
+  | {
+      type: "node";
+      id: string;
+    }
+  | {
+      type: "asset";
+      id: string;
+    };
+
+type DeepEditorTab = "prompt" | "output" | "preview";
+type DeepEditorOutputTab = "visual" | "json";
+
+type DeepEditorState = {
+  target: DeepEditorTarget;
+  tab: DeepEditorTab;
+  outputTab: DeepEditorOutputTab;
+  rawContractText: string;
+  rawContractError: string | null;
+  promptSelectionStart: number;
+  promptSelectionEnd: number;
+  sampleSelectionStart: number;
+  sampleSelectionEnd: number;
+};
+
+type WorkflowVariableToken = {
+  id: string;
+  label: string;
+  detail: string;
+  reference: WorkflowExpressionVariableReference;
+};
+
+type WorkflowVariableGroup = {
+  id: string;
+  label: string;
+  tokens: ReadonlyArray<WorkflowVariableToken>;
 };
 
 type NodeDropTarget = {
@@ -287,6 +343,7 @@ interface WorkflowsScreenState {
   guardrailValidationTarget: GuardrailValidationTargetValue;
   guardrailValidationPath: string;
   guardrailValidationMessage: string;
+  deepEditor: DeepEditorState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
 }
@@ -328,6 +385,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       guardrailValidationTarget: "output",
       guardrailValidationPath: "$.result",
       guardrailValidationMessage: "Expected $.result to be present.",
+      deepEditor: null,
       errorMessage: null,
       noticeMessage: null
     });
@@ -362,7 +420,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         noticeMessage: this.state.noticeMessage
       }),
       this.renderToolbar(),
-      this.renderSurface()
+      this.renderSurface(),
+      this.state.deepEditor ? this.renderDeepEditorModal() : ""
     ]);
   }
 
@@ -1420,31 +1479,734 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
   private renderNodeOutputContractSection(node: WorkflowNodeRecord): HTMLElement {
     const contract = node.outputContract ?? null;
+    const validation = readJsonContractValidation(contract);
+    const pathCount = contract ? readJsonSchemaPaths(contract.schema).length : 0;
 
-    return this.renderOutputContractEditor({
+    return this.renderQuickEditorCard({
       title: "JSON output contract",
-      description: "Define the structured object this node must produce. Downstream mappings can select these paths.",
-      contract,
-      selectors: NodeOutputContractEditorSelectors,
-      onRename: (name) => {
-        if (!this.state.draftWorkflow) {
-          return;
-        }
-        this.updateDraftWorkflow(updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, (current) => ({
-          ...current,
-          name
-        })), { type: "node", id: node.id });
+      description: validation.valid
+        ? `${pathCount.toString()} paths available for downstream mappings.`
+        : validation.message,
+      status: validation.valid ? "success" : "warning",
+      statusLabel: validation.valid ? "Valid" : "Needs work",
+      buttonLabel: "Open editor",
+      testId: `${WorkflowScreenSelector.DeepEditorOpenPrefix}contract`,
+      onOpen: () => this.openDeepEditor({
+        type: "node",
+        id: node.id
+      }, "output")
+    });
+  }
+
+  private renderQuickEditorCard(input: {
+    title: string;
+    description: string;
+    status: "success" | "warning" | "info";
+    statusLabel: string;
+    buttonLabel: string;
+    testId: string;
+    onOpen: () => void;
+  }): HTMLElement {
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+      createElement("div", { className: "flex items-start justify-between gap-3" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, [input.title]),
+          createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [input.description])
+        ]),
+        createElement(StatusBadge, { status: input.status }, [input.statusLabel])
+      ]),
+      createElement("div", { className: "mt-3 flex justify-end" }, [
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          onClick: input.onOpen,
+          children: input.buttonLabel,
+          dataset: {
+            testid: input.testId
+          }
+        })
+      ])
+    ]);
+  }
+
+  private openDeepEditor(
+    target: DeepEditorTarget,
+    initialTab: DeepEditorTab = "prompt"
+  ): void {
+    const contract = this.readDeepEditorContract(target);
+    this.setState({
+      deepEditor: {
+        target,
+        tab: initialTab,
+        outputTab: initialTab === "output" ? "visual" : "visual",
+        rawContractText: contract ? formatJsonOutputContractDocument(contract) : "",
+        rawContractError: null,
+        promptSelectionStart: 0,
+        promptSelectionEnd: 0,
+        sampleSelectionStart: 0,
+        sampleSelectionEnd: 0
       },
-      onChangeContract: (updater) => {
-        if (!this.state.draftWorkflow) {
+      errorMessage: null
+    });
+  }
+
+  private closeDeepEditor(): void {
+    this.setState({
+      deepEditor: null
+    });
+  }
+
+  private renderDeepEditorModal(): HTMLElement {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return createElement("div");
+    }
+
+    const targetTitle = this.readDeepEditorTitle(deepEditor.target);
+    const promptValue = this.readDeepEditorPromptValue(deepEditor.target);
+    const contract = this.readDeepEditorContract(deepEditor.target);
+    const variableGroups = this.readDeepEditorVariableGroups(deepEditor.target);
+    const sampleOutputValue = contract?.sampleOutput ?? "";
+
+    return createElement("div", {
+      className: "fixed inset-0 z-50 bg-black/70 p-3 md:p-6",
+      onClick: () => this.closeDeepEditor(),
+      "data-testid": WorkflowScreenSelector.DeepEditorModal
+    }, [
+      createElement("div", {
+        className: "mx-auto flex h-full w-full max-w-[1460px] flex-col overflow-hidden rounded-xl border border-border-dark bg-[#0f141a] shadow-2xl",
+        onClick: (event: Event) => event.stopPropagation()
+      }, [
+        createElement("div", {
+          className: "flex items-center justify-between border-b border-border-dark px-4 py-3"
+        }, [
+          createElement("div", { className: "min-w-0" }, [
+            createElement("p", { className: "truncate text-sm font-semibold text-white" }, [targetTitle]),
+            createElement("p", { className: "truncate text-xs text-text-secondary" }, [
+              "Deep authoring modal. Quick edits stay in inspector; full prompt/schema work happens here."
+            ])
+          ]),
+          createElement(IconButton, {
+            icon: "close",
+            tooltip: "Close editor",
+            onClick: () => this.closeDeepEditor(),
+            dataset: {
+              testid: WorkflowScreenSelector.DeepEditorClose
+            }
+          })
+        ]),
+        createElement("div", {
+          className: "flex items-center gap-2 border-b border-border-dark px-4 py-2"
+        }, [
+          this.renderDeepEditorTabButton("Prompt", "prompt", WorkflowScreenSelector.DeepEditorTabPrompt),
+          this.renderDeepEditorTabButton("Output", "output", WorkflowScreenSelector.DeepEditorTabOutput),
+          this.renderDeepEditorTabButton("Preview", "preview", WorkflowScreenSelector.DeepEditorTabPreview)
+        ]),
+        createElement("div", {
+          className: "grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_320px]"
+        }, [
+          createElement("div", {
+            className: "min-h-0 overflow-y-auto p-4"
+          }, [
+            deepEditor.tab === "prompt"
+              ? this.renderDeepEditorPromptPane(promptValue)
+              : deepEditor.tab === "output"
+                ? this.renderDeepEditorOutputPane(contract, sampleOutputValue)
+                : this.renderDeepEditorPreviewPane(promptValue, contract)
+          ]),
+          createElement("aside", {
+            className: "min-h-0 overflow-y-auto border-t border-border-dark bg-[#121820] p-4 lg:border-l lg:border-t-0"
+          }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Variables"]),
+            createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+              "Click or drag variables into prompt or output template fields. Raw schema JSON stays explicit and recoverable."
+            ]),
+            createElement("div", { className: "mt-4 flex flex-col gap-3" }, [
+              variableGroups.map((group) => this.renderVariableGroup(group))
+            ])
+          ])
+        ])
+      ])
+    ]);
+  }
+
+  private renderDeepEditorTabButton(
+    label: string,
+    tab: DeepEditorTab,
+    testId: string
+  ): HTMLElement {
+    const active = this.state.deepEditor?.tab === tab;
+
+    return createElement(Button, {
+      variant: active ? "secondary" : "ghost",
+      size: "sm",
+      onClick: () => {
+        if (!this.state.deepEditor) {
           return;
         }
-        this.updateDraftWorkflow(
-          updateWorkflowNodeOutputContract(this.state.draftWorkflow, node.id, updater),
-          { type: "node", id: node.id }
-        );
+        this.setState({
+          deepEditor: {
+            ...this.state.deepEditor,
+            tab
+          }
+        });
+      },
+      children: label,
+      dataset: {
+        testid: testId
       }
     });
+  }
+
+  private renderDeepEditorPromptPane(promptValue: string): HTMLElement {
+    return createElement("div", { className: "flex h-full flex-col gap-4" }, [
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Prompt or body"]),
+        createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+          "Use variables from prior outputs, current input, workflow context, or reusable assets. Canonical insertion tokens stay compact for downstream providers."
+        ])
+      ]),
+      createElement("textarea", {
+        className: "min-h-[420px] w-full resize-y rounded-lg border border-border-dark bg-[#0d1117] px-4 py-3 font-mono text-sm leading-6 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/40",
+        value: promptValue,
+        onInput: (event: Event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLTextAreaElement)) {
+            return;
+          }
+          this.updateDeepEditorPromptValue(target.value);
+          this.setDeepEditorSelection("prompt", target.selectionStart, target.selectionEnd);
+        },
+        onClick: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLTextAreaElement) {
+            this.setDeepEditorSelection("prompt", target.selectionStart, target.selectionEnd);
+          }
+        },
+        onKeyUp: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLTextAreaElement) {
+            this.setDeepEditorSelection("prompt", target.selectionStart, target.selectionEnd);
+          }
+        },
+        onDragOver: (event: DragEvent) => {
+          event.preventDefault();
+        },
+        onDrop: (event: DragEvent) => {
+          event.preventDefault();
+          const tokenId = event.dataTransfer?.getData("text/plain") ?? "";
+          this.handleVariableTokenInsert(tokenId, "prompt");
+        },
+        "data-testid": WorkflowScreenSelector.DeepEditorPromptInput
+      })
+    ]);
+  }
+
+  private renderDeepEditorOutputPane(
+    contract: JsonOutputContractRecord | null,
+    sampleOutputValue: string
+  ): HTMLElement {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return createElement("div");
+    }
+
+    return createElement("div", { className: "flex h-full flex-col gap-4" }, [
+      createElement("div", { className: "flex items-center gap-2" }, [
+        createElement(Button, {
+          variant: deepEditor.outputTab === "visual" ? "secondary" : "ghost",
+          size: "sm",
+          onClick: () => this.setDeepEditorOutputTab("visual"),
+          children: "Visual",
+          dataset: {
+            testid: WorkflowScreenSelector.DeepEditorOutputTabVisual
+          }
+        }),
+        createElement(Button, {
+          variant: deepEditor.outputTab === "json" ? "secondary" : "ghost",
+          size: "sm",
+          onClick: () => this.setDeepEditorOutputTab("json"),
+          children: "Raw JSON",
+          dataset: {
+            testid: WorkflowScreenSelector.DeepEditorOutputTabJson
+          }
+        })
+      ]),
+      deepEditor.outputTab === "visual" && contract
+        ? this.renderOutputContractEditor({
+            title: "JSON output contract",
+            description: "Visual tree and raw JSON share one canonical schema model.",
+            contract,
+            selectors: NodeOutputContractEditorSelectors,
+            onRename: (name) => this.updateDeepEditorContract((current) => ({
+              ...current,
+              name
+            })),
+            onChangeContract: (updater) => this.updateDeepEditorContract(updater)
+          })
+        : "",
+      deepEditor.outputTab === "json"
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+            createElement("div", { className: "flex items-center justify-between gap-3" }, [
+              createElement("div", { className: "min-w-0" }, [
+                createElement("p", { className: "text-sm font-medium text-white" }, ["Raw contract JSON"]),
+                createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+                  "Fallback editor chosen after validating that raw ESM runtime makes Monaco/CodeMirror integration risky for this slice."
+                ])
+              ]),
+              createElement(Button, {
+                variant: "secondary",
+                size: "sm",
+                onClick: () => this.applyDeepEditorRawJson(),
+                children: "Apply JSON",
+                dataset: {
+                  testid: WorkflowScreenSelector.DeepEditorApplyRawJson
+                }
+              })
+            ]),
+            createElement("textarea", {
+              className: "mt-3 min-h-[360px] w-full resize-y rounded-lg border border-border-dark bg-[#0d1117] px-4 py-3 font-mono text-sm leading-6 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/40",
+              value: deepEditor.rawContractText,
+              onInput: (event: Event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLTextAreaElement)) {
+                  return;
+                }
+                this.setState({
+                  deepEditor: this.state.deepEditor
+                    ? {
+                        ...this.state.deepEditor,
+                        rawContractText: target.value,
+                        rawContractError: null
+                      }
+                    : null
+                });
+              },
+              "data-testid": WorkflowScreenSelector.DeepEditorRawJsonInput
+            }),
+            deepEditor.rawContractError
+              ? createElement("p", { className: "mt-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100" }, [deepEditor.rawContractError])
+              : createElement("p", { className: "mt-3 text-xs text-text-secondary" }, ["Apply updates after editing raw JSON to keep schema tree and provider payload in sync."])
+          ])
+        : "",
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Output template / sample"]),
+        createElement("p", { className: "mt-1 text-xs leading-5 text-text-secondary" }, [
+          "Optional sample payload or template. Click or drag variables into this field."
+        ]),
+        createElement("textarea", {
+          className: "mt-3 min-h-[180px] w-full resize-y rounded-lg border border-border-dark bg-[#0d1117] px-4 py-3 font-mono text-sm leading-6 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/40",
+          value: sampleOutputValue,
+          onInput: (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLTextAreaElement)) {
+              return;
+            }
+            this.updateDeepEditorContract((current) => ({
+              ...current,
+              sampleOutput: target.value
+            }));
+            this.setDeepEditorSelection("sample", target.selectionStart, target.selectionEnd);
+          },
+          onClick: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLTextAreaElement) {
+              this.setDeepEditorSelection("sample", target.selectionStart, target.selectionEnd);
+            }
+          },
+          onKeyUp: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLTextAreaElement) {
+              this.setDeepEditorSelection("sample", target.selectionStart, target.selectionEnd);
+            }
+          },
+          onDragOver: (event: DragEvent) => {
+            event.preventDefault();
+          },
+          onDrop: (event: DragEvent) => {
+            event.preventDefault();
+            const tokenId = event.dataTransfer?.getData("text/plain") ?? "";
+            this.handleVariableTokenInsert(tokenId, "sample");
+          },
+          "data-testid": WorkflowScreenSelector.DeepEditorSampleOutputInput
+        })
+      ])
+    ]);
+  }
+
+  private renderDeepEditorPreviewPane(
+    promptValue: string,
+    contract: JsonOutputContractRecord | null
+  ): HTMLElement {
+    const paths = contract ? readJsonSchemaPaths(contract.schema) : [];
+    const providerSchema = contract ? serializeJsonContractForProvider(contract) : null;
+
+    return createElement("div", { className: "flex flex-col gap-4" }, [
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Prompt preview"]),
+        createElement("pre", {
+          className: "mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#0d1117] px-3 py-3 font-mono text-xs leading-6 text-slate-200"
+        }, [promptValue.length > 0 ? promptValue : "No prompt text yet."])
+      ]),
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Available output paths"]),
+        paths.length === 0
+          ? createElement("p", { className: "mt-2 text-xs text-text-secondary" }, ["No contract paths yet."])
+          : createElement("div", { className: "mt-3 flex flex-wrap gap-2" }, [
+              paths.map((path) =>
+                createElement("span", {
+                  key: path,
+                  className: "rounded-md border border-border-dark bg-[#0d1117] px-2 py-1 font-mono text-xs text-slate-200"
+                }, [path])
+              )
+            ])
+      ]),
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Compact provider payload"]),
+        createElement("pre", {
+          className: "mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border-dark bg-[#0d1117] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200"
+        }, [providerSchema ? JSON.stringify(providerSchema, null, 2) : "{}"])
+      ])
+    ]);
+  }
+
+  private renderVariableGroup(group: WorkflowVariableGroup): HTMLElement {
+    return createElement("div", { className: "rounded-lg border border-border-dark bg-[#0f141a] px-3 py-3" }, [
+      createElement("p", { className: "text-xs font-semibold uppercase tracking-wide text-text-secondary" }, [group.label]),
+      group.tokens.length === 0
+        ? createElement("p", { className: "mt-2 text-xs text-text-secondary" }, ["No variables available."])
+        : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+            group.tokens.map((token) =>
+              createElement("button", {
+                key: token.id,
+                type: "button",
+                className: "rounded-md border border-border-dark bg-[#151b22] px-3 py-2 text-left transition-colors hover:border-primary/60 hover:bg-[#19212b]",
+                draggable: true,
+                onClick: () => this.handleVariableTokenInsert(token.id, this.state.deepEditor?.tab === "output" ? "sample" : "prompt"),
+                onDragstart: (event: DragEvent) => {
+                  event.dataTransfer?.setData("text/plain", token.id);
+                },
+                "data-testid": `${WorkflowScreenSelector.VariableTokenPrefix}${token.id}`
+              }, [
+                createElement("span", { className: "block font-mono text-xs text-slate-100" }, [token.label]),
+                createElement("span", { className: "mt-1 block text-[11px] text-text-secondary" }, [token.detail])
+              ])
+            )
+          ])
+    ]);
+  }
+
+  private setDeepEditorOutputTab(outputTab: DeepEditorOutputTab): void {
+    if (!this.state.deepEditor) {
+      return;
+    }
+
+    this.setState({
+      deepEditor: {
+        ...this.state.deepEditor,
+        outputTab
+      }
+    });
+  }
+
+  private setDeepEditorSelection(
+    field: "prompt" | "sample",
+    selectionStart: number,
+    selectionEnd: number
+  ): void {
+    if (!this.state.deepEditor) {
+      return;
+    }
+
+    this.setState({
+      deepEditor: {
+        ...this.state.deepEditor,
+        ...(field === "prompt"
+          ? {
+              promptSelectionStart: selectionStart,
+              promptSelectionEnd: selectionEnd
+            }
+          : {
+              sampleSelectionStart: selectionStart,
+              sampleSelectionEnd: selectionEnd
+            })
+      }
+    });
+  }
+
+  private updateDeepEditorPromptValue(value: string): void {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return;
+    }
+
+    if (deepEditor.target.type === "node") {
+      this.patchNode(deepEditor.target.id, (current) => ({
+        ...current,
+        config: {
+          ...current.config,
+          prompt: value
+        }
+      }));
+      return;
+    }
+
+    this.patchAsset(deepEditor.target.id, (current) => ({
+      ...current,
+      body: value
+    }));
+  }
+
+  private updateDeepEditorContract(
+    updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord
+  ): void {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return;
+    }
+
+    if (deepEditor.target.type === "node") {
+      if (!this.state.draftWorkflow) {
+        return;
+      }
+      const nextWorkflow = updateWorkflowNodeOutputContract(this.state.draftWorkflow, deepEditor.target.id, updater);
+      const nextNode = nextWorkflow.nodes.find((node) => node.id === deepEditor.target.id);
+      this.updateDraftWorkflow(nextWorkflow, { type: "node", id: deepEditor.target.id });
+      this.setState({
+        deepEditor: {
+          ...deepEditor,
+          rawContractText: nextNode?.outputContract
+            ? formatJsonOutputContractDocument(nextNode.outputContract)
+            : deepEditor.rawContractText,
+          rawContractError: null
+        }
+      });
+      return;
+    }
+
+    this.patchAsset(deepEditor.target.id, (current) => {
+      if (!current.outputContract) {
+        return current;
+      }
+      const nextContract = updater(current.outputContract);
+      return {
+        ...current,
+        outputContract: nextContract
+      };
+    });
+    const asset = this.state.assets.find((entry) => entry.id === deepEditor.target.id);
+    const nextContract = asset?.outputContract ? updater(asset.outputContract) : null;
+    this.setState({
+      deepEditor: {
+        ...deepEditor,
+        rawContractText: nextContract ? formatJsonOutputContractDocument(nextContract) : deepEditor.rawContractText,
+        rawContractError: null
+      }
+    });
+  }
+
+  private applyDeepEditorRawJson(): void {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return;
+    }
+
+    const contract = this.readDeepEditorContract(deepEditor.target);
+    if (!contract) {
+      return;
+    }
+
+    const parsed = parseJsonOutputContractDocument(deepEditor.rawContractText, contract);
+    if (!parsed.success) {
+      this.setState({
+        deepEditor: {
+          ...deepEditor,
+          rawContractError: parsed.error
+        }
+      });
+      return;
+    }
+
+    this.updateDeepEditorContract(() => parsed.contract);
+  }
+
+  private handleVariableTokenInsert(
+    tokenId: string,
+    targetField: "prompt" | "sample"
+  ): void {
+    const deepEditor = this.state.deepEditor;
+    if (!deepEditor) {
+      return;
+    }
+
+    const token = this.readDeepEditorVariableGroups(deepEditor.target)
+      .flatMap((group) => group.tokens)
+      .find((entry) => entry.id === tokenId);
+    if (!token) {
+      return;
+    }
+
+    if (targetField === "prompt") {
+      const promptValue = this.readDeepEditorPromptValue(deepEditor.target);
+      const inserted = insertWorkflowExpressionVariable({
+        value: promptValue,
+        selectionStart: deepEditor.promptSelectionStart,
+        selectionEnd: deepEditor.promptSelectionEnd,
+        reference: token.reference
+      });
+      this.updateDeepEditorPromptValue(inserted.value);
+      this.setState({
+        deepEditor: {
+          ...deepEditor,
+          promptSelectionStart: inserted.value.length,
+          promptSelectionEnd: inserted.value.length
+        }
+      });
+      return;
+    }
+
+    const contract = this.readDeepEditorContract(deepEditor.target);
+    if (!contract) {
+      return;
+    }
+    const inserted = insertWorkflowExpressionVariable({
+      value: contract.sampleOutput ?? "",
+      selectionStart: deepEditor.sampleSelectionStart,
+      selectionEnd: deepEditor.sampleSelectionEnd,
+      reference: token.reference
+    });
+    this.updateDeepEditorContract((current) => ({
+      ...current,
+      sampleOutput: inserted.value
+    }));
+    this.setState({
+      deepEditor: {
+        ...deepEditor,
+        sampleSelectionStart: inserted.value.length,
+        sampleSelectionEnd: inserted.value.length
+      }
+    });
+  }
+
+  private readDeepEditorTitle(target: DeepEditorTarget): string {
+    if (target.type === "node") {
+      const node = this.state.draftWorkflow?.nodes.find((entry) => entry.id === target.id);
+      return node ? `${node.label} editor` : "Node editor";
+    }
+
+    const asset = this.state.assets.find((entry) => entry.id === target.id);
+    return asset ? `${asset.name} editor` : "Asset editor";
+  }
+
+  private readDeepEditorPromptValue(target: DeepEditorTarget): string {
+    if (target.type === "node") {
+      return this.state.draftWorkflow?.nodes.find((entry) => entry.id === target.id)?.config.prompt ?? "";
+    }
+
+    return this.state.assets.find((entry) => entry.id === target.id)?.body ?? "";
+  }
+
+  private readDeepEditorContract(target: DeepEditorTarget): JsonOutputContractRecord | null {
+    if (target.type === "node") {
+      return this.state.draftWorkflow?.nodes.find((entry) => entry.id === target.id)?.outputContract ?? null;
+    }
+
+    return this.state.assets.find((entry) => entry.id === target.id)?.outputContract ?? null;
+  }
+
+  private readDeepEditorVariableGroups(target: DeepEditorTarget): ReadonlyArray<WorkflowVariableGroup> {
+    const workflow = this.state.draftWorkflow;
+    const targetNodeId = target.type === "node" ? target.id : null;
+    const upstreamTokens = workflow
+      ? workflow.nodes
+          .filter((node) => node.id !== targetNodeId && node.outputContract)
+          .flatMap((node) =>
+            readJsonSchemaPaths(node.outputContract?.schema ?? createJsonSchemaNode("object")).map((path) => ({
+              id: `node-${node.id}-${path}`,
+              label: `${node.label} · ${path}`,
+              detail: "Previous node output",
+              reference: {
+                kind: WorkflowExpressionVariableKind.NodeOutput,
+                sourceId: node.id,
+                path
+              } satisfies WorkflowExpressionVariableReference
+            }))
+          )
+      : [];
+    const incomingTokens = workflow && targetNodeId
+      ? workflow.edges
+          .filter((edge) => edge.targetNodeId === targetNodeId)
+          .flatMap((edge) => {
+            const sourceNode = workflow.nodes.find((node) => node.id === edge.sourceNodeId);
+            const paths = sourceNode?.outputContract ? readJsonSchemaPaths(sourceNode.outputContract.schema) : ["$"];
+            return paths.map((path) => ({
+              id: `input-${edge.id}-${path}`,
+              label: path,
+              detail: sourceNode ? `Current input via ${sourceNode.label}` : "Current input",
+              reference: {
+                kind: WorkflowExpressionVariableKind.CurrentInput,
+                path
+              } satisfies WorkflowExpressionVariableReference
+            }));
+          })
+      : [];
+    const contextTokens: ReadonlyArray<WorkflowVariableToken> = [
+      {
+        id: "context-workflow-name",
+        label: "$.workflow.name",
+        detail: "Workflow context",
+        reference: {
+          kind: WorkflowExpressionVariableKind.WorkflowContext,
+          path: "$.workflow.name"
+        }
+      },
+      {
+        id: "context-workflow-language",
+        label: "$.workflow.language",
+        detail: "Workflow context",
+        reference: {
+          kind: WorkflowExpressionVariableKind.WorkflowContext,
+          path: "$.workflow.language"
+        }
+      }
+    ];
+    const assetTokens = this.state.assets
+      .filter((asset) => asset.outputContract)
+      .flatMap((asset) =>
+        readJsonSchemaPaths(asset.outputContract?.schema ?? createJsonSchemaNode("object")).map((path) => ({
+          id: `asset-${asset.id}-${path}`,
+          label: `${asset.name} · ${path}`,
+          detail: "Reusable asset output",
+          reference: {
+            kind: WorkflowExpressionVariableKind.AssetOutput,
+            sourceId: asset.id,
+            path
+          } satisfies WorkflowExpressionVariableReference
+        }))
+      );
+
+    return [
+      {
+        id: "current-input",
+        label: "Current input",
+        tokens: incomingTokens
+      },
+      {
+        id: "previous-outputs",
+        label: "Previous node outputs",
+        tokens: upstreamTokens
+      },
+      {
+        id: "workflow-context",
+        label: "Workflow context",
+        tokens: contextTokens
+      },
+      {
+        id: "reusable-assets",
+        label: "Reusable assets",
+        tokens: assetTokens
+      }
+    ];
   }
 
   private renderNodeInputMappingSection(node: WorkflowNodeRecord): HTMLElement {
@@ -1566,6 +2328,20 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           body: value
         }));
       }),
+      asset.kind !== WorkflowAssetKind.Guardrail
+        ? this.renderQuickEditorCard({
+            title: "Deep editor",
+            description: "Open a larger modal for prompt/body authoring, output schema JSON sync, and variable insertion.",
+            status: "info",
+            statusLabel: "Modal",
+            buttonLabel: "Open editor",
+            testId: `${WorkflowScreenSelector.DeepEditorOpenPrefix}asset`,
+            onOpen: () => this.openDeepEditor({
+              type: "asset",
+              id: asset.id
+            }, "prompt")
+          })
+        : "",
       asset.kind === WorkflowAssetKind.Guardrail && asset.guardrail
         ? this.renderGuardrailDefinitionEditor(asset)
         : "",
@@ -2326,15 +3102,21 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private renderNodePromptField(node: WorkflowNodeRecord): HTMLElement {
-    return this.renderInspectorTextArea("Prompt", node.config.prompt ?? "", (value) => {
-      this.patchNode(node.id, (current) => ({
-        ...current,
-        config: {
-          ...current.config,
-          prompt: value
-        }
-      }));
-    }, WorkflowScreenSelector.NodePromptInput);
+    const prompt = node.config.prompt ?? "";
+    const preview = prompt.trim().length > 0 ? prompt.trim() : "No prompt written yet.";
+
+    return this.renderQuickEditorCard({
+      title: "Prompt",
+      description: preview.length > 140 ? `${preview.slice(0, 137)}...` : preview,
+      status: prompt.trim().length > 0 ? "info" : "warning",
+      statusLabel: prompt.trim().length > 0 ? `${prompt.length.toString()} chars` : "Empty",
+      buttonLabel: "Open editor",
+      testId: `${WorkflowScreenSelector.DeepEditorOpenPrefix}prompt`,
+      onOpen: () => this.openDeepEditor({
+        type: "node",
+        id: node.id
+      })
+    });
   }
 
   private renderReviewConfig(node: WorkflowNodeRecord): HTMLElement {

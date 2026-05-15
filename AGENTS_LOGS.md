@@ -2626,3 +2626,29 @@
   - `.atl/skill-registry.md` remains an unrelated pre-existing diff and is still out of scope for this 06.4 slice.
 - Next:
   - Get explicit user acceptance on the redesigned contract editor before changing the Notion subtask status or creating the requested manual conventional commit.
+### 2026-05-15 18:31 (Europe/Madrid) — Workflows 06.4 Deep Authoring Modal
+
+- Summary:
+  - Continued only `06.4` and validated the modern-editor approach against the current raw-ESM web runtime before implementation. The deep JSON/prompt authoring flow now lives in a responsive modal with canonical interpolation helpers and deterministic browser coverage.
+- Decisions:
+  - Do not introduce Monaco or CodeMirror in this slice because `apps/web-ui` still ships raw `tsc` ESM to the browser; use a lightweight modal editor with plain textareas and canonical parser/serializer helpers instead.
+  - Keep the side inspector for quick edits and move deep prompt/output work into a modal/full-screen sheet so the canvas stays cleaner and responsive behavior remains predictable.
+  - Represent inserted variables through a compact canonical token syntax (`{{var|kind|sourceId|path}}`) so prompts/output templates remain serializable and provider-facing payloads can stay lean.
+- Changes:
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.ts` with canonical workflow-expression helpers plus raw contract document parse/format support backed by the existing schema tree.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.test.ts` with focused coverage for interpolation token insertion/parsing and raw JSON contract round-tripping.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to add responsive deep-authoring modal tabs, variable explorer click/drag insertion, prompt quick cards in the inspector, and synchronized visual/raw JSON contract editing.
+  - Updated `apps/web-ui/src/shared/Component.ts` to support drag/drop event wiring in the custom DOM renderer for variable insertion.
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` to cover modal-based contract editing, raw JSON error recovery/apply flow, variable insertion into prompts, and save/reload persistence.
+  - Updated `PLAN.md` with the 06.4 modal/interpolation progress while keeping the Notion subtask explicitly in progress.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - The modern editor fallback is intentionally textarea-based for now; Monaco/CodeMirror still need a future bundling/runtime decision before adoption.
+  - `06.4` remains in progress until the user explicitly accepts the new modal-based UX.
+- Next:
+  - Add the Notion progress comment, then request explicit user validation of the new modal/editor flow before moving `06.4` to `Listo`.

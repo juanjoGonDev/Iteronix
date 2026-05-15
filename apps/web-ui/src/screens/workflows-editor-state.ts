@@ -212,6 +212,49 @@ export type JsonOutputContractRecord = {
   sampleOutput?: string;
 };
 
+export const WorkflowExpressionSegmentKind = {
+  Text: "text",
+  Variable: "variable"
+} as const;
+
+export type WorkflowExpressionSegmentKind =
+  typeof WorkflowExpressionSegmentKind[keyof typeof WorkflowExpressionSegmentKind];
+
+export const WorkflowExpressionVariableKind = {
+  NodeOutput: "node_output",
+  CurrentInput: "current_input",
+  WorkflowContext: "workflow_context",
+  AssetOutput: "asset_output"
+} as const;
+
+export type WorkflowExpressionVariableKind =
+  typeof WorkflowExpressionVariableKind[keyof typeof WorkflowExpressionVariableKind];
+
+export type WorkflowExpressionVariableReference = {
+  kind: WorkflowExpressionVariableKind;
+  sourceId?: string;
+  path: string;
+};
+
+export type WorkflowExpressionSegmentRecord =
+  | {
+      kind: typeof WorkflowExpressionSegmentKind.Text;
+      value: string;
+    }
+  | {
+      kind: typeof WorkflowExpressionSegmentKind.Variable;
+      reference: WorkflowExpressionVariableReference;
+    };
+
+export type WorkflowExpressionRecord = {
+  segments: ReadonlyArray<WorkflowExpressionSegmentRecord>;
+};
+
+export type WorkflowExpressionInsertionResult = {
+  expression: WorkflowExpressionRecord;
+  value: string;
+};
+
 export type WorkflowNodeRecord = {
   id: string;
   kind: WorkflowNodeKind;
@@ -640,6 +683,16 @@ export type JsonContractValidationResult = {
   message: string;
 };
 
+export type JsonOutputContractDocumentResult =
+  | {
+      success: true;
+      contract: JsonOutputContractRecord;
+    }
+  | {
+      success: false;
+      error: string;
+    };
+
 export type GuardrailValidityResult = {
   valid: boolean;
   blocking: boolean;
@@ -887,6 +940,106 @@ export const safeParseJsonContractValue = (
 export const serializeJsonContractForProvider = (
   contract: JsonOutputContractRecord
 ): JsonContractProviderSchemaRecord => serializeJsonSchemaNode(contract.schema);
+
+export const formatJsonOutputContractDocument = (
+  contract: JsonOutputContractRecord
+): string => JSON.stringify({
+  name: contract.name,
+  schemaVersion: contract.schemaVersion,
+  rootType: contract.rootType,
+  schema: contract.schema,
+  ...(contract.sampleOutput !== undefined ? { sampleOutput: contract.sampleOutput } : {})
+}, null, 2);
+
+export const parseJsonOutputContractDocument = (
+  input: string,
+  current: JsonOutputContractRecord
+): JsonOutputContractDocumentResult => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    return {
+      success: false,
+      error: "Raw JSON is not valid JSON."
+    };
+  }
+
+  if (!isRecordValue(parsed)) {
+    return {
+      success: false,
+      error: "Raw JSON must describe an object contract document."
+    };
+  }
+
+  const name = typeof parsed["name"] === "string" && parsed["name"].trim().length > 0
+    ? parsed["name"].trim()
+    : current.name;
+  const schemaVersion = parsed["schemaVersion"] === 1 ? 1 : current.schemaVersion;
+  const rootType = parsed["rootType"] === "object" ? "object" : current.rootType;
+  const schemaValue = readJsonSchemaNodeDocument(parsed["schema"]);
+  if (!schemaValue) {
+    return {
+      success: false,
+      error: "Raw JSON schema uses unsupported fields or types."
+    };
+  }
+
+  const contract = {
+    ...current,
+    name,
+    schemaVersion,
+    rootType,
+    schema: schemaValue,
+    ...(typeof parsed["sampleOutput"] === "string"
+      ? { sampleOutput: parsed["sampleOutput"] }
+      : current.sampleOutput !== undefined
+        ? { sampleOutput: current.sampleOutput }
+        : {})
+  } satisfies JsonOutputContractRecord;
+  const validation = readJsonContractValidation(contract);
+
+  return validation.valid
+    ? {
+        success: true,
+        contract
+      }
+    : {
+        success: false,
+        error: validation.message
+      };
+};
+
+export const serializeWorkflowExpression = (
+  expression: WorkflowExpressionRecord
+): string => expression.segments.map((segment) =>
+  segment.kind === WorkflowExpressionSegmentKind.Text
+    ? segment.value
+    : buildWorkflowExpressionToken(segment.reference)
+).join("");
+
+export const parseWorkflowExpression = (
+  value: string
+): WorkflowExpressionRecord => ({
+  segments: splitWorkflowExpressionSegments(value)
+});
+
+export const insertWorkflowExpressionVariable = (input: {
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+  reference: WorkflowExpressionVariableReference;
+}): WorkflowExpressionInsertionResult => {
+  const start = Math.max(0, Math.min(input.selectionStart, input.value.length));
+  const end = Math.max(start, Math.min(input.selectionEnd, input.value.length));
+  const token = buildWorkflowExpressionToken(input.reference);
+  const nextValue = `${input.value.slice(0, start)}${token}${input.value.slice(end)}`;
+
+  return {
+    expression: parseWorkflowExpression(nextValue),
+    value: nextValue
+  };
+};
 
 export const addWorkflowEdgeMappingEntry = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
@@ -1843,6 +1996,206 @@ const isRecordValue = (
   value: unknown
 ): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readJsonSchemaNodeDocument = (
+  value: unknown
+): JsonSchemaNodeRecord | null => {
+  if (!isRecordValue(value)) {
+    return null;
+  }
+
+  const type = value["type"];
+  if (
+    type !== "object" &&
+    type !== "string" &&
+    type !== "number" &&
+    type !== "integer" &&
+    type !== "boolean" &&
+    type !== "array"
+  ) {
+    return null;
+  }
+
+  const baseNode: JsonSchemaNodeRecord = {
+    type
+  };
+
+  if (typeof value["title"] === "string" && value["title"].trim().length > 0) {
+    baseNode.title = value["title"].trim();
+  }
+
+  if (typeof value["description"] === "string" && value["description"].trim().length > 0) {
+    baseNode.description = value["description"].trim();
+  }
+
+  if (Array.isArray(value["required"]) && value["required"].every((entry) => typeof entry === "string")) {
+    baseNode.required = [...value["required"]];
+  }
+
+  if (Array.isArray(value["enum"]) && value["enum"].every((entry) => typeof entry === "string")) {
+    baseNode.enum = [...value["enum"]];
+  }
+
+  if (typeof value["nullable"] === "boolean") {
+    baseNode.nullable = value["nullable"];
+  }
+
+  if (value["format"] === "email" || value["format"] === "url" || value["format"] === "uuid" || value["format"] === "nif") {
+    baseNode.format = value["format"];
+  }
+
+  const minLength = readOptionalNumberValue(value["minLength"]);
+  const maxLength = readOptionalNumberValue(value["maxLength"]);
+  const minimum = readOptionalNumberValue(value["minimum"]);
+  const maximum = readOptionalNumberValue(value["maximum"]);
+  const minItems = readOptionalNumberValue(value["minItems"]);
+  const maxItems = readOptionalNumberValue(value["maxItems"]);
+
+  if (minLength !== undefined) {
+    baseNode.minLength = minLength;
+  }
+  if (maxLength !== undefined) {
+    baseNode.maxLength = maxLength;
+  }
+  if (minimum !== undefined) {
+    baseNode.minimum = minimum;
+  }
+  if (maximum !== undefined) {
+    baseNode.maximum = maximum;
+  }
+  if (minItems !== undefined) {
+    baseNode.minItems = minItems;
+  }
+  if (maxItems !== undefined) {
+    baseNode.maxItems = maxItems;
+  }
+
+  if (typeof value["pattern"] === "string") {
+    baseNode.pattern = value["pattern"];
+  }
+
+  if (type === "object") {
+    const propertiesValue = value["properties"];
+    if (propertiesValue !== undefined) {
+      if (!isRecordValue(propertiesValue)) {
+        return null;
+      }
+      const properties = Object.entries(propertiesValue).reduce<Record<string, JsonSchemaNodeRecord> | null>((accumulator, [key, nested]) => {
+        if (accumulator === null) {
+          return null;
+        }
+        const nextNode = readJsonSchemaNodeDocument(nested);
+        if (!nextNode) {
+          return null;
+        }
+        accumulator[key] = nextNode;
+        return accumulator;
+      }, {});
+      if (properties === null) {
+        return null;
+      }
+      baseNode.properties = properties;
+    } else {
+      baseNode.properties = {};
+    }
+  }
+
+  if (type === "array") {
+    const itemNode = value["items"] === undefined
+      ? createJsonSchemaNode("string")
+      : readJsonSchemaNodeDocument(value["items"]);
+    if (!itemNode) {
+      return null;
+    }
+    baseNode.items = itemNode;
+  }
+
+  return baseNode;
+};
+
+const readOptionalNumberValue = (
+  value: unknown
+): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+const buildWorkflowExpressionToken = (
+  reference: WorkflowExpressionVariableReference
+): string =>
+  reference.sourceId
+    ? `{{var|${reference.kind}|${reference.sourceId}|${reference.path}}}`
+    : `{{var|${reference.kind}||${reference.path}}}`;
+
+const splitWorkflowExpressionSegments = (
+  value: string
+): ReadonlyArray<WorkflowExpressionSegmentRecord> => {
+  const tokenPattern = /\{\{var\|([^|}]+)\|([^|}]*)\|([^}]+)\}\}/gu;
+  const segments: WorkflowExpressionSegmentRecord[] = [];
+  let index = 0;
+
+  for (const match of value.matchAll(tokenPattern)) {
+    const matchIndex = match.index ?? 0;
+    if (matchIndex > index) {
+      segments.push({
+        kind: WorkflowExpressionSegmentKind.Text,
+        value: value.slice(index, matchIndex)
+      });
+    }
+
+    const reference = readWorkflowExpressionReferenceFromMatch(
+      match[1] ?? "",
+      match[2] ?? "",
+      match[3] ?? ""
+    );
+    if (reference) {
+      segments.push({
+        kind: WorkflowExpressionSegmentKind.Variable,
+        reference
+      });
+    } else {
+      segments.push({
+        kind: WorkflowExpressionSegmentKind.Text,
+        value: match[0]
+      });
+    }
+
+    index = matchIndex + match[0].length;
+  }
+
+  if (index < value.length || segments.length === 0) {
+    segments.push({
+      kind: WorkflowExpressionSegmentKind.Text,
+      value: value.slice(index)
+    });
+  }
+
+  return segments;
+};
+
+const readWorkflowExpressionReferenceFromMatch = (
+  kind: string,
+  sourceId: string,
+  path: string
+): WorkflowExpressionVariableReference | null => {
+  if (
+    kind !== WorkflowExpressionVariableKind.NodeOutput &&
+    kind !== WorkflowExpressionVariableKind.CurrentInput &&
+    kind !== WorkflowExpressionVariableKind.WorkflowContext &&
+    kind !== WorkflowExpressionVariableKind.AssetOutput
+  ) {
+    return null;
+  }
+
+  const normalizedPath = path.trim();
+  if (normalizedPath.length === 0) {
+    return null;
+  }
+
+  return {
+    kind,
+    ...(sourceId.trim().length > 0 ? { sourceId: sourceId.trim() } : {}),
+    path: normalizedPath
+  };
+};
 
 const serializeJsonSchemaNode = (
   schema: JsonSchemaNodeRecord

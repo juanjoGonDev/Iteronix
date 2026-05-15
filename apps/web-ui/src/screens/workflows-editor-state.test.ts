@@ -15,12 +15,17 @@ import {
   createWorkflowAssetDraft,
   createWorkflowOutputContractField,
   createJsonSchemaNode,
+  formatJsonOutputContractDocument,
+  insertWorkflowExpressionVariable,
   removeJsonSchemaProperty,
   renameJsonSchemaProperty,
   readJsonContractValidation,
   readGuardrailDefinitionValidity,
+  parseJsonOutputContractDocument,
+  parseWorkflowExpression,
   safeParseJsonContractValue,
   serializeJsonContractForProvider,
+  serializeWorkflowExpression,
   moveWorkflowNode,
   readNodeAssetKind,
   removeWorkflowEdge,
@@ -29,7 +34,9 @@ import {
   updateJsonSchemaNode,
   updateWorkflowAssetGuardrail,
   updateWorkflowNodeOutputContract,
-  upsertJsonSchemaProperty
+  upsertJsonSchemaProperty,
+  WorkflowExpressionSegmentKind,
+  WorkflowExpressionVariableKind
 } from "./workflows-editor-state.js";
 
 describe("workflows editor state", () => {
@@ -460,6 +467,85 @@ describe("workflows editor state", () => {
 
     expect(validation.valid).toBe(false);
     expect(validation.message).toContain("result");
+  });
+
+  it("parses and inserts canonical workflow expression variables", () => {
+    const inserted = insertWorkflowExpressionVariable({
+      value: "Summarize: ",
+      selectionStart: 11,
+      selectionEnd: 11,
+      reference: {
+        kind: WorkflowExpressionVariableKind.NodeOutput,
+        sourceId: "node-42",
+        path: "$.summary"
+      }
+    });
+
+    expect(inserted.value).toBe("Summarize: {{var|node_output|node-42|$.summary}}");
+    expect(inserted.expression.segments).toEqual([
+      {
+        kind: WorkflowExpressionSegmentKind.Text,
+        value: "Summarize: "
+      },
+      {
+        kind: WorkflowExpressionSegmentKind.Variable,
+        reference: {
+          kind: WorkflowExpressionVariableKind.NodeOutput,
+          sourceId: "node-42",
+          path: "$.summary"
+        }
+      }
+    ]);
+    expect(serializeWorkflowExpression(inserted.expression)).toBe(inserted.value);
+    expect(parseWorkflowExpression(inserted.value).segments).toEqual(inserted.expression.segments);
+  });
+
+  it("round-trips raw contract documents through canonical schema parsing", () => {
+    const prompt = createWorkflowAssetDraft({
+      kind: WorkflowAssetKind.Prompt,
+      projectId: "project-1",
+      idFactory: createSequentialIdFactory("raw-contract")
+    });
+    const contract = prompt.outputContract;
+    if (!contract) {
+      throw new Error("Expected prompt assets to include an output contract.");
+    }
+
+    const updatedContract = {
+      ...contract,
+      name: "Raw editor contract",
+      schema: {
+        type: "object",
+        required: ["summary"],
+        properties: {
+          summary: {
+            type: "string",
+            minLength: 3
+          },
+          meta: {
+            type: "object",
+            properties: {
+              email: {
+                type: "string",
+                format: "email"
+              }
+            }
+          }
+        }
+      },
+      sampleOutput: "{\n  \"summary\": \"{{var|node_output|node-42|$.summary}}\"\n}"
+    } as const;
+
+    const formatted = formatJsonOutputContractDocument(updatedContract);
+    const parsed = parseJsonOutputContractDocument(formatted, contract);
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) {
+      throw new Error(parsed.error);
+    }
+    expect(parsed.contract.name).toBe("Raw editor contract");
+    expect(parsed.contract.schema.properties?.["summary"]?.minLength).toBe(3);
+    expect(parsed.contract.sampleOutput).toContain("{{var|node_output|node-42|$.summary}}");
   });
 });
 

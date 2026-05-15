@@ -646,6 +646,11 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
       - The output-contract model is now a canonical nested schema tree with object nesting, array item schemas, required flags, min/max constraints, regex patterns and predefined formats (`email`, `url`, `uuid`, `nif`)
       - The same schema tree now emits a compact provider-facing payload and a Zod-compatible schema expression while local runtime validation stays browser-safe without adding a bundle dependency
       - The visual contract editor is now tree-based with per-property icon actions for add child, delete, rename, type changes and constraint editing, plus deterministic browser coverage for nested object and array authoring
+    - Modern deep-authoring progress completed on `2026-05-15` while keeping `06.4` in progress:
+      - Validated that the current `apps/web-ui` raw-ESM runtime makes Monaco/CodeMirror a risky fit for this slice, so the fallback stays a browser-safe modal editor with plain textareas plus canonical parser/serializer helpers
+      - Node quick edits now stay in the side inspector, while prompt/output deep authoring moves into a responsive modal/full-screen sheet with separate Prompt, Output and Preview tabs
+      - Prompts and output templates now use a canonical interpolation token model (`{{var|kind|sourceId|path}}`) with click/drag insertion from previous node outputs, current input, workflow context and reusable asset outputs
+      - Output contracts now support synchronized Visual Tree and Raw JSON editing from the same canonical schema tree, including recoverable raw-JSON validation and apply flow in browser automation
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

@@ -149,6 +149,12 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
       element.addEventListener('pointerup', value as EventListener);
     } else if (key === 'onPointerMove' && typeof value === 'function') {
       element.addEventListener('pointermove', value as EventListener);
+    } else if (key === 'onDragstart' && typeof value === 'function') {
+      element.addEventListener('dragstart', value as EventListener);
+    } else if (key === 'onDragOver' && typeof value === 'function') {
+      element.addEventListener('dragover', value as EventListener);
+    } else if (key === 'onDrop' && typeof value === 'function') {
+      element.addEventListener('drop', value as EventListener);
     } else if (key === 'onMouseEnter' && typeof value === 'function') {
       element.addEventListener('mouseenter', value as EventListener);
     } else if (key === 'onMouseLeave' && typeof value === 'function') {
