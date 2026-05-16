@@ -106,11 +106,22 @@ const WorkflowSelector = {
   GuardrailAddValidation: "workflows-guardrail-add-validation",
   SectionHistory: "workflows-section-history",
   ExecutionSummary: "workflows-execution-summary",
+  ExecutionSummaryLatestRun: "workflows-execution-summary-latest-run",
+  ExecutionSummaryLatestStatus: "workflows-execution-summary-latest-status",
+  ExecutionSummaryStatusDistribution: "workflows-execution-summary-status-distribution",
   ExecutionSummaryRuns: "workflows-execution-summary-runs",
   ExecutionSummaryCost: "workflows-execution-summary-cost",
   ExecutionSummaryTokens: "workflows-execution-summary-tokens",
   ExecutionSummaryWarnings: "workflows-execution-summary-warnings",
   ExecutionSummaryErrors: "workflows-execution-summary-errors",
+  ExecutionSummaryAttention: "workflows-execution-summary-attention",
+  ExecutionSummaryAttentionRuns: "workflows-execution-summary-attention-runs",
+  ExecutionSummaryAttentionFailedRuns: "workflows-execution-summary-attention-failed-runs",
+  ExecutionSummaryAttentionAlertedRuns: "workflows-execution-summary-attention-alerted-runs",
+  ExecutionFilterAll: "workflows-execution-filter-all",
+  ExecutionFilterFailed: "workflows-execution-filter-failed",
+  ExecutionFilterAttention: "workflows-execution-filter-attention",
+  ExecutionAttentionRunPrefix: "workflows-execution-attention-run-",
   ExecutionCardPrefix: "workflows-execution-card-",
   ExecutionDeletePrefix: "workflows-execution-delete-",
   ExecutionInspector: "workflows-execution-inspector",
@@ -321,27 +332,53 @@ const ValidationText = {
   MappingSourcePath: "$.result",
   GuardrailValidationPath: "$.summary",
   GuardrailValidationMessage: "Summary must be present before continuing.",
+  ExecutionCleanId: "execution-clean",
   ExecutionPrimaryId: "execution-completed",
   ExecutionSecondaryId: "execution-failed",
+  ExecutionCleanSessionId: "ctx-clean",
+  ExecutionPrimarySessionId: "ctx-completed",
+  ExecutionSecondarySessionId: "ctx-failed",
   ExecutionPrimaryAlert: "Summary guardrail returned a warning.",
   ExecutionSecondaryAlert: "Provider request failed after guardrail pass.",
   ExecutionSecondaryNodeLabel: "Codex run",
-  ExecutionSummaryRunsBeforeDelete: "2",
-  ExecutionSummaryCostBeforeDelete: "€0.0555",
-  ExecutionSummaryTokensBeforeDelete: "1020",
-  ExecutionSummaryWarningsBeforeDelete: "1",
-  ExecutionSummaryErrorsBeforeDelete: "1",
-  ExecutionSummaryRunsAfterDelete: "1",
-  ExecutionSummaryCostAfterDelete: "€0.0213",
-  ExecutionSummaryTokensAfterDelete: "390",
-  ExecutionSummaryWarningsAfterDelete: "0",
-  ExecutionSummaryErrorsAfterDelete: "1",
+  ExecutionPrimaryStartedAt: "2026-05-06T08:16:00.000Z",
+  ExecutionSecondaryStartedAt: "2026-05-06T08:20:00.000Z",
+  ExecutionCleanStartedAt: "2026-05-06T08:12:00.000Z",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
   ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
   ConnectionHintTitle: "Connect nodes",
   ConnectionModeTitle: "Connection mode"
+} as const;
+
+const ExecutionOverviewExpectation = {
+  BeforeDelete: {
+    latestRunStartedAt: ValidationText.ExecutionSecondaryStartedAt,
+    latestStatus: "Failed",
+    statusDistribution: "Completed 2 · Failed 1",
+    runs: "3",
+    cost: "€0.0685",
+    tokens: "1300",
+    warnings: "1",
+    errors: "1",
+    attentionRuns: "2",
+    failedRuns: "1",
+    alertedRuns: "2"
+  },
+  AfterDelete: {
+    latestRunStartedAt: ValidationText.ExecutionSecondaryStartedAt,
+    latestStatus: "Failed",
+    statusDistribution: "Completed 1 · Failed 1",
+    runs: "2",
+    cost: "€0.0343",
+    tokens: "670",
+    warnings: "0",
+    errors: "1",
+    attentionRuns: "1",
+    failedRuns: "1",
+    alertedRuns: "1"
+  }
 } as const;
 
 const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
@@ -627,32 +664,46 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
     await clickByTestId(page, WorkflowSelector.SectionHistory);
-    await waitForExecutionCardCount(page, 2);
-    await waitForExecutionSummary(page, {
-      runs: ValidationText.ExecutionSummaryRunsBeforeDelete,
-      cost: ValidationText.ExecutionSummaryCostBeforeDelete,
-      tokens: ValidationText.ExecutionSummaryTokensBeforeDelete,
-      warnings: ValidationText.ExecutionSummaryWarningsBeforeDelete,
-      errors: ValidationText.ExecutionSummaryErrorsBeforeDelete
-    });
-    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await waitForExecutionCardCount(page, 3);
+    await waitForExecutionOverview(page, ExecutionOverviewExpectation.BeforeDelete);
+    await waitForExecutionAttentionItemCount(page, 2);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionAttentionRunPrefix}${ValidationText.ExecutionPrimaryId}`);
     await waitForTestId(page, WorkflowSelector.ExecutionInspector);
     await waitForPageTexts(page, [
       ValidationText.ExecutionPrimaryAlert,
       ValidationText.ExecutionSecondaryNodeLabel
     ]);
     await waitForNodeRunCards(page, 2);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
+    await waitForPageText(page, ValidationText.ExecutionCleanSessionId);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
+    await waitForExecutionCardCount(page, 1);
+    await waitForMissingTestId(page, WorkflowSelector.ExecutionInspector);
+    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
+    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
+    await waitForPageTexts(page, [
+      ValidationText.ExecutionSecondaryAlert,
+      ValidationText.ExecutionSecondarySessionId
+    ]);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
+    await waitForExecutionCardCount(page, 2);
+    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
+    await waitForExecutionAttentionItemCount(page, 2);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await waitForPageText(page, ValidationText.ExecutionPrimaryAlert);
     await clickByTestId(page, `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`);
     await waitForPageText(page, ValidationText.ExecutionDeletedNotice);
     await waitForExecutionCardCount(page, 1);
-    await waitForExecutionSummary(page, {
-      runs: ValidationText.ExecutionSummaryRunsAfterDelete,
-      cost: ValidationText.ExecutionSummaryCostAfterDelete,
-      tokens: ValidationText.ExecutionSummaryTokensAfterDelete,
-      warnings: ValidationText.ExecutionSummaryWarningsAfterDelete,
-      errors: ValidationText.ExecutionSummaryErrorsAfterDelete
-    });
+    await waitForExecutionOverview(page, ExecutionOverviewExpectation.AfterDelete);
+    await waitForExecutionAttentionItemCount(page, 1);
     assertExecutionDeletion(stubServer.state, ValidationText.ExecutionPrimaryId);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterAll);
+    await waitForExecutionCardCount(page, 2);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
+    await waitForExecutionCardCount(page, 1);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
+    await waitForExecutionCardCount(page, 1);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -664,17 +715,21 @@ async function validateWorkflowsScreen(): Promise<void> {
       waitUntil: "networkidle0"
     });
     await clickByTestId(page, WorkflowSelector.SectionHistory);
-    await waitForExecutionCardCount(page, 1);
-    await waitForExecutionSummary(page, {
-      runs: ValidationText.ExecutionSummaryRunsAfterDelete,
-      cost: ValidationText.ExecutionSummaryCostAfterDelete,
-      tokens: ValidationText.ExecutionSummaryTokensAfterDelete,
-      warnings: ValidationText.ExecutionSummaryWarningsAfterDelete,
-      errors: ValidationText.ExecutionSummaryErrorsAfterDelete
-    });
+    await waitForExecutionCardCount(page, 2);
+    await waitForExecutionOverview(page, ExecutionOverviewExpectation.AfterDelete);
+    await waitForExecutionAttentionItemCount(page, 1);
     await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
+    await waitForExecutionCardCount(page, 1);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
+    await waitForExecutionCardCount(page, 1);
+    await clickByTestId(page, WorkflowSelector.ExecutionFilterAll);
+    await waitForExecutionCardCount(page, 2);
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
-    await waitForPageText(page, ValidationText.ExecutionSecondaryAlert);
+    await waitForPageTexts(page, [
+      ValidationText.ExecutionSecondaryAlert,
+      ValidationText.ExecutionSecondarySessionId
+    ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -1617,33 +1672,51 @@ async function waitForExecutionCardCount(page: Page, expectedCount: number): Pro
   });
 }
 
-async function waitForExecutionSummary(
+async function waitForExecutionOverview(
   page: Page,
   expected: {
+    latestRunStartedAt: string;
+    latestStatus: string;
+    statusDistribution: string;
     runs: string;
     cost: string;
     tokens: string;
     warnings: string;
     errors: string;
+    attentionRuns: string;
+    failedRuns: string;
+    alertedRuns: string;
   }
 ): Promise<void> {
   await waitForCondition(async () => {
     const matches = await page.evaluate((payload: {
       selectors: Record<string, string>;
       expected: {
+        latestRun: string;
+        latestStatus: string;
+        statusDistribution: string;
         runs: string;
         cost: string;
         tokens: string;
         warnings: string;
         errors: string;
+        attentionRuns: string;
+        failedRuns: string;
+        alertedRuns: string;
       };
     }) => {
       const checks = [
+        { selector: payload.selectors["latestRun"], expected: payload.expected.latestRun, mode: "text" },
+        { selector: payload.selectors["latestStatus"], expected: payload.expected.latestStatus, mode: "text" },
+        { selector: payload.selectors["statusDistribution"], expected: payload.expected.statusDistribution, mode: "text" },
         { selector: payload.selectors["runs"], expected: payload.expected.runs, mode: "digits" },
         { selector: payload.selectors["cost"], expected: payload.expected.cost, mode: "text" },
         { selector: payload.selectors["tokens"], expected: payload.expected.tokens, mode: "digits" },
         { selector: payload.selectors["warnings"], expected: payload.expected.warnings, mode: "digits" },
-        { selector: payload.selectors["errors"], expected: payload.expected.errors, mode: "digits" }
+        { selector: payload.selectors["errors"], expected: payload.expected.errors, mode: "digits" },
+        { selector: payload.selectors["attentionRuns"], expected: payload.expected.attentionRuns, mode: "digits" },
+        { selector: payload.selectors["failedRuns"], expected: payload.expected.failedRuns, mode: "digits" },
+        { selector: payload.selectors["alertedRuns"], expected: payload.expected.alertedRuns, mode: "digits" }
       ] as const;
       for (const check of checks) {
         const element = document.querySelector(`[data-testid="${check.selector}"]`);
@@ -1664,19 +1737,56 @@ async function waitForExecutionSummary(
       return true;
     }, {
       selectors: {
+        latestRun: WorkflowSelector.ExecutionSummaryLatestRun,
+        latestStatus: WorkflowSelector.ExecutionSummaryLatestStatus,
+        statusDistribution: WorkflowSelector.ExecutionSummaryStatusDistribution,
         runs: WorkflowSelector.ExecutionSummaryRuns,
         cost: WorkflowSelector.ExecutionSummaryCost,
         tokens: WorkflowSelector.ExecutionSummaryTokens,
         warnings: WorkflowSelector.ExecutionSummaryWarnings,
-        errors: WorkflowSelector.ExecutionSummaryErrors
+        errors: WorkflowSelector.ExecutionSummaryErrors,
+        attentionRuns: WorkflowSelector.ExecutionSummaryAttentionRuns,
+        failedRuns: WorkflowSelector.ExecutionSummaryAttentionFailedRuns,
+        alertedRuns: WorkflowSelector.ExecutionSummaryAttentionAlertedRuns
       },
-      expected
+      expected: {
+        latestRun: formatValidationTimestamp(expected.latestRunStartedAt),
+        latestStatus: expected.latestStatus,
+        statusDistribution: expected.statusDistribution,
+        runs: expected.runs,
+        cost: expected.cost,
+        tokens: expected.tokens,
+        warnings: expected.warnings,
+        errors: expected.errors,
+        attentionRuns: expected.attentionRuns,
+        failedRuns: expected.failedRuns,
+        alertedRuns: expected.alertedRuns
+      }
     });
     return matches;
-  }, "execution summary totals", {
+  }, "execution overview", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });
+}
+
+async function waitForExecutionAttentionItemCount(page: Page, expectedCount: number): Promise<void> {
+  await waitForCondition(async () => {
+    const count = await page.evaluate((prefix: string) =>
+      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
+        .filter((entry) => entry instanceof HTMLElement)
+        .length,
+    WorkflowSelector.ExecutionAttentionRunPrefix);
+    return count === expectedCount;
+  }, `execution attention item count ${expectedCount.toString()}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+function formatValidationTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
 async function waitForNodeRunCards(page: Page, expectedCount: number): Promise<void> {
@@ -2031,12 +2141,63 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
 
   return [
     {
+      id: ValidationText.ExecutionCleanId,
+      workflowId: definition.id,
+      projectId: definition.projectId,
+      triggerKind: "manual",
+      status: "completed",
+      startedAt: ValidationText.ExecutionCleanStartedAt,
+      finishedAt: "2026-05-06T08:12:03.500Z",
+      durationMs: 3500,
+      warningsCount: 0,
+      errorsCount: 0,
+      totals: {
+        promptTokens: 180,
+        completionTokens: 100,
+        totalTokens: 280,
+        estimatedCostEur: 0.013,
+        latencyMs: 3400
+      },
+      contextSessionId: ValidationText.ExecutionCleanSessionId,
+      nodeRuns: [
+        {
+          id: "node-run-trigger-clean",
+          nodeId: triggerNode.id,
+          nodeKind: triggerNode.kind,
+          status: "completed",
+          startedAt: ValidationText.ExecutionCleanStartedAt,
+          finishedAt: "2026-05-06T08:12:00.250Z",
+          durationMs: 250,
+          alerts: []
+        },
+        {
+          id: "node-run-provider-clean",
+          nodeId: providerNode.id,
+          nodeKind: providerNode.kind,
+          status: "completed",
+          startedAt: "2026-05-06T08:12:00.300Z",
+          finishedAt: "2026-05-06T08:12:03.500Z",
+          durationMs: 3200,
+          providerId: "codex-cli",
+          modelId: "gpt-5-codex",
+          usage: {
+            promptTokens: 180,
+            completionTokens: 100,
+            totalTokens: 280,
+            estimatedCostEur: 0.013,
+            latencyMs: 3200
+          },
+          alerts: []
+        }
+      ]
+    },
+    {
       id: ValidationText.ExecutionPrimaryId,
       workflowId: definition.id,
       projectId: definition.projectId,
       triggerKind: "manual",
       status: "completed",
-      startedAt: "2026-05-06T08:16:00.000Z",
+      startedAt: ValidationText.ExecutionPrimaryStartedAt,
       finishedAt: "2026-05-06T08:16:07.000Z",
       durationMs: 7000,
       warningsCount: 1,
@@ -2048,14 +2209,14 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
         estimatedCostEur: 0.0342,
         latencyMs: 6900
       },
-      contextSessionId: "ctx-completed",
+      contextSessionId: ValidationText.ExecutionPrimarySessionId,
       nodeRuns: [
         {
           id: "node-run-trigger-completed",
           nodeId: triggerNode.id,
           nodeKind: triggerNode.kind,
           status: "completed",
-          startedAt: "2026-05-06T08:16:00.000Z",
+          startedAt: ValidationText.ExecutionPrimaryStartedAt,
           finishedAt: "2026-05-06T08:16:00.300Z",
           durationMs: 300,
           alerts: []
@@ -2095,7 +2256,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
       projectId: definition.projectId,
       triggerKind: "manual",
       status: "failed",
-      startedAt: "2026-05-06T08:20:00.000Z",
+      startedAt: ValidationText.ExecutionSecondaryStartedAt,
       finishedAt: "2026-05-06T08:20:05.500Z",
       durationMs: 5500,
       warningsCount: 0,
@@ -2107,14 +2268,14 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
         estimatedCostEur: 0.0213,
         latencyMs: 5400
       },
-      contextSessionId: "ctx-failed",
+      contextSessionId: ValidationText.ExecutionSecondarySessionId,
       nodeRuns: [
         {
           id: "node-run-prompt-failed",
           nodeId: promptNode.id,
           nodeKind: promptNode.kind,
           status: "completed",
-          startedAt: "2026-05-06T08:20:00.000Z",
+          startedAt: ValidationText.ExecutionSecondaryStartedAt,
           finishedAt: "2026-05-06T08:20:00.900Z",
           durationMs: 900,
           alerts: []

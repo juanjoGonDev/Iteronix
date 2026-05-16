@@ -679,6 +679,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Phase `06.5E` persisted rail filtering implemented on `2026-05-16` while `06.5` remains in progress pending the deferred final validation pass:
     - `apps/web-ui/src/screens/Workflows.ts` now lets the execution rail switch between all persisted runs, failed runs only, and runs needing attention, using saved execution data only and keeping existing select/delete/detail behavior intact
     - `validate-workflows.ts` intentionally stays untouched in this slice because the real-app/browser validation update remains deferred until the end-of-phase `06.5` validation pass
+  - Final `06.5` browser validation pass completed on `2026-05-16`; `06.5` is now ready for acceptance but NOT auto-accepted:
+    - `apps/web-ui/scripts/validate-workflows.ts` now validates workflow totals, latest-run snapshot, needs-attention summary, all/failed/needs-attention filters, selection fallback, delete, and reload in one deterministic browser flow
+    - Quality gates and browser validation passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
+  - Phase `06.5` accepted on `2026-05-16` after re-verifying the final browser validation pass:
+    - The persisted execution observability surface from `06.5A` to `06.5E` is accepted as complete
+    - Next workflow work may continue beyond `06.5` without reopening this phase unless new feedback appears
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

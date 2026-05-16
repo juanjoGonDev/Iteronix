@@ -2810,3 +2810,45 @@
   - Browser-level acceptance validation is still intentionally deferred, so the new rail filter is covered by workspace quality gates only until the final `06.5` validation pass updates the browser harness.
 - Next:
   - Run the deferred final `06.5` browser validation pass, then decide whether the phase can be accepted and closed.
+
+### 2026-05-16 17:30 (Europe/Madrid) â€” Workflows 06.5 Final Browser Validation Pass
+
+- Summary:
+  - Completed only `06.5` and expanded `apps/web-ui/scripts/validate-workflows.ts` so the deferred end-of-phase browser pass now covers the full persisted-history surface from slices `06.5A` to `06.5E`.
+- Decisions:
+  - Keep scope locked to the validation harness plus repo tracking docs only; no `Workflows.ts` edits, no `06.6` work, and no unrelated refactors.
+  - Strengthen filter coverage with one extra clean persisted execution fixture so `all`, `failed`, and `needs-attention` each prove a distinct browser result instead of collapsing to the same card set.
+- Changes:
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` to assert workflow totals, latest-run snapshot, needs-attention summary, all/failed/needs-attention filters, selection fallback when a filtered run disappears, execution-detail hydration, delete, and reload.
+  - Updated `PLAN.md` to record the final `06.5` validation pass as ready for acceptance without auto-accepting the phase.
+- Commands:
+  - `rtk pnpm lint` PASS
+  - `rtk pnpm typecheck` PASS
+  - `rtk pnpm test` PASS
+  - `rtk pnpm build` PASS
+  - `rtk pnpm -C apps/web-ui validate:workflows` PASS
+- Issues/Risks:
+  - `06.5` is validated and ready for acceptance, but it still needs explicit user acceptance before it can be treated as closed.
+- Next:
+  - Ask for explicit acceptance or targeted follow-up feedback on `06.5`; only then decide whether to close the phase or address any gap.
+
+### 2026-05-16 17:45 (Europe/Madrid) — Workflows 06.5 Acceptance And Commit Preparation
+
+- Summary:
+  - Re-verified the exact pending `06.5` diff after the interrupted recovery session, reran all mandatory gates plus browser validation, and accepted `06.5` with evidence before preparing a single reviewable commit.
+- Decisions:
+  - Accept `06.5` because the final persisted execution observability scope is now verified end-to-end in the real browser harness, not just inferred from the interrupted session logs.
+  - Keep the commit as one work unit: final `06.5` validation harness plus planning/log traceability for acceptance.
+- Changes:
+  - Updated `PLAN.md` to mark `06.5` as accepted after re-verification.
+  - Updated `AGENTS_LOGS.md` with the recovery verification and explicit acceptance record.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+  - `pnpm -C apps/web-ui validate:workflows` PASS
+- Issues/Risks:
+  - Only benign CRLF warnings appeared during git/test flows on Windows; no failing gate or functional regression was observed.
+- Next:
+  - Create the Conventional Commit for the accepted `06.5` validation pass and continue with the next workflow scope only if new product direction requires it.
