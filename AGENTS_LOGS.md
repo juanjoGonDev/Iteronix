@@ -2710,3 +2710,43 @@
   - `06.5` is still in progress; accumulated EUR areas, live execution controls, and later provider/runtime continuity remain for subsequent slices.
 - Next:
   - Wait for user validation of the persisted execution rail slice, then choose the narrowest follow-up inside `06.5`.
+
+### 2026-05-16 12:22 (Europe/Madrid) — Workflows 06.5A Slice Acceptance
+
+- Summary:
+  - The user explicitly accepted `06.5A` as completed. The slice is now treated as accepted, while the parent `06.5` phase remains in progress for the next observability increment.
+- Decisions:
+  - Do not move into `06.6`; continue with the next narrowest slice inside `06.5`.
+  - Treat aggregated persisted-run clarity as the next smallest unfinished scope because the base execution rail, delete flow, node details, and per-run EUR/token/runtime fields are already accepted.
+- Changes:
+  - Updated `PLAN.md` to record `06.5A` acceptance while keeping `06.5` open.
+  - Refreshed the Notion `06.5 Execution rail, history, alerts and EUR cost observability` page with an acceptance/progress comment while keeping the page in `En progreso`.
+- Commands:
+  - None.
+- Issues/Risks:
+  - The parent `06.5` page cannot move to `Listo` yet because acceptance applies only to slice `06.5A`, not the full phase deliverables.
+- Next:
+  - Start `06.5B` as the persisted aggregate observability slice before any live-run controls or `06.6` work.
+
+### 2026-05-16 12:38 (Europe/Madrid) — Workflows 06.5B Persisted Aggregate Observability
+
+- Summary:
+  - Continued only `06.5` and implemented the next narrow slice in `apps/web-ui`: workflow-level persisted execution totals above the history rail, derived from saved executions and kept synchronized through delete and reload flows.
+- Decisions:
+  - Keep `06.5B` limited to aggregate persisted-history clarity only; no live execution controls, no new endpoints, and no `06.6` runtime/provider continuity work.
+  - Derive totals directly from the same filtered execution collection already used by the rail so the summary stays in sync with existing reload/delete behavior instead of introducing parallel state.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with the aggregate execution summary area for total runs, accumulated EUR cost, total tokens, warnings, and errors.
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` with deterministic assertions for aggregate totals before delete, after delete, and after reload.
+  - Updated `PLAN.md` with `06.5B` progress while keeping the parent `06.5` phase open.
+  - Added a Notion progress comment to `06.5 Execution rail, history, alerts and EUR cost observability` and kept it `En progreso`.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.5` still remains open for later slices beyond aggregate persisted-history clarity.
+- Next:
+  - Wait for user validation of `06.5B`, then choose the narrowest remaining `06.5` increment before any `06.6` work.

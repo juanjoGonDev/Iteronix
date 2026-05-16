@@ -664,6 +664,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Full workspace gates passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`
     - Real browser validation passed again with `pnpm -C apps/web-ui validate:workflows`
     - Notion progress for `06.5 Execution rail, history, alerts and EUR cost observability` was refreshed without closing the phase
+  - Phase `06.5A` accepted on `2026-05-16` as the first `06.5` slice, while the parent `06.5` phase stays in progress:
+    - Persisted execution rail UX is accepted for list/get/delete observability
+    - Remaining `06.5` scope should stay focused on persisted-history clarity before any `06.6` live runtime/provider continuity work
+  - Phase `06.5B` aggregate observability implemented on `2026-05-16` while `06.5` remains in progress:
+    - `apps/web-ui/src/screens/Workflows.ts` now shows workflow-level persisted totals above the execution rail for total runs, accumulated EUR cost, total tokens, warnings, and errors derived from saved executions only
+    - `apps/web-ui/scripts/validate-workflows.ts` now asserts aggregate totals before delete, after delete, and after reload so persisted-history summaries stay trustworthy
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

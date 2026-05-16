@@ -105,6 +105,12 @@ const WorkflowSelector = {
   GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
   SectionHistory: "workflows-section-history",
+  ExecutionSummary: "workflows-execution-summary",
+  ExecutionSummaryRuns: "workflows-execution-summary-runs",
+  ExecutionSummaryCost: "workflows-execution-summary-cost",
+  ExecutionSummaryTokens: "workflows-execution-summary-tokens",
+  ExecutionSummaryWarnings: "workflows-execution-summary-warnings",
+  ExecutionSummaryErrors: "workflows-execution-summary-errors",
   ExecutionCardPrefix: "workflows-execution-card-",
   ExecutionDeletePrefix: "workflows-execution-delete-",
   ExecutionInspector: "workflows-execution-inspector",
@@ -320,6 +326,16 @@ const ValidationText = {
   ExecutionPrimaryAlert: "Summary guardrail returned a warning.",
   ExecutionSecondaryAlert: "Provider request failed after guardrail pass.",
   ExecutionSecondaryNodeLabel: "Codex run",
+  ExecutionSummaryRunsBeforeDelete: "2",
+  ExecutionSummaryCostBeforeDelete: "€0.0555",
+  ExecutionSummaryTokensBeforeDelete: "1020",
+  ExecutionSummaryWarningsBeforeDelete: "1",
+  ExecutionSummaryErrorsBeforeDelete: "1",
+  ExecutionSummaryRunsAfterDelete: "1",
+  ExecutionSummaryCostAfterDelete: "€0.0213",
+  ExecutionSummaryTokensAfterDelete: "390",
+  ExecutionSummaryWarningsAfterDelete: "0",
+  ExecutionSummaryErrorsAfterDelete: "1",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
   ExecutionDeletedNotice: "Execution deleted.",
@@ -612,6 +628,13 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
     await clickByTestId(page, WorkflowSelector.SectionHistory);
     await waitForExecutionCardCount(page, 2);
+    await waitForExecutionSummary(page, {
+      runs: ValidationText.ExecutionSummaryRunsBeforeDelete,
+      cost: ValidationText.ExecutionSummaryCostBeforeDelete,
+      tokens: ValidationText.ExecutionSummaryTokensBeforeDelete,
+      warnings: ValidationText.ExecutionSummaryWarningsBeforeDelete,
+      errors: ValidationText.ExecutionSummaryErrorsBeforeDelete
+    });
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
     await waitForTestId(page, WorkflowSelector.ExecutionInspector);
     await waitForPageTexts(page, [
@@ -622,6 +645,13 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`);
     await waitForPageText(page, ValidationText.ExecutionDeletedNotice);
     await waitForExecutionCardCount(page, 1);
+    await waitForExecutionSummary(page, {
+      runs: ValidationText.ExecutionSummaryRunsAfterDelete,
+      cost: ValidationText.ExecutionSummaryCostAfterDelete,
+      tokens: ValidationText.ExecutionSummaryTokensAfterDelete,
+      warnings: ValidationText.ExecutionSummaryWarningsAfterDelete,
+      errors: ValidationText.ExecutionSummaryErrorsAfterDelete
+    });
     assertExecutionDeletion(stubServer.state, ValidationText.ExecutionPrimaryId);
     await captureBrowserValidationScreenshot({
       page,
@@ -635,6 +665,13 @@ async function validateWorkflowsScreen(): Promise<void> {
     });
     await clickByTestId(page, WorkflowSelector.SectionHistory);
     await waitForExecutionCardCount(page, 1);
+    await waitForExecutionSummary(page, {
+      runs: ValidationText.ExecutionSummaryRunsAfterDelete,
+      cost: ValidationText.ExecutionSummaryCostAfterDelete,
+      tokens: ValidationText.ExecutionSummaryTokensAfterDelete,
+      warnings: ValidationText.ExecutionSummaryWarningsAfterDelete,
+      errors: ValidationText.ExecutionSummaryErrorsAfterDelete
+    });
     await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
     await waitForPageText(page, ValidationText.ExecutionSecondaryAlert);
@@ -1575,6 +1612,68 @@ async function waitForExecutionCardCount(page: Page, expectedCount: number): Pro
     WorkflowSelector.ExecutionCardPrefix);
     return count === expectedCount;
   }, `execution card count ${expectedCount.toString()}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForExecutionSummary(
+  page: Page,
+  expected: {
+    runs: string;
+    cost: string;
+    tokens: string;
+    warnings: string;
+    errors: string;
+  }
+): Promise<void> {
+  await waitForCondition(async () => {
+    const matches = await page.evaluate((payload: {
+      selectors: Record<string, string>;
+      expected: {
+        runs: string;
+        cost: string;
+        tokens: string;
+        warnings: string;
+        errors: string;
+      };
+    }) => {
+      const checks = [
+        { selector: payload.selectors["runs"], expected: payload.expected.runs, mode: "digits" },
+        { selector: payload.selectors["cost"], expected: payload.expected.cost, mode: "text" },
+        { selector: payload.selectors["tokens"], expected: payload.expected.tokens, mode: "digits" },
+        { selector: payload.selectors["warnings"], expected: payload.expected.warnings, mode: "digits" },
+        { selector: payload.selectors["errors"], expected: payload.expected.errors, mode: "digits" }
+      ] as const;
+      for (const check of checks) {
+        const element = document.querySelector(`[data-testid="${check.selector}"]`);
+        if (!(element instanceof HTMLElement)) {
+          return false;
+        }
+        const text = (element.textContent ?? "").replace(/\s+/gu, " ").trim();
+        if (check.mode === "digits") {
+          if (text.replace(/[^\d]/gu, "") !== check.expected) {
+            return false;
+          }
+          continue;
+        }
+        if (!text.includes(check.expected)) {
+          return false;
+        }
+      }
+      return true;
+    }, {
+      selectors: {
+        runs: WorkflowSelector.ExecutionSummaryRuns,
+        cost: WorkflowSelector.ExecutionSummaryCost,
+        tokens: WorkflowSelector.ExecutionSummaryTokens,
+        warnings: WorkflowSelector.ExecutionSummaryWarnings,
+        errors: WorkflowSelector.ExecutionSummaryErrors
+      },
+      expected
+    });
+    return matches;
+  }, "execution summary totals", {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
     intervalMs: ValidationConfig.UiPollingIntervalMs
   });

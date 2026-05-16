@@ -100,6 +100,12 @@ const WorkflowScreenSelector = {
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
   SectionHistory: "workflows-section-history",
+  ExecutionSummary: "workflows-execution-summary",
+  ExecutionSummaryRuns: "workflows-execution-summary-runs",
+  ExecutionSummaryCost: "workflows-execution-summary-cost",
+  ExecutionSummaryTokens: "workflows-execution-summary-tokens",
+  ExecutionSummaryWarnings: "workflows-execution-summary-warnings",
+  ExecutionSummaryErrors: "workflows-execution-summary-errors",
   ExecutionCardPrefix: "workflows-execution-card-",
   ExecutionDeletePrefix: "workflows-execution-delete-",
   ExecutionInspector: "workflows-execution-inspector",
@@ -774,6 +780,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         .filter((execution) => execution.workflowId === currentWorkflow.id)]
         .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
       : [];
+    const aggregateSummary = readExecutionAggregateSummary(executions);
 
     return createElement("div", {
       className: "min-h-0 flex-1 overflow-y-auto p-3"
@@ -791,6 +798,26 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               description: "This workflow has no persisted runs yet. When the server records executions, this rail will show them here."
             })
           : createElement("div", { className: "flex flex-col gap-3" }, [
+              createElement("div", {
+                className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+                "data-testid": WorkflowScreenSelector.ExecutionSummary
+              }, [
+                createElement("div", { className: "flex flex-col gap-3" }, [
+                  createElement("div", { className: "min-w-0" }, [
+                    createElement("p", { className: "text-sm font-medium text-white" }, ["Workflow totals"]),
+                    createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                      "Accumulated observability from persisted runs for the selected workflow only."
+                    ])
+                  ]),
+                  createElement("div", { className: "grid grid-cols-2 gap-3 lg:grid-cols-5" }, [
+                    this.renderInlineMetaTile("Runs", aggregateSummary.runCount.toString(), WorkflowScreenSelector.ExecutionSummaryRuns),
+                    this.renderInlineMetaTile("EUR", formatEuro(aggregateSummary.totalCostEur), WorkflowScreenSelector.ExecutionSummaryCost),
+                    this.renderInlineMetaTile("Tokens", aggregateSummary.totalTokens.toLocaleString(), WorkflowScreenSelector.ExecutionSummaryTokens),
+                    this.renderInlineMetaTile("Warnings", aggregateSummary.warningCount.toString(), WorkflowScreenSelector.ExecutionSummaryWarnings),
+                    this.renderInlineMetaTile("Errors", aggregateSummary.errorCount.toString(), WorkflowScreenSelector.ExecutionSummaryErrors)
+                  ])
+                ])
+              ]),
               createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
                 createElement("div", { className: "flex items-center justify-between gap-3" }, [
                   createElement("div", { className: "min-w-0" }, [
@@ -3528,10 +3555,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     ]);
   }
 
-  private renderInlineMetaTile(label: string, value: string): HTMLElement {
+  private renderInlineMetaTile(label: string, value: string, testId?: string): HTMLElement {
     return createElement("div", {
       key: label,
-      className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3"
+      className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+      ...(testId ? { "data-testid": testId } : {})
     }, [
       createElement("p", { className: "text-[11px] uppercase tracking-wide text-text-secondary" }, [label]),
       createElement("p", { className: "mt-2 text-sm font-medium text-white break-words" }, [value])
@@ -5306,6 +5334,21 @@ const formatDuration = (value?: number): string => {
 };
 
 const formatEuro = (value: number): string => `€${value.toFixed(4)}`;
+
+const readExecutionAggregateSummary = (executions: ReadonlyArray<WorkflowExecutionRecord>) =>
+  executions.reduce((summary, execution) => ({
+    runCount: summary.runCount + 1,
+    totalCostEur: summary.totalCostEur + execution.totals.estimatedCostEur,
+    totalTokens: summary.totalTokens + execution.totals.totalTokens,
+    warningCount: summary.warningCount + execution.warningsCount,
+    errorCount: summary.errorCount + execution.errorsCount
+  }), {
+    runCount: 0,
+    totalCostEur: 0,
+    totalTokens: 0,
+    warningCount: 0,
+    errorCount: 0
+  });
 
 const readExecutionLabel = (execution: Pick<WorkflowExecutionRecord, "id">): string =>
   execution.id.length > 8 ? execution.id.slice(0, 8) : execution.id;
