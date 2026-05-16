@@ -670,6 +670,9 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Phase `06.5B` aggregate observability implemented on `2026-05-16` while `06.5` remains in progress:
     - `apps/web-ui/src/screens/Workflows.ts` now shows workflow-level persisted totals above the execution rail for total runs, accumulated EUR cost, total tokens, warnings, and errors derived from saved executions only
     - `apps/web-ui/scripts/validate-workflows.ts` now asserts aggregate totals before delete, after delete, and after reload so persisted-history summaries stay trustworthy
+  - Phase `06.5C` persisted history snapshot clarity implemented on `2026-05-16` while `06.5` remains in progress:
+    - `apps/web-ui/src/screens/Workflows.ts` now shows latest persisted run timestamp, latest persisted status, and workflow-level status distribution counts beside the existing 06.5B totals, derived from saved executions only
+    - `validate-workflows.ts` intentionally stays untouched in this slice because real-app/user-facing browser validation remains deferred until the end of all `06.5` tasks
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

@@ -101,6 +101,9 @@ const WorkflowScreenSelector = {
   SectionAssets: "workflows-section-assets",
   SectionHistory: "workflows-section-history",
   ExecutionSummary: "workflows-execution-summary",
+  ExecutionSummaryLatestRun: "workflows-execution-summary-latest-run",
+  ExecutionSummaryLatestStatus: "workflows-execution-summary-latest-status",
+  ExecutionSummaryStatusDistribution: "workflows-execution-summary-status-distribution",
   ExecutionSummaryRuns: "workflows-execution-summary-runs",
   ExecutionSummaryCost: "workflows-execution-summary-cost",
   ExecutionSummaryTokens: "workflows-execution-summary-tokens",
@@ -780,6 +783,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         .filter((execution) => execution.workflowId === currentWorkflow.id)]
         .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
       : [];
+    const snapshotSummary = readExecutionSnapshotSummary(executions);
     const aggregateSummary = readExecutionAggregateSummary(executions);
 
     return createElement("div", {
@@ -808,6 +812,27 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
                       "Accumulated observability from persisted runs for the selected workflow only."
                     ])
+                  ]),
+                  createElement("div", { className: "grid grid-cols-1 gap-3 md:grid-cols-3" }, [
+                    this.renderInlineMetaTile(
+                      "Latest run",
+                      snapshotSummary.latestExecution === null
+                        ? "n/a"
+                        : formatTimestamp(snapshotSummary.latestExecution.startedAt),
+                      WorkflowScreenSelector.ExecutionSummaryLatestRun
+                    ),
+                    this.renderInlineMetaTile(
+                      "Latest status",
+                      snapshotSummary.latestExecution === null
+                        ? "n/a"
+                        : formatSelectOptionLabel(snapshotSummary.latestExecution.status),
+                      WorkflowScreenSelector.ExecutionSummaryLatestStatus
+                    ),
+                    this.renderInlineMetaTile(
+                      "Status mix",
+                      snapshotSummary.statusDistributionLabel,
+                      WorkflowScreenSelector.ExecutionSummaryStatusDistribution
+                    )
                   ]),
                   createElement("div", { className: "grid grid-cols-2 gap-3 lg:grid-cols-5" }, [
                     this.renderInlineMetaTile("Runs", aggregateSummary.runCount.toString(), WorkflowScreenSelector.ExecutionSummaryRuns),
@@ -5335,6 +5360,33 @@ const formatDuration = (value?: number): string => {
 
 const formatEuro = (value: number): string => `€${value.toFixed(4)}`;
 
+type WorkflowExecutionStatus = WorkflowExecutionRecord["status"];
+
+type WorkflowExecutionStatusCounts = Record<WorkflowExecutionStatus, number>;
+
+const OptionalWorkflowExecutionStatuses = ["running", "awaiting_review", "canceled"] as const satisfies ReadonlyArray<WorkflowExecutionStatus>;
+
+const createWorkflowExecutionStatusCounts = (): WorkflowExecutionStatusCounts => ({
+  completed: 0,
+  failed: 0,
+  running: 0,
+  awaiting_review: 0,
+  canceled: 0
+});
+
+const readExecutionSnapshotSummary = (executions: ReadonlyArray<WorkflowExecutionRecord>) => {
+  const statusCounts = createWorkflowExecutionStatusCounts();
+
+  for (const execution of executions) {
+    statusCounts[execution.status] += 1;
+  }
+
+  return {
+    latestExecution: executions[0] ?? null,
+    statusDistributionLabel: readExecutionStatusDistributionLabel(statusCounts)
+  };
+};
+
 const readExecutionAggregateSummary = (executions: ReadonlyArray<WorkflowExecutionRecord>) =>
   executions.reduce((summary, execution) => ({
     runCount: summary.runCount + 1,
@@ -5349,6 +5401,17 @@ const readExecutionAggregateSummary = (executions: ReadonlyArray<WorkflowExecuti
     warningCount: 0,
     errorCount: 0
   });
+
+const readExecutionStatusDistributionLabel = (statusCounts: WorkflowExecutionStatusCounts): string => [
+  readExecutionStatusCountLabel("completed", statusCounts.completed),
+  readExecutionStatusCountLabel("failed", statusCounts.failed),
+  ...OptionalWorkflowExecutionStatuses.flatMap((status) =>
+    statusCounts[status] > 0 ? [readExecutionStatusCountLabel(status, statusCounts[status])] : []
+  )
+].join(" · ");
+
+const readExecutionStatusCountLabel = (status: WorkflowExecutionStatus, count: number): string =>
+  `${formatSelectOptionLabel(status)} ${count.toString()}`;
 
 const readExecutionLabel = (execution: Pick<WorkflowExecutionRecord, "id">): string =>
   execution.id.length > 8 ? execution.id.slice(0, 8) : execution.id;

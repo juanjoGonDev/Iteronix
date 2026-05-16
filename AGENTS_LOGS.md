@@ -2750,3 +2750,23 @@
   - `06.5` still remains open for later slices beyond aggregate persisted-history clarity.
 - Next:
   - Wait for user validation of `06.5B`, then choose the narrowest remaining `06.5` increment before any `06.6` work.
+
+### 2026-05-16 12:45 (Europe/Madrid) — Workflows 06.5C Persisted History Snapshot Clarity
+
+- Summary:
+  - Continued only `06.5` and added the next narrow persisted-history slice in `apps/web-ui`: latest run metadata plus workflow-level status distribution, derived only from saved executions.
+- Decisions:
+  - Keep `06.5C` limited to persisted snapshot clarity only; no new endpoints, no live controls, and no `validate-workflows.ts` changes because browser validation stays deferred until the end of all `06.5` tasks.
+  - Reuse the existing selected-workflow `executions` collection so the new snapshot stays aligned with the accepted 06.5A rail and 06.5B totals.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with compact tiles for latest persisted run timestamp, latest persisted status, and workflow-level status mix alongside the existing aggregate totals.
+  - Updated `PLAN.md` to record `06.5C` as the next in-progress slice while keeping parent phase `06.5` open.
+- Commands:
+  - `rtk pnpm lint` PASS
+  - `rtk pnpm typecheck` PASS
+  - `rtk pnpm test` PASS
+  - `rtk pnpm build` PASS
+- Issues/Risks:
+  - `validate-workflows.ts` intentionally remains unchanged in this slice, so the new snapshot relies on existing workspace gates until the final `06.5` validation pass.
+- Next:
+  - Implement the next `06.5` slice for persisted run-level alert/failure surfacing polish without starting any `06.6` runtime/provider continuity work.
