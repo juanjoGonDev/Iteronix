@@ -62,6 +62,7 @@ import {
   type GuardrailValidationRecord,
   type JsonOutputContractRecord,
   type JsonSchemaNodeRecord,
+  type WorkflowAlertRecord,
   type WorkflowAssetKind as WorkflowAssetKindValue,
   type WorkflowAssetRecord,
   type WorkflowAssetScope as WorkflowAssetScopeValue,
@@ -71,6 +72,7 @@ import {
   type WorkflowDefinitionUpsertInput,
   type WorkflowExecutionRecord,
   type WorkflowExpressionVariableReference,
+  type WorkflowNodeExecutionRecord,
   type WorkflowNodeKind as WorkflowNodeKindValue,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
@@ -98,6 +100,10 @@ const WorkflowScreenSelector = {
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
   SectionHistory: "workflows-section-history",
+  ExecutionCardPrefix: "workflows-execution-card-",
+  ExecutionDeletePrefix: "workflows-execution-delete-",
+  ExecutionInspector: "workflows-execution-inspector",
+  ExecutionNodeRunPrefix: "workflows-execution-node-run-",
   WorkflowNameInput: "workflows-name-input",
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
@@ -207,7 +213,8 @@ type PendingAction = typeof PendingAction[keyof typeof PendingAction];
 type WorkflowSelection =
   | { type: "workflow"; id: string | null }
   | { type: "node"; id: string }
-  | { type: "asset"; id: string };
+  | { type: "asset"; id: string }
+  | { type: "execution"; id: string };
 
 type PortSide = "input" | "output";
 
@@ -330,6 +337,7 @@ interface WorkflowsScreenState {
   compactView: CompactView;
   isCompactViewport: boolean;
   pendingAction: PendingAction | null;
+  loadingExecutionId: string | null;
   dirtyWorkflow: boolean;
   dirtyAssetIds: ReadonlyArray<string>;
   pendingConnection: PendingConnection | null;
@@ -372,6 +380,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       compactView: CompactView.Canvas,
       isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
+      loadingExecutionId: null,
       dirtyWorkflow: false,
       dirtyAssetIds: [],
       pendingConnection: null,
@@ -761,7 +770,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private renderExecutionSection(): HTMLElement {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const executions = currentWorkflow
-      ? this.state.executions.filter((execution) => execution.workflowId === currentWorkflow.id)
+      ? [...this.state.executions
+        .filter((execution) => execution.workflowId === currentWorkflow.id)]
+        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
       : [];
 
     return createElement("div", {
@@ -771,34 +782,64 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         ? createElement(EmptyStatePanel, {
             icon: "history",
             title: "Select a workflow",
-            description: "Execution history is already server-backed, but detailed run controls land in phase 06.5. This panel stays read-only for now."
+            description: "Pick a workflow first. Execution observability stays scoped to the selected definition only."
           })
         : executions.length === 0
           ? createElement(EmptyStatePanel, {
               icon: "history_toggle_off",
               title: "No recorded runs",
-              description: "The execution rail remains read-only in 06.3. Run history will become first-class in 06.5."
+              description: "This workflow has no persisted runs yet. When the server records executions, this rail will show them here."
             })
-          : executions.map((execution) =>
+          : createElement("div", { className: "flex flex-col gap-3" }, [
+              createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+                createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                  createElement("div", { className: "min-w-0" }, [
+                    createElement("p", { className: "text-sm font-medium text-white" }, ["Persisted runs"]),
+                    createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                      "Inspect runtime, tokens, EUR cost, warnings and node alerts. No live run controls in this slice."
+                    ])
+                  ]),
+                  createElement(StatusBadge, {
+                    status: executions.some((execution) => execution.status === "failed")
+                      ? "failed"
+                      : executions.some((execution) => execution.status === "running")
+                        ? "running"
+                        : "info"
+                  }, [`${executions.length} run${executions.length === 1 ? "" : "s"}`])
+                ])
+              ]),
+              executions.map((execution) =>
               createElement(Card, {
                 key: execution.id,
-                className: "mb-3 border border-border-dark bg-[#11161d]",
+                className: `border border-border-dark bg-[#11161d] ${this.state.selection.type === "execution" && this.state.selection.id === execution.id ? "border-primary bg-primary/10" : ""}`,
                 padding: "md",
+                hover: true,
+                active: this.state.selection.type === "execution" && this.state.selection.id === execution.id,
                 children: [
-                  createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                    createElement("div", { className: "min-w-0" }, [
-                      createElement("p", { className: "truncate text-sm font-medium text-white" }, [execution.id.slice(0, 8)]),
-                      createElement("p", { className: "text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)])
+                  createElement("button", {
+                    type: "button",
+                    className: "flex w-full flex-col gap-3 text-left",
+                    onClick: () => {
+                      void this.handleSelectExecution(execution.id);
+                    },
+                    "data-testid": `${WorkflowScreenSelector.ExecutionCardPrefix}${execution.id}`
+                  }, [
+                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                      createElement("div", { className: "min-w-0" }, [
+                        createElement("p", { className: "truncate text-sm font-medium text-white" }, [readExecutionLabel(execution)]),
+                        createElement("p", { className: "text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)])
+                      ]),
+                      createElement(StatusBadge, {
+                        status: readExecutionBadgeStatus(execution.status),
+                        pulse: execution.status === "running"
+                      }, [formatSelectOptionLabel(execution.status)])
                     ]),
-                    createElement(StatusBadge, {
-                      status: execution.status === "completed" ? "success" : execution.status === "failed" ? "failed" : execution.status === "awaiting_review" ? "warning" : "info"
-                    }, [execution.status])
-                  ]),
-                  createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
-                    createElement("span", {}, [`${execution.totals.totalTokens} tokens`]),
-                    createElement("span", {}, [`€${execution.totals.estimatedCostEur.toFixed(4)}`]),
-                    createElement("span", {}, [`${execution.warningsCount} warnings`]),
-                    createElement("span", {}, [`${execution.errorsCount} errors`])
+                    createElement("div", { className: "grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
+                      createElement("span", {}, [formatDuration(execution.durationMs)]),
+                      createElement("span", {}, [`${execution.totals.totalTokens.toLocaleString()} tokens`]),
+                      createElement("span", {}, [formatEuro(execution.totals.estimatedCostEur)]),
+                      createElement("span", {}, [`${execution.warningsCount} warnings · ${execution.errorsCount} errors`])
+                    ])
                   ]),
                   createElement(Button, {
                     variant: "ghost",
@@ -807,11 +848,15 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     onClick: () => {
                       void this.handleDeleteExecution(execution.id);
                     },
-                    children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run"
+                    children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run",
+                    dataset: {
+                      testid: `${WorkflowScreenSelector.ExecutionDeletePrefix}${execution.id}`
+                    }
                   })
                 ]
               })
             )
+            ])
     ]);
   }
 
@@ -1350,6 +1395,19 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               onClick: () => this.handleRemoveSelectedNode(),
               children: "Delete node"
             })
+          : this.state.selection.type === "execution"
+            ? (() => {
+                const executionId = this.state.selection.id;
+                return createElement(Button, {
+                variant: "danger",
+                size: "sm",
+                disabled: this.state.pendingAction !== null,
+                onClick: () => {
+                  void this.handleDeleteExecution(executionId);
+                },
+                children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run"
+              });
+              })()
           : ""
       ]),
       createElement("div", {
@@ -1370,8 +1428,145 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       return asset ? this.renderAssetInspector(asset) : this.renderEmptyInspector();
     }
 
+    if (this.state.selection.type === "execution") {
+      const execution = this.readSelectedExecution();
+      return execution ? this.renderExecutionInspector(execution) : this.renderEmptyInspector();
+    }
+
     const workflow = this.state.draftWorkflow;
     return workflow ? this.renderWorkflowInspector(workflow) : this.renderEmptyInspector();
+  }
+
+  private renderExecutionInspector(execution: WorkflowExecutionRecord): HTMLElement {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    const nodeLookup = new Map((currentWorkflow?.nodes ?? []).map((node) => [node.id, node]));
+    const hasAlerts = execution.nodeRuns.some((nodeRun) => nodeRun.alerts.length > 0);
+
+    return createElement("div", {
+      className: "flex flex-col gap-4",
+      "data-testid": WorkflowScreenSelector.ExecutionInspector
+    }, [
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+        createElement("div", { className: "flex items-center justify-between gap-3" }, [
+          createElement("div", { className: "min-w-0" }, [
+            createElement("p", { className: "truncate text-sm font-medium text-white" }, [readExecutionLabel(execution)]),
+            createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+              `Started ${formatTimestamp(execution.startedAt)}`
+            ])
+          ]),
+          createElement(StatusBadge, {
+            status: readExecutionBadgeStatus(execution.status),
+            pulse: execution.status === "running"
+          }, [formatSelectOptionLabel(execution.status)])
+        ]),
+        createElement("div", { className: "mt-3 grid grid-cols-2 gap-3" }, [
+          this.renderInlineMetaTile("Runtime", formatDuration(execution.durationMs)),
+          this.renderInlineMetaTile("Tokens", execution.totals.totalTokens.toLocaleString()),
+          this.renderInlineMetaTile("EUR", formatEuro(execution.totals.estimatedCostEur)),
+          this.renderInlineMetaTile("Latency", formatDuration(execution.totals.latencyMs)),
+          this.renderInlineMetaTile("Warnings", execution.warningsCount.toString()),
+          this.renderInlineMetaTile("Errors", execution.errorsCount.toString())
+        ])
+      ]),
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+        createElement("p", { className: "text-sm font-medium text-white" }, ["Run context"]),
+        createElement("div", { className: "mt-3 grid grid-cols-2 gap-3" }, [
+          this.renderInlineMetaTile("Trigger", formatSelectOptionLabel(execution.triggerKind)),
+          this.renderInlineMetaTile("Session", execution.contextSessionId),
+          this.renderInlineMetaTile("Prompt", execution.totals.promptTokens.toLocaleString()),
+          this.renderInlineMetaTile("Completion", execution.totals.completionTokens.toLocaleString())
+        ])
+      ]),
+      hasAlerts
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Run alerts"]),
+            createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              execution.nodeRuns.flatMap((nodeRun) =>
+                nodeRun.alerts.map((alert) =>
+                  createElement("div", {
+                    key: alert.id,
+                    className: "rounded-md border border-border-dark bg-[#161b22] px-3 py-2"
+                  }, [
+                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                      createElement("span", { className: "text-xs font-medium text-white" }, [
+                        `${nodeLookup.get(nodeRun.nodeId)?.label ?? nodeRun.nodeId} · ${formatSelectOptionLabel(alert.source)}`
+                      ]),
+                      createElement(StatusBadge, {
+                        status: readAlertBadgeStatus(alert.level)
+                      }, [formatSelectOptionLabel(alert.level)])
+                    ]),
+                    createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [alert.message])
+                  ])
+                )
+              )
+            ])
+          ])
+        : "",
+      createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+        createElement("div", { className: "flex items-center justify-between gap-3" }, [
+          createElement("div", { className: "min-w-0" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Node runs"]),
+            createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+              "Per-node runtime, provider usage and alert visibility."
+            ])
+          ]),
+          this.state.loadingExecutionId === execution.id
+            ? createElement(StatusBadge, {
+                status: "running",
+                pulse: true
+              }, ["Refreshing"])
+            : ""
+        ]),
+        createElement("div", { className: "mt-3 flex flex-col gap-3" }, [
+          execution.nodeRuns.map((nodeRun) => {
+            const nodeLabel = nodeLookup.get(nodeRun.nodeId)?.label ?? nodeRun.nodeId;
+            return createElement("div", {
+              key: nodeRun.id,
+              className: "rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+              "data-testid": `${WorkflowScreenSelector.ExecutionNodeRunPrefix}${nodeRun.id}`
+            }, [
+              createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement("p", { className: "truncate text-sm font-medium text-white" }, [nodeLabel]),
+                  createElement("p", { className: "truncate text-xs text-text-secondary" }, [
+                    `${readNodeKindLabel(nodeRun.nodeKind)} · ${formatDuration(nodeRun.durationMs)}`
+                  ])
+                ]),
+                createElement(StatusBadge, {
+                  status: readExecutionBadgeStatus(nodeRun.status)
+                }, [formatSelectOptionLabel(nodeRun.status)])
+              ]),
+              createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
+                createElement("span", {}, [readNodeRunProviderLabel(nodeRun)]),
+                createElement("span", {}, [nodeRun.usage ? `${nodeRun.usage.totalTokens.toLocaleString()} tokens` : "No token data"]),
+                createElement("span", {}, [nodeRun.usage ? formatEuro(nodeRun.usage.estimatedCostEur) : "No EUR data"]),
+                createElement("span", {}, [`${nodeRun.alerts.length} alert${nodeRun.alerts.length === 1 ? "" : "s"}`])
+              ]),
+              nodeRun.alerts.length > 0
+                ? createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+                    nodeRun.alerts.map((alert) =>
+                      createElement("div", {
+                        key: alert.id,
+                        className: "rounded border border-border-dark bg-[#11161d] px-3 py-2"
+                      }, [
+                        createElement("div", { className: "flex items-center justify-between gap-2" }, [
+                          createElement("span", { className: "text-xs text-white" }, [alert.message]),
+                          createElement(StatusBadge, {
+                            status: readAlertBadgeStatus(alert.level)
+                          }, [formatSelectOptionLabel(alert.level)])
+                        ]),
+                        createElement("p", { className: "mt-1 text-[11px] text-text-secondary" }, [
+                          `${formatSelectOptionLabel(alert.source)} · ${formatTimestamp(alert.createdAt)}`
+                        ])
+                      ])
+                    )
+                  ])
+                : createElement("p", { className: "mt-3 text-xs text-text-secondary" }, ["No node alerts."])
+            ]);
+          })
+        ])
+      ])
+    ]);
   }
 
   private renderWorkflowInspector(workflow: WorkflowDefinitionUpsertInput): HTMLElement {
@@ -3329,15 +3524,17 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
   private renderInlineMetaGrid(items: ReadonlyArray<{ label: string; value: string }>): HTMLElement {
     return createElement("div", { className: "grid grid-cols-2 gap-3" }, [
-      items.map((item) =>
-        createElement("div", {
-          key: item.label,
-          className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3"
-        }, [
-          createElement("p", { className: "text-[11px] uppercase tracking-wide text-text-secondary" }, [item.label]),
-          createElement("p", { className: "mt-2 text-sm font-medium text-white" }, [item.value])
-        ])
-      )
+      items.map((item) => this.renderInlineMetaTile(item.label, item.value))
+    ]);
+  }
+
+  private renderInlineMetaTile(label: string, value: string): HTMLElement {
+    return createElement("div", {
+      key: label,
+      className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3"
+    }, [
+      createElement("p", { className: "text-[11px] uppercase tracking-wide text-text-secondary" }, [label]),
+      createElement("p", { className: "mt-2 text-sm font-medium text-white break-words" }, [value])
     ]);
   }
 
@@ -3419,8 +3616,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       executions,
       draftWorkflow: currentWorkflow ? stripDefinitionVersionFields(currentWorkflow) : null,
       selection: currentWorkflow
-        ? resolveSelectionAfterReload(this.state.selection, currentWorkflow, assets)
+        ? resolveSelectionAfterReload(this.state.selection, currentWorkflow, assets, executions)
         : { type: "workflow", id: null },
+      loadingExecutionId: null,
       dirtyWorkflow: false,
       dirtyAssetIds: []
     });
@@ -3448,6 +3646,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.setState({
       draftWorkflow: stripDefinitionVersionFields(workflow),
       selection: { type: "workflow", id: workflow.id },
+      loadingExecutionId: null,
       dirtyWorkflow: false,
       dirtyAssetIds: [],
       pendingConnection: null,
@@ -3658,6 +3857,36 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
   }
 
+  private async handleSelectExecution(executionId: string): Promise<void> {
+    const execution = this.state.executions.find((entry) => entry.id === executionId);
+    if (!execution) {
+      return;
+    }
+
+    this.setState({
+      selection: { type: "execution", id: executionId },
+      loadingExecutionId: executionId,
+      errorMessage: null,
+      noticeMessage: null,
+      compactView: this.state.isCompactViewport ? CompactView.Inspector : this.state.compactView
+    });
+
+    try {
+      const hydratedExecution = await this.workflowClient.getExecution({ executionId });
+      this.setState({
+        executions: this.state.executions.map((entry) => entry.id === executionId ? hydratedExecution : entry),
+        loadingExecutionId: null,
+        selection: { type: "execution", id: executionId }
+      });
+    } catch (error) {
+      this.setState({
+        loadingExecutionId: null,
+        errorMessage: readErrorMessage(error, "Could not load the selected execution."),
+        noticeMessage: null
+      });
+    }
+  }
+
   private async handleDeleteExecution(executionId: string): Promise<void> {
     if (!this.state.currentProject) {
       return;
@@ -3670,12 +3899,14 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       await this.reloadCatalog(this.state.currentProject.id);
       this.setState({
         pendingAction: null,
+        loadingExecutionId: this.state.loadingExecutionId === executionId ? null : this.state.loadingExecutionId,
         noticeMessage: "Execution deleted.",
         errorMessage: null
       });
     } catch (error) {
       this.setState({
         pendingAction: null,
+        loadingExecutionId: this.state.loadingExecutionId === executionId ? null : this.state.loadingExecutionId,
         errorMessage: readErrorMessage(error, "Could not delete the execution record."),
         noticeMessage: null
       });
@@ -4199,6 +4430,14 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     return this.state.assets.find((asset) => asset.id === this.state.selection.id) ?? null;
   }
 
+  private readSelectedExecution(): WorkflowExecutionRecord | null {
+    if (this.state.selection.type !== "execution") {
+      return null;
+    }
+
+    return this.state.executions.find((execution) => execution.id === this.state.selection.id) ?? null;
+  }
+
   private readProviderProfileOptions(currentProviderId: string): ReadonlyArray<{ value: string; label: string }> {
     const profiles = this.state.workspaceState?.settings.providerProfiles ?? [];
     const profileOptions = profiles.map((profile) => ({
@@ -4228,6 +4467,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       return this.readSelectedAsset()?.name ?? "Reusable asset";
     }
 
+    if (this.state.selection.type === "execution") {
+      const execution = this.readSelectedExecution();
+      return execution ? readExecutionLabel(execution) : this.state.selection.id.slice(0, 8);
+    }
+
     return this.state.draftWorkflow?.name ?? "Workflow";
   }
 
@@ -4240,6 +4484,13 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     if (this.state.selection.type === "asset") {
       const asset = this.readSelectedAsset();
       return asset ? `${readAssetKindLabel(asset.kind)} · ${readAssetScopeLabel(asset.scope)}` : "No asset selected";
+    }
+
+    if (this.state.selection.type === "execution") {
+      const execution = this.readSelectedExecution();
+      return execution
+        ? `${formatSelectOptionLabel(execution.status)} · ${formatDuration(execution.durationMs)} · ${execution.nodeRuns.length} node run${execution.nodeRuns.length === 1 ? "" : "s"}`
+        : "Run detail";
     }
 
     return "Workflow metadata";
@@ -4703,13 +4954,18 @@ const readWorkspaceId = (
 const resolveSelectionAfterReload = (
   selection: WorkflowSelection,
   workflow: WorkflowDefinitionRecord,
-  assets: ReadonlyArray<WorkflowAssetRecord>
+  assets: ReadonlyArray<WorkflowAssetRecord>,
+  executions: ReadonlyArray<WorkflowExecutionRecord>
 ): WorkflowSelection => {
   if (selection.type === "node" && workflow.nodes.some((node) => node.id === selection.id)) {
     return selection;
   }
 
   if (selection.type === "asset" && assets.some((asset) => asset.id === selection.id)) {
+    return selection;
+  }
+
+  if (selection.type === "execution" && executions.some((execution) => execution.id === selection.id && execution.workflowId === workflow.id)) {
     return selection;
   }
 
@@ -5029,6 +5285,81 @@ const readErrorMessage = (error: unknown, fallback: string): string =>
 const formatTimestamp = (value: string): string => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+};
+
+const formatDuration = (value?: number): string => {
+  if (value === undefined || Number.isNaN(value) || value < 0) {
+    return "n/a";
+  }
+
+  if (value < 1000) {
+    return `${Math.round(value)} ms`;
+  }
+
+  if (value < 60_000) {
+    return `${(value / 1000).toFixed(1)} s`;
+  }
+
+  const minutes = Math.floor(value / 60_000);
+  const seconds = Math.round((value % 60_000) / 1000);
+  return `${minutes.toString()}m ${seconds.toString()}s`;
+};
+
+const formatEuro = (value: number): string => `€${value.toFixed(4)}`;
+
+const readExecutionLabel = (execution: Pick<WorkflowExecutionRecord, "id">): string =>
+  execution.id.length > 8 ? execution.id.slice(0, 8) : execution.id;
+
+const readExecutionBadgeStatus = (
+  status: WorkflowExecutionRecord["status"] | WorkflowNodeExecutionRecord["status"]
+): "info" | "success" | "warning" | "running" | "failed" => {
+  if (status === "completed") {
+    return "success";
+  }
+
+  if (status === "failed") {
+    return "failed";
+  }
+
+  if (status === "awaiting_review") {
+    return "warning";
+  }
+
+  if (status === "running") {
+    return "running";
+  }
+
+  return "info";
+};
+
+const readAlertBadgeStatus = (
+  level: WorkflowAlertRecord["level"]
+): "info" | "success" | "warning" | "failed" => {
+  if (level === "success") {
+    return "success";
+  }
+
+  if (level === "warn") {
+    return "warning";
+  }
+
+  if (level === "error") {
+    return "failed";
+  }
+
+  return "info";
+};
+
+const readNodeRunProviderLabel = (nodeRun: WorkflowExecutionRecord["nodeRuns"][number]): string => {
+  if (nodeRun.providerId && nodeRun.modelId) {
+    return `${nodeRun.providerId} · ${nodeRun.modelId}`;
+  }
+
+  if (nodeRun.providerId) {
+    return nodeRun.providerId;
+  }
+
+  return "No provider data";
 };
 
 const toSlugValue = (value: string): string =>

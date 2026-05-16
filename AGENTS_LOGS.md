@@ -2652,3 +2652,61 @@
   - `06.4` remains in progress until the user explicitly accepts the new modal-based UX.
 - Next:
   - Add the Notion progress comment, then request explicit user validation of the new modal/editor flow before moving `06.4` to `Listo`.
+### 2026-05-15 18:47 (Europe/Madrid) — Workflows 06.4 Acceptance Validation
+
+- Summary:
+  - Validated the new `06.4` deep-authoring UX in the real running browser flow and accepted the subtask.
+- Decisions:
+  - `06.4 JSON contracts, data mapping and guardrail composition UI` is accepted and can move from `En progreso` to `Listo`.
+- Changes:
+  - Updated `PLAN.md` to record `06.4` acceptance and the validated modal/variable/raw-JSON behavior.
+  - Moved the Notion subtask status to `Listo`.
+  - Added a Notion acceptance comment with the browser-validation outcome.
+- Commands:
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - Monaco/CodeMirror remain deferred until the web runtime stops being raw browser ESM.
+- Next:
+  - Start the next Workflows phase only after the user confirms the next priority.
+
+### 2026-05-15 19:10 (Europe/Madrid) — Workflows 06.5A Execution Observability Shell
+
+- Summary:
+  - Implemented first 06.5A Workflows slice in `apps/web-ui` only: persisted execution rail plus inspector-level run observability, without adding live execution controls, provider continuity work, or new triggers.
+- Decisions:
+  - Reused only existing `/workflows/executions/list`, `/get`, and `/delete` endpoints; run list stays summary-first and the selected run hydrates through `getExecution`.
+  - Kept 06.3/06.4 editor behavior intact and treated execution work as read-only observability plus delete.
+  - Deterministic browser validation seeds execution fixtures only after workflow save so node-level alerts use real persisted node ids.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with selectable execution cards, selected-run inspector panels, node-run alert surfacing, and server-backed delete actions.
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` with load -> inspect -> delete -> reload coverage and stub execution fixtures.
+  - Updated `PLAN.md` with 06.5A progress.
+- Commands:
+  - `pnpm exec tsc --noEmit -p apps/web-ui/tsconfig.json`
+  - `pnpm exec eslint apps/web-ui/src/screens/Workflows.ts apps/web-ui/scripts/validate-workflows.ts`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - Engram memory save tools were not fully exposed in this session tooling surface, so only session tracking/search remained available during implementation.
+- Next:
+  - Run full workspace quality gates and report final blockers, if any.
+
+### 2026-05-16 12:13 (Europe/Madrid) — Workflows 06.5A Validation Pass
+
+- Summary:
+  - Recovered the accepted `06.4` context, verified the existing `06.5A` execution observability diff, and re-ran the full workspace and browser validation gates. The persisted execution rail slice is green and remains the active `06.5` scope.
+- Decisions:
+  - Keep `06.5` scoped to execution observability only for now; no live run controls or `06.6` runtime/provider work were added.
+  - Treat the current `apps/web-ui` diff as the valid first `06.5A` slice because it already satisfies the requested run list/get/delete observability acceptance criteria.
+- Changes:
+  - Updated `PLAN.md` with the `2026-05-16` validation pass for `06.5A`.
+  - Added a Notion progress update to `06.5 Execution rail, history, alerts and EUR cost observability` while keeping the phase open.
+- Commands:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm -C apps/web-ui validate:workflows`
+- Issues/Risks:
+  - `06.5` is still in progress; accumulated EUR areas, live execution controls, and later provider/runtime continuity remain for subsequent slices.
+- Next:
+  - Wait for user validation of the persisted execution rail slice, then choose the narrowest follow-up inside `06.5`.

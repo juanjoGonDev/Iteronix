@@ -104,6 +104,11 @@ const WorkflowSelector = {
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
   GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
+  SectionHistory: "workflows-section-history",
+  ExecutionCardPrefix: "workflows-execution-card-",
+  ExecutionDeletePrefix: "workflows-execution-delete-",
+  ExecutionInspector: "workflows-execution-inspector",
+  ExecutionNodeRunPrefix: "workflows-execution-node-run-",
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
   CompactCanvas: "workflows-compact-canvas",
@@ -225,10 +230,10 @@ type StubExecutionRecord = {
   workflowId: string;
   projectId: string;
   triggerKind: "manual";
-  status: "completed";
+  status: "running" | "completed" | "failed" | "awaiting_review" | "canceled";
   startedAt: string;
-  finishedAt: string;
-  durationMs: number;
+  finishedAt?: string;
+  durationMs?: number;
   warningsCount: number;
   errorsCount: number;
   totals: {
@@ -239,7 +244,31 @@ type StubExecutionRecord = {
     latencyMs: number;
   };
   contextSessionId: string;
-  nodeRuns: ReadonlyArray<unknown>;
+  nodeRuns: ReadonlyArray<{
+    id: string;
+    nodeId: string;
+    nodeKind: WorkflowNodeKind;
+    status: "running" | "completed" | "failed" | "skipped" | "awaiting_review";
+    startedAt: string;
+    finishedAt?: string;
+    durationMs?: number;
+    providerId?: string;
+    modelId?: string;
+    usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      estimatedCostEur: number;
+      latencyMs: number;
+    };
+    alerts: ReadonlyArray<{
+      id: string;
+      level: "info" | "success" | "warn" | "error";
+      source: "system" | "guardrail" | "provider" | "checkpoint";
+      message: string;
+      createdAt: string;
+    }>;
+  }>;
 };
 
 type StubAssetUsageRecord = {
@@ -286,8 +315,14 @@ const ValidationText = {
   MappingSourcePath: "$.result",
   GuardrailValidationPath: "$.summary",
   GuardrailValidationMessage: "Summary must be present before continuing.",
+  ExecutionPrimaryId: "execution-completed",
+  ExecutionSecondaryId: "execution-failed",
+  ExecutionPrimaryAlert: "Summary guardrail returned a warning.",
+  ExecutionSecondaryAlert: "Provider request failed after guardrail pass.",
+  ExecutionSecondaryNodeLabel: "Codex run",
   WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
+  ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
   ConnectionHintTitle: "Connect nodes",
   ConnectionModeTitle: "Connection mode"
@@ -575,6 +610,34 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
+    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await waitForExecutionCardCount(page, 2);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await waitForTestId(page, WorkflowSelector.ExecutionInspector);
+    await waitForPageTexts(page, [
+      ValidationText.ExecutionPrimaryAlert,
+      ValidationText.ExecutionSecondaryNodeLabel
+    ]);
+    await waitForNodeRunCards(page, 2);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`);
+    await waitForPageText(page, ValidationText.ExecutionDeletedNotice);
+    await waitForExecutionCardCount(page, 1);
+    assertExecutionDeletion(stubServer.state, ValidationText.ExecutionPrimaryId);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-execution-history",
+      artifactName: "workflows"
+    });
+
+    await page.reload({
+      waitUntil: "networkidle0"
+    });
+    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await waitForExecutionCardCount(page, 1);
+    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
+    await waitForPageText(page, ValidationText.ExecutionSecondaryAlert);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -741,6 +804,10 @@ async function handleStubRequest(
       state.nextWorkflowId += 1;
       state.definitions.push(nextDefinition);
     }
+    state.executions = [
+      ...state.executions.filter((execution) => execution.workflowId !== nextDefinition.id),
+      ...createExecutionFixtures(nextDefinition)
+    ];
     writeJson(response, 200, {
       definition: nextDefinition
     });
@@ -1486,6 +1553,47 @@ async function waitForTestId(page: Page, testId: string): Promise<void> {
   });
 }
 
+async function waitForMissingTestId(page: Page, testId: string): Promise<void> {
+  await waitForCondition(async () => {
+    const missing = await page.evaluate((selector: string) => {
+      const element = document.querySelector(`[data-testid="${selector}"]`);
+      return !(element instanceof Element);
+    }, testId);
+    return missing;
+  }, `missing test id ${testId}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForExecutionCardCount(page: Page, expectedCount: number): Promise<void> {
+  await waitForCondition(async () => {
+    const count = await page.evaluate((prefix: string) =>
+      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
+        .filter((entry) => entry instanceof HTMLElement)
+        .length,
+    WorkflowSelector.ExecutionCardPrefix);
+    return count === expectedCount;
+  }, `execution card count ${expectedCount.toString()}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
+async function waitForNodeRunCards(page: Page, expectedCount: number): Promise<void> {
+  await waitForCondition(async () => {
+    const count = await page.evaluate((prefix: string) =>
+      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
+        .filter((entry) => entry instanceof HTMLElement)
+        .length,
+    WorkflowSelector.ExecutionNodeRunPrefix);
+    return count === expectedCount;
+  }, `node run card count ${expectedCount.toString()}`, {
+    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+    intervalMs: ValidationConfig.UiPollingIntervalMs
+  });
+}
+
 async function waitForNodeCardText(page: Page, text: string): Promise<void> {
   await waitForCondition(async () => {
     const exists = await page.evaluate((label: string) =>
@@ -1805,6 +1913,143 @@ function assertPersistedWorkflow(state: StubServerState): void {
   if (!providerNode.attachedGuardrails.some((guardrail) => guardrail.assetId === guardrailAsset.id)) {
     throw new Error("Expected provider node to keep the guardrail attachment.");
   }
+}
+
+function assertExecutionDeletion(state: StubServerState, executionId: string): void {
+  if (state.executions.some((execution) => execution.id === executionId)) {
+    throw new Error(`Expected execution ${executionId} to be deleted from persisted state.`);
+  }
+}
+
+function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): ReadonlyArray<StubExecutionRecord> {
+  const triggerNode = definition.nodes.find((node) => node.kind === WorkflowNodeKind.TriggerManual);
+  const promptNode = definition.nodes.find((node) => node.label === ValidationText.PromptNodeLabel);
+  const providerNode = definition.nodes.find((node) => node.label === ValidationText.ProviderNodeLabel);
+
+  if (!triggerNode || !promptNode || !providerNode) {
+    return [];
+  }
+
+  return [
+    {
+      id: ValidationText.ExecutionPrimaryId,
+      workflowId: definition.id,
+      projectId: definition.projectId,
+      triggerKind: "manual",
+      status: "completed",
+      startedAt: "2026-05-06T08:16:00.000Z",
+      finishedAt: "2026-05-06T08:16:07.000Z",
+      durationMs: 7000,
+      warningsCount: 1,
+      errorsCount: 0,
+      totals: {
+        promptTokens: 420,
+        completionTokens: 210,
+        totalTokens: 630,
+        estimatedCostEur: 0.0342,
+        latencyMs: 6900
+      },
+      contextSessionId: "ctx-completed",
+      nodeRuns: [
+        {
+          id: "node-run-trigger-completed",
+          nodeId: triggerNode.id,
+          nodeKind: triggerNode.kind,
+          status: "completed",
+          startedAt: "2026-05-06T08:16:00.000Z",
+          finishedAt: "2026-05-06T08:16:00.300Z",
+          durationMs: 300,
+          alerts: []
+        },
+        {
+          id: "node-run-provider-completed",
+          nodeId: providerNode.id,
+          nodeKind: providerNode.kind,
+          status: "completed",
+          startedAt: "2026-05-06T08:16:00.400Z",
+          finishedAt: "2026-05-06T08:16:07.000Z",
+          durationMs: 6600,
+          providerId: "codex-cli",
+          modelId: "gpt-5-codex",
+          usage: {
+            promptTokens: 420,
+            completionTokens: 210,
+            totalTokens: 630,
+            estimatedCostEur: 0.0342,
+            latencyMs: 6600
+          },
+          alerts: [
+            {
+              id: "alert-completed-guardrail",
+              level: "warn",
+              source: "guardrail",
+              message: ValidationText.ExecutionPrimaryAlert,
+              createdAt: "2026-05-06T08:16:06.200Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: ValidationText.ExecutionSecondaryId,
+      workflowId: definition.id,
+      projectId: definition.projectId,
+      triggerKind: "manual",
+      status: "failed",
+      startedAt: "2026-05-06T08:20:00.000Z",
+      finishedAt: "2026-05-06T08:20:05.500Z",
+      durationMs: 5500,
+      warningsCount: 0,
+      errorsCount: 1,
+      totals: {
+        promptTokens: 390,
+        completionTokens: 0,
+        totalTokens: 390,
+        estimatedCostEur: 0.0213,
+        latencyMs: 5400
+      },
+      contextSessionId: "ctx-failed",
+      nodeRuns: [
+        {
+          id: "node-run-prompt-failed",
+          nodeId: promptNode.id,
+          nodeKind: promptNode.kind,
+          status: "completed",
+          startedAt: "2026-05-06T08:20:00.000Z",
+          finishedAt: "2026-05-06T08:20:00.900Z",
+          durationMs: 900,
+          alerts: []
+        },
+        {
+          id: "node-run-provider-failed",
+          nodeId: providerNode.id,
+          nodeKind: providerNode.kind,
+          status: "failed",
+          startedAt: "2026-05-06T08:20:01.000Z",
+          finishedAt: "2026-05-06T08:20:05.500Z",
+          durationMs: 4500,
+          providerId: "codex-cli",
+          modelId: "gpt-5-codex",
+          usage: {
+            promptTokens: 390,
+            completionTokens: 0,
+            totalTokens: 390,
+            estimatedCostEur: 0.0213,
+            latencyMs: 4500
+          },
+          alerts: [
+            {
+              id: "alert-provider-failed",
+              level: "error",
+              source: "provider",
+              message: ValidationText.ExecutionSecondaryAlert,
+              createdAt: "2026-05-06T08:20:05.100Z"
+            }
+          ]
+        }
+      ]
+    }
+  ];
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {

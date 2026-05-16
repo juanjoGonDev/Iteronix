@@ -651,6 +651,19 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
       - Node quick edits now stay in the side inspector, while prompt/output deep authoring moves into a responsive modal/full-screen sheet with separate Prompt, Output and Preview tabs
       - Prompts and output templates now use a canonical interpolation token model (`{{var|kind|sourceId|path}}`) with click/drag insertion from previous node outputs, current input, workflow context and reusable asset outputs
       - Output contracts now support synchronized Visual Tree and Raw JSON editing from the same canonical schema tree, including recoverable raw-JSON validation and apply flow in browser automation
+  - Phase `06.4` accepted on `2026-05-15` after real running browser validation and moved to `Listo` in Notion:
+    - Deep authoring now opens in a responsive modal while the side inspector acts as quick-edit only
+    - Variable click/drag insertion persists in prompt/output template fields
+    - Visual Tree and Raw JSON output-contract editing stay synchronized through the canonical schema model
+    - Real-app browser validation passed again for modal editing, raw JSON recovery, variable insertion, save, and reload
+  - Phase `06.5A` first slice implemented on `2026-05-15` while `06.5` remains in progress:
+    - `apps/web-ui/src/screens/Workflows.ts` now turns the History rail into a persisted execution rail for the selected workflow, with run selection, runtime/tokens/EUR/warnings/errors summaries, and server-backed delete actions
+    - The Workflows inspector now renders selected run observability with run context, node-level runtime usage, and alert surfacing using existing `/workflows/executions/list|get|delete` endpoints only
+    - `apps/web-ui/scripts/validate-workflows.ts` now validates deterministic load -> inspect -> delete -> reload behavior by generating saved execution fixtures tied to the persisted workflow node ids
+  - Phase `06.5A` validation pass completed on `2026-05-16` while `06.5` stays in progress pending further slices:
+    - Full workspace gates passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`
+    - Real browser validation passed again with `pnpm -C apps/web-ui validate:workflows`
+    - Notion progress for `06.5 Execution rail, history, alerts and EUR cost observability` was refreshed without closing the phase
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow
