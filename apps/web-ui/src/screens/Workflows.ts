@@ -109,6 +109,11 @@ const WorkflowScreenSelector = {
   ExecutionSummaryTokens: "workflows-execution-summary-tokens",
   ExecutionSummaryWarnings: "workflows-execution-summary-warnings",
   ExecutionSummaryErrors: "workflows-execution-summary-errors",
+  ExecutionSummaryAttention: "workflows-execution-summary-attention",
+  ExecutionSummaryAttentionRuns: "workflows-execution-summary-attention-runs",
+  ExecutionSummaryAttentionFailedRuns: "workflows-execution-summary-attention-failed-runs",
+  ExecutionSummaryAttentionAlertedRuns: "workflows-execution-summary-attention-alerted-runs",
+  ExecutionAttentionRunPrefix: "workflows-execution-attention-run-",
   ExecutionCardPrefix: "workflows-execution-card-",
   ExecutionDeletePrefix: "workflows-execution-delete-",
   ExecutionInspector: "workflows-execution-inspector",
@@ -785,6 +790,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       : [];
     const snapshotSummary = readExecutionSnapshotSummary(executions);
     const aggregateSummary = readExecutionAggregateSummary(executions);
+    const attentionSummary = readExecutionAttentionSummary(executions);
 
     return createElement("div", {
       className: "min-h-0 flex-1 overflow-y-auto p-3"
@@ -840,6 +846,61 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     this.renderInlineMetaTile("Tokens", aggregateSummary.totalTokens.toLocaleString(), WorkflowScreenSelector.ExecutionSummaryTokens),
                     this.renderInlineMetaTile("Warnings", aggregateSummary.warningCount.toString(), WorkflowScreenSelector.ExecutionSummaryWarnings),
                     this.renderInlineMetaTile("Errors", aggregateSummary.errorCount.toString(), WorkflowScreenSelector.ExecutionSummaryErrors)
+                  ]),
+                  createElement("div", {
+                    className: "rounded-lg border border-border-dark bg-[#161b22] px-3 py-3",
+                    "data-testid": WorkflowScreenSelector.ExecutionSummaryAttention
+                  }, [
+                    createElement("div", { className: "flex flex-col gap-3 md:flex-row md:items-start md:justify-between" }, [
+                      createElement("div", { className: "min-w-0" }, [
+                        createElement("p", { className: "text-sm font-medium text-white" }, ["Needs attention"]),
+                        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                          attentionSummary.attentionRunCount === 0
+                            ? "No persisted failures or alerts need review right now."
+                            : "Recent failing or alerted persisted runs, without opening each run first."
+                        ])
+                      ]),
+                      createElement(StatusBadge, {
+                        status: attentionSummary.failedRunCount > 0
+                          ? "failed"
+                          : attentionSummary.attentionRunCount > 0
+                            ? "warning"
+                            : "success"
+                      }, [
+                        attentionSummary.attentionRunCount === 0
+                          ? "Clear"
+                          : `${attentionSummary.attentionRunCount} run${attentionSummary.attentionRunCount === 1 ? "" : "s"}`
+                      ])
+                    ]),
+                    createElement("div", { className: "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3" }, [
+                      this.renderInlineMetaTile(
+                        "Needs attention",
+                        attentionSummary.attentionRunCount.toString(),
+                        WorkflowScreenSelector.ExecutionSummaryAttentionRuns
+                      ),
+                      this.renderInlineMetaTile(
+                        "Failed runs",
+                        attentionSummary.failedRunCount.toString(),
+                        WorkflowScreenSelector.ExecutionSummaryAttentionFailedRuns
+                      ),
+                      this.renderInlineMetaTile(
+                        "Runs with alerts",
+                        attentionSummary.alertedRunCount.toString(),
+                        WorkflowScreenSelector.ExecutionSummaryAttentionAlertedRuns
+                      )
+                    ]),
+                    attentionSummary.recentAttentionRuns.length === 0
+                      ? ""
+                      : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+                          attentionSummary.recentAttentionRuns.map((execution) =>
+                            this.renderExecutionAttentionItem(execution)
+                          ),
+                          attentionSummary.remainingAttentionRunCount > 0
+                            ? createElement("p", { className: "text-xs text-text-secondary" }, [
+                                `${attentionSummary.remainingAttentionRunCount} older attention run${attentionSummary.remainingAttentionRunCount === 1 ? "" : "s"} remain in persisted history.`
+                              ])
+                            : ""
+                        ])
                   ])
                 ])
               ]),
@@ -909,6 +970,34 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
               })
             )
             ])
+    ]);
+  }
+
+  private renderExecutionAttentionItem(execution: WorkflowExecutionRecord): HTMLElement {
+    const alertCount = readExecutionAlertCount(execution);
+    const isSelected = this.state.selection.type === "execution" && this.state.selection.id === execution.id;
+
+    return createElement("button", {
+      type: "button",
+      className: `flex w-full items-start justify-between gap-3 rounded-lg border border-border-dark px-3 py-2 text-left transition-colors ${
+        isSelected ? "border-primary bg-primary/10" : "bg-[#11161d] hover:border-primary/40 hover:bg-[#171c22]"
+      }`,
+      onClick: () => {
+        void this.handleSelectExecution(execution.id);
+      },
+      "data-testid": `${WorkflowScreenSelector.ExecutionAttentionRunPrefix}${execution.id}`
+    }, [
+      createElement("div", { className: "min-w-0 flex-1" }, [
+        createElement("p", { className: "truncate text-sm font-medium text-white" }, [readExecutionLabel(execution)]),
+        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)]),
+        createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [
+          `${alertCount} alert${alertCount === 1 ? "" : "s"} · ${execution.warningsCount} warning${execution.warningsCount === 1 ? "" : "s"} · ${execution.errorsCount} error${execution.errorsCount === 1 ? "" : "s"}`
+        ])
+      ]),
+      createElement(StatusBadge, {
+        status: readExecutionBadgeStatus(execution.status),
+        pulse: execution.status === "running"
+      }, [formatSelectOptionLabel(execution.status)])
     ]);
   }
 
@@ -5402,6 +5491,18 @@ const readExecutionAggregateSummary = (executions: ReadonlyArray<WorkflowExecuti
     errorCount: 0
   });
 
+const readExecutionAttentionSummary = (executions: ReadonlyArray<WorkflowExecutionRecord>) => {
+  const attentionRuns = executions.filter((execution) => readExecutionNeedsAttention(execution));
+
+  return {
+    attentionRunCount: attentionRuns.length,
+    failedRunCount: executions.filter((execution) => execution.status === "failed").length,
+    alertedRunCount: executions.filter((execution) => readExecutionHasAlerts(execution)).length,
+    recentAttentionRuns: attentionRuns.slice(0, 4),
+    remainingAttentionRunCount: Math.max(0, attentionRuns.length - 4)
+  };
+};
+
 const readExecutionStatusDistributionLabel = (statusCounts: WorkflowExecutionStatusCounts): string => [
   readExecutionStatusCountLabel("completed", statusCounts.completed),
   readExecutionStatusCountLabel("failed", statusCounts.failed),
@@ -5415,6 +5516,15 @@ const readExecutionStatusCountLabel = (status: WorkflowExecutionStatus, count: n
 
 const readExecutionLabel = (execution: Pick<WorkflowExecutionRecord, "id">): string =>
   execution.id.length > 8 ? execution.id.slice(0, 8) : execution.id;
+
+const readExecutionNeedsAttention = (execution: WorkflowExecutionRecord): boolean =>
+  execution.status === "failed" || readExecutionHasAlerts(execution);
+
+const readExecutionHasAlerts = (execution: WorkflowExecutionRecord): boolean =>
+  readExecutionAlertCount(execution) > 0 || execution.warningsCount > 0 || execution.errorsCount > 0;
+
+const readExecutionAlertCount = (execution: WorkflowExecutionRecord): number =>
+  execution.nodeRuns.reduce((count, nodeRun) => count + nodeRun.alerts.length, 0);
 
 const readExecutionBadgeStatus = (
   status: WorkflowExecutionRecord["status"] | WorkflowNodeExecutionRecord["status"]

@@ -2770,3 +2770,22 @@
   - `validate-workflows.ts` intentionally remains unchanged in this slice, so the new snapshot relies on existing workspace gates until the final `06.5` validation pass.
 - Next:
   - Implement the next `06.5` slice for persisted run-level alert/failure surfacing polish without starting any `06.6` runtime/provider continuity work.
+### 2026-05-16 16:35 (Europe/Madrid) — Workflows 06.5D Persisted Attention Surface
+
+- Summary:
+  - Continued only `06.5` and added a compact workflow-level persisted attention surface in `apps/web-ui` so failing or alerted runs are visible without opening each run.
+- Decisions:
+  - Keep `06.5D` limited to saved-execution observability only; no new endpoints, no live controls, no `validate-workflows.ts` edits, and no `06.6` work.
+  - Treat a run as needing attention when it failed or when persisted warning/error/alert data already indicates review is needed.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with a nested `Needs attention` block aligned to the existing execution summary, including failed-run count, runs-with-alerts count, and a compact list of the most recent attention runs with timestamp/status/alert counts plus direct selection.
+  - Updated `PLAN.md` to record `06.5D` while keeping parent phase `06.5` explicitly in progress.
+- Commands:
+  - `rtk pnpm lint` PASS
+  - `rtk pnpm typecheck` PASS
+  - `rtk pnpm test` PASS
+  - `rtk pnpm build` PASS
+- Issues/Risks:
+  - Browser-level acceptance validation remains intentionally deferred until the end of all `06.5` slices, so this slice is currently covered by workspace quality gates only.
+- Next:
+  - Implement the final remaining `06.5` polish around persisted alert detail clarity or filtering before running the deferred end-of-phase browser validation.
