@@ -113,6 +113,9 @@ const WorkflowScreenSelector = {
   ExecutionSummaryAttentionRuns: "workflows-execution-summary-attention-runs",
   ExecutionSummaryAttentionFailedRuns: "workflows-execution-summary-attention-failed-runs",
   ExecutionSummaryAttentionAlertedRuns: "workflows-execution-summary-attention-alerted-runs",
+  ExecutionFilterAll: "workflows-execution-filter-all",
+  ExecutionFilterFailed: "workflows-execution-filter-failed",
+  ExecutionFilterAttention: "workflows-execution-filter-attention",
   ExecutionAttentionRunPrefix: "workflows-execution-attention-run-",
   ExecutionCardPrefix: "workflows-execution-card-",
   ExecutionDeletePrefix: "workflows-execution-delete-",
@@ -223,6 +226,14 @@ const PendingAction = {
 } as const;
 
 type PendingAction = typeof PendingAction[keyof typeof PendingAction];
+
+const ExecutionHistoryFilter = {
+  All: "all",
+  Failed: "failed",
+  Attention: "attention"
+} as const;
+
+type ExecutionHistoryFilter = typeof ExecutionHistoryFilter[keyof typeof ExecutionHistoryFilter];
 
 type WorkflowSelection =
   | { type: "workflow"; id: string | null }
@@ -345,6 +356,7 @@ interface WorkflowsScreenState {
   assets: ReadonlyArray<WorkflowAssetRecord>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
+  executionHistoryFilter: ExecutionHistoryFilter;
   draftWorkflow: WorkflowDefinitionUpsertInput | null;
   selection: WorkflowSelection;
   activeSidebarSection: SidebarSection;
@@ -388,6 +400,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       assets: [],
       assetUsages: [],
       executions: [],
+      executionHistoryFilter: ExecutionHistoryFilter.All,
       draftWorkflow: null,
       selection: { type: "workflow", id: null },
       activeSidebarSection: SidebarSection.Workflows,
@@ -784,10 +797,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private renderExecutionSection(): HTMLElement {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const executions = currentWorkflow
-      ? [...this.state.executions
-        .filter((execution) => execution.workflowId === currentWorkflow.id)]
-        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      ? readWorkflowExecutions(this.state.executions, currentWorkflow.id)
       : [];
+    const filteredExecutions = readFilteredExecutions(executions, this.state.executionHistoryFilter);
     const snapshotSummary = readExecutionSnapshotSummary(executions);
     const aggregateSummary = readExecutionAggregateSummary(executions);
     const attentionSummary = readExecutionAttentionSummary(executions);
@@ -905,70 +917,101 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                 ])
               ]),
               createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
-                createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                  createElement("div", { className: "min-w-0" }, [
-                    createElement("p", { className: "text-sm font-medium text-white" }, ["Persisted runs"]),
-                    createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-                      "Inspect runtime, tokens, EUR cost, warnings and node alerts. No live run controls in this slice."
-                    ])
+                createElement("div", { className: "flex flex-col gap-3" }, [
+                  createElement("div", { className: "flex flex-col gap-3 md:flex-row md:items-start md:justify-between" }, [
+                    createElement("div", { className: "min-w-0" }, [
+                      createElement("p", { className: "text-sm font-medium text-white" }, ["Persisted runs"]),
+                      createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                        "Inspect runtime, tokens, EUR cost, warnings and node alerts. No live run controls in this slice."
+                      ])
+                    ]),
+                    createElement(StatusBadge, {
+                      status: filteredExecutions.some((execution) => execution.status === "failed")
+                        ? "failed"
+                        : filteredExecutions.some((execution) => execution.status === "running")
+                          ? "running"
+                          : "info"
+                    }, [`${filteredExecutions.length} shown`])
                   ]),
-                  createElement(StatusBadge, {
-                    status: executions.some((execution) => execution.status === "failed")
-                      ? "failed"
-                      : executions.some((execution) => execution.status === "running")
-                        ? "running"
-                        : "info"
-                  }, [`${executions.length} run${executions.length === 1 ? "" : "s"}`])
+                  createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
+                    createElement("span", { className: "text-xs text-text-secondary" }, ["Show"]),
+                    this.renderExecutionFilterButton(
+                      ExecutionHistoryFilter.All,
+                      "All runs",
+                      WorkflowScreenSelector.ExecutionFilterAll
+                    ),
+                    this.renderExecutionFilterButton(
+                      ExecutionHistoryFilter.Failed,
+                      "Failed",
+                      WorkflowScreenSelector.ExecutionFilterFailed
+                    ),
+                    this.renderExecutionFilterButton(
+                      ExecutionHistoryFilter.Attention,
+                      "Needs attention",
+                      WorkflowScreenSelector.ExecutionFilterAttention
+                    )
+                  ])
                 ])
               ]),
-              executions.map((execution) =>
-              createElement(Card, {
-                key: execution.id,
-                className: `border border-border-dark bg-[#11161d] ${this.state.selection.type === "execution" && this.state.selection.id === execution.id ? "border-primary bg-primary/10" : ""}`,
-                padding: "md",
-                hover: true,
-                active: this.state.selection.type === "execution" && this.state.selection.id === execution.id,
-                children: [
-                  createElement("button", {
-                    type: "button",
-                    className: "flex w-full flex-col gap-3 text-left",
-                    onClick: () => {
-                      void this.handleSelectExecution(execution.id);
-                    },
-                    "data-testid": `${WorkflowScreenSelector.ExecutionCardPrefix}${execution.id}`
+              filteredExecutions.length === 0
+                ? createElement("div", {
+                    className: "rounded-lg border border-dashed border-border-dark bg-[#11161d] px-3 py-4"
                   }, [
-                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                      createElement("div", { className: "min-w-0" }, [
-                        createElement("p", { className: "truncate text-sm font-medium text-white" }, [readExecutionLabel(execution)]),
-                        createElement("p", { className: "text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)])
-                      ]),
-                      createElement(StatusBadge, {
-                        status: readExecutionBadgeStatus(execution.status),
-                        pulse: execution.status === "running"
-                      }, [formatSelectOptionLabel(execution.status)])
+                    createElement("p", { className: "text-sm font-medium text-white" }, [
+                      readExecutionFilterEmptyTitle(this.state.executionHistoryFilter)
                     ]),
-                    createElement("div", { className: "grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
-                      createElement("span", {}, [formatDuration(execution.durationMs)]),
-                      createElement("span", {}, [`${execution.totals.totalTokens.toLocaleString()} tokens`]),
-                      createElement("span", {}, [formatEuro(execution.totals.estimatedCostEur)]),
-                      createElement("span", {}, [`${execution.warningsCount} warnings · ${execution.errorsCount} errors`])
+                    createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+                      readExecutionFilterEmptyDescription(this.state.executionHistoryFilter)
                     ])
-                  ]),
-                  createElement(Button, {
-                    variant: "ghost",
-                    size: "sm",
-                    disabled: this.state.pendingAction !== null,
-                    onClick: () => {
-                      void this.handleDeleteExecution(execution.id);
-                    },
-                    children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run",
-                    dataset: {
-                      testid: `${WorkflowScreenSelector.ExecutionDeletePrefix}${execution.id}`
-                    }
-                  })
-                ]
-              })
-            )
+                  ])
+                : filteredExecutions.map((execution) =>
+                    createElement(Card, {
+                      key: execution.id,
+                      className: `border border-border-dark bg-[#11161d] ${this.state.selection.type === "execution" && this.state.selection.id === execution.id ? "border-primary bg-primary/10" : ""}`,
+                      padding: "md",
+                      hover: true,
+                      active: this.state.selection.type === "execution" && this.state.selection.id === execution.id,
+                      children: [
+                        createElement("button", {
+                          type: "button",
+                          className: "flex w-full flex-col gap-3 text-left",
+                          onClick: () => {
+                            void this.handleSelectExecution(execution.id);
+                          },
+                          "data-testid": `${WorkflowScreenSelector.ExecutionCardPrefix}${execution.id}`
+                        }, [
+                          createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                            createElement("div", { className: "min-w-0" }, [
+                              createElement("p", { className: "truncate text-sm font-medium text-white" }, [readExecutionLabel(execution)]),
+                              createElement("p", { className: "text-xs text-text-secondary" }, [formatTimestamp(execution.startedAt)])
+                            ]),
+                            createElement(StatusBadge, {
+                              status: readExecutionBadgeStatus(execution.status),
+                              pulse: execution.status === "running"
+                            }, [formatSelectOptionLabel(execution.status)])
+                          ]),
+                          createElement("div", { className: "grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
+                            createElement("span", {}, [formatDuration(execution.durationMs)]),
+                            createElement("span", {}, [`${execution.totals.totalTokens.toLocaleString()} tokens`]),
+                            createElement("span", {}, [formatEuro(execution.totals.estimatedCostEur)]),
+                            createElement("span", {}, [`${execution.warningsCount} warnings · ${execution.errorsCount} errors`])
+                          ])
+                        ]),
+                        createElement(Button, {
+                          variant: "ghost",
+                          size: "sm",
+                          disabled: this.state.pendingAction !== null,
+                          onClick: () => {
+                            void this.handleDeleteExecution(execution.id);
+                          },
+                          children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run",
+                          dataset: {
+                            testid: `${WorkflowScreenSelector.ExecutionDeletePrefix}${execution.id}`
+                          }
+                        })
+                      ]
+                    })
+                  )
             ])
     ]);
   }
@@ -999,6 +1042,27 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         pulse: execution.status === "running"
       }, [formatSelectOptionLabel(execution.status)])
     ]);
+  }
+
+  private renderExecutionFilterButton(
+    filter: ExecutionHistoryFilter,
+    label: string,
+    testId: string
+  ): HTMLElement {
+    const isActive = this.state.executionHistoryFilter === filter;
+
+    return createElement("button", {
+      type: "button",
+      className: `rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+        isActive
+          ? "border-primary bg-primary/10 text-white"
+          : "border-border-dark bg-[#161b22] text-text-secondary hover:border-primary/40 hover:text-white"
+      }`,
+      onClick: () => {
+        this.handleSelectExecutionFilter(filter);
+      },
+      "data-testid": testId
+    }, [label]);
   }
 
   private renderCreateAssetButton(kind: WorkflowAssetKindValue): HTMLElement {
@@ -3758,7 +3822,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       executions,
       draftWorkflow: currentWorkflow ? stripDefinitionVersionFields(currentWorkflow) : null,
       selection: currentWorkflow
-        ? resolveSelectionAfterReload(this.state.selection, currentWorkflow, assets, executions)
+        ? resolveSelectionAfterReload(this.state.selection, currentWorkflow, assets, executions, this.state.executionHistoryFilter)
         : { type: "workflow", id: null },
       loadingExecutionId: null,
       dirtyWorkflow: false,
@@ -4053,6 +4117,27 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         noticeMessage: null
       });
     }
+  }
+
+  private handleSelectExecutionFilter(filter: ExecutionHistoryFilter): void {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    if (!currentWorkflow) {
+      this.setState({ executionHistoryFilter: filter });
+      return;
+    }
+
+    const executions = readWorkflowExecutions(this.state.executions, currentWorkflow.id);
+    const filteredExecutions = readFilteredExecutions(executions, filter);
+    const selection = this.state.selection.type === "execution" &&
+      !filteredExecutions.some((execution) => execution.id === this.state.selection.id)
+      ? { type: "workflow", id: currentWorkflow.id } satisfies WorkflowSelection
+      : this.state.selection;
+
+    this.setState({
+      executionHistoryFilter: filter,
+      selection,
+      loadingExecutionId: selection.type === "execution" ? this.state.loadingExecutionId : null
+    });
   }
 
   private handleNodePointerDown(event: PointerEvent, nodeId: string): void {
@@ -5097,7 +5182,8 @@ const resolveSelectionAfterReload = (
   selection: WorkflowSelection,
   workflow: WorkflowDefinitionRecord,
   assets: ReadonlyArray<WorkflowAssetRecord>,
-  executions: ReadonlyArray<WorkflowExecutionRecord>
+  executions: ReadonlyArray<WorkflowExecutionRecord>,
+  executionHistoryFilter: ExecutionHistoryFilter
 ): WorkflowSelection => {
   if (selection.type === "node" && workflow.nodes.some((node) => node.id === selection.id)) {
     return selection;
@@ -5107,8 +5193,12 @@ const resolveSelectionAfterReload = (
     return selection;
   }
 
-  if (selection.type === "execution" && executions.some((execution) => execution.id === selection.id && execution.workflowId === workflow.id)) {
-    return selection;
+  if (selection.type === "execution") {
+    const workflowExecutions = readWorkflowExecutions(executions, workflow.id);
+    const filteredExecutions = readFilteredExecutions(workflowExecutions, executionHistoryFilter);
+    if (filteredExecutions.some((execution) => execution.id === selection.id)) {
+      return selection;
+    }
   }
 
   return {
@@ -5516,6 +5606,53 @@ const readExecutionStatusCountLabel = (status: WorkflowExecutionStatus, count: n
 
 const readExecutionLabel = (execution: Pick<WorkflowExecutionRecord, "id">): string =>
   execution.id.length > 8 ? execution.id.slice(0, 8) : execution.id;
+
+const readWorkflowExecutions = (
+  executions: ReadonlyArray<WorkflowExecutionRecord>,
+  workflowId: string
+): ReadonlyArray<WorkflowExecutionRecord> =>
+  [...executions
+    .filter((execution) => execution.workflowId === workflowId)]
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+
+const readFilteredExecutions = (
+  executions: ReadonlyArray<WorkflowExecutionRecord>,
+  filter: ExecutionHistoryFilter
+): ReadonlyArray<WorkflowExecutionRecord> => {
+  if (filter === ExecutionHistoryFilter.Failed) {
+    return executions.filter((execution) => execution.status === "failed");
+  }
+
+  if (filter === ExecutionHistoryFilter.Attention) {
+    return executions.filter((execution) => readExecutionNeedsAttention(execution));
+  }
+
+  return executions;
+};
+
+const readExecutionFilterEmptyTitle = (filter: ExecutionHistoryFilter): string => {
+  if (filter === ExecutionHistoryFilter.Failed) {
+    return "No failed persisted runs";
+  }
+
+  if (filter === ExecutionHistoryFilter.Attention) {
+    return "No attention runs in persisted history";
+  }
+
+  return "No persisted runs";
+};
+
+const readExecutionFilterEmptyDescription = (filter: ExecutionHistoryFilter): string => {
+  if (filter === ExecutionHistoryFilter.Failed) {
+    return "Saved execution history does not include a failed run for this workflow right now.";
+  }
+
+  if (filter === ExecutionHistoryFilter.Attention) {
+    return "Saved execution history does not include failed or alerted runs for this workflow right now.";
+  }
+
+  return "This workflow has no persisted runs yet.";
+};
 
 const readExecutionNeedsAttention = (execution: WorkflowExecutionRecord): boolean =>
   execution.status === "failed" || readExecutionHasAlerts(execution);

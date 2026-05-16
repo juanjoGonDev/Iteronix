@@ -676,6 +676,9 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
   - Phase `06.5D` workflow-level attention surfacing implemented on `2026-05-16` while `06.5` remains in progress:
     - `apps/web-ui/src/screens/Workflows.ts` now shows a compact persisted `Needs attention` surface derived from saved executions only, including failed-run count, runs-with-alerts count, and the most recent attention runs with timestamp/status/alert counts
     - `validate-workflows.ts` intentionally stays untouched in this slice because real-app/user-facing browser validation remains deferred until the end of all `06.5` tasks
+  - Phase `06.5E` persisted rail filtering implemented on `2026-05-16` while `06.5` remains in progress pending the deferred final validation pass:
+    - `apps/web-ui/src/screens/Workflows.ts` now lets the execution rail switch between all persisted runs, failed runs only, and runs needing attention, using saved execution data only and keeping existing select/delete/detail behavior intact
+    - `validate-workflows.ts` intentionally stays untouched in this slice because the real-app/browser validation update remains deferred until the end-of-phase `06.5` validation pass
   - Connection UX refinement completed on `2026-05-06` before `06.4`:
     - Output and input ports now render as explicit n8n-style connection anchors with visible labels, stems, hover glow and active connection states
     - Connection creation supports drag-to-connect from output to input while preserving the click-based fallback flow

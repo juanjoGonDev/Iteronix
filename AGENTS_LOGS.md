@@ -2789,3 +2789,24 @@
   - Browser-level acceptance validation remains intentionally deferred until the end of all `06.5` slices, so this slice is currently covered by workspace quality gates only.
 - Next:
   - Implement the final remaining `06.5` polish around persisted alert detail clarity or filtering before running the deferred end-of-phase browser validation.
+
+### 2026-05-16 16:45 (Europe/Madrid) — Workflows 06.5E Persisted Rail Filtering
+
+- Summary:
+  - Continued only `06.5` and implemented the final narrow execution-rail slice in `apps/web-ui`: a compact persisted-history filter that isolates all runs, failed runs, or runs needing attention without leaving the existing rail.
+- Decisions:
+  - Keep the filter scoped to the execution rail only; workflow totals and attention summary still reflect the full persisted history for the selected workflow.
+  - Use only the already loaded saved executions collection, with no new endpoints, no `validate-workflows.ts` edits, and no `06.6` runtime/provider continuity work.
+  - If the active run selection becomes hidden by the new filter, fall back to the workflow inspector instead of forcing a different run selection so delete/detail behavior stays predictable.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with compact rail filter controls, filtered empty states, and filtered-card rendering while preserving existing persisted run selection/delete flows.
+  - Updated `PLAN.md` to record `06.5E` while keeping the parent `06.5` phase explicitly in progress until the deferred final browser validation pass.
+- Commands:
+  - `rtk pnpm lint`
+  - `rtk pnpm typecheck`
+  - `rtk pnpm test`
+  - `rtk pnpm build`
+- Issues/Risks:
+  - Browser-level acceptance validation is still intentionally deferred, so the new rail filter is covered by workspace quality gates only until the final `06.5` validation pass updates the browser harness.
+- Next:
+  - Run the deferred final `06.5` browser validation pass, then decide whether the phase can be accepted and closed.
