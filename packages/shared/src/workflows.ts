@@ -91,6 +91,47 @@ export type WorkflowContextPolicyRecord = {
   carryArtifactLimit: number;
 };
 
+export type WorkflowContextMessageRecord = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  sourceNodeId?: string;
+};
+
+export type WorkflowArtifactRecord = {
+  id: string;
+  kind: "json_output" | "text_output" | "retrieval_context" | "tool_result";
+  nodeId: string;
+  content: unknown;
+};
+
+export type WorkflowCitationRecord = {
+  sourceId: string;
+  chunkId: string;
+  uri: string;
+  score: number;
+};
+
+export type WorkflowGuardrailFindingRecord = {
+  guardrailAssetId: string;
+  nodeId: string;
+  severity: "warn" | "error" | "success";
+  message: string;
+};
+
+export type WorkflowContextEnvelope = {
+  sessionId: string;
+  workflowRunId: string;
+  workflowId: string;
+  language: string;
+  summary: string;
+  objectives: ReadonlyArray<string>;
+  variables: Readonly<Record<string, unknown>>;
+  artifacts: ReadonlyArray<WorkflowArtifactRecord>;
+  citations: ReadonlyArray<WorkflowCitationRecord>;
+  guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
+  messages: ReadonlyArray<WorkflowContextMessageRecord>;
+};
+
 export const WorkflowNodeRole = {
   Planner: "planner",
   Retriever: "retriever",

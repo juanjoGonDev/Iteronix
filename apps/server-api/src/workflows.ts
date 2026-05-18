@@ -4,7 +4,8 @@ import {
   type WorkflowAssetUsageRecord,
   type WorkflowAssetRecord,
   type WorkflowDefinitionRecord,
-  type WorkflowExecutionRecord
+  type WorkflowExecutionRecord,
+  WorkflowNodeKind
 } from "../../../packages/shared/src/workflows";
 import { ErrorMessage, HttpStatus } from "./constants";
 import type { ProjectStore } from "./projects";
@@ -12,6 +13,14 @@ import { ResultType, err, ok, type Result } from "./result";
 
 export type ApiError = {
   status: number;
+  message: string;
+};
+
+export type WorkflowNodeProviderTestResult = {
+  definition: WorkflowDefinitionRecord;
+  nodeId: string;
+  status: "passed" | "failed";
+  testedAt: string;
   message: string;
 };
 
@@ -258,6 +267,105 @@ export const executeWorkflowExecutionDelete = (
   return ok(execution);
 };
 
+export const executeWorkflowExecutionRun = async (
+  input: {
+    workflowId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    runWorkflow: (input: {
+      definition: WorkflowDefinitionRecord;
+      assets: ReadonlyArray<WorkflowAssetRecord>;
+    }) => Promise<WorkflowExecutionRecord>;
+  }
+): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  const assets = dependencies.catalog.listAssets({
+    workspaceId: workflow.workspaceId,
+    projectId: workflow.projectId
+  });
+  const execution = await dependencies.runWorkflow({
+    definition: workflow,
+    assets
+  });
+  return ok(dependencies.catalog.upsertExecution(execution));
+};
+
+export const executeWorkflowNodeProviderTest = async (
+  input: {
+    workflowId: string;
+    nodeId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    testProviderNode: (input: {
+      workflow: WorkflowDefinitionRecord;
+      node: WorkflowDefinitionRecord["nodes"][number];
+      assets: ReadonlyArray<WorkflowAssetRecord>;
+    }) => Promise<{
+      status: "passed" | "failed";
+      testedAt: string;
+      message: string;
+    }>;
+  }
+): Promise<Result<WorkflowNodeProviderTestResult, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  const node = workflow.nodes.find((candidate) => candidate.id === input.nodeId);
+  if (!node) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound
+    });
+  }
+
+  if (
+    node.kind !== WorkflowNodeKind.AiProviderRun &&
+    node.kind !== WorkflowNodeKind.AiAgent
+  ) {
+    return invalidBody();
+  }
+
+  const assets = dependencies.catalog.listAssets({
+    workspaceId: workflow.workspaceId,
+    projectId: workflow.projectId
+  });
+  const outcome = await dependencies.testProviderNode({
+    workflow,
+    node,
+    assets
+  });
+  const updatedDefinition = dependencies.catalog.upsertWorkflow({
+    ...workflow,
+    nodes: workflow.nodes.map((candidate) =>
+      candidate.id === node.id
+        ? updateWorkflowNodeProviderTestMetadata(candidate, outcome)
+        : candidate
+    )
+  });
+
+  return ok({
+    definition: updatedDefinition,
+    nodeId: node.id,
+    status: outcome.status,
+    testedAt: outcome.testedAt,
+    message: outcome.message
+  });
+};
+
 export const parseWorkflowDefinitionUpsertRequest = (
   value: unknown
 ): Result<{ projectId: string; definition: WorkflowDefinitionUpsertInput }, ApiError> => {
@@ -404,6 +512,34 @@ export const parseWorkflowExecutionDeleteRequest = (
 ): Result<{ executionId: string }, ApiError> =>
   parseSingleIdentifierRequest(value, "executionId");
 
+export const parseWorkflowExecutionRunRequest = (
+  value: unknown
+): Result<{ workflowId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "workflowId");
+
+export const parseWorkflowNodeProviderTestRequest = (
+  value: unknown
+): Result<{ workflowId: string; nodeId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId
+  );
+  const nodeId = readRequiredString(value, "nodeId", ErrorMessage.MissingNodeId);
+  if (workflowId.type === ResultType.Err || nodeId.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    nodeId: nodeId.value
+  });
+};
+
 const parseProjectRequest = (
   value: unknown
 ): Result<{ projectId: string }, ApiError> => {
@@ -444,6 +580,30 @@ const invalidBody = <T>(): Result<T, ApiError> =>
     status: HttpStatus.BadRequest,
     message: ErrorMessage.InvalidBody
   });
+
+const updateWorkflowNodeProviderTestMetadata = (
+  node: WorkflowDefinitionRecord["nodes"][number],
+  outcome: {
+    status: "passed" | "failed";
+    testedAt: string;
+  }
+): WorkflowDefinitionRecord["nodes"][number] => {
+  if (!node.config.provider) {
+    return node;
+  }
+
+  return {
+    ...node,
+    config: {
+      ...node.config,
+      provider: {
+        ...node.config.provider,
+        testStatus: outcome.status,
+        testedAt: outcome.testedAt
+      }
+    }
+  };
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

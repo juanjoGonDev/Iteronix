@@ -152,6 +152,8 @@ import {
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
+  executeWorkflowExecutionRun,
+  executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
   parseWorkflowAssetGetRequest,
   parseWorkflowAssetListRequest,
@@ -163,8 +165,11 @@ import {
   parseWorkflowAssetUsageListRequest,
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
-  parseWorkflowExecutionListRequest
+  parseWorkflowExecutionListRequest,
+  parseWorkflowExecutionRunRequest,
+  parseWorkflowNodeProviderTestRequest
 } from "./workflows";
+import { createWorkflowRuntimeService, type WorkflowRuntimeService } from "./workflow-runtime";
 import {
   createFileWorkspaceStateStore,
   createWorkspaceStateFromStores,
@@ -227,6 +232,9 @@ export const startServer = async (): Promise<void> => {
   const aiWorkbench = await createAiWorkbenchService({
     workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
   });
+  const workflowRuntime = createWorkflowRuntimeService({
+    readWorkspaceState: () => workspacePersistence.read()
+  });
   const commandRunner = createCommandRunnerAdapter();
   const qualityGateCatalog = createDefaultQualityGateCatalog();
   const git = createGitCliAdapter();
@@ -248,6 +256,7 @@ export const startServer = async (): Promise<void> => {
       commandRunner,
       qualityGateCatalog,
       aiWorkbench,
+      workflowRuntime,
       git,
       workspacePersistence,
       workflowCatalog
@@ -350,6 +359,7 @@ const handleRequest = async (
   commandRunner: CommandRunner,
   qualityGateCatalog: QualityGateCatalog,
   aiWorkbench: AiWorkbenchService,
+  workflowRuntime: WorkflowRuntimeService,
   git: GitRepository,
   workspacePersistence: WorkspacePersistence,
   workflowCatalog: WorkflowCatalogStore
@@ -756,6 +766,38 @@ const handleRequest = async (
     }
 
     await handleWorkflowExecutionDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionRun(
+      req,
+      res,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowProvidersTest) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowNodeProviderTest(
+      req,
+      res,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence
+    );
     return;
   }
 
@@ -4297,6 +4339,72 @@ const handleWorkflowExecutionDelete = async (
   respondJson(res, HttpStatus.Ok, {
     execution: result.value
   });
+};
+
+const handleWorkflowExecutionRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeWorkflowExecutionRun(parsed.value, {
+    catalog: workflowCatalog,
+    runWorkflow: workflowRuntime.runWorkflow
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
+  });
+};
+
+const handleWorkflowNodeProviderTest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowNodeProviderTestRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeWorkflowNodeProviderTest(parsed.value, {
+    catalog: workflowCatalog,
+    testProviderNode: workflowRuntime.testProviderNode
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, result.value);
 };
 
 const handleGitStatusRequest = async (

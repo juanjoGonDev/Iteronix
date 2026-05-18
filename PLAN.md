@@ -766,6 +766,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Asset deletion is blocked server-side while usage records still reference the asset
     - Manual trigger remains the only accepted runtime trigger in the API contract during the MVP
     - Workflows UI is intentionally untouched in this phase
+  - `06.6` Codex CLI workflow baseline and provider continuity implemented on `2026-05-16`:
+    - `packages/shared/src/workflows.ts` now includes the normalized `WorkflowContextEnvelope` continuity contract and related artifact/citation/guardrail records
+    - `packages/agents/src/workflow-runtime.ts` now runs the saved workflow graph baseline for manual trigger, prompt asset, provider-run/agent, terminal passthrough and human-review checkpoint handling
+    - `apps/server-api` now exposes `/workflows/executions/run` and `/workflows/providers/test`, resolving saved Codex CLI provider profiles server-side and persisting execution history plus provider smoke-test metadata
+    - `apps/web-ui/src/screens/Workflows.ts` now enables saved-workflow manual run and per-node provider smoke test controls while keeping the persisted execution rail as the source of truth
+    - Validation passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

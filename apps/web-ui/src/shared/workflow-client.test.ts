@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   parseWorkflowAssetListResponse,
   parseWorkflowDefinitionListResponse,
-  parseWorkflowExecutionListResponse
+  parseWorkflowExecutionListResponse,
+  parseWorkflowNodeProviderTestResponse
 } from "./workflow-client.js";
 
 describe("workflow client parsers", () => {
@@ -150,5 +151,51 @@ describe("workflow client parsers", () => {
     expect(executions).toHaveLength(1);
     expect(executions[0]?.totals.totalTokens).toBe(30);
     expect(executions[0]?.warningsCount).toBe(1);
+  });
+
+  it("parses provider test results with updated workflow metadata", () => {
+    const result = parseWorkflowNodeProviderTestResponse({
+      definition: {
+        id: "workflow-1",
+        workspaceId: "workspace-1",
+        projectId: "project-1",
+        name: "Workflow",
+        description: "",
+        status: "draft",
+        version: 2,
+        createdAt: "2026-05-06T18:00:00.000Z",
+        updatedAt: "2026-05-06T18:10:00.000Z",
+        trigger: {
+          kind: "manual",
+          enabled: true,
+          config: {}
+        },
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        },
+        nodes: [],
+        edges: [],
+        executionPolicy: {
+          maxNodeRetries: 1,
+          allowManualCheckpointResume: true
+        },
+        defaultContextPolicy: {
+          language: "en",
+          carryMessagesLimit: 8,
+          carryArtifactLimit: 8
+        },
+        tags: []
+      },
+      nodeId: "node-1",
+      status: "passed",
+      testedAt: "2026-05-06T18:11:00.000Z",
+      message: "Provider runtime responded to the workflow smoke test."
+    });
+
+    expect(result.nodeId).toBe("node-1");
+    expect(result.status).toBe("passed");
+    expect(result.definition.id).toBe("workflow-1");
   });
 });

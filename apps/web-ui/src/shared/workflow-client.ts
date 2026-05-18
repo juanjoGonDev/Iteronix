@@ -20,8 +20,18 @@ const EndpointPath = {
   AssetsUsage: "/workflows/assets/usage",
   ExecutionsList: "/workflows/executions/list",
   ExecutionsGet: "/workflows/executions/get",
-  ExecutionsDelete: "/workflows/executions/delete"
+  ExecutionsDelete: "/workflows/executions/delete",
+  ExecutionsRun: "/workflows/executions/run",
+  ProvidersTest: "/workflows/providers/test"
 } as const;
+
+export type WorkflowNodeProviderTestResult = {
+  definition: WorkflowDefinitionRecord;
+  nodeId: string;
+  status: "passed" | "failed";
+  testedAt: string;
+  message: string;
+};
 
 export type WorkflowClient = {
   listDefinitions: (input: { projectId: string }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
@@ -52,6 +62,11 @@ export type WorkflowClient = {
   }) => Promise<ReadonlyArray<WorkflowExecutionRecord>>;
   getExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
   deleteExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
+  runWorkflow: (input: { workflowId: string }) => Promise<WorkflowExecutionRecord>;
+  testNodeProvider: (input: {
+    workflowId: string;
+    nodeId: string;
+  }) => Promise<WorkflowNodeProviderTestResult>;
 };
 
 export const createWorkflowClient = (): WorkflowClient => ({
@@ -156,6 +171,23 @@ export const createWorkflowClient = (): WorkflowClient => ({
         executionId: input.executionId
       },
       parse: parseWorkflowExecutionResponse
+    }),
+  runWorkflow: (input) =>
+    requestJson({
+      path: EndpointPath.ExecutionsRun,
+      body: {
+        workflowId: input.workflowId
+      },
+      parse: parseWorkflowExecutionResponse
+    }),
+  testNodeProvider: (input) =>
+    requestJson({
+      path: EndpointPath.ProvidersTest,
+      body: {
+        workflowId: input.workflowId,
+        nodeId: input.nodeId
+      },
+      parse: parseWorkflowNodeProviderTestResponse
     })
 });
 
@@ -207,6 +239,21 @@ export const parseWorkflowExecutionResponse = (
   parseWorkflowExecutionRecord(
     readRequiredRecord(value, "workflowExecutionResponse", "execution")
   );
+
+export const parseWorkflowNodeProviderTestResponse = (
+  value: unknown
+): WorkflowNodeProviderTestResult => {
+  const record = ensureRecord(value, "workflowNodeProviderTestResponse");
+  return {
+    definition: parseWorkflowDefinitionRecord(
+      readRequiredRecord(record, "workflowNodeProviderTestResponse", "definition")
+    ),
+    nodeId: readRequiredString(record, "workflowNodeProviderTestResponse", "nodeId"),
+    status: readRequiredString(record, "workflowNodeProviderTestResponse", "status") as WorkflowNodeProviderTestResult["status"],
+    testedAt: readRequiredString(record, "workflowNodeProviderTestResponse", "testedAt"),
+    message: readRequiredString(record, "workflowNodeProviderTestResponse", "message")
+  };
+};
 
 const parseWorkflowDefinitionRecord = (
   value: Record<string, unknown>

@@ -88,6 +88,7 @@ const WorkflowScreenSelector = {
   WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowDelete: "workflows-delete",
+  WorkflowRun: "workflows-run",
   WorkflowSelect: "workflows-select",
   CanvasZoomOut: "workflows-canvas-zoom-out",
   CanvasResetView: "workflows-canvas-reset-view",
@@ -127,6 +128,7 @@ const WorkflowScreenSelector = {
   NodePromptInput: "workflows-node-prompt-input",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
+  NodeProviderTest: "workflows-node-provider-test",
   NodeReasoningSelect: "workflows-node-reasoning-select",
   NodeVerbositySelect: "workflows-node-verbosity-select",
   OutputContractNameInput: "workflows-output-contract-name-input",
@@ -222,7 +224,9 @@ const PendingAction = {
   SaveWorkflow: "save-workflow",
   DeleteWorkflow: "delete-workflow",
   CreateAsset: "create-asset",
-  DeleteExecution: "delete-execution"
+  DeleteExecution: "delete-execution",
+  RunWorkflow: "run-workflow",
+  TestProvider: "test-provider"
 } as const;
 
 type PendingAction = typeof PendingAction[keyof typeof PendingAction];
@@ -364,6 +368,7 @@ interface WorkflowsScreenState {
   isCompactViewport: boolean;
   pendingAction: PendingAction | null;
   loadingExecutionId: string | null;
+  activeProviderTestNodeId: string | null;
   dirtyWorkflow: boolean;
   dirtyAssetIds: ReadonlyArray<string>;
   pendingConnection: PendingConnection | null;
@@ -408,6 +413,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
       loadingExecutionId: null,
+      activeProviderTestNodeId: null,
       dirtyWorkflow: false,
       dirtyAssetIds: [],
       pendingConnection: null,
@@ -516,6 +522,18 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           children: this.state.pendingAction === PendingAction.SaveWorkflow ? "Saving" : "Save",
           dataset: {
             testid: WorkflowScreenSelector.WorkflowSave
+          }
+        }),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled: currentWorkflow === null || this.state.pendingAction !== null || hasUnsavedChanges,
+          onClick: () => {
+            void this.handleRunWorkflow();
+          },
+          children: this.state.pendingAction === PendingAction.RunWorkflow ? "Running" : "Run",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowRun
           }
         }),
         createElement(Button, {
@@ -922,7 +940,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                     createElement("div", { className: "min-w-0" }, [
                       createElement("p", { className: "text-sm font-medium text-white" }, ["Persisted runs"]),
                       createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-                        "Inspect runtime, tokens, EUR cost, warnings and node alerts. No live run controls in this slice."
+                        "Inspect runtime, tokens, EUR cost, warnings and node alerts. Manual run baseline is now available for saved workflows."
                       ])
                     ]),
                     createElement(StatusBadge, {
@@ -3445,13 +3463,31 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       this.renderNodePromptField(node),
       this.renderProviderSelectionFields(node, provider),
       createElement("p", { className: "mt-3 text-xs text-text-secondary" }, [
-        "Provider capability tests land in phase 06.6. This MVP persists per-node provider, model, reasoning, temperature and verbosity now, but the connection test action remains disabled with explanation."
+        provider.testedAt
+          ? `Last provider test: ${formatTimestamp(provider.testedAt)} · ${formatSelectOptionLabel(provider.testStatus ?? "unknown")}`
+          : "Run a smoke test to verify this saved workflow node can reach its selected provider profile."
       ]),
       createElement(Button, {
         variant: "ghost",
         size: "sm",
-        disabled: true,
-        children: "Provider test in 06.6"
+        disabled:
+          this.state.pendingAction !== null ||
+          this.state.currentProject === null ||
+          this.state.draftWorkflow === null ||
+          this.state.dirtyWorkflow ||
+          this.state.dirtyAssetIds.length > 0 ||
+          !provider.providerId,
+        onClick: () => {
+          void this.handleTestNodeProvider(node.id);
+        },
+        children:
+          this.state.pendingAction === PendingAction.TestProvider &&
+          this.state.activeProviderTestNodeId === node.id
+            ? "Testing"
+            : "Run provider test",
+        dataset: {
+          testid: WorkflowScreenSelector.NodeProviderTest
+        }
       })
     ]);
   }
@@ -3889,6 +3925,86 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       this.setState({
         pendingAction: null,
         errorMessage: readErrorMessage(error, "Could not create the workflow definition."),
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handleRunWorkflow(): Promise<void> {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    if (
+      !this.state.currentProject ||
+      !currentWorkflow ||
+      this.state.dirtyWorkflow ||
+      this.state.dirtyAssetIds.length > 0
+    ) {
+      return;
+    }
+
+    this.setState({
+      pendingAction: PendingAction.RunWorkflow,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const execution = await this.workflowClient.runWorkflow({
+        workflowId: currentWorkflow.id
+      });
+      await this.reloadCatalog(this.state.currentProject.id);
+      await this.handleSelectExecution(execution.id);
+      this.setState({
+        pendingAction: null,
+        noticeMessage: "Workflow run persisted in execution history.",
+        errorMessage: null,
+        selection: { type: "execution", id: execution.id }
+      });
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        errorMessage: readErrorMessage(error, "Could not run the workflow."),
+        noticeMessage: null
+      });
+    }
+  }
+
+  private async handleTestNodeProvider(nodeId: string): Promise<void> {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    if (
+      !this.state.currentProject ||
+      !currentWorkflow ||
+      this.state.dirtyWorkflow ||
+      this.state.dirtyAssetIds.length > 0
+    ) {
+      return;
+    }
+
+    this.setState({
+      pendingAction: PendingAction.TestProvider,
+      activeProviderTestNodeId: nodeId,
+      errorMessage: null,
+      noticeMessage: null
+    });
+
+    try {
+      const result = await this.workflowClient.testNodeProvider({
+        workflowId: currentWorkflow.id,
+        nodeId
+      });
+      await this.reloadCatalog(this.state.currentProject.id);
+      this.handleSelectWorkflow(result.definition.id);
+      this.setState({
+        pendingAction: null,
+        activeProviderTestNodeId: null,
+        noticeMessage: result.message,
+        errorMessage: null,
+        selection: { type: "node", id: nodeId }
+      });
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        activeProviderTestNodeId: null,
+        errorMessage: readErrorMessage(error, "Could not test the provider runtime."),
         noticeMessage: null
       });
     }

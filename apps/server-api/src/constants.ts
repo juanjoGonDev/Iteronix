@@ -70,7 +70,9 @@ export const RoutePath = {
   WorkflowAssetsUsage: "/workflows/assets/usage",
   WorkflowExecutionsList: "/workflows/executions/list",
   WorkflowExecutionsGet: "/workflows/executions/get",
-  WorkflowExecutionsDelete: "/workflows/executions/delete"
+  WorkflowExecutionsDelete: "/workflows/executions/delete",
+  WorkflowExecutionsRun: "/workflows/executions/run",
+  WorkflowProvidersTest: "/workflows/providers/test"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -154,7 +156,8 @@ export const ErrorMessage = {
   InvalidBranchName: "Invalid Git branch name",
   MissingWorkflowId: "Missing workflowId",
   MissingAssetId: "Missing assetId",
-  MissingExecutionId: "Missing executionId"
+  MissingExecutionId: "Missing executionId",
+  MissingNodeId: "Missing nodeId"
 } as const;
 
 export const MimeType = {
@@ -278,6 +281,7 @@ export const QualityGateField = {
 export const WorkflowField = {
   ProjectId: "projectId",
   WorkflowId: "workflowId",
+  NodeId: "nodeId",
   AssetId: "assetId",
   ExecutionId: "executionId",
   WorkspaceId: "workspaceId",

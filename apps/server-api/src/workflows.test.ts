@@ -24,13 +24,17 @@ import {
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
+  executeWorkflowExecutionRun,
+  executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
   parseWorkflowAssetUpsertRequest,
   parseWorkflowDefinitionDeleteRequest,
   parseWorkflowDefinitionUpsertRequest,
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
-  parseWorkflowExecutionListRequest
+  parseWorkflowExecutionListRequest,
+  parseWorkflowExecutionRunRequest,
+  parseWorkflowNodeProviderTestRequest
 } from "./workflows";
 
 const BaseTime = "2026-05-06T18:00:00.000Z";
@@ -265,6 +269,92 @@ describe("workflow api contracts", () => {
     expect(deleted.type).toBe(ResultType.Ok);
   });
 
+  it("runs a workflow execution and persists the returned record", async () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime)
+    });
+    catalog.upsertWorkflow({
+      ...createWorkflowDefinitionInput(),
+      id: "workflow-1",
+      projectId: "project-1",
+      nodes: [
+        createProviderRunNodeRecord()
+      ]
+    });
+
+    const result = await executeWorkflowExecutionRun(
+      {
+        workflowId: "workflow-1"
+      },
+      {
+        catalog,
+        runWorkflow: async ({ definition }) => ({
+          id: "execution-1",
+          workflowId: definition.id,
+          projectId: definition.projectId,
+          triggerKind: WorkflowTriggerKind.Manual,
+          status: WorkflowExecutionStatus.Completed,
+          startedAt: BaseTime,
+          finishedAt: "2026-05-06T18:01:00.000Z",
+          durationMs: 60000,
+          warningsCount: 0,
+          errorsCount: 0,
+          totals: {
+            promptTokens: 2,
+            completionTokens: 3,
+            totalTokens: 5,
+            estimatedCostEur: 0.01,
+            latencyMs: 1000
+          },
+          contextSessionId: "ctx-1",
+          nodeRuns: []
+        })
+      }
+    );
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type === ResultType.Ok) {
+      expect(catalog.getExecution("execution-1")?.workflowId).toBe("workflow-1");
+      expect(result.value.totals.totalTokens).toBe(5);
+    }
+  });
+
+  it("tests a workflow node provider and updates provider continuity metadata", async () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime)
+    });
+    catalog.upsertWorkflow({
+      ...createWorkflowDefinitionInput(),
+      id: "workflow-1",
+      projectId: "project-1",
+      nodes: [
+        createProviderRunNodeRecord()
+      ]
+    });
+
+    const result = await executeWorkflowNodeProviderTest(
+      {
+        workflowId: "workflow-1",
+        nodeId: "node-1"
+      },
+      {
+        catalog,
+        testProviderNode: async () => ({
+          status: "passed",
+          testedAt: "2026-05-06T18:02:00.000Z",
+          message: "Provider responded to smoke test."
+        })
+      }
+    );
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type === ResultType.Ok) {
+      expect(result.value.status).toBe("passed");
+      expect(result.value.definition.nodes[0]?.config.provider?.testStatus).toBe("passed");
+      expect(result.value.definition.nodes[0]?.config.provider?.testedAt).toBe("2026-05-06T18:02:00.000Z");
+    }
+  });
+
   it("parses workflow asset and execution request payloads", () => {
     expect(parseWorkflowAssetUpsertRequest({
       projectId: "project-1",
@@ -284,6 +374,13 @@ describe("workflow api contracts", () => {
     }).type).toBe(ResultType.Ok);
     expect(parseWorkflowExecutionDeleteRequest({
       executionId: "execution-1"
+    }).type).toBe(ResultType.Ok);
+    expect(parseWorkflowExecutionRunRequest({
+      workflowId: "workflow-1"
+    }).type).toBe(ResultType.Ok);
+    expect(parseWorkflowNodeProviderTestRequest({
+      workflowId: "workflow-1",
+      nodeId: "node-1"
     }).type).toBe(ResultType.Ok);
   });
 });
@@ -353,4 +450,28 @@ const createWorkflowAssetInput = () => ({
   body: "Plan the task",
   language: "en",
   tags: []
+});
+
+const createProviderRunNodeRecord = () => ({
+  id: "node-1",
+  kind: WorkflowNodeKind.AiProviderRun,
+  label: "Provider",
+  position: {
+    x: 0,
+    y: 0
+  },
+  width: 320,
+  collapsed: false,
+  config: {
+    provider: {
+      providerId: "profile-1",
+      modelId: "gpt-1",
+      reasoningLevel: "medium" as const,
+      temperature: 0.2,
+      verbosity: "medium" as const
+    }
+  },
+  inputPorts: [],
+  outputPorts: [],
+  attachedGuardrails: []
 });

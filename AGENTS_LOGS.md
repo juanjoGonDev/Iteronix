@@ -2852,3 +2852,26 @@
   - Only benign CRLF warnings appeared during git/test flows on Windows; no failing gate or functional regression was observed.
 - Next:
   - Create the Conventional Commit for the accepted `06.5` validation pass and continue with the next workflow scope only if new product direction requires it.
+
+### 2026-05-16 18:10 (Europe/Madrid) — Workflows 06.6 Codex CLI Baseline And Provider Continuity
+
+- Summary:
+  - Implemented the first real `06.6` runtime slice: saved workflows can now execute manually through a server-owned runtime baseline, and provider-run nodes can execute a smoke test against their saved Codex CLI profile while continuity is normalized through a shared context envelope instead of raw transcript reuse.
+- Decisions:
+  - Keep `06.6` scoped to the Codex CLI baseline only; unsupported provider kinds remain rejected explicitly instead of faking cross-provider execution behavior.
+  - Put workflow graph execution in `packages/agents` as a pure runtime and keep provider resolution plus CLI invocation in `apps/server-api` so continuity logic stays testable and server-owned.
+- Changes:
+  - Added normalized continuity records in `packages/shared/src/workflows.ts` for `WorkflowContextEnvelope`, artifacts, citations, guardrail findings, and workflow messages.
+  - Added `packages/agents/src/workflow-runtime.ts` plus tests to execute the manual-trigger workflow baseline and prove continuity between provider nodes.
+  - Added `apps/server-api/src/workflow-runtime.ts`, `/workflows/executions/run`, and `/workflows/providers/test`, including persisted provider test metadata on workflow nodes.
+  - Updated `apps/web-ui/src/shared/workflow-client.ts` and `apps/web-ui/src/screens/Workflows.ts` to expose workflow run and provider smoke test actions from the saved workflow UI.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+  - `pnpm -C apps/web-ui validate:workflows` PASS
+- Issues/Risks:
+  - `06.6` currently supports saved Codex CLI profiles only; broader provider capability matrix and non-manual triggers remain future work.
+- Next:
+  - Expand `06.6` only if needed with richer node coverage or execution detail hydration; otherwise move to the next planned workflow/runtime slice.
