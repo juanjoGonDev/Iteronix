@@ -5,6 +5,11 @@ import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
 import { Component, createElement, type ComponentProps } from "../shared/Component.js";
 import { COMPACT_VIEWPORT_MAX_WIDTH } from "../shared/constants.js";
 import {
+  createLogsClient,
+  ServerLogLevel,
+  type ServerLogEntry
+} from "../shared/logs-client.js";
+import {
   createWorkflowClient,
   WorkflowRunStreamEventType,
   type WorkflowRunStreamEvent
@@ -246,6 +251,13 @@ const ExecutionHistoryFilter = {
 
 type ExecutionHistoryFilter = typeof ExecutionHistoryFilter[keyof typeof ExecutionHistoryFilter];
 
+const WorkflowLogsFilter = {
+  Errors: "errors",
+  All: "all"
+} as const;
+
+type WorkflowLogsFilter = typeof WorkflowLogsFilter[keyof typeof WorkflowLogsFilter];
+
 type WorkflowSelection =
   | { type: "workflow"; id: string | null }
   | { type: "node"; id: string }
@@ -390,6 +402,8 @@ interface WorkflowsScreenState {
   assets: ReadonlyArray<WorkflowAssetRecord>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
+  serverLogs: ReadonlyArray<ServerLogEntry>;
+  workflowLogsFilter: WorkflowLogsFilter;
   executionHistoryFilter: ExecutionHistoryFilter;
   draftWorkflow: WorkflowDefinitionUpsertInput | null;
   selection: WorkflowSelection;
@@ -399,6 +413,7 @@ interface WorkflowsScreenState {
   desktopInspectorCollapsed: boolean;
   isCompactViewport: boolean;
   pendingAction: PendingAction | null;
+  refreshingLogs: boolean;
   loadingExecutionId: string | null;
   activeProviderTestNodeId: string | null;
   dirtyWorkflow: boolean;
@@ -423,6 +438,7 @@ interface WorkflowsScreenState {
 export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenState> {
   private readonly workspaceStateClient = createWorkspaceStateClient();
   private readonly workflowClient = createWorkflowClient();
+  private readonly logsClient = createLogsClient();
   private draggingNodeId: string | null = null;
   private dragPointerOffset: { x: number; y: number } | null = null;
   private connectionDragging = false;
@@ -440,6 +456,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       assets: [],
       assetUsages: [],
       executions: [],
+      serverLogs: [],
+      workflowLogsFilter: WorkflowLogsFilter.Errors,
       executionHistoryFilter: ExecutionHistoryFilter.All,
       draftWorkflow: null,
       selection: { type: "workflow", id: null },
@@ -449,6 +467,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       desktopInspectorCollapsed: false,
       isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
+      refreshingLogs: false,
       loadingExecutionId: null,
       activeProviderTestNodeId: null,
       dirtyWorkflow: false,
@@ -721,7 +740,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
 
     if (this.state.activeSidebarSection === SidebarSection.History) {
-      return this.renderExecutionSection();
+      return createElement("div", { className: "flex min-h-0 flex-1 flex-col" }, [
+        createElement("div", { className: "min-h-0 flex-1" }, [this.renderExecutionSection()]),
+        this.renderServerLogsPanel()
+      ]);
     }
 
     return this.renderWorkflowListSection();
@@ -1102,6 +1124,89 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   )
             ])
     ]);
+  }
+
+  private renderServerLogsPanel(): HTMLElement {
+    const filteredLogs = this.state.serverLogs.filter((entry) =>
+      this.state.workflowLogsFilter === WorkflowLogsFilter.All
+        ? true
+        : entry.level === ServerLogLevel.Warn ||
+          entry.level === ServerLogLevel.Error ||
+          entry.level === ServerLogLevel.Fatal
+    );
+
+    return createElement("section", {
+      className: "flex h-[280px] shrink-0 flex-col border-t border-border-dark bg-[#11161d]"
+    }, [
+      createElement("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-border-dark px-3 py-2.5" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, ["Server logs"]),
+          createElement("p", { className: "text-[11px] leading-5 text-text-secondary" }, ["Useful for provider/settings save failures and workflow runtime issues."])
+        ]),
+        createElement("div", { className: "flex items-center gap-1.5" }, [
+          this.renderLogsFilterButton("Errors", WorkflowLogsFilter.Errors),
+          this.renderLogsFilterButton("All", WorkflowLogsFilter.All),
+          createElement(IconButton, {
+            icon: "refresh",
+            tooltip: "Refresh logs",
+            onClick: () => {
+              void this.refreshServerLogs();
+            },
+            className: "h-8 w-8 rounded-lg border border-transparent hover:border-border-dark hover:bg-[#20262f]"
+          })
+        ])
+      ]),
+      createElement("div", { className: "min-h-0 flex-1 overflow-y-auto px-3 py-2" }, [
+        filteredLogs.length === 0
+          ? createElement("div", { className: "flex h-full items-center justify-center rounded-xl border border-dashed border-border-dark bg-[#0d1319] px-4 text-center text-xs leading-6 text-text-secondary" }, [
+              this.state.refreshingLogs ? "Refreshing logs..." : "No server log entries for this filter."
+            ])
+          : filteredLogs.slice(-24).map((entry) =>
+              createElement("article", {
+                key: entry.id,
+                className: "mb-2 rounded-xl border border-border-dark bg-[#0d1319] px-3 py-2.5"
+              }, [
+                createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
+                  createElement(StatusBadge, {
+                    status: readServerLogBadgeStatus(entry.level)
+                  }, [entry.level]),
+                  createElement("span", { className: "text-[11px] text-text-secondary" }, [formatTimestamp(entry.timestamp)]),
+                  entry.runId
+                    ? createElement("span", { className: "rounded-full border border-border-dark px-2 py-0.5 font-mono text-[10px] text-slate-300" }, [entry.runId])
+                    : ""
+                ]),
+                createElement("pre", { className: "mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-slate-200" }, [entry.message])
+              ])
+            )
+      ])
+    ]);
+  }
+
+  private renderLogsFilterButton(
+    label: string,
+    value: WorkflowLogsFilter
+  ): HTMLElement {
+    const active = this.state.workflowLogsFilter === value;
+
+    return createElement(Button, {
+      variant: active ? "secondary" : "ghost",
+      size: "sm",
+      onClick: () => {
+        this.setState({ workflowLogsFilter: value, refreshingLogs: true });
+        void this.logsClient.query({
+          ...(value === WorkflowLogsFilter.Errors ? { level: ServerLogLevel.Warn } : {}),
+          limit: 80
+        }).then((logs) => {
+          this.setState({
+            serverLogs: [...logs].reverse(),
+            refreshingLogs: false
+          });
+        }).catch(() => {
+          this.setState({ refreshingLogs: false });
+        });
+      },
+      children: label
+    });
   }
 
   private renderExecutionAttentionItem(execution: WorkflowExecutionRecord): HTMLElement {
@@ -4161,6 +4266,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
       if (currentProject) {
         await this.reloadCatalog(currentProject.id, workspaceState);
+        await this.refreshServerLogs();
       }
     } catch (error) {
       this.setState({
@@ -4210,6 +4316,28 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       assets,
       assetUsages
     });
+  }
+
+  private async refreshServerLogs(): Promise<void> {
+    this.setState({ refreshingLogs: true });
+
+    try {
+      const level = this.state.workflowLogsFilter === WorkflowLogsFilter.Errors
+        ? ServerLogLevel.Warn
+        : undefined;
+      const logs = await this.logsClient.query({
+        ...(level ? { level } : {}),
+        limit: 80
+      });
+      this.setState({
+        serverLogs: [...logs].reverse(),
+        refreshingLogs: false
+      });
+    } catch {
+      this.setState({
+        refreshingLogs: false
+      });
+    }
   }
 
   private handleSelectWorkflow(workflowId: string): void {
@@ -4315,6 +4443,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       });
     } finally {
       this.cancelLiveExecutionStream();
+      void this.refreshServerLogs();
     }
   }
 
@@ -4357,6 +4486,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         errorMessage: readErrorMessage(error, "Could not test the provider runtime."),
         noticeMessage: null
       });
+    } finally {
+      void this.refreshServerLogs();
     }
   }
 
@@ -4393,6 +4524,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         errorMessage: readErrorMessage(error, "Could not save the workflow."),
         noticeMessage: null
       });
+    } finally {
+      void this.refreshServerLogs();
     }
   }
 
@@ -4425,6 +4558,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         errorMessage: readErrorMessage(error, "Could not delete the workflow."),
         noticeMessage: null
       });
+    } finally {
+      void this.refreshServerLogs();
     }
   }
 
@@ -6670,6 +6805,20 @@ const readGuardrailFindingBadgeStatus = (
   }
 
   return "failed";
+};
+
+const readServerLogBadgeStatus = (
+  level: ServerLogLevel
+): "info" | "warning" | "failed" => {
+  if (level === ServerLogLevel.Warn) {
+    return "warning";
+  }
+
+  if (level === ServerLogLevel.Error || level === ServerLogLevel.Fatal) {
+    return "failed";
+  }
+
+  return "info";
 };
 
 const readNodeRunProviderLabel = (nodeRun: WorkflowExecutionRecord["nodeRuns"][number]): string => {
