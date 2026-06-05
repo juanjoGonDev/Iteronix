@@ -179,10 +179,16 @@ import {
   type WorkspaceStateStore,
   type WorkspaceWorkbenchHistory
 } from "./workspace-state";
+import {
+  installConsoleForwarder,
+  type SharedLogEntry
+} from "../../web-ui/src/shared/logger-core";
+
+const responseErrorLogMap = new WeakMap<ServerResponse, string>();
 
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
-  const logsStore = await createServerLogsStore(config.logDir);
+  const logsStore = await createServerLogsStore(config.logDir, config.logMaxEntries);
   installServerConsoleForwarder(logsStore);
 
   const workspaceStateStore = createFileWorkspaceStateStore(config.workspaceStateFile);
@@ -239,6 +245,8 @@ export const startServer = async (): Promise<void> => {
   const qualityGateCatalog = createDefaultQualityGateCatalog();
   const git = createGitCliAdapter();
   const server = createServer((req, res) => {
+    const startedAt = Date.now();
+    installRequestLogLifecycle(req, res, startedAt);
     void handleRequest(
       req,
       res,
@@ -260,10 +268,24 @@ export const startServer = async (): Promise<void> => {
       git,
       workspacePersistence,
       workflowCatalog
-    );
+    ).catch((error: unknown) => {
+      console.error("server.unhandled", req.method ?? "UNKNOWN", req.url ?? "", error);
+      if (!res.writableEnded) {
+        respondError(res, {
+          status: HttpStatus.InternalServerError,
+          message: ErrorMessage.InternalServerError
+        });
+      }
+    });
   });
 
   server.listen(config.port, config.host);
+  console.info("server.started", {
+    host: config.host,
+    port: config.port,
+    logDir: config.logDir,
+    logMaxEntries: config.logMaxEntries
+  });
 };
 
 type WorkspacePersistence = {
@@ -5322,80 +5344,73 @@ const isAllowedCorsOrigin = (origin: string): boolean => {
 };
 
 const installServerConsoleForwarder = (logsStore: ServerLogsStore): void => {
-  const original = {
-    log: console.log.bind(console),
-    info: console.info.bind(console),
-    warn: console.warn.bind(console),
-    error: console.error.bind(console),
-    debug: console.debug.bind(console),
-    trace: console.trace.bind(console)
-  };
-
-  const methodLevel: Record<keyof typeof original, LogLevel> = {
-    log: LogLevelValues.Info,
-    info: LogLevelValues.Info,
-    warn: LogLevelValues.Warn,
-    error: LogLevelValues.Error,
-    debug: LogLevelValues.Debug,
-    trace: LogLevelValues.Trace
-  };
-
-  const forward = (method: keyof typeof original, args: unknown[]): void => {
-    const entry: ServerLogEntry = {
-      id: randomUUID(),
-      timestamp: new Date().toISOString(),
-      level: methodLevel[method],
-      message: args.map((value) => safeSerializeServerValue(value)).join(Separator.Space)
-    };
-
-    void logsStore.append(entry);
-  };
-
-  console.log = (...args: unknown[]): void => {
-    forward("log", args);
-    original.log(...args);
-  };
-
-  console.info = (...args: unknown[]): void => {
-    forward("info", args);
-    original.info(...args);
-  };
-
-  console.warn = (...args: unknown[]): void => {
-    forward("warn", args);
-    original.warn(...args);
-  };
-
-  console.error = (...args: unknown[]): void => {
-    forward("error", args);
-    original.error(...args);
-  };
-
-  console.debug = (...args: unknown[]): void => {
-    forward("debug", args);
-    original.debug(...args);
-  };
-
-  console.trace = (...args: unknown[]): void => {
-    forward("trace", args);
-    original.trace(...args);
-  };
+  installConsoleForwarder({
+    send: async (entry: SharedLogEntry) => {
+      await logsStore.append({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        level: toServerLogLevel(entry.level),
+        message: entry.message,
+        ...(entry.runId ? { runId: entry.runId } : {})
+      });
+    },
+    createId: () => randomUUID()
+  });
 };
 
-const safeSerializeServerValue = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
+const installRequestLogLifecycle = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  startedAt: number
+): void => {
+  res.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    const summary = [
+      "server.request",
+      req.method ?? "UNKNOWN",
+      req.url ?? "",
+      res.statusCode.toString(),
+      `${durationMs.toString()}ms`
+    ].join(Separator.Space);
+    const errorMessage = responseErrorLogMap.get(res);
+    responseErrorLogMap.delete(res);
+
+    if (res.statusCode >= HttpStatus.InternalServerError) {
+      console.error(summary, errorMessage ?? "");
+      return;
+    }
+
+    if (res.statusCode >= HttpStatus.BadRequest) {
+      console.warn(summary, errorMessage ?? "");
+      return;
+    }
+
+    console.info(summary);
+  });
+};
+
+const toServerLogLevel = (level: string): LogLevel => {
+  if (level === LogLevelValues.Trace) {
+    return LogLevelValues.Trace;
   }
 
-  if (value instanceof Error) {
-    return value.stack ? `${value.name}: ${value.message}\n${value.stack}` : `${value.name}: ${value.message}`;
+  if (level === LogLevelValues.Debug) {
+    return LogLevelValues.Debug;
   }
 
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
+  if (level === LogLevelValues.Warn) {
+    return LogLevelValues.Warn;
   }
+
+  if (level === LogLevelValues.Error) {
+    return LogLevelValues.Error;
+  }
+
+  if (level === LogLevelValues.Fatal) {
+    return LogLevelValues.Fatal;
+  }
+
+  return LogLevelValues.Info;
 };
 
 const respondUnauthorized = (res: ServerResponse): void => {
@@ -5414,6 +5429,7 @@ const respondMethodNotAllowed = (res: ServerResponse): void => {
 };
 
 const respondError = (res: ServerResponse, error: ApiError): void => {
+  responseErrorLogMap.set(res, error.message);
   respondJson(res, error.status, {
     error: {
       message: error.message

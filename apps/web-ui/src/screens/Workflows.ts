@@ -290,6 +290,20 @@ type DeepEditorState = {
   sampleSelectionEnd: number;
 };
 
+type LiveNodeRunState = {
+  status: "pending" | "running" | "completed";
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+type LiveExecutionState = {
+  workflowId: string;
+  startedAt: string;
+  activeNodeId: string | null;
+  completedNodeIds: ReadonlyArray<string>;
+  nodeRuns: Record<string, LiveNodeRunState>;
+};
+
 type WorkflowVariableToken = {
   id: string;
   label: string;
@@ -367,6 +381,8 @@ interface WorkflowsScreenState {
   selection: WorkflowSelection;
   activeSidebarSection: SidebarSection;
   compactView: CompactView;
+  desktopSidebarCollapsed: boolean;
+  desktopInspectorCollapsed: boolean;
   isCompactViewport: boolean;
   pendingAction: PendingAction | null;
   loadingExecutionId: string | null;
@@ -385,6 +401,7 @@ interface WorkflowsScreenState {
   guardrailValidationPath: string;
   guardrailValidationMessage: string;
   deepEditor: DeepEditorState | null;
+  liveExecution: LiveExecutionState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
 }
@@ -396,8 +413,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   private dragPointerOffset: { x: number; y: number } | null = null;
   private connectionDragging = false;
   private panning = false;
+  private spacePanPressed = false;
   private panOrigin: { x: number; y: number } | null = null;
   private panViewportOrigin: WorkflowViewportRecord | null = null;
+  private liveExecutionTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(props: ComponentProps = {}) {
     super(props, {
@@ -412,6 +431,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       selection: { type: "workflow", id: null },
       activeSidebarSection: SidebarSection.Workflows,
       compactView: CompactView.Canvas,
+      desktopSidebarCollapsed: false,
+      desktopInspectorCollapsed: false,
       isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
       loadingExecutionId: null,
@@ -430,6 +451,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       guardrailValidationPath: "$.result",
       guardrailValidationMessage: "Expected $.result to be present.",
       deepEditor: null,
+      liveExecution: null,
       errorMessage: null,
       noticeMessage: null
     });
@@ -442,6 +464,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.addEventListener("mousemove", this.handleGlobalPointerMove);
     window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
+    window.addEventListener("keyup", this.handleGlobalKeyUp);
     void this.hydrateState();
   }
 
@@ -452,6 +475,8 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     window.removeEventListener("mousemove", this.handleGlobalPointerMove);
     window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
+    window.removeEventListener("keyup", this.handleGlobalKeyUp);
+    this.clearLiveExecutionTimer();
   }
 
   override render(): HTMLElement {
@@ -586,6 +611,22 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       this.renderRailButton("deployed_code", "Nodes", this.state.activeSidebarSection === SidebarSection.Nodes, () => this.setState({ activeSidebarSection: SidebarSection.Nodes, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionNodes),
       this.renderRailButton("library_books", "Assets", this.state.activeSidebarSection === SidebarSection.Assets, () => this.setState({ activeSidebarSection: SidebarSection.Assets, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionAssets),
       this.renderRailButton("history", "History", this.state.activeSidebarSection === SidebarSection.History, () => this.setState({ activeSidebarSection: SidebarSection.History, compactView: CompactView.Sidebar }), WorkflowScreenSelector.SectionHistory),
+      !this.state.isCompactViewport
+        ? createElement("div", { className: "mt-auto flex flex-col gap-1 px-1" }, [
+            this.renderRailButton(
+              this.state.desktopSidebarCollapsed ? "left_panel_open" : "left_panel_close",
+              this.state.desktopSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar",
+              false,
+              () => this.setState({ desktopSidebarCollapsed: !this.state.desktopSidebarCollapsed })
+            ),
+            this.renderRailButton(
+              this.state.desktopInspectorCollapsed ? "right_panel_open" : "right_panel_close",
+              this.state.desktopInspectorCollapsed ? "Expand inspector" : "Collapse inspector",
+              false,
+              () => this.setState({ desktopInspectorCollapsed: !this.state.desktopInspectorCollapsed })
+            )
+          ])
+        : "",
       this.state.isCompactViewport
         ? createElement("div", { className: "mt-auto flex flex-col gap-1 px-1" }, [
             this.renderRailButton("left_panel_open", "Sidebar", this.state.compactView === CompactView.Sidebar, () => this.setState({ compactView: CompactView.Sidebar }), WorkflowScreenSelector.CompactSidebar),
@@ -639,7 +680,15 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         createElement("p", { className: "mt-1 truncate text-xs text-slate-400" }, [
           this.state.currentProject?.name ?? "No project"
         ])
-      ])
+      ]),
+      !this.state.isCompactViewport
+        ? createElement(IconButton, {
+            icon: "left_panel_close",
+            tooltip: "Collapse sidebar",
+            onClick: () => this.setState({ desktopSidebarCollapsed: true }),
+            className: "h-8 w-8 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]"
+          })
+        : ""
     ]);
   }
 
@@ -1325,10 +1374,13 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     const asset = node.config.assetId ? this.state.assets.find((entry) => entry.id === node.config.assetId) ?? null : null;
     const canAcceptConnection = this.state.pendingConnection !== null && node.inputPorts.length > 0;
     const highlightedInputNode = this.state.hoveredPort?.side === "input" && this.state.hoveredPort.nodeId === node.id;
+    const nodeRunVisual = this.readNodeRunVisual(node.id);
+    const stateToneClassName = readNodeRunToneClassName(nodeRunVisual.status);
+    const stateAccentClassName = readNodeRunAccentClassName(nodeRunVisual.status);
 
     return createElement("div", {
       key: node.id,
-      className: `pointer-events-auto absolute flex flex-col rounded-xl border bg-[#1a1f27] shadow-[0_8px_24px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : canAcceptConnection ? "border-slate-500/90 shadow-[0_10px_30px_rgba(59,130,246,0.12)]" : "border-border-dark hover:border-slate-500"}`,
+      className: `pointer-events-auto absolute flex flex-col rounded-xl border bg-[#1a1f27] shadow-[0_8px_24px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : canAcceptConnection ? "border-slate-500/90 shadow-[0_10px_30px_rgba(59,130,246,0.12)]" : stateToneClassName} ${nodeRunVisual.status === "running" ? "animate-pulse" : ""}`,
       style: `left:${node.position.x}px; top:${node.position.y}px; width:${node.width}px;`,
       onPointerMove: (event: Event) => this.handleNodeConnectionMouseMove(event as PointerEvent),
       onPointerUp: (event: Event) => this.handleNodeConnectionMouseUp(event as PointerEvent),
@@ -1338,7 +1390,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       }
     }, [
       createElement("div", {
-        className: `h-1.5 rounded-t-xl ${readNodeAccentClassName(node.kind)}`
+        className: `h-1.5 rounded-t-xl ${stateAccentClassName ?? readNodeAccentClassName(node.kind)}`
       }),
       canAcceptConnection
         ? createElement("div", {
@@ -1356,14 +1408,24 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           createElement("div", { className: "min-w-0 flex-1" }, [
             createElement("div", { className: "flex items-center gap-2" }, [
               createElement("span", { className: "material-symbols-outlined text-[18px] text-white/90" }, [readNodeIcon(node.kind)]),
-              createElement("span", { className: "truncate text-sm font-semibold text-white" }, [node.label])
+              createElement("span", { className: "truncate text-sm font-semibold text-white" }, [node.label]),
+              nodeRunVisual.label
+                ? createElement(StatusBadge, {
+                    status: nodeRunVisual.badgeStatus,
+                    pulse: nodeRunVisual.status === "running"
+                  }, [nodeRunVisual.label])
+                : ""
             ]),
             createElement("p", { className: "mt-1 truncate text-xs text-text-secondary" }, [asset ? asset.name : readNodeSecondaryText(node)])
           ]),
           createElement(Button, {
             variant: "ghost",
             size: "sm",
-            onClick: () => this.setState({ selection: { type: "node", id: node.id }, compactView: CompactView.Inspector }),
+            onClick: () => this.setState({
+              selection: { type: "node", id: node.id },
+              compactView: CompactView.Inspector,
+              desktopInspectorCollapsed: false
+            }),
             children: selected ? "Selected" : "Edit"
           })
         ])
@@ -1374,6 +1436,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         createElement("span", {}, [node.inputPorts.length === 0 ? "No inputs" : `${node.inputPorts.length} input${node.inputPorts.length === 1 ? "" : "s"}`]),
         createElement("span", {}, [node.outputPorts.length === 0 ? "No outputs" : `${node.outputPorts.length} output${node.outputPorts.length === 1 ? "" : "s"}`])
       ]),
+      nodeRunVisual.detail
+        ? createElement("div", {
+            className: "border-t border-border-dark/70 px-3 py-2 text-[11px] leading-5 text-slate-300"
+          }, [nodeRunVisual.detail])
+        : "",
       node.inputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "input", index, node.inputPorts.length)),
       node.outputPorts.map((port, index) => this.renderNodePort(node, port.id, port.name, "output", index, node.outputPorts.length))
     ]);
@@ -1582,6 +1649,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private readCanvasFooterLabel(): string {
+    if (this.spacePanPressed) {
+      return "Space pressed · drag to pan like n8n";
+    }
+
     if (this.panning) {
       return "Panning canvas";
     }
@@ -1596,7 +1667,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         : "Connection mode active";
     }
 
-    return "Drag the canvas, drag nodes, or drag from outputs to create connections";
+    return "Space + drag pans anywhere. Drag nodes or drag from outputs to create connections";
   }
 
   private renderInspectorPanel(): HTMLElement {
@@ -1613,27 +1684,37 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           createElement("span", { className: "text-sm font-semibold text-white" }, [this.readInspectorTitle()]),
           createElement("span", { className: "truncate text-xs text-text-secondary" }, [this.readInspectorSubtitle()])
         ]),
-        this.state.selection.type === "node"
-          ? createElement(Button, {
-              variant: "danger",
-              size: "sm",
-              onClick: () => this.handleRemoveSelectedNode(),
-              children: "Delete node"
-            })
-          : this.state.selection.type === "execution"
-            ? (() => {
-                const executionId = this.state.selection.id;
-                return createElement(Button, {
+        createElement("div", { className: "flex items-center gap-2" }, [
+          this.state.selection.type === "node"
+            ? createElement(Button, {
                 variant: "danger",
                 size: "sm",
-                disabled: this.state.pendingAction !== null,
-                onClick: () => {
-                  void this.handleDeleteExecution(executionId);
-                },
-                children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run"
-              });
-              })()
-          : ""
+                onClick: () => this.handleRemoveSelectedNode(),
+                children: "Delete node"
+              })
+            : this.state.selection.type === "execution"
+              ? (() => {
+                  const executionId = this.state.selection.id;
+                  return createElement(Button, {
+                    variant: "danger",
+                    size: "sm",
+                    disabled: this.state.pendingAction !== null,
+                    onClick: () => {
+                      void this.handleDeleteExecution(executionId);
+                    },
+                    children: this.state.pendingAction === PendingAction.DeleteExecution ? "Deleting" : "Delete run"
+                  });
+                })()
+              : "",
+          !this.state.isCompactViewport
+            ? createElement(IconButton, {
+                icon: "right_panel_close",
+                tooltip: "Collapse inspector",
+                onClick: () => this.setState({ desktopInspectorCollapsed: true }),
+                className: "h-8 w-8 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]"
+              })
+            : ""
+        ])
       ]),
       createElement("div", {
         className: "min-h-0 flex-1 overflow-y-auto p-4",
@@ -1794,6 +1875,17 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                 createElement("span", {}, [`${nodeRun.alerts.length} alert${nodeRun.alerts.length === 1 ? "" : "s"}`]),
                 createElement("span", {}, [`${nodeRun.guardrailFindings.length} finding${nodeRun.guardrailFindings.length === 1 ? "" : "s"}`]),
                 createElement("span", {}, [formatDuration(nodeRun.durationMs)])
+              ]),
+              createElement("div", { className: "mt-3 rounded-md border border-border-dark bg-[#0d1117] px-3 py-3" }, [
+                createElement("div", { className: "flex items-center justify-between gap-2" }, [
+                  createElement("span", { className: "text-xs font-medium text-white" }, ["Output snapshot"]),
+                  createElement("span", { className: "text-[11px] text-text-secondary" }, [
+                    readOutputSnapshotKindLabel(nodeRun.outputSnapshot)
+                  ])
+                ]),
+                createElement("pre", {
+                  className: "mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#11161d] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200"
+                }, [formatOutputSnapshot(nodeRun.outputSnapshot)])
               ]),
               nodeRun.guardrailFindings.length > 0
                 ? createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
@@ -3852,7 +3944,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private shouldShowSidebar(): boolean {
-    return !this.state.isCompactViewport || this.state.compactView === CompactView.Sidebar;
+    return this.state.isCompactViewport
+      ? this.state.compactView === CompactView.Sidebar
+      : !this.state.desktopSidebarCollapsed;
   }
 
   private shouldShowCanvas(): boolean {
@@ -3860,7 +3954,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private shouldShowInspector(): boolean {
-    return !this.state.isCompactViewport || this.state.compactView === CompactView.Inspector;
+    return this.state.isCompactViewport
+      ? this.state.compactView === CompactView.Inspector
+      : !this.state.desktopInspectorCollapsed;
   }
 
   private async hydrateState(): Promise<void> {
@@ -3993,9 +4089,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
     this.setState({
       pendingAction: PendingAction.RunWorkflow,
+      liveExecution: createLiveExecutionState(currentWorkflow),
       errorMessage: null,
       noticeMessage: null
     });
+    this.startLiveExecutionPreview(currentWorkflow);
 
     try {
       const execution = await this.workflowClient.runWorkflow({
@@ -4005,6 +4103,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       await this.handleSelectExecution(execution.id);
       this.setState({
         pendingAction: null,
+        liveExecution: null,
         noticeMessage: "Workflow run persisted in execution history.",
         errorMessage: null,
         selection: { type: "execution", id: execution.id }
@@ -4012,9 +4111,12 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     } catch (error) {
       this.setState({
         pendingAction: null,
+        liveExecution: null,
         errorMessage: readErrorMessage(error, "Could not run the workflow."),
         noticeMessage: null
       });
+    } finally {
+      this.clearLiveExecutionTimer();
     }
   }
 
@@ -4240,6 +4342,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       loadingExecutionId: executionId,
       errorMessage: null,
       noticeMessage: null,
+      desktopInspectorCollapsed: false,
       compactView: this.state.isCompactViewport ? CompactView.Inspector : this.state.compactView
     });
 
@@ -4311,6 +4414,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       return;
     }
 
+    if (this.spacePanPressed) {
+      this.handleCanvasPointerDown(event);
+      return;
+    }
+
     if (event.target.closest("button") && !event.target.closest("[data-drag-handle]")) {
       return;
     }
@@ -4331,7 +4439,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       x: (event.clientX - surfaceRect.left - viewport.x) / viewport.zoom - node.position.x,
       y: (event.clientY - surfaceRect.top - viewport.y) / viewport.zoom - node.position.y
     };
-    this.setState({ selection: { type: "node", id: nodeId }, compactView: this.state.isCompactViewport ? CompactView.Inspector : this.state.compactView });
+    this.setState({
+      selection: { type: "node", id: nodeId },
+      compactView: this.state.isCompactViewport ? CompactView.Inspector : this.state.compactView,
+      desktopInspectorCollapsed: false
+    });
   }
 
   private handleCanvasPointerDown(event: PointerEvent): void {
@@ -4343,7 +4455,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       return;
     }
 
-    if (event.target.closest("[data-node-id]")) {
+    if (event.target.closest("[data-node-id]") && !this.spacePanPressed) {
       return;
     }
 
@@ -5165,6 +5277,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   };
 
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (event.code === "Space") {
+      this.spacePanPressed = true;
+      return;
+    }
+
     if (event.key !== "Escape" || this.state.pendingConnection === null) {
       return;
     }
@@ -5178,6 +5295,135 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       errorMessage: null
     });
   };
+
+  private readonly handleGlobalKeyUp = (event: KeyboardEvent): void => {
+    if (event.code === "Space") {
+      this.spacePanPressed = false;
+    }
+  };
+
+  private readNodeRunVisual(nodeId: string): {
+    status: "idle" | "running" | "completed" | "warn" | "failed";
+    label: string | null;
+    detail: string | null;
+    badgeStatus: "info" | "success" | "warning" | "running" | "failed";
+  } {
+    const liveNodeRun = this.state.liveExecution?.nodeRuns[nodeId];
+    if (liveNodeRun?.status === "running") {
+      return {
+        status: "running",
+        label: "Running",
+        detail: "Live run preview in progress.",
+        badgeStatus: "running"
+      };
+    }
+
+    if (liveNodeRun?.status === "completed") {
+      return {
+        status: "completed",
+        label: "Done",
+        detail: "Completed in current live preview.",
+        badgeStatus: "success"
+      };
+    }
+
+    const execution = this.readSelectedExecution();
+    const nodeRun = execution?.nodeRuns.find((entry) => entry.nodeId === nodeId) ?? null;
+    if (!nodeRun) {
+      return {
+        status: "idle",
+        label: null,
+        detail: null,
+        badgeStatus: "info"
+      };
+    }
+
+    const detail = summarizeOutputSnapshot(nodeRun.outputSnapshot);
+    if (nodeRun.status === "failed") {
+      return { status: "failed", label: "Error", detail, badgeStatus: "failed" };
+    }
+
+    if (nodeRun.alerts.some((alert) => alert.level === "warn" || alert.level === "error")) {
+      return { status: "warn", label: "Warn", detail, badgeStatus: "warning" };
+    }
+
+    if (nodeRun.status === "running") {
+      return { status: "running", label: "Running", detail, badgeStatus: "running" };
+    }
+
+    if (nodeRun.status === "completed") {
+      return { status: "completed", label: "Done", detail, badgeStatus: "success" };
+    }
+
+    return {
+      status: "idle",
+      label: formatSelectOptionLabel(nodeRun.status),
+      detail,
+      badgeStatus: "info"
+    };
+  }
+
+  private startLiveExecutionPreview(workflow: WorkflowDefinitionRecord): void {
+    const nodeIds = workflow.nodes.map((node) => node.id);
+    let index = 0;
+    const tick = (): void => {
+      if (index >= nodeIds.length || !this.state.liveExecution) {
+        this.clearLiveExecutionTimer();
+        return;
+      }
+
+      const nextNodeId = nodeIds[index];
+      if (!nextNodeId) {
+        this.clearLiveExecutionTimer();
+        return;
+      }
+
+      const previousActiveNodeId = this.state.liveExecution.activeNodeId;
+      const previousStartedAt = previousActiveNodeId
+        ? this.state.liveExecution.nodeRuns[previousActiveNodeId]?.startedAt
+        : undefined;
+      const nextNodeRuns: Record<string, LiveNodeRunState> = {
+        ...this.state.liveExecution.nodeRuns,
+        ...(previousActiveNodeId
+          ? {
+              [previousActiveNodeId]: {
+                status: "completed",
+                ...(previousStartedAt ? { startedAt: previousStartedAt } : {}),
+                finishedAt: new Date().toISOString()
+              }
+            }
+          : {}),
+        [nextNodeId]: {
+          status: "running",
+          startedAt: new Date().toISOString()
+        }
+      };
+
+      this.setState({
+        liveExecution: {
+          ...this.state.liveExecution,
+          activeNodeId: nextNodeId,
+          completedNodeIds: previousActiveNodeId
+            ? [...this.state.liveExecution.completedNodeIds, previousActiveNodeId]
+            : this.state.liveExecution.completedNodeIds,
+          nodeRuns: nextNodeRuns
+        }
+      });
+
+      index += 1;
+      this.liveExecutionTimer = setTimeout(tick, 420);
+    };
+
+    this.clearLiveExecutionTimer();
+    this.liveExecutionTimer = setTimeout(tick, 120);
+  }
+
+  private clearLiveExecutionTimer(): void {
+    if (this.liveExecutionTimer) {
+      clearTimeout(this.liveExecutionTimer);
+      this.liveExecutionTimer = null;
+    }
+  }
 }
 
 const groupAssetsByKind = (
@@ -5333,6 +5579,153 @@ const edgeDeletePointOverlapsNode = (
 
 const hoveredPortUsesActiveArrow = (hoveredPort: HoveredPort | null): boolean =>
   hoveredPort?.side === "input";
+
+const createLiveExecutionState = (
+  workflow: WorkflowDefinitionRecord
+): LiveExecutionState => ({
+  workflowId: workflow.id,
+  startedAt: new Date().toISOString(),
+  activeNodeId: null,
+  completedNodeIds: [],
+  nodeRuns: Object.fromEntries(
+    workflow.nodes.map((node) => [
+      node.id,
+      {
+        status: "pending"
+      } satisfies LiveNodeRunState
+    ])
+  )
+});
+
+const readNodeRunToneClassName = (
+  status: "idle" | "running" | "completed" | "warn" | "failed"
+): string => {
+  if (status === "running") {
+    return "border-sky-400/80 shadow-[0_12px_32px_rgba(56,189,248,0.16)]";
+  }
+
+  if (status === "completed") {
+    return "border-emerald-500/70 shadow-[0_10px_28px_rgba(16,185,129,0.14)]";
+  }
+
+  if (status === "warn") {
+    return "border-amber-400/80 shadow-[0_10px_28px_rgba(251,191,36,0.14)]";
+  }
+
+  if (status === "failed") {
+    return "border-rose-500/80 shadow-[0_12px_32px_rgba(244,63,94,0.18)]";
+  }
+
+  return "border-border-dark";
+};
+
+const readNodeRunAccentClassName = (
+  status: "idle" | "running" | "completed" | "warn" | "failed"
+): string | null => {
+  if (status === "running") {
+    return "from-sky-400 via-cyan-300 to-sky-500";
+  }
+
+  if (status === "completed") {
+    return "from-emerald-500 via-green-400 to-emerald-400";
+  }
+
+  if (status === "warn") {
+    return "from-amber-400 via-yellow-300 to-orange-400";
+  }
+
+  if (status === "failed") {
+    return "from-rose-500 via-red-400 to-pink-500";
+  }
+
+  return null;
+};
+
+const readOutputSnapshotKindLabel = (value: unknown): string => {
+  if (value === null) {
+    return "Null";
+  }
+
+  if (Array.isArray(value)) {
+    return `Array · ${value.length.toString()} item${value.length === 1 ? "" : "s"}`;
+  }
+
+  if (value instanceof Error) {
+    return "Error";
+  }
+
+  if (typeof value === "object") {
+    return `Object · ${Object.keys(value).length.toString()} field${Object.keys(value).length === 1 ? "" : "s"}`;
+  }
+
+  return formatSelectOptionLabel(typeof value);
+};
+
+const summarizeOutputSnapshot = (value: unknown): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return "Empty string";
+    }
+
+    return trimmed.length > 88 ? `${trimmed.slice(0, 85)}...` : trimmed;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "Empty array";
+    }
+
+    const preview = value
+      .slice(0, 2)
+      .map((entry) => summarizeOutputSnapshot(entry) ?? formatSelectOptionLabel(typeof entry))
+      .join(" · ");
+    return value.length > 2 ? `${preview}...` : preview;
+  }
+
+  if (value instanceof Error) {
+    return value.message;
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) {
+      return "Empty object";
+    }
+
+    const preview = entries
+      .slice(0, 2)
+      .map(([key, entryValue]) => `${key}: ${summarizeOutputSnapshot(entryValue) ?? formatSelectOptionLabel(typeof entryValue)}`)
+      .join(" · ");
+    return entries.length > 2 ? `${preview}...` : preview;
+  }
+
+  return null;
+};
+
+const formatOutputSnapshot = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === undefined) {
+    return "undefined";
+  }
+
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+};
 
 const readCanvasBackgroundStyle = (viewport: WorkflowViewportRecord): string => {
   const gridSize = Math.max(14, Math.round(24 * viewport.zoom));

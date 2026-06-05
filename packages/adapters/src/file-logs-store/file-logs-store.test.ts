@@ -113,6 +113,44 @@ describe("FileLogsStore", () => {
       expect(fileContent).toContain("error");
       expect(fileContent).toContain("Something went wrong");
     });
+
+    it("should drop the oldest entries when the max entry limit is exceeded", async () => {
+      const limitedStore = await createFileLogsStore(testLogDir, {
+        maxEntries: 2
+      });
+
+      await limitedStore.append({
+        id: "test-id-1",
+        timestamp: "2024-01-01 12:00:00.000",
+        level: LogLevel.Info,
+        message: "First message"
+      });
+      await limitedStore.append({
+        id: "test-id-2",
+        timestamp: "2024-01-01 12:00:01.000",
+        level: LogLevel.Info,
+        message: "Second message"
+      });
+      await limitedStore.append({
+        id: "test-id-3",
+        timestamp: "2024-01-01 12:00:02.000",
+        level: LogLevel.Info,
+        message: "Third message"
+      });
+
+      const queryResult = await limitedStore.query({});
+      expect(queryResult.type).toBe("ok");
+      if (queryResult.type === "ok") {
+        expect(queryResult.value).toHaveLength(2);
+        expect(queryResult.value[0]?.message).toBe("Second message");
+        expect(queryResult.value[1]?.message).toBe("Third message");
+      }
+
+      const fileContent = await fs.readFile(testLogPath, "utf-8");
+      expect(fileContent).not.toContain("First message");
+      expect(fileContent).toContain("Second message");
+      expect(fileContent).toContain("Third message");
+    });
   });
 
   describe("query", () => {

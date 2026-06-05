@@ -7,6 +7,7 @@ export type ServerConfig = {
   workspaceRoots: ReadonlyArray<string>;
   commandAllowlist: ReadonlyArray<string>;
   logDir: string;
+  logMaxEntries: number;
   workspaceStateFile: string;
 };
 
@@ -17,6 +18,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   const workspaceRoots = parseAllowlist(env[EnvKey.WorkspaceRoots]);
   const commandAllowlist = parseAllowlist(env[EnvKey.CommandAllowlist]);
   const logDir = env[EnvKey.LogDir] ?? DefaultServerConfig.LogDir;
+  const logMaxEntries = parsePositiveInteger(
+    env[EnvKey.LogMaxEntries],
+    DefaultServerConfig.LogMaxEntries
+  );
   const workspaceStateFile =
     env[EnvKey.WorkspaceStateFile] ?? DefaultServerConfig.WorkspaceStateFile;
 
@@ -35,6 +40,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
     workspaceRoots,
     commandAllowlist,
     logDir,
+    logMaxEntries,
     workspaceStateFile
   };
 };
@@ -68,4 +74,20 @@ const parseAllowlist = (value: string | undefined): ReadonlyArray<string> => {
   }
 
   return normalized;
+};
+
+const parsePositiveInteger = (
+  value: string | undefined,
+  fallback: number
+): number => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${ErrorMessage.InvalidBody}: ${value}`);
+  }
+
+  return parsed;
 };

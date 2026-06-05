@@ -36,9 +36,13 @@ const LogsErrorMessage = {
 } as const;
 
 export const createServerLogsStore = async (
-  logDir: string
+  logDir: string,
+  maxEntries?: number
 ): Promise<ServerLogsStore> => {
-  const fileLogsStore = await createFileLogsStore(logDir);
+  const fileLogsStore = await createFileLogsStore(
+    logDir,
+    maxEntries === undefined ? {} : { maxEntries }
+  );
   let entries: ServerLogEntry[] = [];
 
   const reset = async (): Promise<void> => {

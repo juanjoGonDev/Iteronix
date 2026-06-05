@@ -2940,3 +2940,42 @@
   - Provider API keys now persist in workspace state, so server-side secret hardening remains a future security follow-up.
 - Next:
   - Add secure-at-rest storage for API-backed provider credentials once the server secret adapter path is defined.
+
+### 2026-06-05 03:16 (Europe/Madrid) — Centralized Reusable Logging Core For UI And Server
+
+- Summary:
+  - Centralized the console-forwarding logger core so the web UI and server reuse the same log-entry creation, serialization, truncation, reset-on-start, and global error capture behavior, and added bounded FIFO retention for file-backed logs.
+- Decisions:
+  - Keep one reusable logger core in `apps/web-ui/src/shared/logger-core.ts` so both runtime surfaces compile cleanly without breaking the current web build layout.
+  - Reset logs at app start and cap retained entries with FIFO truncation to avoid unbounded growth while preserving the newest failures.
+- Changes:
+  - Added `apps/web-ui/src/shared/logger-core.ts` plus tests and refactored `logger-impl.ts` to use it.
+  - Updated `apps/server-api/src/server.ts` to reuse the same logger core, log request lifecycles, log startup metadata, and capture response error messages.
+  - Updated `packages/adapters/src/file-logs-store/file-logs-store.ts` and `apps/server-api/src/server-logs-store.ts` to support max-entry retention with rewrite-on-trim behavior.
+  - Added `LOG_MAX_ENTRIES` config support in `apps/server-api/src/config.ts` and `constants.ts`.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+- Issues/Risks:
+  - Logger-core tests still print one intentional console warning line because the test validates the real wrapped console path.
+- Next:
+  - Expose server logs in the UI with filtering/search so save/config failures can be inspected without filesystem access.
+### 2026-06-05 08:24 (Europe/Madrid) — Workflow Editor Live Run UX Slice
+
+- Summary:
+  - Improved the workflow editor execution UX with live node-state preview while a run is pending, per-node historical output snapshots in the execution inspector, desktop sidebar/inspector collapse controls, and n8n-style space-drag panning.
+- Decisions:
+  - Ship live execution as a client-side preview over the existing non-streaming run API instead of widening the backend contract in this slice.
+  - Reuse persisted `outputSnapshot` data from workflow execution history so node outputs are inspectable immediately without server changes.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to add live execution state, node status borders/badges, output snapshot rendering, desktop panel collapse toggles, and space-key pan behavior.
+  - Kept existing compact/mobile behavior intact while forcing the inspector open when selecting a node or execution on desktop.
+- Commands:
+  - `pnpm typecheck` PASS
+  - `pnpm lint && pnpm typecheck && pnpm test && pnpm build` PASS
+- Issues/Risks:
+  - Live execution remains a UI preview until the workflow API exposes real streaming node progress.
+- Next:
+  - Add real server-sent execution streaming and wire the canvas/inspector to actual runtime node events instead of simulated progression.

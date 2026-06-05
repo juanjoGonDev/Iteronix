@@ -97,6 +97,7 @@ export const EnvKey = {
   WorkspaceRoots: "WORKSPACE_ROOTS",
   CommandAllowlist: "COMMAND_ALLOWLIST",
   LogDir: "LOG_DIR",
+  LogMaxEntries: "LOG_MAX_ENTRIES",
   WorkspaceStateFile: "WORKSPACE_STATE_FILE"
 } as const;
 
@@ -104,6 +105,7 @@ export const DefaultServerConfig = {
   Host: "0.0.0.0",
   Port: 4000,
   LogDir: "../web-ui/logs",
+  LogMaxEntries: 1000,
   WorkspaceStateFile: ".iteronix/workspace-state.json"
 } as const;
 

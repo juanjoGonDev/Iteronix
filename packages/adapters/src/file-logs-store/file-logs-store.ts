@@ -19,23 +19,47 @@ const resetLogFile = async (
 };
 
 export const createFileLogsStore = async (
-  logDir: string
+  logDir: string,
+  options: {
+    maxEntries?: number;
+  } = {}
 ): Promise<LogsStorePort & { reset: () => Promise<void> }> => {
   const logFilePath = join(logDir, LOG_FILE_NAME);
   let entries: LogEntry[] = [];
+  const maxEntries = readMaxEntries(options.maxEntries);
 
   const reset = async (): Promise<void> => {
     entries = [];
     await resetLogFile(logFilePath, logDir);
   };
 
-  const appendToMemory = (entry: LogEntry): void => {
+  const appendToMemory = (entry: LogEntry): boolean => {
     entries.push(entry);
+    if (entries.length <= maxEntries) {
+      return false;
+    }
+
+    entries = entries.slice(-maxEntries);
+    return true;
   };
 
   const appendToFile = async (entry: LogEntry): Promise<void> => {
     const line = formatLogEntry(entry);
     await fs.appendFile(logFilePath, `${line}${LOG_LINE_SEPARATOR}`, "utf-8");
+  };
+
+  const writeAllEntriesToFile = async (): Promise<void> => {
+    const payload = entries
+      .map((entry) => formatLogEntry(entry))
+      .join(LOG_LINE_SEPARATOR);
+    const suffix = payload.length > 0 ? LOG_LINE_SEPARATOR : "";
+
+    try {
+      await fs.writeFile(logFilePath, `${payload}${suffix}`, "utf-8");
+    } catch {
+      await fs.mkdir(logDir, { recursive: true });
+      await fs.writeFile(logFilePath, `${payload}${suffix}`, "utf-8");
+    }
   };
 
   const queryFromMemory = (
@@ -89,8 +113,12 @@ export const createFileLogsStore = async (
     entry: LogEntry
   ): Promise<Result<void, LogsStoreError>> => {
     try {
-      appendToMemory(entry);
-      await appendToFile(entry);
+      const trimmed = appendToMemory(entry);
+      if (trimmed) {
+        await writeAllEntriesToFile();
+      } else {
+        await appendToFile(entry);
+      }
       return { type: "ok", value: undefined };
     } catch (error) {
       const errorMessage =
@@ -139,6 +167,18 @@ export const createFileLogsStore = async (
     query,
     reset
   };
+};
+
+const readMaxEntries = (value: number | undefined): number => {
+  if (
+    value === undefined ||
+    !Number.isInteger(value) ||
+    value < 1
+  ) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return value;
 };
 
 const formatLogEntry = (entry: LogEntry): string => {
