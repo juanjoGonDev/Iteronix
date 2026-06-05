@@ -1,11 +1,16 @@
-import { requestJson } from "./server-api-client.js";
+import { requestJson, streamText } from "./server-api-client.js";
 import type {
+  WorkflowAlertRecord,
   WorkflowAssetRecord,
   WorkflowAssetUpsertInput,
   WorkflowAssetUsageRecord,
   WorkflowDefinitionRecord,
   WorkflowDefinitionUpsertInput,
-  WorkflowExecutionRecord
+  WorkflowExecutionRecord,
+  WorkflowGuardrailFindingRecord,
+  WorkflowNodeKind,
+  WorkflowProviderSelectionRecord,
+  WorkflowUsageTotalsRecord
 } from "../screens/workflows-editor-state.js";
 
 const EndpointPath = {
@@ -22,6 +27,7 @@ const EndpointPath = {
   ExecutionsGet: "/workflows/executions/get",
   ExecutionsDelete: "/workflows/executions/delete",
   ExecutionsRun: "/workflows/executions/run",
+  ExecutionsStream: "/workflows/executions/stream",
   ProvidersTest: "/workflows/providers/test"
 } as const;
 
@@ -32,6 +38,83 @@ export type WorkflowNodeProviderTestResult = {
   testedAt: string;
   message: string;
 };
+
+export const WorkflowRunStreamEventType = {
+  WorkflowStarted: "workflow_started",
+  NodeStarted: "node_started",
+  NodeDelta: "node_delta",
+  NodeCompleted: "node_completed",
+  NodeFailed: "node_failed",
+  WorkflowCompleted: "workflow_completed",
+  WorkflowFailed: "workflow_failed"
+} as const;
+
+export type WorkflowRunStreamEvent =
+  | {
+      type: typeof WorkflowRunStreamEventType.WorkflowStarted;
+      workflowId: string;
+      workflowRunId: string;
+      startedAt: string;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.NodeStarted;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      startedAt: string;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.NodeDelta;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      delta: string;
+      emittedAt: string;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.NodeCompleted;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      status: "completed" | "failed" | "awaiting_review";
+      startedAt: string;
+      finishedAt: string;
+      outputSnapshot: unknown;
+      alerts: ReadonlyArray<WorkflowAlertRecord>;
+      guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
+      usage?: WorkflowUsageTotalsRecord;
+      provider?: WorkflowProviderSelectionRecord;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.NodeFailed;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      startedAt: string;
+      finishedAt: string;
+      message: string;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.WorkflowCompleted;
+      workflowId: string;
+      workflowRunId: string;
+      finishedAt: string;
+      execution: WorkflowExecutionRecord;
+    }
+  | {
+      type: typeof WorkflowRunStreamEventType.WorkflowFailed;
+      workflowId: string;
+      workflowRunId: string;
+      finishedAt: string;
+      error?: string;
+      execution?: WorkflowExecutionRecord;
+    };
 
 export type WorkflowClient = {
   listDefinitions: (input: { projectId: string }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
@@ -63,6 +146,11 @@ export type WorkflowClient = {
   getExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
   deleteExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
   runWorkflow: (input: { workflowId: string }) => Promise<WorkflowExecutionRecord>;
+  streamWorkflow: (input: {
+    workflowId: string;
+    signal?: AbortSignal;
+    onEvent: (event: WorkflowRunStreamEvent) => void;
+  }) => Promise<void>;
   testNodeProvider: (input: {
     workflowId: string;
     nodeId: string;
@@ -180,6 +268,30 @@ export const createWorkflowClient = (): WorkflowClient => ({
       },
       parse: parseWorkflowExecutionResponse
     }),
+  streamWorkflow: async (input) => {
+    let buffer = "";
+
+    await streamText({
+      path: `${EndpointPath.ExecutionsStream}?workflowId=${encodeURIComponent(input.workflowId)}`,
+      ...(input.signal ? { signal: input.signal } : {}),
+      onChunk: (chunk) => {
+        buffer += chunk;
+        let boundaryIndex = buffer.indexOf("\n\n");
+
+        while (boundaryIndex >= 0) {
+          const rawBlock = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + 2);
+          const decoded = decodeServerSentEvents(`${rawBlock}\n\n`);
+
+          for (const event of decoded) {
+            input.onEvent(parseWorkflowRunStreamEvent(event.event, event.data));
+          }
+
+          boundaryIndex = buffer.indexOf("\n\n");
+        }
+      }
+    });
+  },
   testNodeProvider: (input) =>
     requestJson({
       path: EndpointPath.ProvidersTest,
@@ -252,6 +364,153 @@ export const parseWorkflowNodeProviderTestResponse = (
     status: readRequiredString(record, "workflowNodeProviderTestResponse", "status") as WorkflowNodeProviderTestResult["status"],
     testedAt: readRequiredString(record, "workflowNodeProviderTestResponse", "testedAt"),
     message: readRequiredString(record, "workflowNodeProviderTestResponse", "message")
+  };
+};
+
+export const decodeServerSentEvents = (
+  value: string
+): ReadonlyArray<{
+  event: string;
+  data: unknown;
+  id?: string;
+}> => {
+  const blocks = value
+    .split(/\n\n/u)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  return blocks
+    .map((block) => {
+      const lines = block.split(/\n/u);
+      let id: string | undefined;
+      let eventName = "";
+      const dataLines: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith("id:")) {
+          id = line.slice(3).trim();
+          continue;
+        }
+
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+          continue;
+        }
+
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+
+      if (eventName.length === 0 || dataLines.length === 0) {
+        return null;
+      }
+
+      return {
+        event: eventName,
+        data: JSON.parse(dataLines.join("\n")) as unknown,
+        ...(id ? { id } : {})
+      };
+    })
+    .filter((event): event is { event: string; data: unknown; id?: string } => event !== null);
+};
+
+export const parseWorkflowRunStreamEvent = (
+  eventName: string,
+  value: unknown
+): WorkflowRunStreamEvent => {
+  const record = ensureRecord(value, "workflowRunStreamEvent");
+
+  if (eventName === WorkflowRunStreamEventType.WorkflowStarted) {
+    return {
+      type: WorkflowRunStreamEventType.WorkflowStarted,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt")
+    };
+  }
+
+  if (eventName === WorkflowRunStreamEventType.NodeStarted) {
+    return {
+      type: WorkflowRunStreamEventType.NodeStarted,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
+      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      label: readRequiredString(record, "workflowRunStreamEvent", "label"),
+      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt")
+    };
+  }
+
+  if (eventName === WorkflowRunStreamEventType.NodeDelta) {
+    return {
+      type: WorkflowRunStreamEventType.NodeDelta,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
+      delta: readRequiredString(record, "workflowRunStreamEvent", "delta"),
+      emittedAt: readRequiredString(record, "workflowRunStreamEvent", "emittedAt")
+    };
+  }
+
+  if (eventName === WorkflowRunStreamEventType.NodeCompleted) {
+    return {
+      type: WorkflowRunStreamEventType.NodeCompleted,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
+      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      label: readRequiredString(record, "workflowRunStreamEvent", "label"),
+      status: readRequiredString(record, "workflowRunStreamEvent", "status") as "completed" | "failed" | "awaiting_review",
+      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt"),
+      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+      outputSnapshot: record["outputSnapshot"],
+      alerts: readRequiredArray(record, "workflowRunStreamEvent", "alerts") as ReadonlyArray<WorkflowAlertRecord>,
+      guardrailFindings: readRequiredArray(record, "workflowRunStreamEvent", "guardrailFindings") as ReadonlyArray<WorkflowGuardrailFindingRecord>,
+      ...(record["usage"] ? { usage: record["usage"] as WorkflowUsageTotalsRecord } : {}),
+      ...(record["provider"] ? { provider: record["provider"] as WorkflowProviderSelectionRecord } : {})
+    };
+  }
+
+  if (eventName === WorkflowRunStreamEventType.NodeFailed) {
+    return {
+      type: WorkflowRunStreamEventType.NodeFailed,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
+      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      label: readRequiredString(record, "workflowRunStreamEvent", "label"),
+      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt"),
+      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+      message: readRequiredString(record, "workflowRunStreamEvent", "message")
+    };
+  }
+
+  if (eventName === WorkflowRunStreamEventType.WorkflowCompleted) {
+    return {
+      type: WorkflowRunStreamEventType.WorkflowCompleted,
+      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+      execution: parseWorkflowExecutionRecord(
+        readRequiredRecord(record, "workflowRunStreamEvent", "execution")
+      )
+    };
+  }
+
+  return {
+    type: WorkflowRunStreamEventType.WorkflowFailed,
+    workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
+    workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+    finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+    ...(typeof record["error"] === "string" ? { error: record["error"] } : {}),
+    ...(record["execution"]
+      ? {
+          execution: parseWorkflowExecutionRecord(
+            readRequiredRecord(record, "workflowRunStreamEvent", "execution")
+          )
+        }
+      : {})
   };
 };
 

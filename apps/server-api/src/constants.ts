@@ -72,6 +72,7 @@ export const RoutePath = {
   WorkflowExecutionsGet: "/workflows/executions/get",
   WorkflowExecutionsDelete: "/workflows/executions/delete",
   WorkflowExecutionsRun: "/workflows/executions/run",
+  WorkflowExecutionsStream: "/workflows/executions/stream",
   WorkflowProvidersTest: "/workflows/providers/test"
 } as const;
 
@@ -208,7 +209,8 @@ export const SessionField = {
 } as const;
 
 export const QueryParam = {
-  SessionId: "sessionId"
+  SessionId: "sessionId",
+  WorkflowId: "workflowId"
 } as const;
 
 export const HistoryField = {

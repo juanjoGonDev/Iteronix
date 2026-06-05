@@ -39,11 +39,88 @@ export type WorkflowProviderRunResult = {
   citations?: ReadonlyArray<WorkflowCitationRecord>;
 };
 
+export const WorkflowRuntimeEventType = {
+  WorkflowStarted: "workflow_started",
+  NodeStarted: "node_started",
+  NodeDelta: "node_delta",
+  NodeCompleted: "node_completed",
+  NodeFailed: "node_failed",
+  WorkflowCompleted: "workflow_completed",
+  WorkflowFailed: "workflow_failed"
+} as const;
+
+export type WorkflowRuntimeEvent =
+  | {
+      type: typeof WorkflowRuntimeEventType.WorkflowStarted;
+      workflowId: string;
+      workflowRunId: string;
+      startedAt: string;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.NodeStarted;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      startedAt: string;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.NodeDelta;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      delta: string;
+      emittedAt: string;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.NodeCompleted;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      status: "completed" | "failed" | "awaiting_review";
+      startedAt: string;
+      finishedAt: string;
+      outputSnapshot: unknown;
+      alerts: ReadonlyArray<WorkflowAlertRecord>;
+      guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
+      usage?: WorkflowUsageTotalsRecord;
+      provider?: WorkflowProviderSelectionRecord;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.NodeFailed;
+      workflowId: string;
+      workflowRunId: string;
+      nodeId: string;
+      nodeKind: WorkflowNodeKind;
+      label: string;
+      startedAt: string;
+      finishedAt: string;
+      message: string;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.WorkflowCompleted;
+      workflowId: string;
+      workflowRunId: string;
+      finishedAt: string;
+      execution: WorkflowExecutionRecord;
+    }
+  | {
+      type: typeof WorkflowRuntimeEventType.WorkflowFailed;
+      workflowId: string;
+      workflowRunId: string;
+      finishedAt: string;
+      execution: WorkflowExecutionRecord;
+    };
+
 export type WorkflowRuntime = {
   runDefinition: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
     contextSessionId?: string;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
 };
 
@@ -59,6 +136,7 @@ export const createWorkflowRuntime = (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
     contextSessionId?: string;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> => {
     const workflowRunId = randomUUID();
     const startedAt = now().toISOString();
@@ -75,17 +153,48 @@ export const createWorkflowRuntime = (input: {
       contextSessionId
     });
     let status: WorkflowExecutionStatus = WorkflowExecutionStatus.Completed;
+    request.onEvent?.({
+      type: WorkflowRuntimeEventType.WorkflowStarted,
+      workflowId: request.definition.id,
+      workflowRunId,
+      startedAt
+    });
 
     for (const node of nodes) {
       const nodeStartedAt = now().toISOString();
+      request.onEvent?.({
+        type: WorkflowRuntimeEventType.NodeStarted,
+        workflowId: request.definition.id,
+        workflowRunId,
+        nodeId: node.id,
+        nodeKind: node.kind,
+        label: node.label,
+        startedAt: nodeStartedAt
+      });
       if (node.kind === WorkflowNodeKind.HumanReview) {
-        nodeRuns.push(createNodeRunRecord({
+        const nodeFinishedAt = now().toISOString();
+        const nodeRun = createNodeRunRecord({
           node,
           startedAt: nodeStartedAt,
-          finishedAt: now().toISOString(),
+          finishedAt: nodeFinishedAt,
           status: "awaiting_review",
           outputSnapshot: readNodeInput(node.id, request.definition.edges, outputs, envelope)
-        }));
+        });
+        nodeRuns.push(nodeRun);
+        request.onEvent?.({
+          type: WorkflowRuntimeEventType.NodeCompleted,
+          workflowId: request.definition.id,
+          workflowRunId,
+          nodeId: node.id,
+          nodeKind: node.kind,
+          label: node.label,
+          status: "awaiting_review",
+          startedAt: nodeStartedAt,
+          finishedAt: nodeFinishedAt,
+          outputSnapshot: nodeRun.outputSnapshot,
+          alerts: nodeRun.alerts,
+          guardrailFindings: nodeRun.guardrailFindings
+        });
         status = WorkflowExecutionStatus.AwaitingReview;
         break;
       }
@@ -105,39 +214,71 @@ export const createWorkflowRuntime = (input: {
           workflowRunId,
           definition: request.definition,
           now,
-          runProviderNode: input.runProviderNode
+          runProviderNode: input.runProviderNode,
+          ...(request.onEvent ? { onEvent: request.onEvent } : {})
         });
         outputs.set(node.id, result.outputSnapshot);
         envelope = result.envelope;
         const nodeStatus = result.failedByGuardrail ? "failed" : "completed";
-        nodeRuns.push(createNodeRunRecord({
+        const nodeFinishedAt = now().toISOString();
+        const nodeRun = createNodeRunRecord({
           node,
           startedAt: nodeStartedAt,
-          finishedAt: now().toISOString(),
+          finishedAt: nodeFinishedAt,
           status: nodeStatus,
           alerts: result.alerts,
           guardrailFindings: result.guardrailFindings,
           outputSnapshot: result.outputSnapshot,
           ...(result.provider ? { provider: result.provider } : {}),
           ...(result.usage ? { usage: result.usage } : {})
-        }));
+        });
+        nodeRuns.push(nodeRun);
+        request.onEvent?.({
+          type: WorkflowRuntimeEventType.NodeCompleted,
+          workflowId: request.definition.id,
+          workflowRunId,
+          nodeId: node.id,
+          nodeKind: node.kind,
+          label: node.label,
+          status: nodeStatus,
+          startedAt: nodeStartedAt,
+          finishedAt: nodeFinishedAt,
+          outputSnapshot: nodeRun.outputSnapshot,
+          alerts: nodeRun.alerts,
+          guardrailFindings: nodeRun.guardrailFindings,
+          ...(result.provider ? { provider: result.provider } : {}),
+          ...(result.usage ? { usage: result.usage } : {})
+        });
         if (result.failedByGuardrail) {
           status = WorkflowExecutionStatus.Failed;
           break;
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Workflow node failed";
-        nodeRuns.push(createNodeRunRecord({
+        const nodeFinishedAt = now().toISOString();
+        const nodeRun = createNodeRunRecord({
           node,
           startedAt: nodeStartedAt,
-          finishedAt: now().toISOString(),
+          finishedAt: nodeFinishedAt,
           status: "failed",
           alerts: [createRuntimeAlert(message)],
           guardrailFindings: [],
           outputSnapshot: {
             error: message
           }
-        }));
+        });
+        nodeRuns.push(nodeRun);
+        request.onEvent?.({
+          type: WorkflowRuntimeEventType.NodeFailed,
+          workflowId: request.definition.id,
+          workflowRunId,
+          nodeId: node.id,
+          nodeKind: node.kind,
+          label: node.label,
+          startedAt: nodeStartedAt,
+          finishedAt: nodeFinishedAt,
+          message
+        });
         status = WorkflowExecutionStatus.Failed;
         break;
       }
@@ -145,7 +286,7 @@ export const createWorkflowRuntime = (input: {
 
     const finishedAt = now().toISOString();
     const totals = sumWorkflowUsage(nodeRuns);
-    return {
+    const execution = {
       id: workflowRunId,
       workflowId: request.definition.id,
       projectId: request.definition.projectId,
@@ -163,6 +304,17 @@ export const createWorkflowRuntime = (input: {
       contextSessionId,
       nodeRuns
     };
+    request.onEvent?.({
+      type:
+        execution.status === WorkflowExecutionStatus.Failed
+          ? WorkflowRuntimeEventType.WorkflowFailed
+          : WorkflowRuntimeEventType.WorkflowCompleted,
+      workflowId: execution.workflowId,
+      workflowRunId,
+      finishedAt,
+      execution
+    });
+    return execution;
   };
 
   return {
@@ -181,6 +333,7 @@ const executeWorkflowNode = async (input: {
   runProviderNode: (
     request: WorkflowProviderRunRequest
   ) => Promise<WorkflowProviderRunResult>;
+  onEvent?: (event: WorkflowRuntimeEvent) => void;
 }): Promise<{
   envelope: WorkflowContextEnvelope;
   outputSnapshot: unknown;
@@ -253,6 +406,16 @@ const executeWorkflowNode = async (input: {
     });
     const outputSnapshot =
       providerResult.outputSnapshot ?? providerResult.outputText;
+    if (providerResult.outputText.trim().length > 0) {
+      input.onEvent?.({
+        type: WorkflowRuntimeEventType.NodeDelta,
+        workflowId: input.definition.id,
+        workflowRunId: input.workflowRunId,
+        nodeId: input.node.id,
+        delta: providerResult.outputText,
+        emittedAt: input.now().toISOString()
+      });
+    }
     const guardrailFindings = evaluateNodeGuardrails({
       node: input.node,
       inputValue: input.inputValue,

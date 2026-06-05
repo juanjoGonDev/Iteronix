@@ -1,5 +1,6 @@
 import {
   createWorkflowRuntime,
+  WorkflowRuntimeEvent,
   type WorkflowProviderRunRequest,
   type WorkflowProviderRunResult
 } from "../../../packages/agents/src/workflow-runtime";
@@ -30,6 +31,7 @@ export type WorkflowRuntimeService = {
   runWorkflow: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
   testProviderNode: (input: {
     workflow: WorkflowDefinitionRecord;
@@ -59,10 +61,12 @@ export const createWorkflowRuntimeService = (input: {
   const runWorkflow = async (request: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
     runtime.runDefinition({
       definition: request.definition,
-      assets: request.assets
+      assets: request.assets,
+      ...(request.onEvent ? { onEvent: request.onEvent } : {})
     });
 
   const testProviderNode = async (request: {

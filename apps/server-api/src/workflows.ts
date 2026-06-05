@@ -1,4 +1,5 @@
 import type { WorkflowCatalogStore, WorkflowAssetUpsertInput, WorkflowDefinitionUpsertInput } from "../../../packages/agents/src/workflow-catalog";
+import type { WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
 import {
   isWorkflowTriggerKindSupportedInMvp,
   type WorkflowAssetUsageRecord,
@@ -276,7 +277,9 @@ export const executeWorkflowExecutionRun = async (
     runWorkflow: (input: {
       definition: WorkflowDefinitionRecord;
       assets: ReadonlyArray<WorkflowAssetRecord>;
+      onEvent?: (event: WorkflowRuntimeEvent) => void;
     }) => Promise<WorkflowExecutionRecord>;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
   }
 ): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
   const workflow = dependencies.catalog.getWorkflow(input.workflowId);
@@ -292,8 +295,9 @@ export const executeWorkflowExecutionRun = async (
     projectId: workflow.projectId
   });
   const execution = await dependencies.runWorkflow({
-    definition: workflow,
-    assets
+      definition: workflow,
+      assets,
+      ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {})
   });
   return ok(dependencies.catalog.upsertExecution(execution));
 };

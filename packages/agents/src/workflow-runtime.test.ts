@@ -10,7 +10,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowProviderSelectionRecord
 } from "../../shared/src/workflows";
-import { createWorkflowRuntime } from "./workflow-runtime";
+import { createWorkflowRuntime, WorkflowRuntimeEventType } from "./workflow-runtime";
 
 const BaseTime = "2026-05-16T18:00:00.000Z";
 
@@ -167,7 +167,49 @@ describe("workflow runtime", () => {
       }
     ]);
   });
+
+  it("emits runtime events for node progress and provider output deltas", async () => {
+    const events: ReadonlyArray<unknown> = [];
+    const collected: unknown[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => ({
+        outputText: `Output from ${request.node.id}`
+      })
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      onEvent: (event) => {
+        collected.push(event);
+      }
+    });
+
+    expect(execution.status).toBe("completed");
+    expect(events).toEqual([]);
+    expect(collected.some((event) => isEventOfType(event, WorkflowRuntimeEventType.WorkflowStarted))).toBe(true);
+    expect(collected.some((event) => isEventOfType(event, WorkflowRuntimeEventType.NodeStarted))).toBe(true);
+    expect(
+      collected.some(
+        (event) =>
+          isEventOfType(event, WorkflowRuntimeEventType.NodeDelta) &&
+          event.nodeId === "node-provider-1" &&
+          event.delta?.includes("Output from node-provider-1") === true
+      )
+    ).toBe(true);
+    expect(collected.some((event) => isEventOfType(event, WorkflowRuntimeEventType.WorkflowCompleted))).toBe(true);
+  });
 });
+
+const isEventOfType = <TType extends string>(
+  value: unknown,
+  type: TType
+): value is { type: TType; nodeId?: string; delta?: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  (value as { type?: unknown }).type === type;
 
 const createWorkflowDefinitionRecord = (input: {
   providerGuardrailAssetId?: string;

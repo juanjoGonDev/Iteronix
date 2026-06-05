@@ -170,6 +170,7 @@ import {
   parseWorkflowNodeProviderTestRequest
 } from "./workflows";
 import { createWorkflowRuntimeService, type WorkflowRuntimeService } from "./workflow-runtime";
+import { WorkflowRuntimeEventType, type WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
 import {
   createFileWorkspaceStateStore,
   createWorkspaceStateFromStores,
@@ -804,6 +805,16 @@ const handleRequest = async (
       workflowRuntime,
       workspacePersistence
     );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsStream) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionStream(req, res, url, workflowCatalog, workflowRuntime, workspacePersistence);
     return;
   }
 
@@ -4397,6 +4408,71 @@ const handleWorkflowExecutionRun = async (
   });
 };
 
+const handleWorkflowExecutionStream = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
+  if (!workflowId || workflowId.trim().length === 0) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingWorkflowId
+    });
+    return;
+  }
+
+  const stream = createSseStream(res);
+
+  try {
+    const result = await executeWorkflowExecutionRun(
+      { workflowId },
+      {
+        catalog: workflowCatalog,
+        runWorkflow: workflowRuntime.runWorkflow,
+        onEvent: (event) => {
+          stream.send({
+            event: readWorkflowStreamEventName(event),
+            data: event
+          });
+        }
+      }
+    );
+
+    if (result.type === ResultType.Err) {
+      stream.send({
+        event: WorkflowRuntimeEventType.WorkflowFailed,
+        data: {
+          type: WorkflowRuntimeEventType.WorkflowFailed,
+          workflowId,
+          workflowRunId: "",
+          finishedAt: new Date().toISOString(),
+          error: result.error.message
+        }
+      });
+      return;
+    }
+
+    await workspacePersistence.saveCurrent();
+  } catch (error) {
+    stream.send({
+      event: WorkflowRuntimeEventType.WorkflowFailed,
+      data: {
+        type: WorkflowRuntimeEventType.WorkflowFailed,
+        workflowId,
+        workflowRunId: "",
+        finishedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Workflow stream failed."
+      }
+    });
+  } finally {
+    stream.close();
+  }
+};
+
 const handleWorkflowNodeProviderTest = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -4428,6 +4504,8 @@ const handleWorkflowNodeProviderTest = async (
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, result.value);
 };
+
+const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string => event.type;
 
 const handleGitStatusRequest = async (
   req: IncomingMessage,

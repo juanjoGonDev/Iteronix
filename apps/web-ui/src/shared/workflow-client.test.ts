@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodeServerSentEvents,
   parseWorkflowAssetListResponse,
   parseWorkflowDefinitionListResponse,
   parseWorkflowExecutionListResponse,
-  parseWorkflowNodeProviderTestResponse
+  parseWorkflowNodeProviderTestResponse,
+  parseWorkflowRunStreamEvent,
+  WorkflowRunStreamEventType
 } from "./workflow-client.js";
 
 describe("workflow client parsers", () => {
@@ -216,5 +219,49 @@ describe("workflow client parsers", () => {
     expect(result.nodeId).toBe("node-1");
     expect(result.status).toBe("passed");
     expect(result.definition.id).toBe("workflow-1");
+  });
+
+  it("decodes workflow stream SSE blocks", () => {
+    const decoded = decodeServerSentEvents(
+      "event: node_delta\ndata: {\"type\":\"node_delta\",\"workflowId\":\"workflow-1\",\"workflowRunId\":\"run-1\",\"nodeId\":\"node-1\",\"delta\":\"hello\",\"emittedAt\":\"2026-05-06T18:00:00.000Z\"}\n\n"
+    );
+
+    expect(decoded).toHaveLength(1);
+    expect(decoded[0]?.event).toBe("node_delta");
+  });
+
+  it("parses workflow stream completion events", () => {
+    const event = parseWorkflowRunStreamEvent(WorkflowRunStreamEventType.WorkflowCompleted, {
+      type: "workflow_completed",
+      workflowId: "workflow-1",
+      workflowRunId: "run-1",
+      finishedAt: "2026-05-06T18:01:00.000Z",
+      execution: {
+        id: "execution-1",
+        workflowId: "workflow-1",
+        projectId: "project-1",
+        triggerKind: "manual",
+        status: "completed",
+        startedAt: "2026-05-06T18:00:00.000Z",
+        finishedAt: "2026-05-06T18:01:00.000Z",
+        durationMs: 60000,
+        warningsCount: 0,
+        errorsCount: 0,
+        totals: {
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+          estimatedCostEur: 0.12,
+          latencyMs: 1200
+        },
+        contextSessionId: "ctx-1",
+        nodeRuns: []
+      }
+    });
+
+    expect(event.type).toBe("workflow_completed");
+    if (event.type === "workflow_completed") {
+      expect(event.execution.id).toBe("execution-1");
+    }
   });
 });
