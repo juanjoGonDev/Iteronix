@@ -97,6 +97,7 @@ const WorkflowScreenSelector = {
   WorkflowRun: "workflows-run",
   WorkflowSelect: "workflows-select",
   CanvasZoomOut: "workflows-canvas-zoom-out",
+  CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
   CanvasZoomIn: "workflows-canvas-zoom-in",
   ConnectionHint: "workflows-connection-hint",
@@ -1332,6 +1333,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       ]),
       createElement("div", { className: "flex items-center gap-1 rounded-xl border border-border-dark bg-[#0d1319] p-1" }, [
         createElement(IconButton, {
+          icon: "fit_screen",
+          tooltip: "Fit workflow",
+          disabled: this.state.draftWorkflow === null,
+          onClick: () => this.handleFitViewport(),
+          className: "h-9 w-9 rounded-lg border border-transparent hover:border-border-dark hover:bg-[#1b2330]",
+          dataset: {
+            testid: WorkflowScreenSelector.CanvasFitView
+          }
+        }),
+        createElement(IconButton, {
           icon: "zoom_out",
           tooltip: "Zoom out",
           disabled: this.state.draftWorkflow === null,
@@ -1420,6 +1431,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         testid: `${WorkflowScreenSelector.NodeCardPrefix}${node.id}`
       }
     }, [
+      nodeRunVisual.status !== "idle"
+        ? createElement("div", {
+            className: `pointer-events-none absolute inset-0 rounded-2xl border ${readNodeRunOverlayClassName(nodeRunVisual.status)}`
+          })
+        : "",
       createElement("div", {
         className: `h-1.5 rounded-t-2xl ${stateAccentClassName ?? readNodeAccentClassName(node.kind)}`
       }),
@@ -4992,6 +5008,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }));
   }
 
+  private handleFitViewport(): void {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow) {
+      return;
+    }
+
+    const nextViewport = readWorkflowFitViewport(workflow);
+    this.updateDraftWorkflow(setWorkflowViewport(workflow, nextViewport));
+  }
+
   private updateDraftWorkflow(nextDefinition: WorkflowDefinitionUpsertInput, nextSelection?: WorkflowSelection): void {
     this.setState({
       draftWorkflow: nextDefinition,
@@ -6656,6 +6682,68 @@ const readNodeRunProviderLabel = (nodeRun: WorkflowExecutionRecord["nodeRuns"][n
   }
 
   return "No provider data";
+};
+
+const readNodeRunOverlayClassName = (status: string): string => {
+  if (status === "running") {
+    return "border-primary/80 shadow-[0_0_0_1px_rgba(37,99,235,0.5),0_0_32px_rgba(37,99,235,0.22)] animate-pulse";
+  }
+
+  if (status === "completed") {
+    return "border-emerald-400/70 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_0_24px_rgba(52,211,153,0.12)]";
+  }
+
+  if (status === "warn") {
+    return "border-amber-400/80 shadow-[0_0_0_1px_rgba(251,191,36,0.4),0_0_24px_rgba(251,191,36,0.14)]";
+  }
+
+  if (status === "failed") {
+    return "border-rose-400/80 shadow-[0_0_0_1px_rgba(251,113,133,0.45),0_0_28px_rgba(251,113,133,0.16)]";
+  }
+
+  return "border-transparent";
+};
+
+const readWorkflowFitViewport = (
+  workflow: WorkflowDefinitionUpsertInput
+): WorkflowViewportRecord => {
+  if (workflow.nodes.length === 0) {
+    return {
+      x: 96,
+      y: 96,
+      zoom: 1
+    };
+  }
+
+  const bounds = workflow.nodes.reduce((current, node) => ({
+    minX: Math.min(current.minX, node.position.x),
+    minY: Math.min(current.minY, node.position.y),
+    maxX: Math.max(current.maxX, node.position.x + node.width),
+    maxY: Math.max(current.maxY, node.position.y + WorkflowNodeApproximateHeight)
+  }), {
+    minX: Number.POSITIVE_INFINITY,
+    minY: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    maxY: Number.NEGATIVE_INFINITY
+  });
+
+  const padding = 112;
+  const contentWidth = Math.max(320, bounds.maxX - bounds.minX);
+  const contentHeight = Math.max(220, bounds.maxY - bounds.minY);
+  const viewportWidth = 1320;
+  const viewportHeight = 760;
+  const zoom = Math.max(0.58, Math.min(1.08, Math.min(
+    (viewportWidth - padding * 2) / contentWidth,
+    (viewportHeight - padding * 2) / contentHeight
+  )));
+  const centerX = bounds.minX + contentWidth / 2;
+  const centerY = bounds.minY + contentHeight / 2;
+
+  return {
+    x: Number((viewportWidth / 2 - centerX * zoom).toFixed(2)),
+    y: Number((viewportHeight / 2 - centerY * zoom).toFixed(2)),
+    zoom: Number(zoom.toFixed(2))
+  };
 };
 
 const toSlugValue = (value: string): string =>
