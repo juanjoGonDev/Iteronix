@@ -285,6 +285,12 @@ type StubExecutionRecord = {
       message: string;
       createdAt: string;
     }>;
+    guardrailFindings: ReadonlyArray<{
+      guardrailAssetId: string;
+      nodeId: string;
+      severity: "warn" | "error" | "success";
+      message: string;
+    }>;
   }>;
 };
 
@@ -339,7 +345,9 @@ const ValidationText = {
   ExecutionPrimarySessionId: "ctx-completed",
   ExecutionSecondarySessionId: "ctx-failed",
   ExecutionPrimaryAlert: "Summary guardrail returned a warning.",
+  ExecutionPrimaryFinding: "Summary present.",
   ExecutionSecondaryAlert: "Provider request failed after guardrail pass.",
+  ExecutionSecondaryFinding: "Missing result blocks completion.",
   ExecutionSecondaryNodeLabel: "Codex run",
   ExecutionPrimaryStartedAt: "2026-05-06T08:16:00.000Z",
   ExecutionSecondaryStartedAt: "2026-05-06T08:20:00.000Z",
@@ -671,6 +679,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(page, WorkflowSelector.ExecutionInspector);
     await waitForPageTexts(page, [
       ValidationText.ExecutionPrimaryAlert,
+      ValidationText.ExecutionPrimaryFinding,
       ValidationText.ExecutionSecondaryNodeLabel
     ]);
     await waitForNodeRunCards(page, 2);
@@ -684,6 +693,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
     await waitForPageTexts(page, [
       ValidationText.ExecutionSecondaryAlert,
+      ValidationText.ExecutionSecondaryFinding,
       ValidationText.ExecutionSecondarySessionId
     ]);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
@@ -691,7 +701,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
     await waitForExecutionAttentionItemCount(page, 2);
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
-    await waitForPageText(page, ValidationText.ExecutionPrimaryAlert);
+    await waitForPageTexts(page, [
+      ValidationText.ExecutionPrimaryAlert,
+      ValidationText.ExecutionPrimaryFinding
+    ]);
     await clickByTestId(page, `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`);
     await waitForPageText(page, ValidationText.ExecutionDeletedNotice);
     await waitForExecutionCardCount(page, 1);
@@ -728,6 +741,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
     await waitForPageTexts(page, [
       ValidationText.ExecutionSecondaryAlert,
+      ValidationText.ExecutionSecondaryFinding,
       ValidationText.ExecutionSecondarySessionId
     ]);
     await captureBrowserValidationScreenshot({
@@ -2168,7 +2182,8 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           startedAt: ValidationText.ExecutionCleanStartedAt,
           finishedAt: "2026-05-06T08:12:00.250Z",
           durationMs: 250,
-          alerts: []
+          alerts: [],
+          guardrailFindings: []
         },
         {
           id: "node-run-provider-clean",
@@ -2187,7 +2202,8 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
             estimatedCostEur: 0.013,
             latencyMs: 3200
           },
-          alerts: []
+          alerts: [],
+          guardrailFindings: []
         }
       ]
     },
@@ -2219,7 +2235,8 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           startedAt: ValidationText.ExecutionPrimaryStartedAt,
           finishedAt: "2026-05-06T08:16:00.300Z",
           durationMs: 300,
-          alerts: []
+          alerts: [],
+          guardrailFindings: []
         },
         {
           id: "node-run-provider-completed",
@@ -2245,6 +2262,14 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
               source: "guardrail",
               message: ValidationText.ExecutionPrimaryAlert,
               createdAt: "2026-05-06T08:16:06.200Z"
+            }
+          ],
+          guardrailFindings: [
+            {
+              guardrailAssetId: "asset-guardrail-warn",
+              nodeId: providerNode.id,
+              severity: "warn",
+              message: ValidationText.ExecutionPrimaryFinding
             }
           ]
         }
@@ -2278,7 +2303,8 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           startedAt: ValidationText.ExecutionSecondaryStartedAt,
           finishedAt: "2026-05-06T08:20:00.900Z",
           durationMs: 900,
-          alerts: []
+          alerts: [],
+          guardrailFindings: []
         },
         {
           id: "node-run-provider-failed",
@@ -2304,6 +2330,14 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
               source: "provider",
               message: ValidationText.ExecutionSecondaryAlert,
               createdAt: "2026-05-06T08:20:05.100Z"
+            }
+          ],
+          guardrailFindings: [
+            {
+              guardrailAssetId: "asset-guardrail-error",
+              nodeId: providerNode.id,
+              severity: "error",
+              message: ValidationText.ExecutionSecondaryFinding
             }
           ]
         }

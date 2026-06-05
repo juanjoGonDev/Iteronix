@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  WorkflowGuardrailOperator,
+  WorkflowGuardrailSeverity,
   WorkflowExecutionStatus,
   WorkflowNodeKind,
   type WorkflowAlertRecord,
@@ -9,6 +11,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowEdgeRecord,
   type WorkflowExecutionRecord,
+  type WorkflowGuardrailFindingRecord,
   type WorkflowNodeExecutionRecord,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
@@ -101,20 +104,27 @@ export const createWorkflowRuntime = (input: {
           assetsById,
           workflowRunId,
           definition: request.definition,
+          now,
           runProviderNode: input.runProviderNode
         });
         outputs.set(node.id, result.outputSnapshot);
         envelope = result.envelope;
+        const nodeStatus = result.failedByGuardrail ? "failed" : "completed";
         nodeRuns.push(createNodeRunRecord({
           node,
           startedAt: nodeStartedAt,
           finishedAt: now().toISOString(),
-          status: "completed",
+          status: nodeStatus,
           alerts: result.alerts,
+          guardrailFindings: result.guardrailFindings,
           outputSnapshot: result.outputSnapshot,
           ...(result.provider ? { provider: result.provider } : {}),
           ...(result.usage ? { usage: result.usage } : {})
         }));
+        if (result.failedByGuardrail) {
+          status = WorkflowExecutionStatus.Failed;
+          break;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Workflow node failed";
         nodeRuns.push(createNodeRunRecord({
@@ -123,6 +133,7 @@ export const createWorkflowRuntime = (input: {
           finishedAt: now().toISOString(),
           status: "failed",
           alerts: [createRuntimeAlert(message)],
+          guardrailFindings: [],
           outputSnapshot: {
             error: message
           }
@@ -166,6 +177,7 @@ const executeWorkflowNode = async (input: {
   assetsById: Map<string, WorkflowAssetRecord>;
   workflowRunId: string;
   definition: WorkflowDefinitionRecord;
+  now: () => Date;
   runProviderNode: (
     request: WorkflowProviderRunRequest
   ) => Promise<WorkflowProviderRunResult>;
@@ -174,6 +186,8 @@ const executeWorkflowNode = async (input: {
   outputSnapshot: unknown;
   usage?: WorkflowUsageTotalsRecord;
   alerts: ReadonlyArray<WorkflowAlertRecord>;
+  guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
+  failedByGuardrail: boolean;
   provider?: WorkflowProviderSelectionRecord;
 }> => {
   if (
@@ -191,7 +205,9 @@ const executeWorkflowNode = async (input: {
         guardrailFindings: []
       }),
       outputSnapshot: input.inputValue,
-      alerts: []
+      alerts: [],
+      guardrailFindings: [],
+      failedByGuardrail: false
     };
   }
 
@@ -210,7 +226,9 @@ const executeWorkflowNode = async (input: {
         guardrailFindings: []
       }),
       outputSnapshot: assetOutput,
-      alerts: []
+      alerts: [],
+      guardrailFindings: [],
+      failedByGuardrail: false
     };
   }
 
@@ -235,19 +253,32 @@ const executeWorkflowNode = async (input: {
     });
     const outputSnapshot =
       providerResult.outputSnapshot ?? providerResult.outputText;
+    const guardrailFindings = evaluateNodeGuardrails({
+      node: input.node,
+      inputValue: input.inputValue,
+      outputSnapshot,
+      envelope: input.envelope,
+      assetsById: input.assetsById
+    });
     const nextEnvelope = appendEnvelopeOutput(input.envelope, {
       nodeId: input.node.id,
       outputSnapshot,
       message: providerResult.outputText,
       citations: providerResult.citations ?? [],
-      guardrailFindings: []
+      guardrailFindings
     });
     const usage = normalizeUsage(providerResult.usage);
+    const guardrailAlerts = createGuardrailAlerts(guardrailFindings, input.now);
+    const failedByGuardrail = guardrailFindings.some(
+      (finding) => finding.severity === WorkflowGuardrailSeverity.Error
+    );
 
     return {
       envelope: nextEnvelope,
       outputSnapshot,
-      alerts: providerResult.alerts ?? [],
+      alerts: [...(providerResult.alerts ?? []), ...guardrailAlerts],
+      guardrailFindings,
+      failedByGuardrail,
       provider,
       ...(usage ? { usage } : {})
     };
@@ -653,6 +684,7 @@ const createNodeRunRecord = (input: {
   provider?: WorkflowProviderSelectionRecord;
   usage?: WorkflowUsageTotalsRecord;
   alerts?: ReadonlyArray<WorkflowAlertRecord>;
+  guardrailFindings?: ReadonlyArray<WorkflowGuardrailFindingRecord>;
   outputSnapshot: unknown;
 }): WorkflowNodeExecutionRecord => ({
   id: randomUUID(),
@@ -676,6 +708,7 @@ const createNodeRunRecord = (input: {
     : {}),
   ...(input.usage ? { usage: input.usage } : {}),
   alerts: input.alerts ?? [],
+  guardrailFindings: input.guardrailFindings ?? [],
   outputSnapshot: input.outputSnapshot
 });
 
@@ -698,6 +731,165 @@ const createRuntimeAlert = (message: string): WorkflowAlertRecord => ({
   message,
   createdAt: new Date().toISOString()
 });
+
+const evaluateNodeGuardrails = (input: {
+  node: WorkflowNodeRecord;
+  inputValue: unknown;
+  outputSnapshot: unknown;
+  envelope: WorkflowContextEnvelope;
+  assetsById: Map<string, WorkflowAssetRecord>;
+}): ReadonlyArray<WorkflowGuardrailFindingRecord> =>
+  input.node.attachedGuardrails
+    .filter((attachment) => attachment.enabled)
+    .sort((left, right) => left.order - right.order)
+    .flatMap((attachment) => {
+      const asset = input.assetsById.get(attachment.assetId);
+      const definition = asset?.guardrail;
+      if (!asset || !definition || definition.validations.length === 0) {
+        return [];
+      }
+
+      const results = definition.validations.map((validation) =>
+        evaluateGuardrailValidation({
+          validation,
+          inputValue: input.inputValue,
+          outputSnapshot: input.outputSnapshot,
+          envelope: input.envelope
+        })
+      );
+      const matched = definition.operator === WorkflowGuardrailOperator.Any
+        ? results.some(Boolean)
+        : results.every(Boolean);
+      const shouldReport = definition.severity === WorkflowGuardrailSeverity.Error
+        ? !matched
+        : matched;
+
+      return shouldReport
+        ? [
+            {
+              guardrailAssetId: attachment.assetId,
+              nodeId: input.node.id,
+              severity: definition.severity,
+              message: readGuardrailFindingMessage(definition.validations)
+            }
+          ]
+        : [];
+    });
+
+const evaluateGuardrailValidation = (input: {
+  validation: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"][number];
+  inputValue: unknown;
+  outputSnapshot: unknown;
+  envelope: WorkflowContextEnvelope;
+}): boolean => {
+  const targetValue = readGuardrailTargetValue({
+    target: input.validation.target,
+    inputValue: input.inputValue,
+    outputSnapshot: input.outputSnapshot,
+    envelope: input.envelope
+  });
+  const resolvedValue = input.validation.kind === "contains" || input.validation.kind === "not_contains"
+    ? targetValue
+    : readPathValue(targetValue, normalizeTargetPath(input.validation.path));
+
+  if (input.validation.kind === "field_exists") {
+    return resolvedValue !== undefined;
+  }
+
+  if (input.validation.kind === "field_equals") {
+    return resolvedValue === input.validation.value;
+  }
+
+  if (input.validation.kind === "contains") {
+    return typeof resolvedValue === "string" &&
+      typeof input.validation.value === "string" &&
+      resolvedValue.includes(input.validation.value);
+  }
+
+  if (input.validation.kind === "not_contains") {
+    return typeof resolvedValue === "string" &&
+      typeof input.validation.value === "string" &&
+      !resolvedValue.includes(input.validation.value);
+  }
+
+  if (input.validation.kind === "regex") {
+    if (typeof resolvedValue !== "string" || typeof input.validation.value !== "string") {
+      return false;
+    }
+
+    try {
+      return new RegExp(input.validation.value, "u").test(resolvedValue);
+    } catch {
+      return false;
+    }
+  }
+
+  if (input.validation.kind === "number_gte") {
+    return typeof resolvedValue === "number" &&
+      typeof input.validation.value === "number" &&
+      resolvedValue >= input.validation.value;
+  }
+
+  if (input.validation.kind === "number_lte") {
+    return typeof resolvedValue === "number" &&
+      typeof input.validation.value === "number" &&
+      resolvedValue <= input.validation.value;
+  }
+
+  if (input.validation.kind === "json_schema") {
+    return isRecord(resolvedValue);
+  }
+
+  return false;
+};
+
+const readGuardrailTargetValue = (input: {
+  target: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"][number]["target"];
+  inputValue: unknown;
+  outputSnapshot: unknown;
+  envelope: WorkflowContextEnvelope;
+}): unknown => {
+  if (input.target === "input") {
+    return input.inputValue;
+  }
+
+  if (input.target === "context") {
+    return input.envelope;
+  }
+
+  if (input.target === "metadata") {
+    return {
+      workflowId: input.envelope.workflowId,
+      workflowRunId: input.envelope.workflowRunId,
+      sessionId: input.envelope.sessionId,
+      language: input.envelope.language
+    };
+  }
+
+  return input.outputSnapshot;
+};
+
+const readGuardrailFindingMessage = (
+  validations: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"]
+): string => validations[0]?.message ?? "Guardrail matched.";
+
+const createGuardrailAlerts = (
+  findings: ReadonlyArray<WorkflowGuardrailFindingRecord>,
+  nowFactory: () => Date
+): ReadonlyArray<WorkflowAlertRecord> =>
+  findings.flatMap((finding) =>
+    finding.severity === WorkflowGuardrailSeverity.Success
+      ? []
+      : [
+          {
+            id: randomUUID(),
+            level: finding.severity,
+            source: "guardrail",
+            message: finding.message,
+            createdAt: nowFactory().toISOString()
+          }
+        ]
+  );
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

@@ -2920,3 +2920,23 @@
   - The detected local endpoint at `http://192.168.1.223:3001/v1/models` still returns `401` without a valid bearer token; the runtime path is ready, but real execution still depends on the correct `OPENAI_API_KEY` value existing in the server environment.
 - Next:
   - Verify the local bearer token value on the server host, then rerun a real workflow/provider smoke test against the saved `openai` profile.
+
+### 2026-06-05 03:00 (Europe/Madrid) — Settings Custom Provider And API Key Persistence
+
+- Summary:
+  - Extended the shared provider settings flow so API-backed profiles persist bearer tokens through the server-backed workspace snapshot, and added a first-class `custom` OpenAI-compatible provider option across Settings, provider registry, and workflow runtime support.
+- Decisions:
+  - Keep the custom provider contract OpenAI-compatible so one runtime adapter can serve local gateways that expect `Authorization: Bearer` plus `/v1/chat/completions`.
+  - Persist provider `apiKey` in the workspace/API layer as requested by product direction instead of keeping it browser-session-only.
+- Changes:
+  - Updated `apps/web-ui/src/screens/settings-state.ts`, `Settings.ts`, and related tests so provider profiles persist `apiKey`, expose `custom`, and sync runtime-backed API profiles through the backend settings API.
+  - Updated `packages/adapters/src/openai-compatible/provider.ts`, `apps/server-api/src/providers.ts`, `providers.test.ts`, and `workflow-runtime.ts` so the backend lists `custom` and can execute workflow provider nodes through the same OpenAI-compatible bearer adapter.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+- Issues/Risks:
+  - Provider API keys now persist in workspace state, so server-side secret hardening remains a future security follow-up.
+- Next:
+  - Add secure-at-rest storage for API-backed provider credentials once the server secret adapter path is defined.

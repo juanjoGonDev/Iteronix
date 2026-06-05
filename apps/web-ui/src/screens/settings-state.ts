@@ -2,7 +2,8 @@ export const ProviderKind = {
   CodexCli: "codex-cli",
   OpenAI: "openai",
   Anthropic: "anthropic",
-  Ollama: "ollama"
+  Ollama: "ollama",
+  Custom: "custom"
 } as const;
 
 export type ProviderKind = typeof ProviderKind[keyof typeof ProviderKind];
@@ -21,6 +22,7 @@ export type ProviderProfileRecord = {
   providerKind: ProviderKind;
   modelId: string;
   endpointUrl: string;
+  apiKey: string;
   apiKeyEnvVar: string;
   command: string;
   promptMode: ProviderPromptMode;
@@ -38,6 +40,7 @@ export type ProviderSyncRequest = {
 const ProviderDefaults: Record<ProviderKind, {
   name: string;
   endpointUrl: string;
+  apiKey: string;
   apiKeyEnvVar: string;
   command: string;
   promptMode: ProviderPromptMode;
@@ -45,6 +48,7 @@ const ProviderDefaults: Record<ProviderKind, {
   [ProviderKind.CodexCli]: {
     name: "Codex CLI",
     endpointUrl: "",
+    apiKey: "",
     apiKeyEnvVar: "",
     command: "codex",
     promptMode: ProviderPromptMode.Stdin
@@ -52,6 +56,7 @@ const ProviderDefaults: Record<ProviderKind, {
   [ProviderKind.OpenAI]: {
     name: "OpenAI",
     endpointUrl: "https://api.openai.com/v1",
+    apiKey: "",
     apiKeyEnvVar: "OPENAI_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin
@@ -59,6 +64,7 @@ const ProviderDefaults: Record<ProviderKind, {
   [ProviderKind.Anthropic]: {
     name: "Anthropic",
     endpointUrl: "https://api.anthropic.com",
+    apiKey: "",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin
@@ -66,6 +72,15 @@ const ProviderDefaults: Record<ProviderKind, {
   [ProviderKind.Ollama]: {
     name: "Ollama",
     endpointUrl: "http://localhost:11434",
+    apiKey: "",
+    apiKeyEnvVar: "",
+    command: "",
+    promptMode: ProviderPromptMode.Stdin
+  },
+  [ProviderKind.Custom]: {
+    name: "Custom",
+    endpointUrl: "",
+    apiKey: "",
     apiKeyEnvVar: "",
     command: "",
     promptMode: ProviderPromptMode.Stdin
@@ -88,6 +103,7 @@ export const createProviderProfile = (
     providerKind: kind,
     modelId: "",
     endpointUrl: defaults.endpointUrl,
+    apiKey: defaults.apiKey,
     apiKeyEnvVar: defaults.apiKeyEnvVar,
     command: defaults.command,
     promptMode: defaults.promptMode,
@@ -109,6 +125,7 @@ export const updateProviderProfile = (
     ...patch,
     providerKind: nextKind,
     endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
+    apiKey: patch.apiKey ?? (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
     apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
     command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
     promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
@@ -120,6 +137,7 @@ export const updateProviderProfile = (
       ...patch,
       providerKind: nextKind,
       endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
+      apiKey: patch.apiKey ?? (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
       apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
       command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
       promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
@@ -155,17 +173,47 @@ export const createProviderSyncRequests = (
   projectId: string
 ): ReadonlyArray<ProviderSyncRequest> =>
   profiles
-    .filter((profile) => profile.providerKind === ProviderKind.CodexCli)
+    .filter((profile) =>
+      profile.providerKind === ProviderKind.CodexCli ||
+      profile.providerKind === ProviderKind.OpenAI ||
+      profile.providerKind === ProviderKind.Ollama ||
+      profile.providerKind === ProviderKind.Custom
+    )
     .map((profile) => ({
       projectId,
       profileId: profile.id,
-      providerId: profile.providerKind,
-      config: createCodexProviderConfig(profile)
+      providerId: readRuntimeProviderId(profile.providerKind),
+      config: createRuntimeProviderConfig(profile)
     }));
 
-const createCodexProviderConfig = (
+const createRuntimeProviderConfig = (
   profile: ProviderProfileRecord
 ): Record<string, unknown> => {
+  if (profile.providerKind !== ProviderKind.CodexCli) {
+    const config: Record<string, unknown> = {
+      endpointUrl: profile.endpointUrl
+    };
+
+    if (profile.apiKey.length > 0) {
+      config["apiKey"] = profile.apiKey;
+    }
+
+    if (profile.apiKeyEnvVar.length > 0) {
+      config["apiKeyEnvVar"] = profile.apiKeyEnvVar;
+    }
+
+    if (profile.modelId.length > 0) {
+      config["models"] = [
+        {
+          id: profile.modelId,
+          displayName: profile.modelId
+        }
+      ];
+    }
+
+    return config;
+  }
+
   const config: Record<string, unknown> = {
     command: profile.command,
     promptMode: profile.promptMode
@@ -181,6 +229,10 @@ const createCodexProviderConfig = (
   }
 
   return config;
+};
+
+const readRuntimeProviderId = (providerKind: ProviderKind): ProviderKind => {
+  return providerKind;
 };
 
 const normalizeProviderProfile = (
@@ -206,6 +258,7 @@ const normalizeProviderProfile = (
     providerKind,
     modelId: readString(value["modelId"]),
     endpointUrl: readString(value["endpointUrl"]) || defaults.endpointUrl,
+    apiKey: readString(value["apiKey"]) || defaults.apiKey,
     apiKeyEnvVar: readString(value["apiKeyEnvVar"]) || defaults.apiKeyEnvVar,
     command: readString(value["command"]) || defaults.command,
     promptMode: readPromptMode(value["promptMode"]) ?? defaults.promptMode,
@@ -225,7 +278,8 @@ const readProviderKind = (value: unknown): ProviderKind | null => {
     value === ProviderKind.CodexCli ||
     value === ProviderKind.OpenAI ||
     value === ProviderKind.Anthropic ||
-    value === ProviderKind.Ollama
+    value === ProviderKind.Ollama ||
+    value === ProviderKind.Custom
   ) {
     return value;
   }

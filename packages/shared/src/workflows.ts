@@ -392,6 +392,7 @@ export type WorkflowNodeExecutionRecord = {
   verbosity?: WorkflowVerbosity;
   usage?: WorkflowUsageTotalsRecord;
   alerts: ReadonlyArray<WorkflowAlertRecord>;
+  guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
   outputSnapshot?: unknown;
 };
 

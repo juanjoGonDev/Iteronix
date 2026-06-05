@@ -164,11 +164,15 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
     });
   }
 
-  if (profile.providerKind === "openai" || profile.providerKind === "ollama") {
+  if (
+    profile.providerKind === "openai" ||
+    profile.providerKind === "ollama" ||
+    profile.providerKind === "custom"
+  ) {
     if (profile.endpointUrl.length === 0) {
       throw new Error(`Workflow provider profile ${profile.id} is missing an endpoint URL.`);
     }
-    if (profile.providerKind === "openai" && profile.apiKey.length === 0) {
+    if ((profile.providerKind === "openai" || profile.providerKind === "custom") && profile.apiKey.length === 0) {
       throw new Error(`Workflow provider profile ${profile.id} is missing a bearer API key.`);
     }
 

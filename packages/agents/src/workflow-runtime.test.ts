@@ -90,9 +90,88 @@ describe("workflow runtime", () => {
       result: "Final answer from second provider."
     });
   });
+
+  it("persists warning guardrail findings on completed node runs", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async () => ({
+        outputText: "Provider output",
+        outputSnapshot: {
+          summary: "Provider output"
+        }
+      })
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord({
+        providerGuardrailAssetId: "asset-guardrail-warn"
+      }),
+      assets: [
+        createWorkflowAssetRecord(),
+        createGuardrailAssetRecord({
+          id: "asset-guardrail-warn",
+          severity: "warn",
+          targetPath: "$.summary",
+          message: "Summary present."
+        })
+      ]
+    });
+
+    const providerNodeRun = execution.nodeRuns.find((nodeRun) => nodeRun.nodeId === "node-provider-1");
+    expect(providerNodeRun?.status).toBe("completed");
+    expect(providerNodeRun?.guardrailFindings).toEqual([
+      {
+        guardrailAssetId: "asset-guardrail-warn",
+        nodeId: "node-provider-1",
+        severity: "warn",
+        message: "Summary present."
+      }
+    ]);
+  });
+
+  it("fails workflow when an error guardrail finding triggers", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async () => ({
+        outputText: "Provider output",
+        outputSnapshot: {
+          summary: "Provider output"
+        }
+      })
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord({
+        providerGuardrailAssetId: "asset-guardrail-error"
+      }),
+      assets: [
+        createWorkflowAssetRecord(),
+        createGuardrailAssetRecord({
+          id: "asset-guardrail-error",
+          severity: "error",
+          targetPath: "$.missing",
+          message: "Missing field blocks node."
+        })
+      ]
+    });
+
+    const providerNodeRun = execution.nodeRuns.find((nodeRun) => nodeRun.nodeId === "node-provider-1");
+    expect(execution.status).toBe("failed");
+    expect(providerNodeRun?.status).toBe("failed");
+    expect(providerNodeRun?.guardrailFindings).toEqual([
+      {
+        guardrailAssetId: "asset-guardrail-error",
+        nodeId: "node-provider-1",
+        severity: "error",
+        message: "Missing field blocks node."
+      }
+    ]);
+  });
 });
 
-const createWorkflowDefinitionRecord = (): WorkflowDefinitionRecord => ({
+const createWorkflowDefinitionRecord = (input: {
+  providerGuardrailAssetId?: string;
+} = {}): WorkflowDefinitionRecord => ({
   id: "workflow-1",
   workspaceId: "workspace-1",
   projectId: "project-1",
@@ -136,7 +215,16 @@ const createWorkflowDefinitionRecord = (): WorkflowDefinitionRecord => ({
       id: "node-provider-1",
       kind: WorkflowNodeKind.AiProviderRun,
       provider: createProviderSelection("profile-1", "gpt-1"),
-      prompt: "Draft with the workflow prompt."
+      prompt: "Draft with the workflow prompt.",
+      attachedGuardrails: input.providerGuardrailAssetId
+        ? [
+            {
+              assetId: input.providerGuardrailAssetId,
+              order: 1,
+              enabled: true
+            }
+          ]
+        : []
     }),
     createNodeRecord({
       id: "node-provider-2",
@@ -169,12 +257,53 @@ const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   updatedAt: BaseTime
 });
 
+const createGuardrailAssetRecord = (input: {
+  id: string;
+  severity: "warn" | "error" | "success";
+  targetPath: string;
+  message: string;
+}): WorkflowAssetRecord => ({
+  id: input.id,
+  workspaceId: "workspace-1",
+  projectId: "project-1",
+  kind: "guardrail",
+  scope: "project",
+  name: input.id,
+  slug: input.id,
+  description: "",
+  body: "",
+  language: "en",
+  version: 1,
+  tags: [],
+  guardrail: {
+    id: `${input.id}-definition`,
+    severity: input.severity,
+    operator: "all",
+    validations: [
+      {
+        id: `${input.id}-validation`,
+        kind: "field_exists",
+        target: "output",
+        path: input.targetPath,
+        message: input.message
+      }
+    ]
+  },
+  createdAt: BaseTime,
+  updatedAt: BaseTime
+});
+
 const createNodeRecord = (input: {
   id: string;
   kind: WorkflowNodeKind;
   assetId?: string;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
+  attachedGuardrails?: ReadonlyArray<{
+    assetId: string;
+    order: number;
+    enabled: boolean;
+  }>;
 }) => ({
   id: input.id,
   kind: input.kind,
@@ -192,7 +321,7 @@ const createNodeRecord = (input: {
   },
   inputPorts: [],
   outputPorts: [],
-  attachedGuardrails: []
+  attachedGuardrails: input.attachedGuardrails ?? []
 });
 
 const createProviderSelection = (

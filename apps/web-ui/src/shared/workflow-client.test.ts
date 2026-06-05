@@ -143,7 +143,25 @@ describe("workflow client parsers", () => {
             latencyMs: 1200
           },
           contextSessionId: "ctx-1",
-          nodeRuns: []
+          nodeRuns: [
+            {
+              id: "node-run-1",
+              nodeId: "node-1",
+              nodeKind: "ai.provider-run",
+              status: "completed",
+              startedAt: "2026-05-06T18:00:00.000Z",
+              finishedAt: "2026-05-06T18:01:00.000Z",
+              alerts: [],
+              guardrailFindings: [
+                {
+                  guardrailAssetId: "asset-guardrail-1",
+                  nodeId: "node-1",
+                  severity: "warn",
+                  message: "Summary present."
+                }
+              ]
+            }
+          ]
         }
       ]
     });
@@ -151,6 +169,7 @@ describe("workflow client parsers", () => {
     expect(executions).toHaveLength(1);
     expect(executions[0]?.totals.totalTokens).toBe(30);
     expect(executions[0]?.warningsCount).toBe(1);
+    expect(executions[0]?.nodeRuns[0]?.guardrailFindings[0]?.message).toBe("Summary present.");
   });
 
   it("parses provider test results with updated workflow metadata", () => {

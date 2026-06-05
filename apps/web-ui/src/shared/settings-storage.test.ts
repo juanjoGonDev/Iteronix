@@ -46,6 +46,7 @@ describe("settings storage", () => {
             providerKind: ProviderKind.OpenAI,
             modelId: "gpt-5",
             endpointUrl: "https://api.openai.com/v1",
+            apiKey: "secret-api-key",
             apiKeyEnvVar: "LOCAL_AI_API_KEY",
             command: "",
             promptMode: "stdin",
@@ -74,12 +75,13 @@ describe("settings storage", () => {
 
     expect(saved.profileId).toBe("coding");
     expect(reloaded.providerProfiles[0]?.name).toBe("OpenAI planner");
+    expect(reloaded.providerProfiles[0]?.apiKey).toBe("secret-api-key");
     expect(reloaded.providerProfiles[0]?.apiKeyEnvVar).toBe("LOCAL_AI_API_KEY");
     expect(reloaded.workflowLimits.infiniteLoops).toBe(true);
     expect(reloaded.notifications.webhookUrl).toBe("https://example.com/webhook");
     expect(reloaded.serverConnection.serverUrl).toBe("https://server.example.com");
     expect(reloaded.serverConnection.authToken).toBe("server-token");
-    expect(JSON.stringify(reloaded)).not.toContain("\"apiKey\":");
+    expect(JSON.stringify(reloaded)).toContain("\"apiKey\":\"secret-api-key\"");
   });
 
   it("falls back to defaults when persisted storage is invalid", () => {

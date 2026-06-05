@@ -62,6 +62,12 @@ export const openAiCompatibleProviderDescriptor: ProviderDescriptor = {
   }
 };
 
+export const customOpenAiCompatibleProviderDescriptor: ProviderDescriptor = {
+  ...openAiCompatibleProviderDescriptor,
+  id: "custom",
+  displayName: "Custom OpenAI-compatible"
+};
+
 export const createOpenAiCompatibleProvider = (
   config: OpenAiCompatibleProviderConfig
 ): LLMProviderPort => ({

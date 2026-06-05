@@ -64,7 +64,6 @@ interface SettingsScreenState {
   currentProject: ProjectRecord | null;
   projectSession: ProjectSessionState;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
-  sessionSecrets: Record<string, string>;
   isSaving: boolean;
   isTestingConnection: boolean;
   isTestingWebhook: boolean;
@@ -82,14 +81,16 @@ const ProviderKindLabel: Record<ProviderKind, string> = {
   [ProviderKind.CodexCli]: "Codex CLI",
   [ProviderKind.OpenAI]: "OpenAI",
   [ProviderKind.Anthropic]: "Anthropic",
-  [ProviderKind.Ollama]: "Ollama"
+  [ProviderKind.Ollama]: "Ollama",
+  [ProviderKind.Custom]: "Custom"
 };
 
 const ProviderKindDescription: Record<ProviderKind, string> = {
   [ProviderKind.CodexCli]: "CLI provider registered in the current backend runtime.",
   [ProviderKind.OpenAI]: "API-based profile persisted in the shared server workspace for future workflow selection.",
   [ProviderKind.Anthropic]: "API-based profile persisted in the shared server workspace for future workflow selection.",
-  [ProviderKind.Ollama]: "Local inference profile persisted in the shared server workspace for future workflow selection."
+  [ProviderKind.Ollama]: "Local inference profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Custom]: "Custom OpenAI-compatible API profile persisted in the shared server workspace for future workflow selection."
 };
 
 const TestWebhookPayload = {
@@ -119,7 +120,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       currentProject: null,
       projectSession: readProjectSession(),
       runtimeProviders: [],
-      sessionSecrets: {},
       isSaving: false,
       isTestingConnection: false,
       isTestingWebhook: false
@@ -238,7 +238,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           createElement("div", { className: "flex flex-col gap-1" }, [
             createElement("h2", { className: "text-lg font-semibold text-white" }, ["Persistence policy"]),
             createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace. Session-only provider secrets stay in the browser."
+              "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace."
             ])
           ]),
           createElement(StatusBadge, { status: "info" }, ["web mode"])
@@ -250,11 +250,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           renderReadOnlyCell("External calls", this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked"),
           renderReadOnlyCell("Workspace server", this.state.serverConnection.serverUrl)
         ]),
-        createElement("div", {
-          className: "mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-        }, [
-          "API keys are intentionally not written to local storage in browser mode. Keep them in the current session only until a secure secret adapter exists for web."
-        ])
       ])
     ]);
   }
@@ -301,7 +296,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       this.renderAddProfileButton(ProviderKind.CodexCli),
       this.renderAddProfileButton(ProviderKind.OpenAI),
       this.renderAddProfileButton(ProviderKind.Anthropic),
-      this.renderAddProfileButton(ProviderKind.Ollama)
+      this.renderAddProfileButton(ProviderKind.Ollama),
+      this.renderAddProfileButton(ProviderKind.Custom)
     ]);
   }
 
@@ -348,7 +344,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   private renderProviderProfileEditor(profile: ProviderProfileRecord): HTMLElement {
-    const apiKeyValue = this.state.sessionSecrets[profile.id] ?? "";
     const runtimeAvailable = this.state.runtimeProviders.some(
       (provider) => provider.id === profile.providerKind
     );
@@ -383,7 +378,8 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             { value: ProviderKind.CodexCli, label: ProviderKindLabel[ProviderKind.CodexCli] },
             { value: ProviderKind.OpenAI, label: ProviderKindLabel[ProviderKind.OpenAI] },
             { value: ProviderKind.Anthropic, label: ProviderKindLabel[ProviderKind.Anthropic] },
-            { value: ProviderKind.Ollama, label: ProviderKindLabel[ProviderKind.Ollama] }
+            { value: ProviderKind.Ollama, label: ProviderKindLabel[ProviderKind.Ollama] },
+            { value: ProviderKind.Custom, label: ProviderKindLabel[ProviderKind.Custom] }
           ],
           onChange: (value: string) => this.handleProviderKindChange(profile.id, value)
         }),
@@ -431,10 +427,10 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             })
           : createElement(SettingsSecretField, {
               label: "API key",
-              value: apiKeyValue,
-              placeholder: "Session only in web mode",
+              value: profile.apiKey,
+              placeholder: "Bearer token",
               testId: "settings-provider-api-key",
-              onChange: (value: string) => this.handleProviderSecretChange(profile.id, value)
+              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "apiKey", value)
             })
       ]),
       createElement("div", {
@@ -444,7 +440,9 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
           ? this.state.currentProject
             ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
             : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
-          : "This provider profile is already persisted in the server workspace snapshot. Register a matching runtime adapter in the backend when you want flows to execute through it."
+          : runtimeAvailable
+            ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
+            : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support."
       ])
     ]);
   }
@@ -706,19 +704,15 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         ? nextProfiles[0]?.id ?? null
         : this.state.selectedProviderId;
 
-    const nextSecrets = { ...this.state.sessionSecrets };
-    delete nextSecrets[profileId];
-
     this.setState({
       providerProfiles: nextProfiles,
-      selectedProviderId,
-      sessionSecrets: nextSecrets
+      selectedProviderId
     });
   }
 
   private handleProviderProfileTextChange(
     profileId: string,
-    key: "name" | "modelId" | "endpointUrl" | "apiKeyEnvVar" | "command",
+    key: "name" | "modelId" | "endpointUrl" | "apiKey" | "apiKeyEnvVar" | "command",
     value: string
   ): void {
     const nextProfiles = this.state.providerProfiles.map((profile) =>
@@ -754,15 +748,6 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     );
 
     this.setState({ providerProfiles: nextProfiles });
-  }
-
-  private handleProviderSecretChange(profileId: string, value: string): void {
-    this.setState({
-      sessionSecrets: {
-        ...this.state.sessionSecrets,
-        [profileId]: value
-      }
-    });
   }
 
   private handleMaxLoopsChange(value: string): void {
@@ -936,8 +921,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection,
-        sessionSecrets: {}
+        serverConnection: persistedSettings.serverConnection
       });
       this.pushToast("success", "Settings restored to defaults.");
     } catch (error) {
@@ -980,7 +964,8 @@ const readProviderKind = (value: string): ProviderKind | null => {
     value === ProviderKind.CodexCli ||
     value === ProviderKind.OpenAI ||
     value === ProviderKind.Anthropic ||
-    value === ProviderKind.Ollama
+    value === ProviderKind.Ollama ||
+    value === ProviderKind.Custom
   ) {
     return value;
   }
