@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { codexCliProviderDescriptor } from "../../../packages/adapters/src/codex-cli/provider";
+import { openAiCompatibleProviderDescriptor } from "../../../packages/adapters/src/openai-compatible/provider";
 import { ResultType } from "./result";
 import {
   ProviderStoreErrorCode,
@@ -17,8 +18,9 @@ describe("provider store", () => {
     const store = createProviderStore();
     const providers = store.listProviders();
 
-    expect(providers).toHaveLength(1);
+    expect(providers).toHaveLength(2);
     expect(providers[0]?.id).toBe(codexCliProviderDescriptor.id);
+    expect(providers[1]?.id).toBe(openAiCompatibleProviderDescriptor.id);
   });
 
   it("selects and reads provider selection", () => {

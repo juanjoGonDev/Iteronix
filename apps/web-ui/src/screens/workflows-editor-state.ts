@@ -384,6 +384,13 @@ export type WorkflowAlertRecord = {
   createdAt: string;
 };
 
+export type WorkflowGuardrailFindingRecord = {
+  guardrailAssetId: string;
+  nodeId: string;
+  severity: "warn" | "error" | "success";
+  message: string;
+};
+
 export type WorkflowNodeExecutionRecord = {
   id: string;
   nodeId: string;
@@ -399,6 +406,7 @@ export type WorkflowNodeExecutionRecord = {
   verbosity?: WorkflowVerbosity;
   usage?: WorkflowUsageTotalsRecord;
   alerts: ReadonlyArray<WorkflowAlertRecord>;
+  guardrailFindings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
   outputSnapshot?: unknown;
 };
 
@@ -1188,8 +1196,20 @@ export const setWorkflowViewport = (
     x: Math.round(viewport.x),
     y: Math.round(viewport.y),
     zoom: Math.max(0.35, Math.min(1.8, Number(viewport.zoom.toFixed(2))))
-  }
-});
+    } 
+  });
+
+export const isWorkflowViewportOnlyChange = (
+  previous: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
+  next: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput
+): boolean =>
+  JSON.stringify({
+    ...previous,
+    viewport: DefaultWorkflowViewport
+  }) === JSON.stringify({
+    ...next,
+    viewport: DefaultWorkflowViewport
+  });
 
 export const updateWorkflowMetadata = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,

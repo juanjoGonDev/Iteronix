@@ -772,6 +772,12 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - `apps/server-api` now exposes `/workflows/executions/run` and `/workflows/providers/test`, resolving saved Codex CLI provider profiles server-side and persisting execution history plus provider smoke-test metadata
     - `apps/web-ui/src/screens/Workflows.ts` now enables saved-workflow manual run and per-node provider smoke test controls while keeping the persisted execution rail as the source of truth
     - Validation passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
+  - `06.6` execution detail hydration expanded on `2026-05-18`:
+    - `WorkflowNodeExecutionRecord` now persists `guardrailFindings` alongside existing alerts so saved execution history retains rule outcomes per node
+    - `packages/agents/src/workflow-runtime.ts` now evaluates attached guardrails during provider/agent node execution, records warn/error outcomes, and invalidates a node run only for blocking `error` guardrails
+    - `apps/web-ui/src/screens/Workflows.ts` now renders persisted guardrail findings in the execution inspector without inflating the workflow-level attention model with non-alert success state
+    - `apps/web-ui/scripts/validate-workflows.ts` now proves execution detail hydration for persisted guardrail findings in the real browser flow
+    - Validation passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

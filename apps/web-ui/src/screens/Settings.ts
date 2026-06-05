@@ -410,6 +410,15 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
               onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "endpointUrl", value)
             }),
         profile.providerKind === ProviderKind.CodexCli
+          ? ""
+          : createElement(SettingsTextField, {
+              label: "API key env var",
+              value: profile.apiKeyEnvVar,
+              placeholder: "OPENAI_API_KEY",
+              testId: "settings-provider-api-key-env-var",
+              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "apiKeyEnvVar", value)
+            }),
+        profile.providerKind === ProviderKind.CodexCli
           ? createElement(SettingsSelectField, {
               label: "Prompt mode",
               value: profile.promptMode,
@@ -709,7 +718,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
   private handleProviderProfileTextChange(
     profileId: string,
-    key: "name" | "modelId" | "endpointUrl" | "command",
+    key: "name" | "modelId" | "endpointUrl" | "apiKeyEnvVar" | "command",
     value: string
   ): void {
     const nextProfiles = this.state.providerProfiles.map((profile) =>

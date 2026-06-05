@@ -4,6 +4,7 @@ import {
   type WorkflowProviderRunResult
 } from "../../../packages/agents/src/workflow-runtime";
 import { createCodexCliProvider } from "../../../packages/adapters/src/codex-cli/provider";
+import { createOpenAiCompatibleProvider } from "../../../packages/adapters/src/openai-compatible/provider";
 import { LLMEventType, type LLMEvent } from "../../../packages/domain/src/llm/events";
 import type { LLMProviderPort, LLMRunResult } from "../../../packages/domain/src/llm/provider";
 import type {
@@ -20,7 +21,9 @@ type ProviderProfile = {
   providerKind: string;
   modelId: string;
   command: string;
+  endpointUrl: string;
   promptMode: "stdin" | "arg";
+  apiKey: string;
 };
 
 export type WorkflowRuntimeService = {
@@ -146,24 +149,44 @@ const executeProviderNode = async (
 };
 
 const createProvider = (profile: ProviderProfile): LLMProviderPort => {
-  if (profile.providerKind !== "codex-cli") {
-    throw new Error(
-      `Workflow 06.6 supports codex-cli profiles only. Received ${profile.providerKind}.`
-    );
+  if (profile.providerKind === "codex-cli") {
+    return createCodexCliProvider({
+      command: profile.command,
+      promptMode: profile.promptMode,
+      models: profile.modelId
+        ? [
+            {
+              id: profile.modelId,
+              displayName: profile.modelId
+            }
+          ]
+        : []
+    });
   }
 
-  return createCodexCliProvider({
-    command: profile.command,
-    promptMode: profile.promptMode,
-    models: profile.modelId
-      ? [
-          {
-            id: profile.modelId,
-            displayName: profile.modelId
-          }
-        ]
-      : []
-  });
+  if (profile.providerKind === "openai" || profile.providerKind === "ollama") {
+    if (profile.endpointUrl.length === 0) {
+      throw new Error(`Workflow provider profile ${profile.id} is missing an endpoint URL.`);
+    }
+    if (profile.providerKind === "openai" && profile.apiKey.length === 0) {
+      throw new Error(`Workflow provider profile ${profile.id} is missing a bearer API key.`);
+    }
+
+    return createOpenAiCompatibleProvider({
+      baseUrl: profile.endpointUrl,
+      apiKey: profile.apiKey,
+      models: profile.modelId
+        ? [
+            {
+              id: profile.modelId,
+              displayName: profile.modelId
+            }
+          ]
+        : []
+    });
+  }
+
+  throw new Error(`Workflow provider kind ${profile.providerKind} is not supported by the runtime yet.`);
 };
 
 const collectProviderResult = async (
@@ -261,7 +284,9 @@ const readProviderProfile = (value: unknown): ProviderProfile | null => {
     providerKind,
     modelId: readString(value["modelId"]),
     command: readString(value["command"]) || "codex",
-    promptMode
+    endpointUrl: readString(value["endpointUrl"]),
+    promptMode,
+    apiKey: readProviderApiKey(value)
   };
 };
 
@@ -270,3 +295,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const readString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
+
+const readProviderApiKey = (value: Record<string, unknown>): string => {
+  const explicitApiKey = readString(value["apiKey"]);
+  if (explicitApiKey.length > 0) {
+    return explicitApiKey;
+  }
+
+  const envKey = readString(value["apiKeyEnvVar"]);
+  if (envKey.length > 0) {
+    return readString(process.env[envKey]);
+  }
+
+  return readString(process.env["OPENAI_API_KEY"]);
+};

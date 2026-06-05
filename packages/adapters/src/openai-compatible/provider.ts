@@ -1,0 +1,158 @@
+import type { LLMProviderCapabilities } from "../../../domain/src/llm/capabilities";
+import { LLMProviderType } from "../../../domain/src/llm/capabilities";
+import type { LLMModel } from "../../../domain/src/llm/models";
+import type { LLMProviderPort, LLMRunResult } from "../../../domain/src/llm/provider";
+import type { LLMRunRequest } from "../../../domain/src/llm/run";
+import type { ProviderDescriptor } from "../../../domain/src/providers/registry";
+import { ProviderAuthType } from "../../../domain/src/providers/registry";
+import { JsonSchemaType } from "../../../domain/src/providers/schema";
+
+export type OpenAiCompatibleProviderConfig = {
+  baseUrl: string;
+  apiKey: string;
+  fetchImplementation?: typeof fetch;
+  models?: ReadonlyArray<LLMModel>;
+};
+
+type OpenAiCompatibleResponse = {
+  choices?: ReadonlyArray<{
+    message?: {
+      content?: string | ReadonlyArray<{
+        type?: string;
+        text?: string;
+      }>;
+    };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
+const DefaultChatCompletionsPath = "/v1/chat/completions";
+
+export const openAiCompatibleCapabilities: LLMProviderCapabilities = {
+  streaming: false,
+  jsonSchemaEnforcement: false,
+  tokenUsage: true,
+  toolCalls: false
+};
+
+export const openAiCompatibleProviderDescriptor: ProviderDescriptor = {
+  id: "openai",
+  displayName: "OpenAI-compatible",
+  type: LLMProviderType.Api,
+  capabilities: openAiCompatibleCapabilities,
+  auth: {
+    type: ProviderAuthType.ApiKey,
+    description: "Bearer token"
+  },
+  settingsSchema: {
+    type: JsonSchemaType.Object,
+    properties: {
+      endpointUrl: {
+        type: JsonSchemaType.String
+      },
+      apiKey: {
+        type: JsonSchemaType.String
+      }
+    },
+    required: ["endpointUrl"]
+  }
+};
+
+export const createOpenAiCompatibleProvider = (
+  config: OpenAiCompatibleProviderConfig
+): LLMProviderPort => ({
+  capabilities: openAiCompatibleCapabilities,
+  listModels: async () => config.models ?? [],
+  run: async (request: LLMRunRequest): Promise<LLMRunResult> =>
+    runOpenAiCompatibleRequest(config, request)
+});
+
+const runOpenAiCompatibleRequest = async (
+  config: OpenAiCompatibleProviderConfig,
+  request: LLMRunRequest
+): Promise<LLMRunResult> => {
+  const fetchImplementation = config.fetchImplementation ?? fetch;
+  const response = await fetchImplementation(buildChatCompletionsUrl(config.baseUrl), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: request.modelId,
+      messages: buildMessages(request),
+      ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI-compatible provider request failed with status ${response.status.toString()}.`);
+  }
+
+  const payload = (await response.json()) as OpenAiCompatibleResponse;
+  return {
+    message: readMessageContent(payload),
+    ...(payload.usage
+      ? {
+          usage: {
+            inputTokens: payload.usage.prompt_tokens ?? 0,
+            outputTokens: payload.usage.completion_tokens ?? 0,
+            totalTokens: payload.usage.total_tokens ?? 0
+          }
+        }
+      : {})
+  };
+};
+
+const buildChatCompletionsUrl = (baseUrl: string): string => {
+  const normalized = baseUrl.trim().replace(/\/+$/u, "");
+  return normalized.endsWith("/v1")
+    ? `${normalized}/chat/completions`
+    : `${normalized}${DefaultChatCompletionsPath}`;
+};
+
+const buildMessages = (request: LLMRunRequest): ReadonlyArray<{
+  role: "system" | "user";
+  content: string;
+}> => [
+  ...(request.system ? [{ role: "system" as const, content: request.system }] : []),
+  {
+    role: "user" as const,
+    content: request.input
+  }
+];
+
+const readMessageContent = (payload: OpenAiCompatibleResponse): string => {
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim().length > 0) {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((entry) => readContentTextPart(entry))
+      .join("")
+      .trim();
+  }
+
+  return "";
+};
+
+const readContentTextPart = (entry: unknown): string => {
+  if (
+    typeof entry === "object" &&
+    entry !== null &&
+    "type" in entry &&
+    entry["type"] === "text" &&
+    "text" in entry &&
+    typeof entry["text"] === "string"
+  ) {
+    return entry["text"];
+  }
+
+  return "";
+};

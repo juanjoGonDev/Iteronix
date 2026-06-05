@@ -2875,3 +2875,48 @@
   - `06.6` currently supports saved Codex CLI profiles only; broader provider capability matrix and non-manual triggers remain future work.
 - Next:
   - Expand `06.6` only if needed with richer node coverage or execution detail hydration; otherwise move to the next planned workflow/runtime slice.
+
+### 2026-05-18 10:22 (Europe/Madrid) — Workflows 06.6 Persisted Guardrail Findings And Execution Hydration
+
+- Summary:
+  - Continued only the narrow `06.6` slice for persisted execution detail hydration: workflow node runs now keep guardrail findings, the runtime evaluates attached guardrails during saved workflow execution, and the Workflows inspector renders those persisted findings without crossing into trigger expansion.
+- Decisions:
+  - Keep `06.6` scoped to manual-run continuity and execution detail only; no schedule, webhook, event, or init trigger work was introduced.
+  - Treat blocking `error` guardrails as run-invalidating on unmet rules, while `warn` and `success` findings remain informational execution detail and do not independently mark a workflow as failed.
+- Changes:
+  - Updated `packages/shared/src/workflows.ts` and `apps/web-ui/src/screens/workflows-editor-state.ts` so `WorkflowNodeExecutionRecord` persists `guardrailFindings`.
+  - Updated `packages/agents/src/workflow-runtime.ts` and `packages/agents/src/workflow-runtime.test.ts` to evaluate attached guardrails, persist findings, surface guardrail alerts, and fail node runs only for blocking `error` outcomes.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` plus `apps/web-ui/src/shared/workflow-client.test.ts` so the execution inspector hydrates persisted guardrail findings per run and per node.
+  - Updated `apps/web-ui/scripts/validate-workflows.ts` to assert persisted guardrail finding hydration in the real browser flow.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+  - `pnpm -C apps/web-ui validate:workflows` PASS
+- Issues/Risks:
+  - Guardrail runtime semantics are intentionally narrow in this slice: they cover persisted finding hydration for attached workflow guardrails, but they do not yet broaden unsupported trigger/runtime scope beyond manual execution.
+- Next:
+  - Commit this `06.6` guardrail-hydration slice as one reviewable work unit before choosing the next runtime-focused increment.
+
+### 2026-06-05 02:24 (Europe/Madrid) — Workflows Provider Compatibility And Viewport Dirty Fix
+
+- Summary:
+  - Fixed the workflow runtime so the 06.6 execution path can resolve saved OpenAI-compatible bearer profiles instead of rejecting every non-`codex-cli` profile, and fixed the canvas so zoom/pan alone no longer marks a workflow as changed.
+- Decisions:
+  - Keep the runtime extension minimal: reuse the existing workflow profile snapshot, support `openai` plus `ollama` through one OpenAI-compatible adapter, and require endpoint + bearer key resolution without storing raw secrets in repo state.
+  - Persist only an `apiKeyEnvVar` hint in settings/workspace state for API-backed profiles so the server can read the bearer token from the environment while the UI still avoids saving plaintext secrets.
+- Changes:
+  - Added `packages/adapters/src/openai-compatible/provider.ts` plus descriptor exports and tests for bearer-auth chat-completions execution.
+  - Updated `apps/server-api/src/workflow-runtime.ts` and provider-store tests so workflow runtime/provider listing supports OpenAI-compatible profiles and bearer env lookup.
+  - Updated `apps/web-ui/src/screens/Workflows.ts`, `workflows-editor-state.ts`, `Settings.ts`, and related tests so viewport-only edits stay clean and API-backed provider profiles persist `apiKeyEnvVar`.
+  - Updated `apps/server-api/.iteronix/workspace-state.json` so the existing local OpenAI-compatible profile points to `OPENAI_API_KEY` for bearer lookup.
+- Commands:
+  - `rtk pnpm lint` PASS
+  - `rtk pnpm typecheck` PASS
+  - `rtk pnpm test` PASS
+  - `rtk pnpm build` PASS
+- Issues/Risks:
+  - The detected local endpoint at `http://192.168.1.223:3001/v1/models` still returns `401` without a valid bearer token; the runtime path is ready, but real execution still depends on the correct `OPENAI_API_KEY` value existing in the server environment.
+- Next:
+  - Verify the local bearer token value on the server host, then rerun a real workflow/provider smoke test against the saved `openai` profile.

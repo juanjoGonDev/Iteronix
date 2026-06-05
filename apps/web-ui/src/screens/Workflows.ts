@@ -57,6 +57,7 @@ import {
   updateWorkflowAssetGuardrail,
   updateWorkflowNodeOutputContract,
   upsertJsonSchemaProperty,
+  isWorkflowViewportOnlyChange,
   WorkflowExpressionVariableKind,
   type EdgeMappingEntryRecord,
   type GuardrailValidationRecord,
@@ -72,6 +73,7 @@ import {
   type WorkflowDefinitionUpsertInput,
   type WorkflowExecutionRecord,
   type WorkflowExpressionVariableReference,
+  type WorkflowGuardrailFindingRecord,
   type WorkflowNodeExecutionRecord,
   type WorkflowNodeKind as WorkflowNodeKindValue,
   type WorkflowNodeRecord,
@@ -1664,6 +1666,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const nodeLookup = new Map((currentWorkflow?.nodes ?? []).map((node) => [node.id, node]));
     const hasAlerts = execution.nodeRuns.some((nodeRun) => nodeRun.alerts.length > 0);
+    const hasGuardrailFindings = execution.nodeRuns.some((nodeRun) => nodeRun.guardrailFindings.length > 0);
 
     return createElement("div", {
       className: "flex flex-col gap-4",
@@ -1725,6 +1728,31 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             ])
           ])
         : "",
+      hasGuardrailFindings
+        ? createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
+            createElement("p", { className: "text-sm font-medium text-white" }, ["Guardrail findings"]),
+            createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+              execution.nodeRuns.flatMap((nodeRun) =>
+                nodeRun.guardrailFindings.map((finding, index) =>
+                  createElement("div", {
+                    key: `${nodeRun.id}-guardrail-${index.toString()}`,
+                    className: "rounded-md border border-border-dark bg-[#161b22] px-3 py-2"
+                  }, [
+                    createElement("div", { className: "flex items-center justify-between gap-3" }, [
+                      createElement("span", { className: "text-xs font-medium text-white" }, [
+                        `${nodeLookup.get(nodeRun.nodeId)?.label ?? nodeRun.nodeId} · Guardrail`
+                      ]),
+                      createElement(StatusBadge, {
+                        status: readGuardrailFindingBadgeStatus(finding.severity)
+                      }, [formatSelectOptionLabel(finding.severity)])
+                    ]),
+                    createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [finding.message])
+                  ])
+                )
+              )
+            ])
+          ])
+        : "",
       createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
           createElement("div", { className: "min-w-0" }, [
@@ -1763,8 +1791,30 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                 createElement("span", {}, [readNodeRunProviderLabel(nodeRun)]),
                 createElement("span", {}, [nodeRun.usage ? `${nodeRun.usage.totalTokens.toLocaleString()} tokens` : "No token data"]),
                 createElement("span", {}, [nodeRun.usage ? formatEuro(nodeRun.usage.estimatedCostEur) : "No EUR data"]),
-                createElement("span", {}, [`${nodeRun.alerts.length} alert${nodeRun.alerts.length === 1 ? "" : "s"}`])
+                createElement("span", {}, [`${nodeRun.alerts.length} alert${nodeRun.alerts.length === 1 ? "" : "s"}`]),
+                createElement("span", {}, [`${nodeRun.guardrailFindings.length} finding${nodeRun.guardrailFindings.length === 1 ? "" : "s"}`]),
+                createElement("span", {}, [formatDuration(nodeRun.durationMs)])
               ]),
+              nodeRun.guardrailFindings.length > 0
+                ? createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+                    nodeRun.guardrailFindings.map((finding, index) =>
+                      createElement("div", {
+                        key: `${nodeRun.id}-finding-${index.toString()}`,
+                        className: "rounded border border-border-dark bg-[#11161d] px-3 py-2"
+                      }, [
+                        createElement("div", { className: "flex items-center justify-between gap-2" }, [
+                          createElement("span", { className: "text-xs text-white" }, [finding.message]),
+                          createElement(StatusBadge, {
+                            status: readGuardrailFindingBadgeStatus(finding.severity)
+                          }, [formatSelectOptionLabel(finding.severity)])
+                        ]),
+                        createElement("p", { className: "mt-1 text-[11px] text-text-secondary" }, [
+                          finding.guardrailAssetId
+                        ])
+                      ])
+                    )
+                  ])
+                : createElement("p", { className: "mt-3 text-xs text-text-secondary" }, ["No guardrail findings."]),
               nodeRun.alerts.length > 0
                 ? createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
                     nodeRun.alerts.map((alert) =>
@@ -4652,7 +4702,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     this.setState({
       draftWorkflow: nextDefinition,
       selection: nextSelection ?? this.state.selection,
-      dirtyWorkflow: true
+      dirtyWorkflow:
+        this.state.dirtyWorkflow ||
+        !this.state.draftWorkflow ||
+        !isWorkflowViewportOnlyChange(this.state.draftWorkflow, nextDefinition)
     });
   }
 
@@ -5817,6 +5870,20 @@ const readAlertBadgeStatus = (
   }
 
   return "info";
+};
+
+const readGuardrailFindingBadgeStatus = (
+  severity: WorkflowGuardrailFindingRecord["severity"]
+): "success" | "warning" | "failed" => {
+  if (severity === "success") {
+    return "success";
+  }
+
+  if (severity === "warn") {
+    return "warning";
+  }
+
+  return "failed";
 };
 
 const readNodeRunProviderLabel = (nodeRun: WorkflowExecutionRecord["nodeRuns"][number]): string => {

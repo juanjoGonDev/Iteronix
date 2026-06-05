@@ -14,6 +14,7 @@ describe("settings state", () => {
     expect(codex.command).toBe("codex");
     expect(codex.promptMode).toBe("stdin");
     expect(anthropic.endpointUrl).toBe("https://api.anthropic.com");
+    expect(anthropic.apiKeyEnvVar).toBe("ANTHROPIC_API_KEY");
   });
 
   it("updates provider profile fields and refreshes updatedAt", () => {
@@ -26,13 +27,15 @@ describe("settings state", () => {
       {
         name: "Planner",
         modelId: "gpt-5",
-        endpointUrl: "https://example.com/openai"
+        endpointUrl: "https://example.com/openai",
+        apiKeyEnvVar: "LOCAL_AI_API_KEY"
       },
       updatedAt
     );
 
     expect(updated.name).toBe("Planner");
     expect(updated.modelId).toBe("gpt-5");
+    expect(updated.apiKeyEnvVar).toBe("LOCAL_AI_API_KEY");
     expect(updated.updatedAt).toBe(updatedAt);
   });
 

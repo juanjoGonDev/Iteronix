@@ -1,5 +1,6 @@
 import type { ProviderDescriptor } from "../../../packages/domain/src/providers/registry";
 import { codexCliProviderDescriptor } from "../../../packages/adapters/src/codex-cli/provider";
+import { openAiCompatibleProviderDescriptor } from "../../../packages/adapters/src/openai-compatible/provider";
 import { ErrorMessage } from "./constants";
 import { err, ok, type Result } from "./result";
 
@@ -81,7 +82,7 @@ export const createProviderStore = (
 ): ProviderStore => {
   const providers = seed.providers
     ? [...seed.providers]
-    : [codexCliProviderDescriptor];
+    : [codexCliProviderDescriptor, openAiCompatibleProviderDescriptor];
   const providersById = new Map<string, ProviderDescriptor>();
 
   for (const provider of providers) {

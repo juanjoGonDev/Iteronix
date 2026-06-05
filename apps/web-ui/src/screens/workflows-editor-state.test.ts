@@ -30,6 +30,7 @@ import {
   readNodeAssetKind,
   removeWorkflowEdge,
   removeWorkflowNode,
+  isWorkflowViewportOnlyChange,
   setWorkflowViewport,
   updateJsonSchemaNode,
   updateWorkflowAssetGuardrail,
@@ -252,6 +253,25 @@ describe("workflows editor state", () => {
     });
     expect(readNodeAssetKind(WorkflowNodeKind.AssetPrompt)).toBe(WorkflowAssetKind.Prompt);
     expect(readNodeAssetKind(WorkflowNodeKind.AiAgent)).toBeNull();
+  });
+
+  it("detects viewport-only edits without treating content as changed", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Viewport"
+    });
+    const zoomOnly = setWorkflowViewport(definition, {
+      x: 140,
+      y: 180,
+      zoom: 1.4
+    });
+    const withNodeMove = moveWorkflowNode(definition, definition.nodes[0]?.id ?? "", {
+      x: 400,
+      y: 220
+    });
+
+    expect(isWorkflowViewportOnlyChange(definition, zoomOnly)).toBe(true);
+    expect(isWorkflowViewportOnlyChange(definition, withNodeMove)).toBe(false);
   });
 
   it("updates node JSON output contracts and validates required object fields", () => {

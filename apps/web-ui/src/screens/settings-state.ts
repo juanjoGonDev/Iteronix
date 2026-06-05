@@ -21,6 +21,7 @@ export type ProviderProfileRecord = {
   providerKind: ProviderKind;
   modelId: string;
   endpointUrl: string;
+  apiKeyEnvVar: string;
   command: string;
   promptMode: ProviderPromptMode;
   createdAt: string;
@@ -37,30 +38,35 @@ export type ProviderSyncRequest = {
 const ProviderDefaults: Record<ProviderKind, {
   name: string;
   endpointUrl: string;
+  apiKeyEnvVar: string;
   command: string;
   promptMode: ProviderPromptMode;
 }> = {
   [ProviderKind.CodexCli]: {
     name: "Codex CLI",
     endpointUrl: "",
+    apiKeyEnvVar: "",
     command: "codex",
     promptMode: ProviderPromptMode.Stdin
   },
   [ProviderKind.OpenAI]: {
     name: "OpenAI",
     endpointUrl: "https://api.openai.com/v1",
+    apiKeyEnvVar: "OPENAI_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin
   },
   [ProviderKind.Anthropic]: {
     name: "Anthropic",
     endpointUrl: "https://api.anthropic.com",
+    apiKeyEnvVar: "ANTHROPIC_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin
   },
   [ProviderKind.Ollama]: {
     name: "Ollama",
     endpointUrl: "http://localhost:11434",
+    apiKeyEnvVar: "",
     command: "",
     promptMode: ProviderPromptMode.Stdin
   }
@@ -82,6 +88,7 @@ export const createProviderProfile = (
     providerKind: kind,
     modelId: "",
     endpointUrl: defaults.endpointUrl,
+    apiKeyEnvVar: defaults.apiKeyEnvVar,
     command: defaults.command,
     promptMode: defaults.promptMode,
     createdAt: timestamp,
@@ -102,19 +109,21 @@ export const updateProviderProfile = (
     ...patch,
     providerKind: nextKind,
     endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
+    apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
     command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
     promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
     updatedAt: timestamp
   });
 
   return normalizedProfile ?? {
-    ...profile,
-    ...patch,
-    providerKind: nextKind,
-    endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
-    command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
-    promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
-    updatedAt: timestamp
+      ...profile,
+      ...patch,
+      providerKind: nextKind,
+      endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
+      apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
+      command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
+      promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
+      updatedAt: timestamp
   };
 };
 
@@ -197,6 +206,7 @@ const normalizeProviderProfile = (
     providerKind,
     modelId: readString(value["modelId"]),
     endpointUrl: readString(value["endpointUrl"]) || defaults.endpointUrl,
+    apiKeyEnvVar: readString(value["apiKeyEnvVar"]) || defaults.apiKeyEnvVar,
     command: readString(value["command"]) || defaults.command,
     promptMode: readPromptMode(value["promptMode"]) ?? defaults.promptMode,
     createdAt: createdAt.length > 0 ? createdAt : new Date().toISOString(),
