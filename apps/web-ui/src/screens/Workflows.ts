@@ -1127,6 +1127,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
   }
 
   private renderServerLogsPanel(): HTMLElement {
+    const activeRunId = this.readActiveLogsRunId();
     const filteredLogs = this.state.serverLogs.filter((entry) =>
       this.state.workflowLogsFilter === WorkflowLogsFilter.All
         ? true
@@ -1144,6 +1145,9 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
           createElement("p", { className: "text-[11px] leading-5 text-text-secondary" }, ["Useful for provider/settings save failures and workflow runtime issues."])
         ]),
         createElement("div", { className: "flex items-center gap-1.5" }, [
+          activeRunId
+            ? createElement("span", { className: "rounded-full border border-border-dark px-2 py-0.5 font-mono text-[10px] text-slate-300" }, [activeRunId])
+            : "",
           this.renderLogsFilterButton("Errors", WorkflowLogsFilter.Errors),
           this.renderLogsFilterButton("All", WorkflowLogsFilter.All),
           createElement(IconButton, {
@@ -1193,8 +1197,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       size: "sm",
       onClick: () => {
         this.setState({ workflowLogsFilter: value, refreshingLogs: true });
+        const runId = this.readActiveLogsRunId();
         void this.logsClient.query({
           ...(value === WorkflowLogsFilter.Errors ? { level: ServerLogLevel.Warn } : {}),
+          ...(runId ? { runId } : {}),
           limit: 80
         }).then((logs) => {
           this.setState({
@@ -1207,6 +1213,18 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       },
       children: label
     });
+  }
+
+  private readActiveLogsRunId(): string | undefined {
+    if (this.state.liveExecution?.workflowRunId) {
+      return this.state.liveExecution.workflowRunId;
+    }
+
+    if (this.state.selection.type === "execution") {
+      return this.state.selection.id;
+    }
+
+    return undefined;
   }
 
   private renderExecutionAttentionItem(execution: WorkflowExecutionRecord): HTMLElement {
@@ -4325,8 +4343,10 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       const level = this.state.workflowLogsFilter === WorkflowLogsFilter.Errors
         ? ServerLogLevel.Warn
         : undefined;
+      const runId = this.readActiveLogsRunId();
       const logs = await this.logsClient.query({
         ...(level ? { level } : {}),
+        ...(runId ? { runId } : {}),
         limit: 80
       });
       this.setState({
@@ -4356,6 +4376,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       guardrailAttachAssetId: null,
       compactView: this.state.isCompactViewport ? CompactView.Canvas : this.state.compactView
     });
+    void this.refreshServerLogs();
   }
 
   private async handleCreateWorkflow(): Promise<void> {
@@ -4686,6 +4707,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
         loadingExecutionId: null,
         selection: { type: "execution", id: executionId }
       });
+      void this.refreshServerLogs();
     } catch (error) {
       this.setState({
         loadingExecutionId: null,
