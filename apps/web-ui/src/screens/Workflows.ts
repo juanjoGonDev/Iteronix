@@ -330,6 +330,12 @@ type LiveExecutionState = {
   errorMessage: string | null;
 };
 
+type WorkflowInspectorLogsScope = {
+  runId?: string | undefined;
+  title: string;
+  emptyMessage: string;
+};
+
 type WorkflowVariableToken = {
   id: string;
   label: string;
@@ -1128,13 +1134,16 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
 
   private renderServerLogsPanel(): HTMLElement {
     const activeRunId = this.readActiveLogsRunId();
-    const filteredLogs = this.state.serverLogs.filter((entry) =>
-      this.state.workflowLogsFilter === WorkflowLogsFilter.All
-        ? true
-        : entry.level === ServerLogLevel.Warn ||
-          entry.level === ServerLogLevel.Error ||
-          entry.level === ServerLogLevel.Fatal
-    );
+    const filteredLogs = this.readScopedLogs(activeRunId
+      ? {
+          runId: activeRunId,
+          title: "Server logs",
+          emptyMessage: "No server log entries for this filter."
+        }
+      : {
+          title: "Server logs",
+          emptyMessage: "No server log entries for this filter."
+        });
 
     return createElement("section", {
       className: "flex h-[280px] shrink-0 flex-col border-t border-border-dark bg-[#11161d]"
@@ -1225,6 +1234,71 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
     }
 
     return undefined;
+  }
+
+  private readScopedLogs(
+    scope: WorkflowInspectorLogsScope
+  ): ReadonlyArray<ServerLogEntry> {
+    const levelFiltered = this.state.serverLogs.filter((entry) =>
+      this.state.workflowLogsFilter === WorkflowLogsFilter.All
+        ? true
+        : entry.level === ServerLogLevel.Warn ||
+          entry.level === ServerLogLevel.Error ||
+          entry.level === ServerLogLevel.Fatal
+    );
+
+    if (!scope.runId) {
+      return levelFiltered;
+    }
+
+    return levelFiltered.filter((entry) => entry.runId === scope.runId);
+  }
+
+  private renderScopedInspectorLogs(
+    scope: WorkflowInspectorLogsScope
+  ): HTMLElement {
+    const logs = this.readScopedLogs(scope).slice(-8);
+
+    return createElement("section", {
+      className: "rounded-xl border border-border-dark bg-[#10161d] px-3 py-3"
+    }, [
+      createElement("div", { className: "flex flex-wrap items-center justify-between gap-2" }, [
+        createElement("div", { className: "min-w-0" }, [
+          createElement("p", { className: "text-sm font-medium text-white" }, [scope.title]),
+          createElement("p", { className: "text-[11px] leading-5 text-text-secondary" }, [
+            scope.runId ? `Run scoped · ${scope.runId}` : "Latest relevant server logs"
+          ])
+        ]),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          onClick: () => {
+            void this.refreshServerLogs();
+          },
+          children: this.state.refreshingLogs ? "Refreshing" : "Refresh"
+        })
+      ]),
+      logs.length === 0
+        ? createElement("div", { className: "mt-3 rounded-lg border border-dashed border-border-dark bg-[#0d1319] px-3 py-3 text-xs leading-6 text-text-secondary" }, [
+            this.state.refreshingLogs ? "Refreshing logs..." : scope.emptyMessage
+          ])
+        : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
+            logs.map((entry) =>
+              createElement("article", {
+                key: entry.id,
+                className: "rounded-lg border border-border-dark bg-[#0d1319] px-3 py-2.5"
+              }, [
+                createElement("div", { className: "flex flex-wrap items-center gap-2" }, [
+                  createElement(StatusBadge, {
+                    status: readServerLogBadgeStatus(entry.level)
+                  }, [entry.level]),
+                  createElement("span", { className: "text-[11px] text-text-secondary" }, [formatTimestamp(entry.timestamp)])
+                ]),
+                createElement("pre", { className: "mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-slate-200" }, [entry.message])
+              ])
+            )
+          ])
+    ]);
   }
 
   private renderExecutionAttentionItem(execution: WorkflowExecutionRecord): HTMLElement {
@@ -1940,7 +2014,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             pulse: execution.status === "running"
           }, [formatSelectOptionLabel(execution.status)])
         ]),
-        createElement("div", { className: "mt-3 grid grid-cols-2 gap-3" }, [
+        createElement("div", { className: "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2" }, [
           this.renderInlineMetaTile("Runtime", formatDuration(execution.durationMs)),
           this.renderInlineMetaTile("Tokens", execution.totals.totalTokens.toLocaleString()),
           this.renderInlineMetaTile("EUR", formatEuro(execution.totals.estimatedCostEur)),
@@ -1951,7 +2025,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
       ]),
       createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
         createElement("p", { className: "text-sm font-medium text-white" }, ["Run context"]),
-        createElement("div", { className: "mt-3 grid grid-cols-2 gap-3" }, [
+        createElement("div", { className: "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2" }, [
           this.renderInlineMetaTile("Trigger", formatSelectOptionLabel(execution.triggerKind)),
           this.renderInlineMetaTile("Session", execution.contextSessionId),
           this.renderInlineMetaTile("Prompt", execution.totals.promptTokens.toLocaleString()),
@@ -2008,6 +2082,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             ])
           ])
         : "",
+      this.renderScopedInspectorLogs({
+        runId: execution.id,
+        title: "Run logs",
+        emptyMessage: "No server log entries captured for this execution."
+      }),
       createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
           createElement("div", { className: "min-w-0" }, [
@@ -2042,7 +2121,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   status: readExecutionBadgeStatus(nodeRun.status)
                 }, [formatSelectOptionLabel(nodeRun.status)])
               ]),
-              createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 text-xs text-text-secondary" }, [
+              createElement("div", { className: "mt-3 grid grid-cols-1 gap-2 text-xs text-text-secondary sm:grid-cols-2" }, [
                 createElement("span", {}, [readNodeRunProviderLabel(nodeRun)]),
                 createElement("span", {}, [nodeRun.usage ? `${nodeRun.usage.totalTokens.toLocaleString()} tokens` : "No token data"]),
                 createElement("span", {}, [nodeRun.usage ? formatEuro(nodeRun.usage.estimatedCostEur) : "No EUR data"]),
@@ -2138,7 +2217,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             pulse: liveExecution.status === "running"
           }, [formatSelectOptionLabel(liveExecution.status)])
         ]),
-        createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" }, [
+        createElement("div", { className: "mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4" }, [
           this.renderInlineMetaTile("Nodes", `${completedCount.toString()}/${liveNodeRuns.length.toString()}`),
           this.renderInlineMetaTile("Active", liveExecution.activeNodeId ? nodeLookup.get(liveExecution.activeNodeId)?.label ?? liveExecution.activeNodeId : "Idle"),
           this.renderInlineMetaTile("Run ID", liveExecution.workflowRunId ?? "Pending"),
@@ -2192,6 +2271,11 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
             ])
           ])
         : "",
+      this.renderScopedInspectorLogs({
+        runId: liveExecution.workflowRunId ?? undefined,
+        title: "Live run logs",
+        emptyMessage: "No server log entries captured for this live run yet."
+      }),
       createElement("div", { className: "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3" }, [
         createElement("div", { className: "flex items-center justify-between gap-3" }, [
           createElement("div", { className: "min-w-0" }, [
@@ -2218,7 +2302,7 @@ export class WorkflowsScreen extends Component<ComponentProps, WorkflowsScreenSt
                   pulse: run.status === "running"
                 }, [formatSelectOptionLabel(run.status)])
               ]),
-              createElement("div", { className: "mt-3 grid grid-cols-2 gap-2 text-[11px] text-text-secondary sm:grid-cols-3" }, [
+              createElement("div", { className: "mt-3 grid grid-cols-1 gap-2 text-[11px] text-text-secondary sm:grid-cols-2 xl:grid-cols-3" }, [
                 createElement("span", {}, [run.provider ? formatProviderLabel(run.provider) : readNodeSecondaryText(node)]),
                 createElement("span", {}, [run.usage ? `${run.usage.totalTokens.toLocaleString()} tokens` : "No token data"]),
                 createElement("span", {}, [run.usage ? formatEuro(run.usage.estimatedCostEur) : "No EUR data"]),
