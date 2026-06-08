@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm -w exec concurrently -k -n build,run \"pnpm -C apps/server-api run build:watch\" \"pnpm -C apps/server-api run start:watch\"",
+    "dev": "pnpm -w exec concurrently -k -n build,run \"pnpm -C apps/server-api run build:watch\" \"pnpm -C apps/server-api run start:watch:dev\"",
     "build": "pnpm -w exec tsc -p apps/server-api/tsconfig.build.json",
     "build:watch": "pnpm -w exec tsc -p apps/server-api/tsconfig.build.json --watch",
     "start": "node ../../dist/apps/server-api/src/index.js",
-    "start:watch": "node --watch ../../dist/apps/server-api/src/index.js"
+    "start:watch": "node --watch ../../dist/apps/server-api/src/index.js",
+    "start:watch:dev": "node scripts/start-watch-dev.js"
   }
 }

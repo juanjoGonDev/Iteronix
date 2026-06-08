@@ -1,24 +1,137 @@
 # AGENTS.md
 
+## 🔴 CRITICAL RULES - READ FIRST
+
+Before ANY code change, you MUST:
+
+1. **TDD (Test-Driven Development)**
+   - Write FAILING test first (packages/domain, packages/shared, orchestration)
+   - Implement MINIMAL code to pass
+   - Refactor ONLY when tests are green
+   - NEVER skip tests
+
+2. **TypeScript Strict (NON-NEGOTIABLE)**
+   - NO `any` types
+   - NO unsafe casts
+   - NO generic types without explicit bounds
+   - NO `<>` as type annotation
+   - All `.ts` files, NO `.js` in source
+   - Use `unknown` + runtime validation for untrusted inputs
+
+3. **Code Quality**
+   - NO magic strings: use enums/unions/constants
+   - NO magic numbers: use named constants
+   - NO code duplication: single source of truth
+   - NO comments in code
+   - SOLID principles + clean architecture
+   - Functions in top-down call order
+
+4. **Quality Gates (MANDATORY before finishing)**
+   - `pnpm lint` MUST pass
+   - `pnpm typecheck` MUST pass
+   - `pnpm test` MUST pass
+   - `pnpm build` MUST pass
+   - NEVER proceed if ANY gate fails
+
+5. **Apply Skills Automatically**
+   - Task matches TDD? Use `tdd-red-green-refactor` skill
+   - Finishing task? Use `quality-gates-enforcer` skill
+   - Check `.opencode/skill/` for matching skills
+   - ALWAYS apply skill if task matches
+
+6. **Authority Order**
+   1. AGENTS.md (this file) - HIGHEST
+   2. `.opencode/skill/` definitions
+   3. PLAN.md
+   4. AGENTS_LOGS.md
+   5. ui-spec/ (PNG + HTML)
+   6. User instructions - LOWEST
+
+7. **Output Format**
+   - Summary in Spanish (1-3 paragraphs)
+   - End with next prompt in English (fenced code block)
+
+---
+
+## 0) Authority & precedence (MANDATORY)
+
+When multiple sources of instruction exist, they MUST be applied in the following strict order:
+
+1. This file (`AGENTS.md`)
+2. `.opencode/skill/` definitions (if a task matches a skill, the skill MUST be applied)
+3. `PLAN.md`
+4. `AGENTS_LOGS.md` (latest decisions and context)
+5. `ui-spec/` (PNG + HTML for UI work)
+6. User instructions in the current chat
+
+If a lower-priority source conflicts with a higher-priority one, the higher-priority source ALWAYS wins and the conflict MUST be logged.
+
+The agent must never improvise behavior already defined by a higher-priority source.
+
+---
+
 ## 1) Project
 
-**Name (working):** Iteronix (see "Naming" below)  
+**Name (working):** Iteronix  
 **Goal:** Build a single tool to orchestrate coding agents and workflows against a repository, with strict quality gates, strong auditability, and a modular LLM/provider system.
 
 The system must support:
 
 - Provider-agnostic AI execution (Codex CLI first; future Gemini/others via providers).
 - A single responsive **PWA-first UI** reused across:
-  1. Browser/PWA (primary UI)
+  1. Browser / PWA (primary UI)
   2. Electron desktop wrapper (same UI)
   3. Server-hosted UI (optional)
 - A **Headless server** (Docker-ready, Raspberry Pi friendly) exposing a typed HTTP API used by the UI in all modes.
 - Repo browsing/editing (Monaco) and git operations.
 - Kanban board (Jira-style panels): IDEAS → TODO → IN_PROGRESS → QA → DONE
 - Workflow graph editor (n8n-like) using React Flow.
-- Plugin system (server-side) with permissions (e.g., n8n webhook, Telegram).
+- Plugin system (server-side) with permissions (e.g. n8n webhook, Telegram).
 
-## 2) Non-negotiables
+---
+
+## 2) Skills system (PRIORITY, MANDATORY)
+
+Skills define reusable, repeatable behaviors.
+
+### 2.1 Skills location
+
+Skills are defined under:
+
+.opencode/skill/<skill-name>/SKILL.md
+
+Each skill describes:
+
+- Purpose
+- When to use
+- Inputs
+- Outputs
+- Execution rules
+- Completion criteria
+- Failure modes
+
+### 2.2 Skill precedence rules
+
+- If a task matches a defined skill, the agent MUST apply that skill.
+- The agent MUST NOT re-interpret or partially apply a skill.
+- The agent MUST NOT invent new behavior already covered by a skill.
+- If multiple skills apply, the agent MUST state which one it is applying and why.
+- If a task SHOULD match a skill but does not clearly do so, the ambiguity MUST be logged.
+
+### 2.3 Examples of expected skills
+
+Typical skills in this project include (non-exhaustive):
+
+- UI implementation from PNG + HTML spec
+- Kanban task lifecycle management
+- Safe refactor
+- Code review / QA
+- Auto-loop step execution
+- Context compaction and logging
+
+---
+
+## 3) Non-negotiables
 
 - TypeScript 100% strict everywhere. No `any`, no unsafe casts.
 - No comments in code.
@@ -31,119 +144,134 @@ The system must support:
 - Deterministic builds; minimal dependencies.
 - Always pass quality gates for merged changes.
 
-## 3) Code conventions
+---
 
-- Function order (top-down call order): if `a()` calls `c()` and `c()` calls `b()`, declare `a`, then `c`, then `b`.
-- Avoid giant files; prefer composition and clear boundaries.
-- No magic strings; use enums/unions/constants.
-- Use `unknown` + runtime validation for untrusted inputs (HTTP, provider outputs, plugin payloads).
-- Error handling: use a consistent approach (typed Result or typed exceptions) per package; prefer typed Results in domain.
+## 4) Code conventions
 
-## 4) Architecture (mandatory)
+### 📋 File type policy
 
-### 4.1 Monorepo layout (target)
+- **TypeScript ONLY**: All source files must use `.ts`
+- **NO JavaScript (.js)** in source (except: scripts/, tools/, build/)
+- **Strict typing**: no `any`, no unsafe casts
+- **Consistent imports**: use `.ts` extensions consistently
 
-- `apps/server-api/` — Headless API server (Node.js)
-- `apps/web-ui/` — Single UI (responsive PWA)
-- `apps/desktop-main/` — Electron main wrapper (loads web-ui)
-- `packages/domain/` — Use-cases, entities, ports, policies (no side effects)
-- `packages/adapters/` — Implementations of ports (fs, git, providers, plugins, secrets)
+### General conventions
+
+- Function order is top-down call order:
+  - if `a()` calls `c()` and `c()` calls `b()`, declare `a`, then `c`, then `b`
+- Avoid giant files; prefer composition and clear boundaries
+- No magic strings; use enums/unions/constants
+- Use `unknown` + runtime validation for untrusted inputs
+- Error handling:
+  - Prefer typed Results in domain
+  - Be consistent per package
+
+---
+
+## 5) Architecture (mandatory)
+
+### 5.1 Monorepo layout
+
+- `apps/server-api/` — Headless API server
+- `apps/web-ui/` — Single responsive PWA
+- `apps/desktop-main/` — Electron wrapper
+- `packages/domain/` — Pure logic + ports
+- `packages/adapters/` — Side-effect implementations
 - `packages/shared/` — Shared types, schemas, utilities
-- `docs/` — design notes, API docs if needed
-- `AGENTS_LOGS.md` — append-only context log
+- `docs/` — Documentation
+- `AGENTS_LOGS.md` — Append-only decision log
 
-### 4.2 “Single UI” strategy (mandatory)
+### 5.2 Single UI strategy
 
-- The UI is implemented once as a responsive web app (PWA-first) in `apps/web-ui`.
-- Electron must NOT have a separate UI:
-  - Dev: load web UI dev server URL.
-  - Prod: load built static assets.
-- The UI must not rely on Electron-only APIs.
-- The UI talks to the **server API** in all modes:
-  - Local mode: server runs locally; UI calls localhost.
-  - Remote mode: UI calls configured server URL (behind VPN/Nginx).
+- UI is implemented once in `apps/web-ui`
+- Electron:
+  - Dev: loads web UI dev server
+  - Prod: loads built static assets
+- No Electron-only APIs in UI
+- UI ALWAYS talks to server API
 
-### 4.3 Headless server (mandatory)
+### 5.3 Headless server
 
-- Docker-friendly, Raspberry Pi friendly.
-- Provides typed HTTP API (prefer OpenAPI generation or a strongly-typed contract).
-- Streaming support when providers stream:
-  - Prefer **SSE** (Server-Sent Events); WebSocket optional later.
-- Enforce workspace sandbox:
-  - Restrict filesystem access to a configured project root.
-  - Command execution must be policy-checked (allowlist + approvals).
+- Docker-ready, Raspberry Pi friendly
+- Typed HTTP API
+- Streaming via SSE (preferred)
+- Workspace sandbox:
+  - Filesystem restricted to project root
+  - Command execution policy-checked
 
-### 4.4 Provider-agnostic AI execution (mandatory)
+### 5.4 Provider-agnostic AI execution
 
-Codex is only one provider implementation.
-
-Define a stable contract in domain:
-
-- `LLMProviderPort` with:
-  - `listModels()`
-  - `run(request)` returning either:
-    - `AsyncIterable<LLMEvent>` (streaming)
-    - or `LLMResponse` (buffered)
-  - `capabilities` (streaming, jsonSchemaEnforcement, maxContext, tokenUsage, tool/function calling, etc.)
-  - `estimateUsage()` if available
-
-Provider registry (plugin-like):
-
-- Provider must declare:
-  - `id`, `displayName`, `type` (cli|api|local)
+- Codex is only one provider
+- Define `LLMProviderPort` in domain with:
+  - model listing
+  - run (streaming or buffered)
   - capabilities
-  - models (or a way to fetch models)
-  - auth requirements (none|apiKey|oauth|custom)
-  - `configurationSchema` (JSON schema) for provider settings
-- Provider settings stored per project + per profile.
+  - usage estimation (if available)
+- Providers declare:
+  - id, displayName, type
+  - capabilities
+  - auth requirements
+  - configuration schema (JSON schema)
+- Settings stored per project/profile
+- Schema enforcement via Ajv when not guaranteed by provider
 
-MVP provider:
+### 5.5 Git (server-first)
 
-- `codex-cli` provider via spawn adapter.
-- Treat schema enforcement as supported only if truly guaranteed; otherwise enforce locally with Ajv + retry.
+- Native `git` CLI via adapter
+- Expose status/diff/commit via API
 
-### 4.5 Git (mandatory, server-first)
+---
 
-- Git adapter uses native `git` CLI spawn by default.
-- Expose status/diff/commit via server API.
+## 6) Security & secrets
 
-## 5) Security & secrets (mandatory)
+- Never store secrets in plain text
+- Desktop: OS keychain
+- Server: env vars or secret adapter
+- API auth required:
+  - MVP: static bearer token
+- Plugins must declare permissions
 
-- Never store secrets in plain text.
-- Desktop secrets: OS keychain adapter.
-- Server secrets: env vars or pluggable secret adapter.
-- API auth required when exposed over network:
-  - MVP: static token via header (e.g., `Authorization: Bearer <token>`).
-- Plugins must declare permissions; the server enforces them.
+---
 
-## 6) Kanban board semantics (mandatory)
+## 7) Kanban board semantics
 
 Columns: `IDEAS` → `TODO` → `IN_PROGRESS` → `QA` → `DONE`
 
 Rules:
 
-- Only pull from TODO to IN_PROGRESS if acceptance criteria are clear.
-- Move to QA only if required quality gates pass.
-- QA pass → DONE, QA fail → back to IN_PROGRESS with a concrete failure note.
-- Tasks can be assigned to an agent profile:
-  - Backend, Frontend, DevOps, Product Manager.
+- Pull to IN_PROGRESS only with clear acceptance criteria
+- Move to QA only if gates pass
+- QA fail returns to IN_PROGRESS with concrete reason
+- Tasks may be assigned to agent profiles:
+  - Backend, Frontend, DevOps, Product Manager
 
-## 7) Workflow graph editor (mandatory, later milestone)
+---
 
-- Use React Flow in web UI.
-- Nodes (MVP set): Prompt, Run Provider, Validate JSON, Run Gates, Git Commit, Notify/Webhook.
+## 8) Workflow graph editor (later milestone)
 
-## 8) Plugins (mandatory, later milestone)
+- Use React Flow
+- Nodes (MVP):
+  - Prompt
+  - Run Provider
+  - Validate JSON
+  - Run Gates
+  - Git Commit
+  - Notify/Webhook
 
-- Server-side plugin system:
-  - Manifest + permission model
-  - Loader
-  - Example plugin: webhook notifier (n8n integration)
-- UI may expose plugin configuration but execution is server-side.
+---
 
-## 9) Quality gates (mandatory)
+## 9) Plugins (later milestone)
 
-Run the minimum necessary gates per change, but never skip typecheck for TS changes:
+- Server-side only
+- Manifest + permission model
+- Loader
+- Example: webhook notifier (n8n)
+
+---
+
+## 10) Quality gates (mandatory)
+
+Minimum required gates per change:
 
 - `pnpm lint`
 - `pnpm typecheck`
@@ -152,202 +280,172 @@ Run the minimum necessary gates per change, but never skip typecheck for TS chan
 
 Never proceed if gates fail.
 
-## 10) Work protocol (mandatory)
+---
 
-- Always read `AGENTS.md`, `PLAN.md`, and the latest entries in `AGENTS_LOGS.md` before starting.
-- Update `PLAN.md` checkboxes as tasks complete.
-- Append a new entry to `AGENTS_LOGS.md` after each meaningful step/decision.
-- Prefer small, reviewable commits with Conventional Commits:
-  - `feat: ...`, `fix: ...`, `chore: ...`, `refactor: ...`, `test: ...`
+## 11) Work protocol
 
-## Agent output & next prompt contract (mandatory)
+- Always read:
+  - `AGENTS.md`
+  - `PLAN.md`
+  - latest `AGENTS_LOGS.md`
+- Update `PLAN.md` checkboxes
+- Append to `AGENTS_LOGS.md` after each meaningful step
+- Prefer small Conventional Commits
 
-Each agent iteration MUST end with a structured output that follows these rules.
+---
+
+## 12) Agent output & next prompt contract
 
 ### Summary
 
-- MUST be written in Spanish.
-- MUST be concise (1–3 paragraphs).
-- MUST describe what was done and why, not what will be done next.
-- At the END of the summary, include a fenced code block containing the next prompt in English.
+- Written in Spanish
+- 1–3 concise paragraphs
+- Describe what was done and why
+- END with a fenced code block containing the next prompt in English
 
-### Next prompt (`nextPrompt`)
+### Next prompt
 
-The next prompt is an execution instruction, not a note.
+- Written in English
+- Specific, scoped, actionable
+- References exact app/package and responsibility
+- Includes acceptance criteria
+- If undefined, set to `null` and log ambiguity
+
+---
+
+## 13) Test-Driven Development (mandatory for core)
+
+TDD REQUIRED for:
+
+- `packages/domain`
+- `packages/shared`
+- Orchestration, auto-loop, policy logic
 
 Rules:
 
-- MUST be written in English.
-- MUST be specific, scoped, and actionable.
-- MUST reference:
-  - the exact app or package to modify (e.g. `apps/server-api`)
-  - the responsibility (API, domain, adapter, UI, etc.)
-- MUST include clear acceptance criteria.
-- MUST respect the current scope defined in PLAN.md.
-- MUST NOT be vague or generic.
+1. Failing test first
+2. Minimal implementation
+3. Refactor with green tests
 
-Forbidden examples:
-
-- "Implement provider endpoints"
-- "Continue with server API"
-- "Add provider settings"
-
-Good examples:
-
-- "Implement provider listing and selection endpoints in apps/server-api, backed by the provider registry in packages/domain, with input validation and tests."
-
-If a precise next step cannot be defined:
-
-- Set the next prompt to `null`
-- Mark the iteration as requiring user input
-- Log the ambiguity in `AGENTS_LOGS.md`
-
-This contract is non-optional.
-
-## Test-Driven Development (mandatory for core)
-
-TDD is REQUIRED for all core logic:
-
-- Domain layer (`packages/domain`)
-- Shared logic (`packages/shared`)
-- Orchestration, auto-loop, policies, and decision logic
-
-TDD rules:
-
-1. Write a failing test that describes the expected behavior.
-2. Implement the minimal code to make the test pass.
-3. Refactor while keeping tests green.
-
-Scope exceptions:
+Exceptions:
 
 - UI components
-- Electron main wiring
-- Thin adapters that mostly delegate to external tools (git, fs, process spawn)
+- Electron wiring
+- Thin adapters
 
-Even when TDD is not mandatory, tests MUST be added for non-trivial logic.
+Never weaken or remove tests.
 
-The agent must:
+---
 
-- Explicitly indicate in AGENTS_LOGS.md when TDD is applied.
-- Never remove or weaken tests to make code pass.
+## 14) Chat reset & context recovery
 
-## 11) Chat reset & context recovery policy (mandatory)
+- Assume chat memory is unreliable
+- Repo files are authoritative
 
-When a new chat/session starts:
+On every new session:
 
-- Assume chat memory is empty/unreliable.
-- Repository files are the only reliable context.
+1. Read AGENTS.md
+2. Read PLAN.md
+3. Read latest AGENTS_LOGS.md
+4. Infer state only from repo
 
-Mandatory steps at the beginning of every new session:
+---
 
-1. Read `AGENTS.md` entirely.
-2. Read `PLAN.md`.
-3. Read the latest entries of `AGENTS_LOGS.md` (most recent first).
-4. Infer current project progress only from those files.
-5. Do not ask the user for context that can be derived from those files.
-
-## 12) AGENTS_LOGS.md format (append-only, mandatory)
-
-Each entry MUST follow:
+## 15) AGENTS_LOGS.md format
 
 ### YYYY-MM-DD HH:mm (Europe/Madrid) — <Area>
 
-- Summary: <1-3 lines>
-- Decisions:
-  - <decision 1>
-  - <decision 2>
-- Changes:
-  - <files/areas touched>
-- Commands:
-  - `<command>`
-- Issues/Risks:
-  - <risk or blocker>
-- Next:
-  - <next concrete step>
+- Summary
+- Decisions
+- Changes
+- Commands
+- Issues/Risks
+- Next
 
-Keep logs concise. Do not paste large outputs.
+Concise. No large outputs.
 
-## Repository hygiene
+---
 
-- `.gitignore` must be created before the first commit.
-- No build artifacts, secrets, or local environment files may ever be committed.
+## 16) Repository hygiene
 
-## UI spec (PNG + HTML) is the source of truth (mandatory)
+- `.gitignore` before first commit
+- Never commit artifacts or secrets
 
-For each UI screen, store under `ui-spec/screens/<screen>/`:
+---
+
+## 17) UI spec (PNG + HTML) source of truth
+
+For each screen under `ui-spec/screens/<screen>/`:
 
 - `reference.png` (visual truth)
-- `spec.html` (structure/layout truth)
+- `spec.html` (structure truth)
 
 Rules:
 
-- The implementation MUST match the PNG visually and the HTML structure conceptually.
-- The HTML MUST NOT be copied as a full-page blob into production code.
-- The agent MUST translate the spec into reusable components (Angular-style composition).
-- If the spec is ambiguous, do not guess: log and request clarification.
+- Match PNG visually and HTML conceptually
+- Never copy full-page HTML
+- Component-based translation
+- Log ambiguities
 
-## UI continuity & completion contract (mandatory)
+---
 
-The UI must be consistent across screens and must never ship partially working interactions.
+## 18) UI continuity & completion contract
 
-### Continuity rules (global invariants)
+### Global invariants
 
-These must remain consistent across ALL screens unless explicitly changed by an approved UI spec update:
+- Sidebar menu order, grouping, icons
+- Header structure
+- Single icon set
+- Shared tokens only
+- Same layout shell everywhere
 
-- Navigation:
+### No dead UI
 
-  - Sidebar menu items, order, grouping, icons, and labels are global invariants.
-  - Header layout (left/center/right areas), global actions, and status indicators are global invariants.
-  - If a screen spec contradicts these invariants, the invariants win and the mismatch must be logged.
+- Clickable means functional OR explicitly disabled with explanation
 
-- Visual system:
+### Spec reconciliation
 
-  - Typography scale, spacing scale, colors/tokens, border radius, shadows, and icon style are global invariants.
-  - Do not introduce new icon styles or mixed icon sets. Pick ONE icon set and use it everywhere.
-  - No per-screen “creative” styling. Everything must come from shared primitives and tokens.
+- Invariants win
+- Log discrepancies
 
-- Layout structure:
-  - All screens must use the same shell: header + sidebar + main content + optional right panel.
-  - Do not reorder layout regions per screen.
+### Decision protocol
 
-### Completion rules (no dead UI)
-
-The agent MUST NOT leave any of the following in a broken or misleading state:
-
-- Buttons that do nothing (unless explicitly disabled with a tooltip explaining why).
-- Menu items that look clickable but do not navigate.
-- Dropdowns/popovers that do not open or do not close properly.
-- Tabs that do not switch views.
-- Links that are placeholders with no behavior.
-
-If a feature is not implemented yet (out of scope or missing backend):
-
-- The UI MUST present it as disabled with:
-  - disabled styling
-  - tooltip or inline note: "Not available yet"
-- The action must NOT appear functional.
-
-### Spec reconciliation (when Stitch is inconsistent)
-
-The Stitch spec (PNG + HTML) is the per-screen visual reference, but global continuity must be maintained.
-
-When the spec is inconsistent across screens:
-
-1. Prefer global invariants (navigation order, icon set, shell layout).
-2. Match screen-specific content within that consistent shell.
-3. Log the discrepancy and the chosen resolution in AGENTS_LOGS.md.
-
-### Decision protocol (required)
-
-When choosing between alternatives (e.g., missing behavior, ambiguous component):
-
-- Decide once, document it, and reuse that decision everywhere.
-- Add or update a single shared primitive/component rather than per-screen hacks.
+- Decide once
+- Reuse everywhere
+- Update shared primitives
 
 ### Done means done
 
-A UI change is considered complete only if:
+- End-to-end interactions
+- No inconsistencies
+- Gates pass
 
-- The screen works end-to-end for its intended interactions (navigation, open/close, submit/cancel).
-- No new inconsistencies in menu/header/iconography are introduced.
-- All quality gates pass.
+---
+
+## 19) 🤖 AI Agent Integration with Stagehand
+
+### UI testing & screenshots
+
+- Use `@browserbasehq/stagehand`
+- Screenshots before/after interactions
+- Store under `apps/web-ui/screenshots/`
+- Format: `[timestamp]_[action]_[screen].png`
+- `screenshots/` gitignored, keep `.gitkeep`
+
+### Core actions
+
+- Navigate routes
+- Click elements
+- Fill forms
+- Scroll
+- Extract text
+- Wait for visibility
+- Capture screenshots
+
+### Best practices
+
+- Screenshots first
+- Descriptive names
+- `data-testid` for critical elements
+- Validate outcomes
+- Document failures

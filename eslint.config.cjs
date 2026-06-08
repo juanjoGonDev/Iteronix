@@ -10,11 +10,11 @@ module.exports = [
         project: "./tsconfig.eslint.json",
         tsconfigRootDir: __dirname,
         ecmaVersion: "latest",
-        sourceType: "module"
-      }
+        sourceType: "module",
+      },
     },
     plugins: {
-      "@typescript-eslint": tsPlugin
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
@@ -22,7 +22,7 @@ module.exports = [
       "@typescript-eslint/no-unsafe-call": "error",
       "@typescript-eslint/no-unsafe-member-access": "error",
       "@typescript-eslint/no-unsafe-return": "error",
-      "@typescript-eslint/no-unsafe-argument": "error"
-    }
-  }
+      "@typescript-eslint/no-unsafe-argument": "error",
+    },
+  },
 ];

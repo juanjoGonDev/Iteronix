@@ -1,9 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import {
+  AiField,
   BearerPrefix,
   BearerScheme,
   ErrorMessage,
   FileField,
+  FileSearchField,
+  FileMoveField,
   HeaderName,
   HttpMethod,
   HttpStatus,
@@ -22,10 +27,45 @@ import {
 } from "./constants";
 import { loadConfig, type ServerConfig } from "./config";
 import {
+  createDirectory,
+  deleteFile,
   listFileTree,
+  moveFile,
   readFileContent,
+  searchFiles,
   writeFileContent
 } from "./files";
+import {
+  executeGitBranchCheckout,
+  executeGitBranchCreate,
+  executeGitBranchList,
+  executeGitBranchPublish,
+  executeGitBranchPush,
+  GitPathOperationKind,
+  executeGitPathOperation,
+  executeGitCommit,
+  executeGitDiff,
+  executeGitStatus,
+  parseGitBranchMutationRequest,
+  parseGitPathRequest,
+  parseGitCommitRequest,
+  parseGitDiffRequest,
+  parseGitStatusRequest
+} from "./git";
+import {
+  createDefaultQualityGateCatalog,
+  createQualityGateEventHub,
+  listQualityGateEvents,
+  listQualityGateRuns,
+  parseQualityGateEventsRequest,
+  parseQualityGateListRequest,
+  parseQualityGateRunRequest,
+  parseQualityGateStreamRequest,
+  QualityGateEventName,
+  startQualityGateRun,
+  type QualityGateCatalog,
+  type QualityGateEventHub
+} from "./quality-gates";
 import {
   createProjectStore,
   ProjectStoreErrorCode,
@@ -41,13 +81,16 @@ import {
   type HistoryStoreError,
   type HistoryStore
 } from "./history";
+import { LogLevel as LogLevelValues, type LogLevel } from "./logs";
 import {
-  createLogsStore,
-  LogLevel,
-  LogsStoreErrorCode,
-  type LogsStoreError,
-  type LogsStore
-} from "./logs";
+  LogsStoreErrorCode as DomainLogsStoreErrorCode,
+  type LogsStoreError as DomainLogsStoreError
+} from "../../../packages/domain/src/ports/logs-store";
+import {
+  createServerLogsStore,
+  type ServerLogEntry,
+  type ServerLogsStore
+} from "./server-logs-store";
 import {
   createProviderStore,
   ProviderStoreErrorCode,
@@ -55,7 +98,12 @@ import {
   type ProviderStoreError,
   type ProviderStore
 } from "./providers";
-import { createWorkspacePolicy, type WorkspacePolicy } from "./sandbox";
+import {
+  createCommandPolicy,
+  createWorkspacePolicy,
+  type CommandPolicy,
+  type WorkspacePolicy
+} from "./sandbox";
 import {
   createKanbanStore,
   KanbanStoreErrorCode,
@@ -75,18 +123,131 @@ import {
 } from "./sessions";
 import { createSseStream } from "./sse";
 import { err, ok, ResultType, type Result } from "./result";
+import {
+  createAiWorkbenchService,
+  type AiWorkbenchService
+} from "./ai-workbench";
+import {
+  createWorkflowCatalogStore,
+  type WorkflowCatalogStore
+} from "../../../packages/agents/src/workflow-catalog";
+import {
+  createCommandRunnerAdapter,
+  type CommandRunner
+} from "../../../packages/adapters/src/command-runner/command-runner";
+import {
+  createGitCliAdapter,
+  type GitRepository
+} from "../../../packages/adapters/src/git/git-adapter";
+import {
+  executeWorkflowAssetDelete,
+  executeWorkflowAssetGet,
+  executeWorkflowAssetList,
+  executeWorkflowAssetUpsert,
+  executeWorkflowAssetUsageList,
+  executeWorkflowDefinitionDelete,
+  executeWorkflowDefinitionGet,
+  executeWorkflowDefinitionList,
+  executeWorkflowDefinitionUpsert,
+  executeWorkflowExecutionDelete,
+  executeWorkflowExecutionGet,
+  executeWorkflowExecutionList,
+  executeWorkflowExecutionRun,
+  executeWorkflowNodeProviderTest,
+  parseWorkflowAssetDeleteRequest,
+  parseWorkflowAssetGetRequest,
+  parseWorkflowAssetListRequest,
+  parseWorkflowAssetUpsertRequest,
+  parseWorkflowDefinitionDeleteRequest,
+  parseWorkflowDefinitionGetRequest,
+  parseWorkflowDefinitionListRequest,
+  parseWorkflowDefinitionUpsertRequest,
+  parseWorkflowAssetUsageListRequest,
+  parseWorkflowExecutionDeleteRequest,
+  parseWorkflowExecutionGetRequest,
+  parseWorkflowExecutionListRequest,
+  parseWorkflowExecutionRunRequest,
+  parseWorkflowNodeProviderTestRequest
+} from "./workflows";
+import { createWorkflowRuntimeService, type WorkflowRuntimeService } from "./workflow-runtime";
+import { WorkflowRuntimeEventType, type WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
+import {
+  createFileWorkspaceStateStore,
+  createWorkspaceStateFromStores,
+  parseWorkspaceState,
+  type WorkspaceSettingsSnapshot,
+  type WorkspaceState,
+  type WorkspaceStateStore,
+  type WorkspaceWorkbenchHistory
+} from "./workspace-state";
+import {
+  installConsoleForwarder,
+  type SharedLogEntry
+} from "../../web-ui/src/shared/logger-core";
 
-export const startServer = (): void => {
+const responseErrorLogMap = new WeakMap<ServerResponse, string>();
+
+export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
-  const projectStore = createProjectStore();
+  const logsStore = await createServerLogsStore(config.logDir, config.logMaxEntries);
+  installServerConsoleForwarder(logsStore);
+
+  const workspaceStateStore = createFileWorkspaceStateStore(config.workspaceStateFile);
+  const initialWorkspaceState = await workspaceStateStore.load();
+  const projectStore = createProjectStore({
+    projects: initialWorkspaceState.projects,
+    activeProjectId: initialWorkspaceState.activeProjectId
+  });
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
-  const historyStore = createHistoryStore();
-  const logsStore = createLogsStore();
-  const providerStore = createProviderStore();
-  const kanbanStore = createKanbanStore();
+  let persistHistoryStoreChange = (): void => {
+    return;
+  };
+  const historyStore = createHistoryStore(initialWorkspaceState.qualityHistory, () => {
+    persistHistoryStoreChange();
+  });
+  const qualityGateEventHub = createQualityGateEventHub();
+  const providerStore = createProviderStore({
+    selections: initialWorkspaceState.providerSelections,
+    settings: initialWorkspaceState.providerSettings
+  });
+  const kanbanStore = createKanbanStore(initialWorkspaceState.kanban);
+  const workflowCatalog = createWorkflowCatalogStore(initialWorkspaceState.workflows);
+  const workspacePersistence = createWorkspacePersistence({
+    stateStore: workspaceStateStore,
+    initialState: initialWorkspaceState,
+    projectStore,
+    providerStore,
+    kanbanStore,
+    historyStore,
+    workflowCatalog
+  });
+  let historySaveQueue = Promise.resolve();
+  persistHistoryStoreChange = () => {
+    historySaveQueue = historySaveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await workspacePersistence.saveCurrent();
+      });
+    void historySaveQueue.catch(() => undefined);
+  };
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
+  const commandPolicy = createCommandPolicy(
+    config.commandAllowlist,
+    workspacePolicy
+  );
+  const aiWorkbench = await createAiWorkbenchService({
+    workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
+  });
+  const workflowRuntime = createWorkflowRuntimeService({
+    readWorkspaceState: () => workspacePersistence.read()
+  });
+  const commandRunner = createCommandRunnerAdapter();
+  const qualityGateCatalog = createDefaultQualityGateCatalog();
+  const git = createGitCliAdapter();
   const server = createServer((req, res) => {
+    const startedAt = Date.now();
+    installRequestLogLifecycle(req, res, startedAt);
     void handleRequest(
       req,
       res,
@@ -95,14 +256,113 @@ export const startServer = (): void => {
       sessionStore,
       sessionEvents,
       historyStore,
+      qualityGateEventHub,
       logsStore,
       providerStore,
       kanbanStore,
-      workspacePolicy
-    );
+      workspacePolicy,
+      commandPolicy,
+      commandRunner,
+      qualityGateCatalog,
+      aiWorkbench,
+      workflowRuntime,
+      git,
+      workspacePersistence,
+      workflowCatalog
+    ).catch((error: unknown) => {
+      console.error("server.unhandled", req.method ?? "UNKNOWN", req.url ?? "", error);
+      if (!res.writableEnded) {
+        respondError(res, {
+          status: HttpStatus.InternalServerError,
+          message: ErrorMessage.InternalServerError
+        });
+      }
+    });
   });
 
   server.listen(config.port, config.host);
+  console.info("server.started", {
+    host: config.host,
+    port: config.port,
+    logDir: config.logDir,
+    logMaxEntries: config.logMaxEntries
+  });
+};
+
+type WorkspacePersistence = {
+  read: () => WorkspaceState;
+  saveCurrent: () => Promise<WorkspaceState>;
+  updateUiState: (input: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  }) => Promise<WorkspaceState>;
+};
+
+const createWorkspacePersistence = (input: {
+  stateStore: WorkspaceStateStore;
+  initialState: WorkspaceState;
+  projectStore: ProjectStore;
+  providerStore: ProviderStore;
+  kanbanStore: KanbanStore;
+  historyStore: HistoryStore;
+  workflowCatalog: WorkflowCatalogStore;
+}): WorkspacePersistence => {
+  let state = input.initialState;
+
+  const buildState = (overrides: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+  } = {}): WorkspaceState =>
+    createWorkspaceStateFromStores({
+      projectSnapshot: input.projectStore.snapshot(),
+      providerSnapshot: input.providerStore.snapshot(),
+      kanbanSnapshot: input.kanbanStore.snapshot(),
+      historySnapshot: input.historyStore.snapshot(),
+      workflowSnapshot: input.workflowCatalog.snapshot(),
+      settings: overrides.settings ?? state.settings,
+      workbenchHistory: overrides.workbenchHistory ?? state.workbenchHistory,
+      previousState: state
+    });
+
+  const saveCurrent = async (): Promise<WorkspaceState> => {
+    state = await input.stateStore.save(buildState());
+    return state;
+  };
+
+  const updateUiState = async (update: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  }): Promise<WorkspaceState> => {
+    if (Object.hasOwn(update, "activeProjectId")) {
+      const activeResult = input.projectStore.setActive(update.activeProjectId ?? null);
+      if (activeResult.type === ResultType.Err) {
+        throw new Error(activeResult.error.message);
+      }
+    }
+
+    const overrides: {
+      settings?: WorkspaceSettingsSnapshot;
+      workbenchHistory?: WorkspaceWorkbenchHistory;
+    } = {};
+    if (update.settings !== undefined) {
+      overrides.settings = update.settings;
+    }
+
+    if (update.workbenchHistory !== undefined) {
+      overrides.workbenchHistory = update.workbenchHistory;
+    }
+
+    state = await input.stateStore.save(buildState(overrides));
+    return state;
+  };
+
+  return {
+    read: () => state,
+    saveCurrent,
+    updateUiState
+  };
 };
 
 const handleRequest = async (
@@ -113,10 +373,19 @@ const handleRequest = async (
   sessionStore: SessionStore,
   sessionEvents: SessionEventHub,
   historyStore: HistoryStore,
-  logsStore: LogsStore,
+  qualityGateEventHub: QualityGateEventHub,
+  logsStore: ServerLogsStore,
   providerStore: ProviderStore,
   kanbanStore: KanbanStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  commandRunner: CommandRunner,
+  qualityGateCatalog: QualityGateCatalog,
+  aiWorkbench: AiWorkbenchService,
+  workflowRuntime: WorkflowRuntimeService,
+  git: GitRepository,
+  workspacePersistence: WorkspacePersistence,
+  workflowCatalog: WorkflowCatalogStore
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -125,6 +394,12 @@ const handleRequest = async (
     });
     return;
   }
+
+  if (handleCorsPreflight(req, res)) {
+    return;
+  }
+
+  applyCorsHeaders(req, res);
 
   if (!isAuthorized(req, config.authToken)) {
     respondUnauthorized(res);
@@ -135,13 +410,33 @@ const handleRequest = async (
   const path = url.pathname;
   const method = req.method;
 
+  if (path === RoutePath.WorkspaceStateGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkspaceStateGet(res, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkspaceStateUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkspaceStateUpdate(req, res, workspacePersistence);
+    return;
+  }
+
   if (path === RoutePath.ProjectsCreate) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleCreateProject(req, res, projectStore, workspacePolicy);
+    await handleCreateProject(req, res, projectStore, workspacePolicy, workspacePersistence);
     return;
   }
 
@@ -151,7 +446,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleOpenProject(req, res, projectStore, workspacePolicy);
+    await handleOpenProject(req, res, projectStore, workspacePolicy, workspacePersistence);
     return;
   }
 
@@ -175,6 +470,46 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.FilesSearch) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileSearch(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileDelete(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileCreate(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesMove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileMove(req, res, projectStore);
+    return;
+  }
+
   if (path === RoutePath.FilesWrite) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -182,6 +517,36 @@ const handleRequest = async (
     }
 
     await handleFileWrite(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileDelete(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileCreate(req, res, projectStore);
+    return;
+  }
+
+  if (path === RoutePath.FilesMove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleFileMove(req, res, projectStore);
     return;
   }
 
@@ -245,6 +610,26 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.LogsAppend) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleLogsAppend(req, res, logsStore);
+    return;
+  }
+
+  if (path === RoutePath.LogsReset) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleLogsReset(res, logsStore);
+    return;
+  }
+
   if (path === RoutePath.ProvidersList) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -261,7 +646,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleProvidersSelect(req, res, projectStore, providerStore);
+    await handleProvidersSelect(req, res, projectStore, providerStore, workspacePersistence);
     return;
   }
 
@@ -271,7 +656,426 @@ const handleRequest = async (
       return;
     }
 
-    await handleProviderSettingsUpdate(req, res, projectStore, providerStore);
+    await handleProviderSettingsUpdate(req, res, projectStore, providerStore, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionList(req, res, projectStore, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionUpsert(
+      req,
+      res,
+      projectStore,
+      workflowCatalog,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetList(req, res, projectStore, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetUpsert(
+      req,
+      res,
+      projectStore,
+      workflowCatalog,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowAssetsUsage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowAssetUsageList(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionList(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionDelete(req, res, workflowCatalog, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionRun(
+      req,
+      res,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsStream) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionStream(req, res, url, workflowCatalog, workflowRuntime, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowProvidersTest) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowNodeProviderTest(
+      req,
+      res,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitStatus) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitStatusRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitDiff) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitDiffRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitStage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Stage
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitUnstage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Unstage
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitRevert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitPathOperationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      GitPathOperationKind.Revert
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitCommit) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitCommitRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchListRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchMutationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "create"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesCheckout) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchMutationRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "checkout"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesPush) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchRemoteRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "push"
+    );
+    return;
+  }
+
+  if (path === RoutePath.GitBranchesPublish) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleGitBranchRemoteRequest(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      commandPolicy,
+      git,
+      "publish"
+    );
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateRunRequest(
+      req,
+      res,
+      projectStore,
+      historyStore,
+      workspacePolicy,
+      commandPolicy,
+      commandRunner,
+      qualityGateEventHub,
+      qualityGateCatalog,
+      workspacePersistence
+    );
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateListRequest(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesEvents) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleQualityGateEventsRequest(req, res, historyStore);
+    return;
+  }
+
+  if (path === RoutePath.QualityGatesStream) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    handleQualityGateStreamRequest(req, res, url, historyStore, qualityGateEventHub);
     return;
   }
 
@@ -281,7 +1085,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -301,7 +1105,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -311,7 +1115,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -321,7 +1125,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -341,7 +1145,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -351,7 +1155,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -361,7 +1165,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -381,7 +1185,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
     return;
   }
 
@@ -391,7 +1195,47 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore);
+    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.AiSkillsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiSkillRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiWorkflowsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiWorkflowRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiEvalsRun) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiEvalRun(req, res, aiWorkbench);
+    return;
+  }
+
+  if (path === RoutePath.AiMemoryQuery) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleAiMemoryQuery(req, res, aiWorkbench);
     return;
   }
 
@@ -405,7 +1249,8 @@ const handleCreateProject = async (
   req: IncomingMessage,
   res: ServerResponse,
   store: ProjectStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -419,7 +1264,7 @@ const handleCreateProject = async (
     return;
   }
 
-  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -434,6 +1279,7 @@ const handleCreateProject = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     project: created.value
   });
@@ -443,7 +1289,8 @@ const handleOpenProject = async (
   req: IncomingMessage,
   res: ServerResponse,
   store: ProjectStore,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -457,7 +1304,7 @@ const handleOpenProject = async (
     return;
   }
 
-  const rootResult = workspacePolicy.assertPathAllowed(parsed.value.rootPath);
+  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -474,9 +1321,137 @@ const handleOpenProject = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     project: opened.value
   });
+};
+
+const handleWorkspaceStateGet = async (
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  respondJson(res, HttpStatus.Ok, {
+    state: workspacePersistence.read()
+  });
+};
+
+const handleWorkspaceStateUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkspaceStateUpdateRequest(
+    bodyResult.value,
+    workspacePersistence.read()
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const state = await workspacePersistence.updateUiState(parsed.value);
+    respondJson(res, HttpStatus.Ok, {
+      state
+    });
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InvalidBody
+    });
+  }
+};
+
+export const parseWorkspaceStateUpdateRequest = (
+  value: unknown,
+  currentState: WorkspaceState
+): Result<
+  {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const parsed = parseWorkspaceStateUpdateValue(value, currentState);
+  if (parsed.type === ResultType.Err) {
+    return parsed;
+  }
+
+  const update: {
+    settings?: WorkspaceSettingsSnapshot;
+    workbenchHistory?: WorkspaceWorkbenchHistory;
+    activeProjectId?: string | null;
+  } = {};
+
+  if (Object.hasOwn(value, "settings")) {
+    update.settings = parsed.value.settings;
+  }
+
+  if (Object.hasOwn(value, "workbenchHistory")) {
+    update.workbenchHistory = parsed.value.workbenchHistory;
+  }
+
+  if (Object.hasOwn(value, "activeProjectId")) {
+    update.activeProjectId = parsed.value.activeProjectId;
+  }
+
+  return ok(update);
+};
+
+const parseWorkspaceStateUpdateValue = (
+  value: Record<string, unknown>,
+  currentState: WorkspaceState
+): Result<WorkspaceState, ApiError> => {
+  try {
+    return ok(parseWorkspaceState({
+      ...currentState,
+      ...(Object.hasOwn(value, "settings") ? { settings: value["settings"] } : {}),
+      ...(Object.hasOwn(value, "workbenchHistory") ? { workbenchHistory: value["workbenchHistory"] } : {}),
+      ...(Object.hasOwn(value, "activeProjectId") ? { activeProjectId: value["activeProjectId"] } : {})
+    }));
+  } catch {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+};
+
+const assertProjectRootIfPresent = (
+  rootPath: string | null,
+  workspacePolicy: WorkspacePolicy
+): Result<string | null, ApiError> => {
+  if (rootPath === null) {
+    return ok(null);
+  }
+
+  return workspacePolicy.assertPathAllowed(rootPath);
+};
+
+const readProjectFilesystemRoot = (project: Project): Result<string, ApiError> => {
+  if (project.rootPath === null) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingRootPath
+    });
+  }
+
+  return ok(project.rootPath);
 };
 
 const handleFileTree = async (
@@ -501,9 +1476,14 @@ const handleFileTree = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const treeResult = await listFileTree(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path
   );
   if (treeResult.type === ResultType.Err) {
@@ -538,10 +1518,23 @@ const handleFileRead = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const readResult = await readFileContent(
-    projectResult.value.rootPath,
-    parsed.value.path
+    rootPath.value,
+    parsed.value.path,
+    {
+      ...(parsed.value.startLine !== undefined
+        ? { startLine: parsed.value.startLine }
+        : {}),
+      ...(parsed.value.lineCount !== undefined
+        ? { lineCount: parsed.value.lineCount }
+        : {})
+    }
   );
   if (readResult.type === ResultType.Err) {
     respondError(res, readResult.error);
@@ -549,7 +1542,193 @@ const handleFileRead = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    content: readResult.value.content
+    content: readResult.value.content,
+    startLine: readResult.value.startLine,
+    endLine: readResult.value.endLine,
+    totalLines: readResult.value.totalLines,
+    truncated: readResult.value.truncated
+  });
+};
+
+const handleFileSearch = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileSearchRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
+
+  const searchResult = await searchFiles(rootPath.value, {
+    query: parsed.value.query,
+    isRegex: parsed.value.isRegex,
+    matchCase: parsed.value.matchCase,
+    wholeWord: parsed.value.wholeWord
+  });
+  if (searchResult.type === ResultType.Err) {
+    respondError(res, searchResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    results: searchResult.value
+  });
+};
+
+const handleFileDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
+
+  const deleteResult = await deleteFile(
+    rootPath.value,
+    parsed.value.path
+  );
+  if (deleteResult.type === ResultType.Err) {
+    respondError(res, deleteResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: deleteResult.value.success
+  });
+};
+
+const handleFileCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
+
+  const createResult = await createDirectory(
+    rootPath.value,
+    dirname(parsed.value.path)
+  );
+  if (createResult.type === ResultType.Err) {
+    respondError(res, createResult.error);
+    return;
+  }
+
+  const writeResult = await writeFileContent(
+    rootPath.value,
+    parsed.value.path,
+    parsed.value.content
+  );
+  if (writeResult.type === ResultType.Err) {
+    respondError(res, writeResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    path: parsed.value.path,
+    bytesWritten: writeResult.value.bytesWritten
+  });
+};
+
+const handleFileMove = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: ProjectStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseFileMoveRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const projectResult = getProjectById(store, parsed.value.projectId);
+  if (projectResult.type === ResultType.Err) {
+    respondError(res, projectResult.error);
+    return;
+  }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
+
+  const moveResult = await moveFile(
+    rootPath.value,
+    parsed.value.sourcePath,
+    parsed.value.targetPath
+  );
+  if (moveResult.type === ResultType.Err) {
+    respondError(res, moveResult.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: moveResult.value.success
   });
 };
 
@@ -575,9 +1754,14 @@ const handleFileWrite = async (
     respondError(res, projectResult.error);
     return;
   }
+  const rootPath = readProjectFilesystemRoot(projectResult.value);
+  if (rootPath.type === ResultType.Err) {
+    respondError(res, rootPath.error);
+    return;
+  }
 
   const writeResult = await writeFileContent(
-    projectResult.value.rootPath,
+    rootPath.value,
     parsed.value.path,
     parsed.value.content
   );
@@ -756,7 +1940,7 @@ const handleHistoryEvents = async (
 const handleLogsQuery = async (
   req: IncomingMessage,
   res: ServerResponse,
-  logsStore: LogsStore
+  logsStore: ServerLogsStore
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -772,12 +1956,51 @@ const handleLogsQuery = async (
 
   const logs = logsStore.query(parsed.value);
   if (logs.type === ResultType.Err) {
-    respondError(res, mapLogsStoreError(logs.error));
+    respondError(res, mapDomainLogsStoreError(logs.error));
     return;
   }
 
   respondJson(res, HttpStatus.Ok, {
     logs: logs.value
+  });
+};
+
+const handleLogsAppend = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  logsStore: ServerLogsStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseLogsAppendRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await logsStore.append(parsed.value);
+  if (result.type === ResultType.Err) {
+    respondError(res, mapDomainLogsStoreError(result.error));
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    success: true
+  });
+};
+
+const handleLogsReset = async (
+  res: ServerResponse,
+  logsStore: ServerLogsStore
+): Promise<void> => {
+  await logsStore.reset();
+
+  respondJson(res, HttpStatus.Ok, {
+    success: true
   });
 };
 
@@ -831,7 +2054,8 @@ const handleProvidersSelect = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -857,6 +2081,7 @@ const handleProvidersSelect = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     selection: selected.value
   });
@@ -866,7 +2091,8 @@ const handleProviderSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -892,6 +2118,7 @@ const handleProviderSettingsUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     settings: updated.value
   });
@@ -901,7 +2128,8 @@ const handleKanbanBoardCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -927,6 +2155,7 @@ const handleKanbanBoardCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     board: created.value
   });
@@ -971,7 +2200,8 @@ const handleKanbanBoardUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -997,6 +2227,7 @@ const handleKanbanBoardUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     board: updated.value
   });
@@ -1006,7 +2237,8 @@ const handleKanbanBoardDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1032,6 +2264,7 @@ const handleKanbanBoardDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     board: deleted.value
   });
@@ -1041,7 +2274,8 @@ const handleKanbanColumnCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1067,6 +2301,7 @@ const handleKanbanColumnCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     column: created.value
   });
@@ -1111,7 +2346,8 @@ const handleKanbanColumnUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1137,6 +2373,7 @@ const handleKanbanColumnUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     column: updated.value
   });
@@ -1146,7 +2383,8 @@ const handleKanbanColumnDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1172,6 +2410,7 @@ const handleKanbanColumnDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     column: deleted.value
   });
@@ -1181,7 +2420,8 @@ const handleKanbanTaskCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1207,6 +2447,7 @@ const handleKanbanTaskCreate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
     task: created.value
   });
@@ -1251,7 +2492,8 @@ const handleKanbanTaskUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1277,6 +2519,7 @@ const handleKanbanTaskUpdate = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     task: updated.value
   });
@@ -1286,7 +2529,8 @@ const handleKanbanTaskDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
+  workspacePersistence: WorkspacePersistence
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1312,6 +2556,7 @@ const handleKanbanTaskDelete = async (
     return;
   }
 
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     task: deleted.value
   });
@@ -1322,7 +2567,7 @@ type ApiError = {
   message: string;
 };
 
-const readJsonBody = async (
+const readJsonBody = (
   req: IncomingMessage
 ): Promise<Result<unknown, ApiError>> =>
   new Promise((resolve) => {
@@ -1363,107 +2608,7 @@ const readJsonBody = async (
     });
   });
 
-const parseCreateProject = (
-  value: unknown
-): Result<ProjectCreateInput, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
-    });
-  }
-
-  const rootPath = readRequiredString(
-    value,
-    ProjectField.RootPath,
-    ErrorMessage.MissingRootPath
-  );
-  if (rootPath.type === ResultType.Err) {
-    return rootPath;
-  }
-
-  const name = readRequiredString(
-    value,
-    ProjectField.Name,
-    ErrorMessage.MissingName
-  );
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-
-  return ok({
-    name: name.value,
-    rootPath: rootPath.value
-  });
-};
-
-const parseOpenProject = (
-  value: unknown
-): Result<ProjectOpenInput, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
-    });
-  }
-
-  const rootPath = readRequiredString(
-    value,
-    ProjectField.RootPath,
-    ErrorMessage.MissingRootPath
-  );
-  if (rootPath.type === ResultType.Err) {
-    return rootPath;
-  }
-
-  const name = readOptionalString(value, ProjectField.Name);
-
-  if (name) {
-    return ok({
-      name,
-      rootPath: rootPath.value
-    });
-  }
-
-  return ok({
-    rootPath: rootPath.value
-  });
-};
-
-const parseFileTreeRequest = (
-  value: unknown
-): Result<{ projectId: string; path?: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readOptionalString(value, FileField.Path);
-
-  if (path) {
-    return ok({
-      projectId: projectId.value,
-      path
-    });
-  }
-
-  return ok({
-    projectId: projectId.value
-  });
-};
-
-const parseFileReadRequest = (
+const parseFileDeleteRequest = (
   value: unknown
 ): Result<{ projectId: string; path: string }, ApiError> => {
   if (!isRecord(value)) {
@@ -1494,6 +2639,94 @@ const parseFileReadRequest = (
   return ok({
     projectId: projectId.value,
     path: path.value
+  });
+};
+
+const parseFileCreateRequest = (
+  value: unknown
+): Result<{ projectId: string; path: string; content: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  const content = readRequiredStringAllowEmpty(
+    value,
+    FileField.Content,
+    ErrorMessage.MissingContent
+  );
+  if (content.type === ResultType.Err) {
+    return content;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value,
+    content: content.value
+  });
+};
+
+const parseFileMoveRequest = (
+  value: unknown
+): Result<{ projectId: string; sourcePath: string; targetPath: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const sourcePath = readRequiredString(
+    value,
+    FileMoveField.SourcePath,
+    ErrorMessage.MissingSourcePath
+  );
+  if (sourcePath.type === ResultType.Err) {
+    return sourcePath;
+  }
+
+  const targetPath = readRequiredString(
+    value,
+    FileMoveField.TargetPath,
+    ErrorMessage.MissingTargetPath
+  );
+  if (targetPath.type === ResultType.Err) {
+    return targetPath;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    sourcePath: sourcePath.value,
+    targetPath: targetPath.value
   });
 };
 
@@ -1538,6 +2771,201 @@ const parseFileWriteRequest = (
     projectId: projectId.value,
     path: path.value,
     content: content.value
+  });
+};
+
+const parseCreateProject = (
+  value: unknown
+): Result<ProjectCreateInput, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const name = readRequiredString(value, ProjectField.Name, ErrorMessage.MissingName);
+  if (name.type === ResultType.Err) {
+    return name;
+  }
+  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
+
+  return ok({
+    name: name.value,
+    rootPath
+  });
+};
+
+const parseOpenProject = (
+  value: unknown
+): Result<ProjectOpenInput, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
+  const name = readOptionalString(value, ProjectField.Name);
+
+  if (name) {
+    return ok({
+      name,
+      rootPath
+    });
+  }
+
+  return ok({
+    rootPath
+  });
+};
+
+const parseFileTreeRequest = (
+  value: unknown
+): Result<{ projectId: string; path?: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readOptionalString(value, FileField.Path);
+
+  if (path) {
+    return ok({
+      projectId: projectId.value,
+      path
+    });
+  }
+
+  return ok({
+    projectId: projectId.value
+  });
+};
+
+const parseFileSearchRequest = (
+  value: unknown
+): Result<
+  {
+    projectId: string;
+    query: string;
+    isRegex: boolean;
+    matchCase: boolean;
+    wholeWord: boolean;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileSearchField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const query = readRequiredString(
+    value,
+    FileSearchField.Query,
+    ErrorMessage.MissingQuery
+  );
+  if (query.type === ResultType.Err) {
+    return query;
+  }
+
+  const isRegex = readOptionalBooleanField(value, FileSearchField.IsRegex);
+  if (isRegex.type === ResultType.Err) {
+    return isRegex;
+  }
+
+  const matchCase = readOptionalBooleanField(value, FileSearchField.MatchCase);
+  if (matchCase.type === ResultType.Err) {
+    return matchCase;
+  }
+
+  const wholeWord = readOptionalBooleanField(value, FileSearchField.WholeWord);
+  if (wholeWord.type === ResultType.Err) {
+    return wholeWord;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    query: query.value,
+    isRegex: isRegex.value ?? false,
+    matchCase: matchCase.value ?? false,
+    wholeWord: wholeWord.value ?? false
+  });
+};
+
+const parseFileReadRequest = (
+  value: unknown
+): Result<
+  {
+    projectId: string;
+    path: string;
+    startLine?: number;
+    lineCount?: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const projectId = readRequiredString(
+    value,
+    FileField.ProjectId,
+    ErrorMessage.MissingProjectId
+  );
+  if (projectId.type === ResultType.Err) {
+    return projectId;
+  }
+
+  const path = readRequiredString(
+    value,
+    FileField.Path,
+    ErrorMessage.MissingPath
+  );
+  if (path.type === ResultType.Err) {
+    return path;
+  }
+
+  const startLine = readOptionalPositiveIntegerField(value, FileField.StartLine);
+  if (startLine.type === ResultType.Err) {
+    return startLine;
+  }
+
+  const lineCount = readOptionalPositiveIntegerField(value, FileField.LineCount);
+  if (lineCount.type === ResultType.Err) {
+    return lineCount;
+  }
+
+  return ok({
+    projectId: projectId.value,
+    path: path.value,
+    ...(startLine.value !== undefined ? { startLine: startLine.value } : {}),
+    ...(lineCount.value !== undefined ? { lineCount: lineCount.value } : {})
   });
 };
 
@@ -1702,6 +3130,63 @@ const parseLogsQueryRequest = (
   }
 
   return ok(input);
+};
+
+const LogsAppendField = {
+  Id: "id",
+  Timestamp: "timestamp",
+  Level: "level",
+  Message: "message",
+  RunId: "runId"
+} as const;
+
+const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const id = readRequiredString(value, LogsAppendField.Id, ErrorMessage.InvalidBody);
+  if (id.type === ResultType.Err) {
+    return id;
+  }
+
+  const timestamp = readRequiredString(value, LogsAppendField.Timestamp, ErrorMessage.InvalidBody);
+  if (timestamp.type === ResultType.Err) {
+    return timestamp;
+  }
+
+  const levelValue = readRequiredString(value, LogsAppendField.Level, ErrorMessage.InvalidBody);
+  if (levelValue.type === ResultType.Err) {
+    return levelValue;
+  }
+
+  const parsedLevel = parseLogLevel(levelValue.value);
+  if (parsedLevel.type === ResultType.Err) {
+    return parsedLevel;
+  }
+
+  const message = readRequiredString(value, LogsAppendField.Message, ErrorMessage.InvalidBody);
+  if (message.type === ResultType.Err) {
+    return message;
+  }
+
+  const runId = readOptionalString(value, LogsAppendField.RunId);
+
+  const entry: ServerLogEntry = {
+    id: id.value,
+    timestamp: timestamp.value,
+    level: parsedLevel.value,
+    message: message.value
+  };
+
+  if (runId) {
+    entry.runId = runId;
+  }
+
+  return ok(entry);
 };
 
 const parseProvidersListRequest = (
@@ -2511,6 +3996,1220 @@ const parseKanbanTaskDeleteRequest = (
   });
 };
 
+const handleWorkflowDefinitionList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionList(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    definitions: result.value
+  });
+};
+
+const handleWorkflowDefinitionGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowDefinitionUpsert = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionUpsertRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionUpsert(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowDefinitionDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value
+  });
+};
+
+const handleWorkflowAssetList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetList(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    assets: result.value
+  });
+};
+
+const handleWorkflowAssetGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetUpsert = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetUpsertRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetUpsert(parsed.value, {
+    projectStore,
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    asset: result.value
+  });
+};
+
+const handleWorkflowAssetUsageList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowAssetUsageListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowAssetUsageList(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    usages: result.value
+  });
+};
+
+const handleWorkflowExecutionList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionList(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    executions: result.value
+  });
+};
+
+const handleWorkflowExecutionGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionGetRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionGet(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
+  });
+};
+
+const handleWorkflowExecutionDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionDeleteRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionDelete(parsed.value, {
+    catalog: workflowCatalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
+  });
+};
+
+const handleWorkflowExecutionRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeWorkflowExecutionRun(parsed.value, {
+    catalog: workflowCatalog,
+    runWorkflow: workflowRuntime.runWorkflow
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value
+  });
+};
+
+const handleWorkflowExecutionStream = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
+  if (!workflowId || workflowId.trim().length === 0) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingWorkflowId
+    });
+    return;
+  }
+
+  const stream = createSseStream(res);
+
+  try {
+    const result = await executeWorkflowExecutionRun(
+      { workflowId },
+      {
+        catalog: workflowCatalog,
+        runWorkflow: workflowRuntime.runWorkflow,
+        onEvent: (event) => {
+          stream.send({
+            event: readWorkflowStreamEventName(event),
+            data: event
+          });
+        }
+      }
+    );
+
+    if (result.type === ResultType.Err) {
+      stream.send({
+        event: WorkflowRuntimeEventType.WorkflowFailed,
+        data: {
+          type: WorkflowRuntimeEventType.WorkflowFailed,
+          workflowId,
+          workflowRunId: "",
+          finishedAt: new Date().toISOString(),
+          error: result.error.message
+        }
+      });
+      return;
+    }
+
+    await workspacePersistence.saveCurrent();
+  } catch (error) {
+    stream.send({
+      event: WorkflowRuntimeEventType.WorkflowFailed,
+      data: {
+        type: WorkflowRuntimeEventType.WorkflowFailed,
+        workflowId,
+        workflowRunId: "",
+        finishedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Workflow stream failed."
+      }
+    });
+  } finally {
+    stream.close();
+  }
+};
+
+const handleWorkflowNodeProviderTest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowNodeProviderTestRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeWorkflowNodeProviderTest(parsed.value, {
+    catalog: workflowCatalog,
+    testProviderNode: workflowRuntime.testProviderNode
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, result.value);
+};
+
+const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string => event.type;
+
+const handleGitStatusRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitStatus(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    repository: result.value
+  });
+};
+
+const handleGitDiffRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitDiffRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitDiff(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    diff: result.value.diff,
+    staged: result.value.staged
+  });
+};
+
+const handleGitCommitRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitCommitRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitCommit(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Created, {
+    commit: result.value
+  });
+};
+
+const handleGitBranchListRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitBranchList(parsed.value, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    branches: result.value
+  });
+};
+
+const handleGitBranchMutationRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: "create" | "checkout"
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitBranchMutationRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = operation === "create"
+    ? await executeGitBranchCreate(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      })
+    : await executeGitBranchCheckout(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, operation === "create" ? HttpStatus.Created : HttpStatus.Ok, {
+    branch: result.value
+  });
+};
+
+const handleGitBranchRemoteRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: "push" | "publish"
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitStatusRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = operation === "push"
+    ? await executeGitBranchPush(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      })
+    : await executeGitBranchPublish(parsed.value, {
+        projectStore,
+        workspacePolicy,
+        commandPolicy,
+        git
+      });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, operation === "publish" ? HttpStatus.Created : HttpStatus.Ok, {
+    branch: result.value
+  });
+};
+
+const handleGitPathOperationRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  git: GitRepository,
+  operation: GitPathOperationKind
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseGitPathRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeGitPathOperation(parsed.value, operation, {
+    projectStore,
+    workspacePolicy,
+    commandPolicy,
+    git
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    paths: result.value.paths
+  });
+};
+
+const handleQualityGateRunRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectStore: ProjectStore,
+  historyStore: HistoryStore,
+  workspacePolicy: WorkspacePolicy,
+  commandPolicy: CommandPolicy,
+  commandRunner: CommandRunner,
+  eventHub: QualityGateEventHub,
+  catalog: QualityGateCatalog,
+  workspacePersistence: WorkspacePersistence
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await startQualityGateRun(parsed.value, {
+    projectStore,
+    historyStore,
+    workspacePolicy,
+    commandPolicy,
+    commandRunner,
+    eventHub,
+    catalog
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Created, {
+    run: result.value
+  });
+};
+
+const handleQualityGateListRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = listQualityGateRuns(parsed.value, {
+    historyStore
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    runs: result.value
+  });
+};
+
+const handleQualityGateEventsRequest = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  historyStore: HistoryStore
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseQualityGateEventsRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = listQualityGateEvents(parsed.value, {
+    historyStore
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    events: result.value
+  });
+};
+
+const handleQualityGateStreamRequest = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  historyStore: HistoryStore,
+  eventHub: QualityGateEventHub
+): void => {
+  const parsed = parseQualityGateStreamRequest(url.searchParams);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const existing = listQualityGateEvents(parsed.value, {
+    historyStore
+  });
+  if (existing.type === ResultType.Err) {
+    respondError(res, existing.error);
+    return;
+  }
+
+  const stream = createSseStream(res);
+  for (const event of existing.value) {
+    stream.send({
+      event: QualityGateEventName.Progress,
+      id: event.id,
+      data: event
+    });
+  }
+
+  const unsubscribe = eventHub.subscribe(parsed.value.runId, (event) => {
+    stream.send({
+      event: QualityGateEventName.Progress,
+      id: event.id,
+      data: event
+    });
+  });
+
+  req.on("close", () => {
+    unsubscribe();
+    stream.close();
+  });
+};
+
+const handleAiSkillRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiSkillRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runSkill(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiWorkflowRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiWorkflowRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runWorkflow(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiEvalRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiEvalRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.runEvaluation(parsed.value);
+    respondJson(res, HttpStatus.Ok, result);
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const handleAiMemoryQuery = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  aiWorkbench: AiWorkbenchService
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseAiMemoryQueryRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  try {
+    const result = await aiWorkbench.searchMemory(parsed.value);
+    respondJson(res, HttpStatus.Ok, {
+      items: result
+    });
+  } catch (error) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+    });
+  }
+};
+
+const parseAiSkillRunRequest = (
+  value: unknown
+): Result<{ skillName: string; sessionId: string; input: unknown }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const skillName = readRequiredString(
+    value,
+    AiField.SkillName,
+    ErrorMessage.MissingSkillName
+  );
+  if (skillName.type === ResultType.Err) {
+    return skillName;
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  if (!(AiField.Input in value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingInput
+    });
+  }
+
+  return ok({
+    skillName: skillName.value,
+    sessionId: sessionId.value,
+    input: value[AiField.Input]
+  });
+};
+
+const parseAiWorkflowRunRequest = (
+  value: unknown
+): Result<
+  {
+    skillName: string;
+    sessionId: string;
+    question: string;
+    autoApprove: boolean;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const skillName = readRequiredString(
+    value,
+    AiField.SkillName,
+    ErrorMessage.MissingSkillName
+  );
+  if (skillName.type === ResultType.Err) {
+    return skillName;
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  const question = readRequiredString(
+    value,
+    AiField.Question,
+    ErrorMessage.MissingQuestion
+  );
+  if (question.type === ResultType.Err) {
+    return question;
+  }
+
+  const autoApprove = readOptionalBooleanField(value, AiField.AutoApprove);
+  if (autoApprove.type === ResultType.Err) {
+    return autoApprove;
+  }
+
+  return ok({
+    skillName: skillName.value,
+    sessionId: sessionId.value,
+    question: question.value,
+    autoApprove: autoApprove.value ?? true
+  });
+};
+
+const parseAiEvalRunRequest = (
+  value: unknown
+): Result<{ datasetPath: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const datasetPath = readRequiredString(
+    value,
+    AiField.DatasetPath,
+    ErrorMessage.MissingDatasetPath
+  );
+  if (datasetPath.type === ResultType.Err) {
+    return datasetPath;
+  }
+
+  return ok({
+    datasetPath: datasetPath.value
+  });
+};
+
+const parseAiMemoryQueryRequest = (
+  value: unknown
+): Result<
+  {
+    sessionId: string;
+    query: string;
+    limit: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  const sessionId = readRequiredString(
+    value,
+    SessionField.SessionId,
+    ErrorMessage.MissingSessionId
+  );
+  if (sessionId.type === ResultType.Err) {
+    return sessionId;
+  }
+
+  const query = readRequiredString(
+    value,
+    AiField.Query,
+    ErrorMessage.MissingQuestion
+  );
+  if (query.type === ResultType.Err) {
+    return query;
+  }
+
+  const limit = readOptionalNumberField(value, AiField.Limit);
+  if (limit.type === ResultType.Err) {
+    return limit;
+  }
+
+  return ok({
+    sessionId: sessionId.value,
+    query: query.value,
+    limit: limit.value ?? 10
+  });
+};
+
 const getSessionById = (
   store: SessionStore,
   id: string
@@ -2551,8 +5250,8 @@ const mapHistoryStoreError = (error: HistoryStoreError): ApiError => {
   };
 };
 
-const mapLogsStoreError = (error: LogsStoreError): ApiError => {
-  if (error.code === LogsStoreErrorCode.InvalidInput) {
+const mapDomainLogsStoreError = (error: DomainLogsStoreError): ApiError => {
+  if (error.code === DomainLogsStoreErrorCode.InvalidQuery) {
     return {
       status: HttpStatus.BadRequest,
       message: error.message
@@ -2654,6 +5353,144 @@ const extractBearerToken = (header: string): string | undefined => {
   return token.length > 0 ? token : undefined;
 };
 
+const CorsHeaderName = {
+  Origin: "origin",
+  AccessControlAllowOrigin: "access-control-allow-origin",
+  AccessControlAllowHeaders: "access-control-allow-headers",
+  AccessControlAllowMethods: "access-control-allow-methods",
+  AccessControlMaxAge: "access-control-max-age",
+  Vary: "vary"
+} as const;
+
+const CorsHeaderValue = {
+  AllowHeaders: "authorization,content-type",
+  AllowMethods: "GET,POST,OPTIONS",
+  MaxAgeSeconds: "600",
+  OptionsMethod: "OPTIONS",
+  VaryOrigin: "origin"
+} as const;
+
+const Separator = {
+  Space: " "
+} as const;
+
+const handleCorsPreflight = (req: IncomingMessage, res: ServerResponse): boolean => {
+  const origin = readCorsOrigin(req);
+  if (!origin || !isAllowedCorsOrigin(origin)) {
+    return false;
+  }
+
+  if (req.method !== CorsHeaderValue.OptionsMethod) {
+    return false;
+  }
+
+  applyCorsHeaders(req, res);
+  res.statusCode = HttpStatus.Ok;
+  res.end();
+  return true;
+};
+
+const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
+  const origin = readCorsOrigin(req);
+  if (!origin || !isAllowedCorsOrigin(origin)) {
+    return;
+  }
+
+  res.setHeader(CorsHeaderName.AccessControlAllowOrigin, origin);
+  res.setHeader(CorsHeaderName.AccessControlAllowHeaders, CorsHeaderValue.AllowHeaders);
+  res.setHeader(CorsHeaderName.AccessControlAllowMethods, CorsHeaderValue.AllowMethods);
+  res.setHeader(CorsHeaderName.AccessControlMaxAge, CorsHeaderValue.MaxAgeSeconds);
+  res.setHeader(CorsHeaderName.Vary, CorsHeaderValue.VaryOrigin);
+};
+
+const readCorsOrigin = (req: IncomingMessage): string | undefined => {
+  const originHeader = req.headers[CorsHeaderName.Origin];
+  return typeof originHeader === "string" ? originHeader : undefined;
+};
+
+const isAllowedCorsOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return false;
+    }
+
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+};
+
+const installServerConsoleForwarder = (logsStore: ServerLogsStore): void => {
+  installConsoleForwarder({
+    send: async (entry: SharedLogEntry) => {
+      await logsStore.append({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        level: toServerLogLevel(entry.level),
+        message: entry.message,
+        ...(entry.runId ? { runId: entry.runId } : {})
+      });
+    },
+    createId: () => randomUUID()
+  });
+};
+
+const installRequestLogLifecycle = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  startedAt: number
+): void => {
+  res.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    const summary = [
+      "server.request",
+      req.method ?? "UNKNOWN",
+      req.url ?? "",
+      res.statusCode.toString(),
+      `${durationMs.toString()}ms`
+    ].join(Separator.Space);
+    const errorMessage = responseErrorLogMap.get(res);
+    responseErrorLogMap.delete(res);
+
+    if (res.statusCode >= HttpStatus.InternalServerError) {
+      console.error(summary, errorMessage ?? "");
+      return;
+    }
+
+    if (res.statusCode >= HttpStatus.BadRequest) {
+      console.warn(summary, errorMessage ?? "");
+      return;
+    }
+
+    console.info(summary);
+  });
+};
+
+const toServerLogLevel = (level: string): LogLevel => {
+  if (level === LogLevelValues.Trace) {
+    return LogLevelValues.Trace;
+  }
+
+  if (level === LogLevelValues.Debug) {
+    return LogLevelValues.Debug;
+  }
+
+  if (level === LogLevelValues.Warn) {
+    return LogLevelValues.Warn;
+  }
+
+  if (level === LogLevelValues.Error) {
+    return LogLevelValues.Error;
+  }
+
+  if (level === LogLevelValues.Fatal) {
+    return LogLevelValues.Fatal;
+  }
+
+  return LogLevelValues.Info;
+};
+
 const respondUnauthorized = (res: ServerResponse): void => {
   res.setHeader(HeaderName.WwwAuthenticate, BearerScheme);
   respondError(res, {
@@ -2670,6 +5507,7 @@ const respondMethodNotAllowed = (res: ServerResponse): void => {
 };
 
 const respondError = (res: ServerResponse, error: ApiError): void => {
+  responseErrorLogMap.set(res, error.message);
   respondJson(res, error.status, {
     error: {
       message: error.message
@@ -2764,6 +5602,19 @@ const readOptionalString = (
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const readOptionalNullableString = (
+  record: Record<string, unknown>,
+  key: string
+): string | null => {
+  const value = record[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const readOptionalStringField = (
   record: Record<string, unknown>,
   key: string
@@ -2794,6 +5645,48 @@ const readOptionalNumberField = (
   }
 
   if (typeof value !== "number" || !Number.isFinite(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(value);
+};
+
+const readOptionalPositiveIntegerField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<number | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody
+    });
+  }
+
+  return ok(value);
+};
+
+const readOptionalBooleanField = (
+  record: Record<string, unknown>,
+  key: string
+): Result<boolean | undefined, ApiError> => {
+  const value = record[key];
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (typeof value !== "boolean") {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody
@@ -2835,12 +5728,12 @@ const isHistoryRunStatus = (value: string): value is HistoryRunStatus =>
   value === HistoryRunStatus.Canceled;
 
 const isLogLevel = (value: string): value is LogLevel =>
-  value === LogLevel.Trace ||
-  value === LogLevel.Debug ||
-  value === LogLevel.Info ||
-  value === LogLevel.Warn ||
-  value === LogLevel.Error ||
-  value === LogLevel.Fatal;
+  value === LogLevelValues.Trace ||
+  value === LogLevelValues.Debug ||
+  value === LogLevelValues.Info ||
+  value === LogLevelValues.Warn ||
+  value === LogLevelValues.Error ||
+  value === LogLevelValues.Fatal;
 
 const parseJson = (raw: string): Result<unknown, ApiError> => {
   try {

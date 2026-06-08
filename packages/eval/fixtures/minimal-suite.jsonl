@@ -1,0 +1,5 @@
+{"id":"case-1","mode":"skill","skillName":"example-skill","input":{"question":"What is Iteronix?"},"expectedAnswerIncludes":["Iteronix"],"minimumCitations":1}
+{"id":"case-2","mode":"skill","skillName":"example-skill","input":{"question":"What does the project goal mention about coding agents?"},"expectedAnswerIncludes":["coding agents"],"minimumCitations":1}
+{"id":"case-3","mode":"skill","skillName":"example-skill","input":{"question":"Which architecture style is mandatory in the repository rules?"},"expectedAnswerIncludes":["architecture"],"minimumCitations":1}
+{"id":"case-4","mode":"workflow","skillName":"example-skill","input":{"question":"What kind of UI strategy does Iteronix use?"},"expectedAnswerIncludes":["UI"],"minimumCitations":1}
+{"id":"case-5","mode":"workflow","skillName":"example-skill","input":{"question":"What does the server expose for the UI?"},"expectedAnswerIncludes":["server"],"minimumCitations":1}

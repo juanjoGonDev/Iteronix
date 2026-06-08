@@ -10,16 +10,39 @@ export const RoutePath = {
   ProjectsOpen: "/projects/open",
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
+  FilesSearch: "/files/search",
   FilesWrite: "/files/write",
+  FilesDelete: "/files/delete",
+  FilesCreate: "/files/create",
+  FilesMove: "/files/move",
   SessionsStart: "/sessions/start",
   SessionsStop: "/sessions/stop",
   SessionsStream: "/sessions/stream",
   HistoryList: "/history/list",
   HistoryEvents: "/history/events",
   LogsQuery: "/logs/query",
+  LogsAppend: "/logs/append",
+  LogsReset: "/logs/reset",
+  WorkspaceStateGet: "/workspace/state/get",
+  WorkspaceStateUpdate: "/workspace/state/update",
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
   ProvidersSettings: "/providers/settings",
+  GitStatus: "/git/status",
+  GitDiff: "/git/diff",
+  GitStage: "/git/stage",
+  GitUnstage: "/git/unstage",
+  GitRevert: "/git/revert",
+  GitCommit: "/git/commit",
+  GitBranchesList: "/git/branches/list",
+  GitBranchesCreate: "/git/branches/create",
+  GitBranchesCheckout: "/git/branches/checkout",
+  GitBranchesPush: "/git/branches/push",
+  GitBranchesPublish: "/git/branches/publish",
+  QualityGatesRun: "/quality-gates/run",
+  QualityGatesList: "/quality-gates/list",
+  QualityGatesEvents: "/quality-gates/events",
+  QualityGatesStream: "/quality-gates/stream",
   KanbanBoardsCreate: "/kanban/boards/create",
   KanbanBoardsList: "/kanban/boards/list",
   KanbanBoardsUpdate: "/kanban/boards/update",
@@ -31,7 +54,26 @@ export const RoutePath = {
   KanbanTasksCreate: "/kanban/tasks/create",
   KanbanTasksList: "/kanban/tasks/list",
   KanbanTasksUpdate: "/kanban/tasks/update",
-  KanbanTasksDelete: "/kanban/tasks/delete"
+  KanbanTasksDelete: "/kanban/tasks/delete",
+  AiSkillsRun: "/ai/skills/run",
+  AiWorkflowsRun: "/ai/workflows/run",
+  AiEvalsRun: "/ai/evals/run",
+  AiMemoryQuery: "/ai/memory/query",
+  WorkflowDefinitionsList: "/workflows/definitions/list",
+  WorkflowDefinitionsGet: "/workflows/definitions/get",
+  WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",
+  WorkflowDefinitionsDelete: "/workflows/definitions/delete",
+  WorkflowAssetsList: "/workflows/assets/list",
+  WorkflowAssetsGet: "/workflows/assets/get",
+  WorkflowAssetsUpsert: "/workflows/assets/upsert",
+  WorkflowAssetsDelete: "/workflows/assets/delete",
+  WorkflowAssetsUsage: "/workflows/assets/usage",
+  WorkflowExecutionsList: "/workflows/executions/list",
+  WorkflowExecutionsGet: "/workflows/executions/get",
+  WorkflowExecutionsDelete: "/workflows/executions/delete",
+  WorkflowExecutionsRun: "/workflows/executions/run",
+  WorkflowExecutionsStream: "/workflows/executions/stream",
+  WorkflowProvidersTest: "/workflows/providers/test"
 } as const;
 
 export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
@@ -54,12 +96,18 @@ export const EnvKey = {
   Host: "HOST",
   AuthToken: "AUTH_TOKEN",
   WorkspaceRoots: "WORKSPACE_ROOTS",
-  CommandAllowlist: "COMMAND_ALLOWLIST"
+  CommandAllowlist: "COMMAND_ALLOWLIST",
+  LogDir: "LOG_DIR",
+  LogMaxEntries: "LOG_MAX_ENTRIES",
+  WorkspaceStateFile: "WORKSPACE_STATE_FILE"
 } as const;
 
 export const DefaultServerConfig = {
   Host: "0.0.0.0",
-  Port: 4000
+  Port: 4000,
+  LogDir: "../web-ui/logs",
+  LogMaxEntries: 1000,
+  WorkspaceStateFile: ".iteronix/workspace-state.json"
 } as const;
 
 export const ErrorMessage = {
@@ -73,6 +121,7 @@ export const ErrorMessage = {
   MissingName: "Missing name",
   MissingProjectId: "Missing projectId",
   MissingPath: "Missing path",
+  MissingQuery: "Missing query",
   MissingContent: "Missing content",
   MissingRunId: "Missing runId",
   MissingSessionId: "Missing sessionId",
@@ -96,7 +145,22 @@ export const ErrorMessage = {
   AuthTokenMissing: "AUTH_TOKEN is required",
   InvalidPort: "Invalid PORT value",
   MethodNotAllowed: "Method not allowed",
-  InternalServerError: "Internal server error"
+  InternalServerError: "Internal server error",
+  MissingSourcePath: "Missing sourcePath",
+  MissingTargetPath: "Missing targetPath",
+  MissingSkillName: "Missing skillName",
+  MissingInput: "Missing input",
+  MissingQuestion: "Missing question",
+  MissingDatasetPath: "Missing datasetPath",
+  MissingCommitMessage: "Missing commit message",
+  MissingBranchName: "Missing branchName",
+  MissingPaths: "Missing paths",
+  InvalidCommitMessage: "Invalid Conventional Commit message",
+  InvalidBranchName: "Invalid Git branch name",
+  MissingWorkflowId: "Missing workflowId",
+  MissingAssetId: "Missing assetId",
+  MissingExecutionId: "Missing executionId",
+  MissingNodeId: "Missing nodeId"
 } as const;
 
 export const MimeType = {
@@ -112,6 +176,7 @@ export const HeaderValue = {
 export const TextEncoding = "utf8";
 
 export const ProjectField = {
+  ProjectId: "projectId",
   RootPath: "rootPath",
   Name: "name"
 } as const;
@@ -119,7 +184,23 @@ export const ProjectField = {
 export const FileField = {
   ProjectId: "projectId",
   Path: "path",
-  Content: "content"
+  Content: "content",
+  StartLine: "startLine",
+  LineCount: "lineCount"
+} as const;
+
+export const FileSearchField = {
+  ProjectId: "projectId",
+  Query: "query",
+  IsRegex: "isRegex",
+  MatchCase: "matchCase",
+  WholeWord: "wholeWord"
+} as const;
+
+export const FileMoveField = {
+  ProjectId: "projectId",
+  SourcePath: "sourcePath",
+  TargetPath: "targetPath"
 } as const;
 
 export const SessionField = {
@@ -128,7 +209,8 @@ export const SessionField = {
 } as const;
 
 export const QueryParam = {
-  SessionId: "sessionId"
+  SessionId: "sessionId",
+  WorkflowId: "workflowId"
 } as const;
 
 export const HistoryField = {
@@ -174,6 +256,43 @@ export const KanbanTaskField = {
   Position: "position"
 } as const;
 
+export const AiField = {
+  SkillName: "skillName",
+  Input: "input",
+  Question: "question",
+  DatasetPath: "datasetPath",
+  AutoApprove: "autoApprove",
+  Query: "query",
+  Limit: "limit"
+} as const;
+
+export const GitField = {
+  ProjectId: "projectId",
+  Paths: "paths",
+  Staged: "staged",
+  Message: "message",
+  BranchName: "branchName"
+} as const;
+
+export const QualityGateField = {
+  ProjectId: "projectId",
+  RunId: "runId",
+  Gates: "gates",
+  Status: "status",
+  Limit: "limit"
+} as const;
+
+export const WorkflowField = {
+  ProjectId: "projectId",
+  WorkflowId: "workflowId",
+  NodeId: "nodeId",
+  AssetId: "assetId",
+  ExecutionId: "executionId",
+  WorkspaceId: "workspaceId",
+  Definition: "definition",
+  Asset: "asset"
+} as const;
+
 export const FileEntryKind = {
   File: "file",
   Directory: "directory"
@@ -190,5 +309,6 @@ export const HttpStatus = {
   NotFound: 404,
   Conflict: 409,
   MethodNotAllowed: 405,
+  TooManyRequests: 429,
   InternalServerError: 500
 } as const;

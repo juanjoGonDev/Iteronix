@@ -157,12 +157,37 @@ export type KanbanStore = {
   deleteTask: (
     input: KanbanTaskDeleteInput
   ) => Result<KanbanTask, KanbanStoreError>;
+  snapshot: () => KanbanStoreSnapshot;
 };
 
-export const createKanbanStore = (): KanbanStore => {
+export type KanbanStoreSnapshot = {
+  boards: ReadonlyArray<KanbanBoard>;
+  columns: ReadonlyArray<KanbanColumn>;
+  tasks: ReadonlyArray<KanbanTask>;
+};
+
+export type KanbanStoreSeed = Partial<KanbanStoreSnapshot>;
+
+export const createKanbanStore = (seed: KanbanStoreSeed = {}): KanbanStore => {
   const boardsById = new Map<string, KanbanBoard>();
   const columnsById = new Map<string, KanbanColumn>();
   const tasksById = new Map<string, KanbanTask>();
+
+  for (const board of seed.boards ?? []) {
+    boardsById.set(board.id, board);
+  }
+
+  for (const column of seed.columns ?? []) {
+    if (boardsById.has(column.boardId)) {
+      columnsById.set(column.id, column);
+    }
+  }
+
+  for (const task of seed.tasks ?? []) {
+    if (boardsById.has(task.boardId) && columnsById.has(task.columnId)) {
+      tasksById.set(task.id, task);
+    }
+  }
 
   const listBoards = (
     input: KanbanBoardListInput
@@ -224,6 +249,12 @@ export const createKanbanStore = (): KanbanStore => {
   ): Result<KanbanTask, KanbanStoreError> =>
     deleteTaskRecord(boardsById, tasksById, input);
 
+  const snapshot = (): KanbanStoreSnapshot => ({
+    boards: Array.from(boardsById.values()),
+    columns: Array.from(columnsById.values()),
+    tasks: Array.from(tasksById.values())
+  });
+
   return {
     listBoards,
     createBoard,
@@ -236,7 +267,8 @@ export const createKanbanStore = (): KanbanStore => {
     listTasks,
     createTask,
     updateTask,
-    deleteTask
+    deleteTask,
+    snapshot
   };
 };
 

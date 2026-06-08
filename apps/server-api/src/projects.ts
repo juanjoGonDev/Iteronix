@@ -1,23 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { ErrorMessage } from "./constants";
-import { err, ok, type Result } from "./result";
+import { ResultType, err, ok, type Result } from "./result";
 
 export type Project = {
   id: string;
   name: string;
-  rootPath: string;
+  rootPath: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ProjectCreateInput = {
   name: string;
-  rootPath: string;
+  rootPath: string | null;
 };
 
 export type ProjectOpenInput = {
-  rootPath: string;
+  rootPath: string | null;
   name?: string;
 };
 
@@ -39,25 +39,86 @@ export type ProjectStore = {
   create: (input: ProjectCreateInput) => Result<Project, ProjectStoreError>;
   open: (input: ProjectOpenInput) => Result<Project, ProjectStoreError>;
   getById: (id: string) => Result<Project, ProjectStoreError>;
+  getActive: () => Result<Project | undefined, ProjectStoreError>;
+  setActive: (id: string | null) => Result<Project | undefined, ProjectStoreError>;
+  snapshot: () => ProjectStoreSnapshot;
 };
 
-export const createProjectStore = (): ProjectStore => {
+export type ProjectStoreSnapshot = {
+  projects: ReadonlyArray<Project>;
+  activeProjectId: string | null;
+};
+
+export type ProjectStoreSeed = Partial<ProjectStoreSnapshot>;
+
+export const createProjectStore = (seed: ProjectStoreSeed = {}): ProjectStore => {
   const projectsById = new Map<string, Project>();
   const projectsByRoot = new Map<string, string>();
+  let activeProjectId = seed.activeProjectId ?? null;
+
+  for (const project of seed.projects ?? []) {
+    projectsById.set(project.id, project);
+    projectsByRoot.set(readProjectKey(project.rootPath ?? undefined, project.name), project.id);
+  }
+
+  if (activeProjectId !== null && !projectsById.has(activeProjectId)) {
+    activeProjectId = null;
+  }
 
   const create = (input: ProjectCreateInput): Result<Project, ProjectStoreError> =>
-    createProject(projectsById, projectsByRoot, input);
+    withActiveProject(createProject(projectsById, projectsByRoot, input));
 
   const open = (input: ProjectOpenInput): Result<Project, ProjectStoreError> =>
-    openProject(projectsById, projectsByRoot, input);
+    withActiveProject(openProject(projectsById, projectsByRoot, input));
 
   const getById = (id: string): Result<Project, ProjectStoreError> =>
     getProjectById(projectsById, id);
 
+  const getActive = (): Result<Project | undefined, ProjectStoreError> => {
+    if (activeProjectId === null) {
+      return ok(undefined);
+    }
+
+    return getProjectById(projectsById, activeProjectId);
+  };
+
+  const setActive = (id: string | null): Result<Project | undefined, ProjectStoreError> => {
+    if (id === null) {
+      activeProjectId = null;
+      return ok(undefined);
+    }
+
+    const project = getProjectById(projectsById, id);
+    if (project.type === ResultType.Err) {
+      return project;
+    }
+
+    activeProjectId = project.value.id;
+    return ok(project.value);
+  };
+
+  const snapshot = (): ProjectStoreSnapshot => ({
+    projects: Array.from(projectsById.values()),
+    activeProjectId
+  });
+
+  const withActiveProject = (
+    result: Result<Project, ProjectStoreError>
+  ): Result<Project, ProjectStoreError> => {
+    if (result.type === ResultType.Ok) {
+      activeProjectId = result.value.id;
+    }
+
+    return result;
+  };
+
   return {
     create,
     open,
-    getById
+    getById,
+    getActive,
+    setActive,
+    snapshot
   };
 };
 
@@ -67,13 +128,6 @@ const createProject = (
   input: ProjectCreateInput
 ): Result<Project, ProjectStoreError> => {
   const rootPath = normalizePath(input.rootPath);
-  if (!rootPath) {
-    return err({
-      code: ProjectStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingRootPath
-    });
-  }
-
   const name = normalizePath(input.name);
   if (!name) {
     return err({
@@ -82,7 +136,8 @@ const createProject = (
     });
   }
 
-  if (projectsByRoot.has(rootPath)) {
+  const projectKey = readProjectKey(rootPath, name);
+  if (projectsByRoot.has(projectKey)) {
     return err({
       code: ProjectStoreErrorCode.Conflict,
       message: ErrorMessage.ProjectExists
@@ -91,11 +146,11 @@ const createProject = (
 
   const project = createProjectEntity({
     name,
-    rootPath
+    rootPath: rootPath ?? null
   });
 
   projectsById.set(project.id, project);
-  projectsByRoot.set(project.rootPath, project.id);
+  projectsByRoot.set(projectKey, project.id);
 
   return ok(project);
 };
@@ -106,14 +161,17 @@ const openProject = (
   input: ProjectOpenInput
 ): Result<Project, ProjectStoreError> => {
   const rootPath = normalizePath(input.rootPath);
-  if (!rootPath) {
+  const explicitName = normalizePath(input.name);
+  const name = explicitName ?? readNameFromRootPath(rootPath);
+  if (!name) {
     return err({
       code: ProjectStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingRootPath
+      message: ErrorMessage.MissingName
     });
   }
 
-  const existingId = projectsByRoot.get(rootPath);
+  const projectKey = readProjectKey(rootPath, name);
+  const existingId = projectsByRoot.get(projectKey);
   if (existingId) {
     const existing = projectsById.get(existingId);
     if (existing) {
@@ -121,14 +179,13 @@ const openProject = (
     }
   }
 
-  const name = normalizePath(input.name) ?? basename(rootPath) ?? rootPath;
   const project = createProjectEntity({
     name,
-    rootPath
+    rootPath: rootPath ?? null
   });
 
   projectsById.set(project.id, project);
-  projectsByRoot.set(project.rootPath, project.id);
+  projectsByRoot.set(projectKey, project.id);
 
   return ok(project);
 };
@@ -159,7 +216,7 @@ const createProjectEntity = (input: ProjectCreateInput): Project => {
   };
 };
 
-const normalizePath = (value: string | undefined): string | undefined => {
+const normalizePath = (value: string | null | undefined): string | undefined => {
   if (!value) {
     return undefined;
   }
@@ -167,3 +224,16 @@ const normalizePath = (value: string | undefined): string | undefined => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
+
+const readNameFromRootPath = (rootPath: string | undefined): string | undefined => {
+  if (!rootPath) {
+    return undefined;
+  }
+
+  return basename(rootPath) || rootPath;
+};
+
+const readProjectKey = (
+  rootPath: string | undefined,
+  name: string
+): string => rootPath ?? `workflow:${name.toLocaleLowerCase()}`;

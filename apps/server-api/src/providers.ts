@@ -1,5 +1,9 @@
 import type { ProviderDescriptor } from "../../../packages/domain/src/providers/registry";
 import { codexCliProviderDescriptor } from "../../../packages/adapters/src/codex-cli/provider";
+import {
+  customOpenAiCompatibleProviderDescriptor,
+  openAiCompatibleProviderDescriptor
+} from "../../../packages/adapters/src/openai-compatible/provider";
 import { ErrorMessage } from "./constants";
 import { err, ok, type Result } from "./result";
 
@@ -68,6 +72,12 @@ export type ProviderStore = {
   updateSettings: (
     input: ProviderSettingsInput
   ) => Result<ProviderSettingsRecord, ProviderStoreError>;
+  snapshot: () => ProviderStoreSnapshot;
+};
+
+export type ProviderStoreSnapshot = {
+  selections: ReadonlyArray<ProviderSelection>;
+  settings: ReadonlyArray<ProviderSettingsRecord>;
 };
 
 export const createProviderStore = (
@@ -75,7 +85,11 @@ export const createProviderStore = (
 ): ProviderStore => {
   const providers = seed.providers
     ? [...seed.providers]
-    : [codexCliProviderDescriptor];
+    : [
+        codexCliProviderDescriptor,
+        openAiCompatibleProviderDescriptor,
+        customOpenAiCompatibleProviderDescriptor
+      ];
   const providersById = new Map<string, ProviderDescriptor>();
 
   for (const provider of providers) {
@@ -127,11 +141,17 @@ export const createProviderStore = (
   ): Result<ProviderSettingsRecord, ProviderStoreError> =>
     writeSettings(providersById, settingsByKey, input);
 
+  const snapshot = (): ProviderStoreSnapshot => ({
+    selections: Array.from(selectionsByKey.values()),
+    settings: Array.from(settingsByKey.values())
+  });
+
   return {
     listProviders,
     getSelection,
     selectProvider,
-    updateSettings
+    updateSettings,
+    snapshot
   };
 };
 

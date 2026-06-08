@@ -1,12 +1,23 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": false,
-    "outDir": "./dist",
-    "rootDir": "./src"
-  },
-  "exclude": [
-    "**/*.test.ts",
-    "**/*.test.tsx"
-  ]
-}
+   "extends": "./tsconfig.json",
+   "compilerOptions": {
+     "allowJs": true,
+     "checkJs": false,
+     "noEmit": false,
+     "outDir": "./dist",
+     "rootDir": "./src",
+     "declaration": false,
+     "sourceMap": true,
+     "moduleResolution": "bundler",
+     "allowImportingTsExtensions": false,
+     "noEmitOnError": true
+   },
+   "include": [
+     "src/**/*"
+   ],
+   "exclude": [
+     "**/*.test.ts",
+     "**/*.test.tsx",
+     "node_modules"
+   ]
+ }

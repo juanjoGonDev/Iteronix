@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary"
+    }
+  },
+  "skills": {
+    "tdd-red-green-refactor": true,
+    "quality-gates-enforcer": true,
+    "command-discovery": true,
+    "ci-parity-finalizer": true,
+    "change-scope-guard": true,
+    "patch-reviewer": true,
+    "repo-invariants-guardian": true,
+    "minimal-diff-mode": true,
+    "strict-acceptance-criteria": true,
+    "ui-implementation-from-spec": true,
+    "dev-server-watchmode-port-aware": true,
+    "live-coding-narrator": true,
+    "failing-tests-first": true
+  }
+}
