@@ -20,7 +20,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   const logDir = env[EnvKey.LogDir] ?? DefaultServerConfig.LogDir;
   const logMaxEntries = parsePositiveInteger(
     env[EnvKey.LogMaxEntries],
-    DefaultServerConfig.LogMaxEntries
+    DefaultServerConfig.LogMaxEntries,
   );
   const workspaceStateFile =
     env[EnvKey.WorkspaceStateFile] ?? DefaultServerConfig.WorkspaceStateFile;
@@ -41,7 +41,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
     commandAllowlist,
     logDir,
     logMaxEntries,
-    workspaceStateFile
+    workspaceStateFile,
   };
 };
 
@@ -78,7 +78,7 @@ const parseAllowlist = (value: string | undefined): ReadonlyArray<string> => {
 
 const parsePositiveInteger = (
   value: string | undefined,
-  fallback: number
+  fallback: number,
 ): number => {
   if (value === undefined) {
     return fallback;

@@ -1,11 +1,15 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
 import {
   DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey
+  LocalStorageKey as ServerStorageKey,
 } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
@@ -15,7 +19,7 @@ import {
   startPreviewServer,
   stopProcess,
   waitForCondition,
-  waitForHttpReady
+  waitForHttpReady,
 } from "./browser-validation-runtime.js";
 
 const ValidationConfig = {
@@ -30,7 +34,7 @@ const ValidationConfig = {
   ViewportWidth: 1480,
   ViewportHeight: 1280,
   MobileViewportWidth: 390,
-  MobileViewportHeight: 844
+  MobileViewportHeight: 844,
 } as const;
 
 const RequestPath = {
@@ -39,14 +43,14 @@ const RequestPath = {
   ProjectOpen: "/projects/open",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
-  Webhook: "/webhook/test"
+  Webhook: "/webhook/test",
 } as const;
 
 const ResponseHeader = {
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
-  ContentType: "Content-Type"
+  ContentType: "Content-Type",
 } as const;
 
 const ValidationText = {
@@ -59,7 +63,8 @@ const ValidationText = {
   AnthropicModelId: "claude-sonnet-4-20250514",
   NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
   SaveNotice: "Settings saved.",
-  SettingsServerBackedNotice: "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+  SettingsServerBackedNotice:
+    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
   WebhookNotice: "Webhook test payload delivered successfully.",
   ConnectionNotice: "Connection OK.",
 } as const;
@@ -68,10 +73,10 @@ const ProviderKind = {
   CodexCli: "codex-cli",
   OpenAI: "openai",
   Anthropic: "anthropic",
-  Ollama: "ollama"
+  Ollama: "ollama",
 } as const;
 
-type ProviderKind = typeof ProviderKind[keyof typeof ProviderKind];
+type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
 type StubProjectRecord = {
   id: string;
@@ -99,10 +104,12 @@ const fixtureProject: StubProjectRecord = {
   name: "Iteronix",
   rootPath: "D:\\projects\\Iteronix",
   createdAt: "2026-04-28T08:00:00.000Z",
-  updatedAt: "2026-04-28T08:00:00.000Z"
+  updatedAt: "2026-04-28T08:00:00.000Z",
 };
 
-const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
+const runtimeOptions = parseBrowserValidationRuntimeOptions(
+  process.argv.slice(2),
+);
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
@@ -113,7 +120,7 @@ async function validateSettingsScreen(): Promise<void> {
   await assertBrowserValidationBuildOutput(buildOutputPath);
   await prepareBrowserValidationDirectory({
     directory: screenshotDirectory,
-    preserveScreenshots: runtimeOptions.preserveScreenshots
+    preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
   const previewServer = startPreviewServer(projectRoot);
@@ -121,49 +128,70 @@ async function validateSettingsScreen(): Promise<void> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    await waitForHttpReady(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForHttpReady(`${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForHttpReady(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await waitForHttpReady(
+      `${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
     browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox"]
+      args: ["--no-sandbox"],
     });
 
     const firstContext = await browser.createBrowserContext();
     const page = await firstContext.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
+      height: ValidationConfig.ViewportHeight,
     });
     await seedBrowserStorage(page);
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
 
     await waitForPageTexts(page, [
       ValidationText.ScreenTitle,
       ValidationText.ProviderHeading,
-      fixtureProject.name
+      fixtureProject.name,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "settings-initial",
-      artifactName: "settings"
+      artifactName: "settings",
     });
 
     await clickNamedButton(page, "Add Anthropic");
     await waitForPageText(page, readProviderCardLabel(ProviderKind.Anthropic));
     await waitForTestId(page, "settings-provider-api-key");
-    await setInputValueByTestId(page, "settings-provider-name", ValidationText.AnthropicProfileName);
-    await setInputValueByTestId(page, "settings-provider-model", ValidationText.AnthropicModelId);
-    await setInputValueByTestId(page, "settings-provider-api-key", "anthropic-session-secret");
+    await setInputValueByTestId(
+      page,
+      "settings-provider-name",
+      ValidationText.AnthropicProfileName,
+    );
+    await setInputValueByTestId(
+      page,
+      "settings-provider-model",
+      ValidationText.AnthropicModelId,
+    );
+    await setInputValueByTestId(
+      page,
+      "settings-provider-api-key",
+      "anthropic-session-secret",
+    );
 
     await clickNamedButton(page, "Workflow Limits");
     await waitForTestId(page, "settings-max-loops");
@@ -173,7 +201,11 @@ async function validateSettingsScreen(): Promise<void> {
 
     await clickNamedButton(page, "Notifications");
     await waitForTestId(page, "settings-webhook-url");
-    await setInputValueByTestId(page, "settings-webhook-url", ValidationText.NotificationsUrl);
+    await setInputValueByTestId(
+      page,
+      "settings-webhook-url",
+      ValidationText.NotificationsUrl,
+    );
     await waitForButtonEnabled(page, ValidationText.TestPayload);
     await clickNamedButton(page, ValidationText.TestPayload);
     await waitForPageText(page, ValidationText.WebhookNotice);
@@ -186,32 +218,48 @@ async function validateSettingsScreen(): Promise<void> {
     await clickNamedButton(page, "Providers");
     await clickNamedButton(page, ValidationText.SaveChanges);
     await waitForPageText(page, ValidationText.SaveNotice);
-    await waitForCondition(async () => stubServer.state.providerSettingsRequests.length === 1, "provider settings sync", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForCondition(
+      async () => stubServer.state.providerSettingsRequests.length === 1,
+      "provider settings sync",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
     assertPersistedWorkspaceSettings(stubServer.state.workspaceSettings);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "settings-saved",
-      artifactName: "settings"
+      artifactName: "settings",
     });
 
     await clickNamedButton(page, "General");
     await waitForPageText(page, ValidationText.SettingsServerBackedNotice);
 
     await page.reload({
-      waitUntil: "networkidle0"
+      waitUntil: "networkidle0",
     });
     await waitForPageTexts(page, [
       ValidationText.ScreenTitle,
-      ValidationText.AnthropicProfileName
+      ValidationText.AnthropicProfileName,
     ]);
-    await clickElementContainingText(page, "button", ValidationText.AnthropicProfileName);
+    await clickElementContainingText(
+      page,
+      "button",
+      ValidationText.AnthropicProfileName,
+    );
     await waitForTestId(page, "settings-provider-api-key");
-    await waitForInputValue(page, "settings-provider-name", ValidationText.AnthropicProfileName);
-    await waitForInputValue(page, "settings-provider-model", ValidationText.AnthropicModelId);
+    await waitForInputValue(
+      page,
+      "settings-provider-name",
+      ValidationText.AnthropicProfileName,
+    );
+    await waitForInputValue(
+      page,
+      "settings-provider-model",
+      ValidationText.AnthropicModelId,
+    );
     await waitForInputValue(page, "settings-provider-api-key", "");
 
     await clickNamedButton(page, "Workflow Limits");
@@ -220,126 +268,186 @@ async function validateSettingsScreen(): Promise<void> {
     await waitForSwitchValue(page, "settings-infinite-loops", true);
 
     await clickNamedButton(page, "Notifications");
-    await waitForInputValue(page, "settings-webhook-url", ValidationText.NotificationsUrl);
+    await waitForInputValue(
+      page,
+      "settings-webhook-url",
+      ValidationText.NotificationsUrl,
+    );
     await clickNamedButton(page, "API Access");
-    await waitForInputValue(page, "settings-server-url", ValidationConfig.StubApiBaseUrl);
-    await waitForInputValue(page, "settings-auth-token", DefaultServerConnection.authToken);
+    await waitForInputValue(
+      page,
+      "settings-server-url",
+      ValidationConfig.StubApiBaseUrl,
+    );
+    await waitForInputValue(
+      page,
+      "settings-auth-token",
+      DefaultServerConnection.authToken,
+    );
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "settings-reloaded",
-      artifactName: "settings"
+      artifactName: "settings",
     });
 
     const secondContext = await browser.createBrowserContext();
     const secondPage = await secondContext.newPage();
     await secondPage.setViewport({
       width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
+      height: ValidationConfig.ViewportHeight,
     });
     await seedBrowserStorage(secondPage);
-    await secondPage.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await secondPage.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
     await waitForPageTexts(secondPage, [
       ValidationText.ScreenTitle,
-      ValidationText.AnthropicProfileName
+      ValidationText.AnthropicProfileName,
     ]);
     await clickNamedButton(secondPage, "Workflow Limits");
     await waitForInputValue(secondPage, "settings-max-loops", "21");
     await waitForSwitchValue(secondPage, "settings-external-calls", false);
     await waitForSwitchValue(secondPage, "settings-infinite-loops", true);
     await clickNamedButton(secondPage, "Notifications");
-    await waitForInputValue(secondPage, "settings-webhook-url", ValidationText.NotificationsUrl);
+    await waitForInputValue(
+      secondPage,
+      "settings-webhook-url",
+      ValidationText.NotificationsUrl,
+    );
     await waitForSwitchValue(secondPage, "settings-sound-enabled", true);
     await clickNamedButton(secondPage, "API Access");
-    await waitForInputValue(secondPage, "settings-server-url", ValidationConfig.StubApiBaseUrl);
-    await waitForInputValue(secondPage, "settings-auth-token", DefaultServerConnection.authToken);
+    await waitForInputValue(
+      secondPage,
+      "settings-server-url",
+      ValidationConfig.StubApiBaseUrl,
+    );
+    await waitForInputValue(
+      secondPage,
+      "settings-auth-token",
+      DefaultServerConnection.authToken,
+    );
     await clickNamedButton(secondPage, "Providers");
     await waitForPageText(secondPage, ValidationText.AnthropicProfileName);
-    await clickElementContainingText(secondPage, "button", ValidationText.AnthropicProfileName);
-    await waitForInputValue(secondPage, "settings-provider-model", ValidationText.AnthropicModelId);
+    await clickElementContainingText(
+      secondPage,
+      "button",
+      ValidationText.AnthropicProfileName,
+    );
+    await waitForInputValue(
+      secondPage,
+      "settings-provider-model",
+      ValidationText.AnthropicModelId,
+    );
     await clickNamedButton(secondPage, "General");
-    await waitForPageText(secondPage, ValidationText.SettingsServerBackedNotice);
+    await waitForPageText(
+      secondPage,
+      ValidationText.SettingsServerBackedNotice,
+    );
     await clickNamedButton(secondPage, "Providers");
     await captureBrowserValidationScreenshot({
       page: secondPage,
       directory: screenshotDirectory,
       suffix: "settings-second-context-before-remove",
-      artifactName: "settings"
+      artifactName: "settings",
     });
-    await clickProviderRemoveButton(secondPage, ValidationText.AnthropicProfileName);
+    await clickProviderRemoveButton(
+      secondPage,
+      ValidationText.AnthropicProfileName,
+    );
     await captureBrowserValidationScreenshot({
       page: secondPage,
       directory: screenshotDirectory,
       suffix: "settings-second-context-after-remove-click",
-      artifactName: "settings"
+      artifactName: "settings",
     });
-    await waitForCondition(async () => {
-      const state = await secondPage.evaluate((profileName: string) => {
-        const rows = Array.from(document.querySelectorAll("button"))
-          .map((button) => button.closest("div.rounded-xl, div.border"))
-          .filter((entry): entry is Element => entry instanceof Element);
-        const profileStillListed = rows.some((row) => row.textContent?.includes(profileName));
-        const selectedHeading = Array.from(document.querySelectorAll("h2"))
-          .map((element) => element.textContent?.trim() ?? "")
-          .includes(profileName);
-        return {
-          profileStillListed,
-          selectedHeading
-        };
-      }, ValidationText.AnthropicProfileName);
+    await waitForCondition(
+      async () => {
+        const state = await secondPage.evaluate((profileName: string) => {
+          const rows = Array.from(document.querySelectorAll("button"))
+            .map((button) => button.closest("div.rounded-xl, div.border"))
+            .filter((entry): entry is Element => entry instanceof Element);
+          const profileStillListed = rows.some((row) =>
+            row.textContent?.includes(profileName),
+          );
+          const selectedHeading = Array.from(document.querySelectorAll("h2"))
+            .map((element) => element.textContent?.trim() ?? "")
+            .includes(profileName);
+          return {
+            profileStillListed,
+            selectedHeading,
+          };
+        }, ValidationText.AnthropicProfileName);
 
-      return !state.profileStillListed && !state.selectedHeading;
-    }, "anthropic profile removed from second context", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+        return !state.profileStillListed && !state.selectedHeading;
+      },
+      "anthropic profile removed from second context",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
     await clickNamedButton(secondPage, ValidationText.SaveChanges);
     await waitForPageText(secondPage, ValidationText.SaveNotice);
     await captureBrowserValidationScreenshot({
       page: secondPage,
       directory: screenshotDirectory,
       suffix: "settings-second-context-removed",
-      artifactName: "settings"
+      artifactName: "settings",
     });
 
     await page.reload({
-      waitUntil: "networkidle0"
+      waitUntil: "networkidle0",
     });
-    await waitForCondition(async () => {
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      return !bodyText.includes(ValidationText.AnthropicProfileName);
-    }, "anthropic profile removal reflected in first context", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForCondition(
+      async () => {
+        const bodyText = await page.evaluate(() => document.body.innerText);
+        return !bodyText.includes(ValidationText.AnthropicProfileName);
+      },
+      "anthropic profile removal reflected in first context",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
     await page.setViewport({
       width: ValidationConfig.MobileViewportWidth,
-      height: ValidationConfig.MobileViewportHeight
+      height: ValidationConfig.MobileViewportHeight,
     });
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
     await waitForPageText(page, ValidationText.ScreenTitle);
-    await waitForCondition(async () => {
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      return !bodyText.includes(ValidationText.AnthropicProfileName);
-    }, "mobile view reflects persisted provider removal", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForCondition(
+      async () => {
+        const bodyText = await page.evaluate(() => document.body.innerText);
+        return !bodyText.includes(ValidationText.AnthropicProfileName);
+      },
+      "mobile view reflects persisted provider removal",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "settings-mobile",
-      artifactName: "settings"
+      artifactName: "settings",
     });
 
     assertProviderSyncRequest(stubServer.state.providerSettingsRequests[0]);
     if (stubServer.state.webhookPayloadCount !== 1) {
-      throw new Error(`Expected exactly one webhook test payload, received ${stubServer.state.webhookPayloadCount}.`);
+      throw new Error(
+        `Expected exactly one webhook test payload, received ${stubServer.state.webhookPayloadCount}.`,
+      );
     }
 
     await secondPage.close();
@@ -363,7 +471,7 @@ async function startSettingsStubServer(): Promise<{
   const state: StubServerState = {
     providerSettingsRequests: [],
     webhookPayloadCount: 0,
-    workspaceSettings: createDefaultWorkspaceSettings()
+    workspaceSettings: createDefaultWorkspaceSettings(),
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -385,20 +493,23 @@ async function startSettingsStubServer(): Promise<{
           }
           resolve();
         });
-      })
+      }),
   };
 }
 
 async function handleStubRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubServerState
+  state: StubServerState,
 ): Promise<void> {
-  const requestUrl = new URL(request.url ?? "/", ValidationConfig.StubApiBaseUrl);
+  const requestUrl = new URL(
+    request.url ?? "/",
+    ValidationConfig.StubApiBaseUrl,
+  );
 
   if (requestUrl.pathname === ValidationConfig.StubHealthPath) {
     writeJson(response, 200, {
-      ok: true
+      ok: true,
     });
     return;
   }
@@ -411,47 +522,59 @@ async function handleStubRequest(
 
   if (requestUrl.pathname !== RequestPath.Webhook && !isAuthorized(request)) {
     writeJson(response, 401, {
-      message: "Unauthorized"
+      message: "Unauthorized",
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.WorkspaceStateGet) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.WorkspaceStateGet
+  ) {
     writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings)
+      state: createWorkspaceState(state.workspaceSettings),
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.WorkspaceStateUpdate) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.WorkspaceStateUpdate
+  ) {
     const body = await readJsonBody(request);
     if (isRecord(body) && isRecord(body["settings"])) {
       state.workspaceSettings = body["settings"];
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings)
+      state: createWorkspaceState(state.workspaceSettings),
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.ProjectOpen) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.ProjectOpen
+  ) {
     const body = await readJsonBody(request);
     const rootPath = readRequiredString(body, "rootPath");
 
     if (rootPath !== fixtureProject.rootPath) {
       writeJson(response, 400, {
-        message: "Unexpected project root"
+        message: "Unexpected project root",
       });
       return;
     }
 
     writeJson(response, 200, {
-      project: fixtureProject
+      project: fixtureProject,
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.ProvidersList) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.ProvidersList
+  ) {
     writeJson(response, 200, {
       providers: [
         {
@@ -459,18 +582,21 @@ async function handleStubRequest(
           displayName: "Codex CLI",
           type: "cli",
           auth: {
-            type: "none"
+            type: "none",
           },
           settingsSchema: {
-            type: "object"
-          }
-        }
-      ]
+            type: "object",
+          },
+        },
+      ],
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.ProvidersSettings) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.ProvidersSettings
+  ) {
     const body = await readJsonBody(request);
     const projectId = readRequiredString(body, "projectId");
     const profileId = readRequiredString(body, "profileId");
@@ -481,7 +607,7 @@ async function handleStubRequest(
       projectId,
       profileId,
       providerId,
-      config
+      config,
     });
 
     writeJson(response, 200, {
@@ -490,27 +616,33 @@ async function handleStubRequest(
         profileId,
         providerId,
         config,
-        updatedAt: "2026-04-28T08:10:00.000Z"
-      }
+        updatedAt: "2026-04-28T08:10:00.000Z",
+      },
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.Webhook) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.Webhook
+  ) {
     state.webhookPayloadCount += 1;
     writeJson(response, 200, {
-      ok: true
+      ok: true,
     });
     return;
   }
 
   writeJson(response, 404, {
-    message: "Not found"
+    message: "Not found",
   });
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
-  return request.headers.authorization === `Bearer ${DefaultServerConnection.authToken}`;
+  return (
+    request.headers.authorization ===
+    `Bearer ${DefaultServerConnection.authToken}`
+  );
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
@@ -520,26 +652,34 @@ async function seedBrowserStorage(page: Page): Promise<void> {
       authToken: string;
       serverKeys: typeof ServerStorageKey;
     }) => {
-      window.localStorage.setItem(payload.serverKeys.ServerUrl, payload.serverUrl);
-      window.localStorage.setItem(payload.serverKeys.AuthToken, payload.authToken);
+      window.localStorage.setItem(
+        payload.serverKeys.ServerUrl,
+        payload.serverUrl,
+      );
+      window.localStorage.setItem(
+        payload.serverKeys.AuthToken,
+        payload.authToken,
+      );
     },
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: DefaultServerConnection.authToken,
-      serverKeys: ServerStorageKey
-    }
+      serverKeys: ServerStorageKey,
+    },
   );
 }
 
-function createWorkspaceState(settings: Record<string, unknown>): Record<string, unknown> {
+function createWorkspaceState(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
   return {
     activeProjectId: fixtureProject.id,
     projects: [fixtureProject],
     settings,
     workbenchHistory: {
       runs: [],
-      evals: []
-    }
+      evals: [],
+    },
   };
 }
 
@@ -554,47 +694,59 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
         modelId: "",
         endpointUrl: "",
         command: "codex",
-        promptMode: "stdin"
-      }
+        promptMode: "stdin",
+      },
     ],
     workflowLimits: {
       infiniteLoops: false,
       maxLoops: 50,
-      externalCalls: true
+      externalCalls: true,
     },
     notifications: {
       soundEnabled: true,
-      webhookUrl: ""
+      webhookUrl: "",
     },
     serverConnection: {
       serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken
-    }
+      authToken: DefaultServerConnection.authToken,
+    },
   };
 }
 
-function assertProviderSyncRequest(request: ProviderSettingsRequestRecord | undefined): void {
+function assertProviderSyncRequest(
+  request: ProviderSettingsRequestRecord | undefined,
+): void {
   if (!request) {
     throw new Error("Expected one provider sync request.");
   }
 
   if (request.projectId !== fixtureProject.id) {
-    throw new Error(`Unexpected project id in provider sync: ${request.projectId}`);
+    throw new Error(
+      `Unexpected project id in provider sync: ${request.projectId}`,
+    );
   }
 
   if (request.providerId !== ProviderKind.CodexCli) {
-    throw new Error(`Unexpected provider id in provider sync: ${request.providerId}`);
+    throw new Error(
+      `Unexpected provider id in provider sync: ${request.providerId}`,
+    );
   }
 }
 
-function assertPersistedWorkspaceSettings(settings: Record<string, unknown>): void {
+function assertPersistedWorkspaceSettings(
+  settings: Record<string, unknown>,
+): void {
   if (!isRecord(settings["workflowLimits"])) {
-    throw new Error("Expected workflow limits to persist in workspace settings.");
+    throw new Error(
+      "Expected workflow limits to persist in workspace settings.",
+    );
   }
 
   const workflowLimits = settings["workflowLimits"];
   if (workflowLimits["maxLoops"] !== 21) {
-    throw new Error(`Expected persisted maxLoops to be 21, received ${String(workflowLimits["maxLoops"])}`);
+    throw new Error(
+      `Expected persisted maxLoops to be 21, received ${String(workflowLimits["maxLoops"])}`,
+    );
   }
   if (workflowLimits["infiniteLoops"] !== true) {
     throw new Error("Expected persisted infiniteLoops to be true.");
@@ -609,31 +761,45 @@ function assertPersistedWorkspaceSettings(settings: Record<string, unknown>): vo
 
   const notifications = settings["notifications"];
   if (notifications["webhookUrl"] !== ValidationText.NotificationsUrl) {
-    throw new Error(`Expected persisted webhookUrl to be ${ValidationText.NotificationsUrl}.`);
+    throw new Error(
+      `Expected persisted webhookUrl to be ${ValidationText.NotificationsUrl}.`,
+    );
   }
   if (notifications["soundEnabled"] !== true) {
     throw new Error("Expected persisted soundEnabled to remain true.");
   }
 
   if (!isRecord(settings["serverConnection"])) {
-    throw new Error("Expected serverConnection to persist in workspace settings.");
+    throw new Error(
+      "Expected serverConnection to persist in workspace settings.",
+    );
   }
 
   const serverConnection = settings["serverConnection"];
   if (serverConnection["serverUrl"] !== ValidationConfig.StubApiBaseUrl) {
-    throw new Error(`Expected persisted serverUrl to be ${ValidationConfig.StubApiBaseUrl}.`);
+    throw new Error(
+      `Expected persisted serverUrl to be ${ValidationConfig.StubApiBaseUrl}.`,
+    );
   }
   if (serverConnection["authToken"] !== DefaultServerConnection.authToken) {
-    throw new Error(`Expected persisted authToken to be ${DefaultServerConnection.authToken}.`);
+    throw new Error(
+      `Expected persisted authToken to be ${DefaultServerConnection.authToken}.`,
+    );
   }
 }
 
 async function clickNamedButton(page: Page, label: string): Promise<void> {
   const clicked = await page.evaluate((buttonLabel: string) => {
-    const button = Array.from(document.querySelectorAll("button")).find((element) => {
-      const text = element.textContent?.trim() ?? "";
-      return text.includes(buttonLabel) && element instanceof HTMLButtonElement && !element.disabled;
-    });
+    const button = Array.from(document.querySelectorAll("button")).find(
+      (element) => {
+        const text = element.textContent?.trim() ?? "";
+        return (
+          text.includes(buttonLabel) &&
+          element instanceof HTMLButtonElement &&
+          !element.disabled
+        );
+      },
+    );
 
     if (!(button instanceof HTMLButtonElement)) {
       return false;
@@ -648,38 +814,44 @@ async function clickNamedButton(page: Page, label: string): Promise<void> {
   }
 }
 
-async function clickProviderRemoveButton(page: Page, profileName: string): Promise<void> {
-  const clicked = await page.evaluate((input: { profileName: string }) => {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    for (const candidate of buttons) {
-      if (!(candidate instanceof HTMLButtonElement) || candidate.disabled) {
-        continue;
-      }
-
-      if ((candidate.textContent?.trim() ?? "") !== "Remove") {
-        continue;
-      }
-
-      let current: HTMLElement | null = candidate;
-      while (current) {
-        const className = current.className;
-        if (
-          typeof className === "string" &&
-          className.includes("border-primary") &&
-          (current.textContent?.includes(input.profileName) ?? false)
-        ) {
-          candidate.click();
-          return true;
+async function clickProviderRemoveButton(
+  page: Page,
+  profileName: string,
+): Promise<void> {
+  const clicked = await page.evaluate(
+    (input: { profileName: string }) => {
+      const buttons = Array.from(document.querySelectorAll("button"));
+      for (const candidate of buttons) {
+        if (!(candidate instanceof HTMLButtonElement) || candidate.disabled) {
+          continue;
         }
 
-        current = current.parentElement;
-      }
-    }
+        if ((candidate.textContent?.trim() ?? "") !== "Remove") {
+          continue;
+        }
 
-    return false;
-  }, {
-    profileName
-  });
+        let current: HTMLElement | null = candidate;
+        while (current) {
+          const className = current.className;
+          if (
+            typeof className === "string" &&
+            className.includes("border-primary") &&
+            (current.textContent?.includes(input.profileName) ?? false)
+          ) {
+            candidate.click();
+            return true;
+          }
+
+          current = current.parentElement;
+        }
+      }
+
+      return false;
+    },
+    {
+      profileName,
+    },
+  );
 
   if (!clicked) {
     throw new Error(`Could not click remove for provider "${profileName}".`);
@@ -689,13 +861,13 @@ async function clickProviderRemoveButton(page: Page, profileName: string): Promi
 async function clickElementContainingText(
   page: Page,
   selector: string,
-  text: string
+  text: string,
 ): Promise<void> {
   const clicked = await page.evaluate(
     (input: { selector: string; text: string }) => {
-      const element = Array.from(document.querySelectorAll(input.selector)).find((entry) =>
-        entry.textContent?.includes(input.text)
-      );
+      const element = Array.from(
+        document.querySelectorAll(input.selector),
+      ).find((entry) => entry.textContent?.includes(input.text));
 
       if (!(element instanceof HTMLElement)) {
         return false;
@@ -706,8 +878,8 @@ async function clickElementContainingText(
     },
     {
       selector,
-      text
-    }
+      text,
+    },
   );
 
   if (!clicked) {
@@ -718,7 +890,7 @@ async function clickElementContainingText(
 async function setInputValueByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const updated = await page.evaluate(
     (input: { testId: string; value: string }) => {
@@ -731,15 +903,17 @@ async function setInputValueByTestId(
       }
 
       element.value = input.value;
-      element.dispatchEvent(new Event("change", {
-        bubbles: true
-      }));
+      element.dispatchEvent(
+        new Event("change", {
+          bubbles: true,
+        }),
+      );
       return true;
     },
     {
       testId,
-      value
-    }
+      value,
+    },
   );
 
   if (!updated) {
@@ -750,12 +924,15 @@ async function setInputValueByTestId(
 async function toggleSwitchByTestId(
   page: Page,
   testId: string,
-  checked: boolean
+  checked: boolean,
 ): Promise<void> {
   const updated = await page.evaluate(
     (input: { testId: string; checked: boolean }) => {
       const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      if (!(element instanceof HTMLButtonElement) || element.getAttribute("role") !== "switch") {
+      if (
+        !(element instanceof HTMLButtonElement) ||
+        element.getAttribute("role") !== "switch"
+      ) {
         return false;
       }
 
@@ -766,8 +943,8 @@ async function toggleSwitchByTestId(
     },
     {
       testId,
-      checked
-    }
+      checked,
+    },
   );
 
   if (!updated) {
@@ -778,109 +955,153 @@ async function toggleSwitchByTestId(
 async function waitForInputValue(
   page: Page,
   testId: string,
-  expectedValue: string
+  expectedValue: string,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const value = await page.evaluate((input: { testId: string }) => {
-      const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      if (
-        !(element instanceof HTMLInputElement) &&
-        !(element instanceof HTMLSelectElement)
-      ) {
-        return null;
-      }
+  await waitForCondition(
+    async () => {
+      const value = await page.evaluate(
+        (input: { testId: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${input.testId}"]`,
+          );
+          if (
+            !(element instanceof HTMLInputElement) &&
+            !(element instanceof HTMLSelectElement)
+          ) {
+            return null;
+          }
 
-      return element.value;
-    }, {
-      testId
-    });
+          return element.value;
+        },
+        {
+          testId,
+        },
+      );
 
-    return value === expectedValue;
-  }, `input ${testId} value ${expectedValue}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return value === expectedValue;
+    },
+    `input ${testId} value ${expectedValue}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForSwitchValue(
   page: Page,
   testId: string,
-  expectedValue: boolean
+  expectedValue: boolean,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const checked = await page.evaluate((input: { testId: string }) => {
-      const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      if (!(element instanceof HTMLButtonElement) || element.getAttribute("role") !== "switch") {
-        return null;
-      }
+  await waitForCondition(
+    async () => {
+      const checked = await page.evaluate(
+        (input: { testId: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${input.testId}"]`,
+          );
+          if (
+            !(element instanceof HTMLButtonElement) ||
+            element.getAttribute("role") !== "switch"
+          ) {
+            return null;
+          }
 
-      return element.getAttribute("aria-checked") === "true";
-    }, {
-      testId
-    });
+          return element.getAttribute("aria-checked") === "true";
+        },
+        {
+          testId,
+        },
+      );
 
-    return checked === expectedValue;
-  }, `switch ${testId} value ${String(expectedValue)}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return checked === expectedValue;
+    },
+    `switch ${testId} value ${String(expectedValue)}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForPageText(page: Page, text: string): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return bodyText.includes(text);
-  }, `page text "${text}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return bodyText.includes(text);
+    },
+    `page text "${text}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForPageTexts(
   page: Page,
-  expectedTexts: ReadonlyArray<string>
+  expectedTexts: ReadonlyArray<string>,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return expectedTexts.every((text) => bodyText.includes(text));
-  }, `page texts "${expectedTexts.join(", ")}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return expectedTexts.every((text) => bodyText.includes(text));
+    },
+    `page texts "${expectedTexts.join(", ")}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForTestId(page: Page, testId: string): Promise<void> {
-  await waitForCondition(async () => {
-    const exists = await page.evaluate((input: { testId: string }) => {
-      const element = document.querySelector(`[data-testid="${input.testId}"]`);
-      return element instanceof HTMLElement;
-    }, {
-      testId
-    });
+  await waitForCondition(
+    async () => {
+      const exists = await page.evaluate(
+        (input: { testId: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${input.testId}"]`,
+          );
+          return element instanceof HTMLElement;
+        },
+        {
+          testId,
+        },
+      );
 
-    return exists;
-  }, `test id "${testId}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return exists;
+    },
+    `test id "${testId}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForButtonEnabled(page: Page, label: string): Promise<void> {
-  await waitForCondition(async () => {
-    const enabled = await page.evaluate((buttonLabel: string) => {
-      const button = Array.from(document.querySelectorAll("button")).find((element) => {
-        const text = element.textContent?.trim() ?? "";
-        return text.includes(buttonLabel);
-      });
+  await waitForCondition(
+    async () => {
+      const enabled = await page.evaluate((buttonLabel: string) => {
+        const button = Array.from(document.querySelectorAll("button")).find(
+          (element) => {
+            const text = element.textContent?.trim() ?? "";
+            return text.includes(buttonLabel);
+          },
+        );
 
-      return button instanceof HTMLButtonElement && !button.disabled;
-    }, label);
+        return button instanceof HTMLButtonElement && !button.disabled;
+      }, label);
 
-    return enabled;
-  }, `button "${label}" enabled`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return enabled;
+    },
+    `button "${label}" enabled`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -929,7 +1150,10 @@ function readRequiredString(value: unknown, key: string): string {
   return nested.trim();
 }
 
-function readRequiredRecord(value: unknown, key: string): Record<string, unknown> {
+function readRequiredRecord(
+  value: unknown,
+  key: string,
+): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new Error(`Invalid ${key}`);
   }
@@ -949,11 +1173,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function writeJson(
   response: ServerResponse,
   statusCode: number,
-  value: Readonly<Record<string, unknown>>
+  value: Readonly<Record<string, unknown>>,
 ): void {
   response.writeHead(statusCode, {
     ...createCorsHeaders(),
-    [ResponseHeader.ContentType]: "application/json"
+    [ResponseHeader.ContentType]: "application/json",
   });
   response.end(JSON.stringify(value));
 }
@@ -962,7 +1186,7 @@ function createCorsHeaders(): Record<string, string> {
   return {
     [ResponseHeader.AllowOrigin]: "*",
     [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
-    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS"
+    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }
 

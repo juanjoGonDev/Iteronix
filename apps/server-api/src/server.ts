@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import {
@@ -23,7 +27,7 @@ import {
   RoutePath,
   HistoryField,
   SessionField,
-  TextEncoding
+  TextEncoding,
 } from "./constants";
 import { loadConfig, type ServerConfig } from "./config";
 import {
@@ -33,7 +37,7 @@ import {
   moveFile,
   readFileContent,
   searchFiles,
-  writeFileContent
+  writeFileContent,
 } from "./files";
 import {
   executeGitBranchCheckout,
@@ -50,7 +54,7 @@ import {
   parseGitPathRequest,
   parseGitCommitRequest,
   parseGitDiffRequest,
-  parseGitStatusRequest
+  parseGitStatusRequest,
 } from "./git";
 import {
   createDefaultQualityGateCatalog,
@@ -64,7 +68,7 @@ import {
   QualityGateEventName,
   startQualityGateRun,
   type QualityGateCatalog,
-  type QualityGateEventHub
+  type QualityGateEventHub,
 } from "./quality-gates";
 import {
   createProjectStore,
@@ -72,43 +76,43 @@ import {
   type Project,
   type ProjectCreateInput,
   type ProjectOpenInput,
-  type ProjectStore
+  type ProjectStore,
 } from "./projects";
 import {
   createHistoryStore,
   HistoryRunStatus,
   HistoryStoreErrorCode,
   type HistoryStoreError,
-  type HistoryStore
+  type HistoryStore,
 } from "./history";
 import { LogLevel as LogLevelValues, type LogLevel } from "./logs";
 import {
   LogsStoreErrorCode as DomainLogsStoreErrorCode,
-  type LogsStoreError as DomainLogsStoreError
+  type LogsStoreError as DomainLogsStoreError,
 } from "../../../packages/domain/src/ports/logs-store";
 import {
   createServerLogsStore,
   type ServerLogEntry,
-  type ServerLogsStore
+  type ServerLogsStore,
 } from "./server-logs-store";
 import {
   createProviderStore,
   ProviderStoreErrorCode,
   type ProviderSelection,
   type ProviderStoreError,
-  type ProviderStore
+  type ProviderStore,
 } from "./providers";
 import {
   createCommandPolicy,
   createWorkspacePolicy,
   type CommandPolicy,
-  type WorkspacePolicy
+  type WorkspacePolicy,
 } from "./sandbox";
 import {
   createKanbanStore,
   KanbanStoreErrorCode,
   type KanbanStoreError,
-  type KanbanStore
+  type KanbanStore,
 } from "./kanban";
 import {
   createSessionEventHub,
@@ -119,25 +123,25 @@ import {
   SessionStoreErrorCode,
   type SessionStoreError,
   type SessionStore,
-  type SessionEventHub
+  type SessionEventHub,
 } from "./sessions";
 import { createSseStream } from "./sse";
 import { err, ok, ResultType, type Result } from "./result";
 import {
   createAiWorkbenchService,
-  type AiWorkbenchService
+  type AiWorkbenchService,
 } from "./ai-workbench";
 import {
   createWorkflowCatalogStore,
-  type WorkflowCatalogStore
+  type WorkflowCatalogStore,
 } from "../../../packages/agents/src/workflow-catalog";
 import {
   createCommandRunnerAdapter,
-  type CommandRunner
+  type CommandRunner,
 } from "../../../packages/adapters/src/command-runner/command-runner";
 import {
   createGitCliAdapter,
-  type GitRepository
+  type GitRepository,
 } from "../../../packages/adapters/src/git/git-adapter";
 import {
   executeWorkflowAssetDelete,
@@ -167,10 +171,16 @@ import {
   parseWorkflowExecutionGetRequest,
   parseWorkflowExecutionListRequest,
   parseWorkflowExecutionRunRequest,
-  parseWorkflowNodeProviderTestRequest
+  parseWorkflowNodeProviderTestRequest,
 } from "./workflows";
-import { createWorkflowRuntimeService, type WorkflowRuntimeService } from "./workflow-runtime";
-import { WorkflowRuntimeEventType, type WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
+import {
+  createWorkflowRuntimeService,
+  type WorkflowRuntimeService,
+} from "./workflow-runtime";
+import {
+  WorkflowRuntimeEventType,
+  type WorkflowRuntimeEvent,
+} from "../../../packages/agents/src/workflow-runtime";
 import {
   createFileWorkspaceStateStore,
   createWorkspaceStateFromStores,
@@ -178,41 +188,51 @@ import {
   type WorkspaceSettingsSnapshot,
   type WorkspaceState,
   type WorkspaceStateStore,
-  type WorkspaceWorkbenchHistory
+  type WorkspaceWorkbenchHistory,
 } from "./workspace-state";
 import {
   installConsoleForwarder,
-  type SharedLogEntry
+  type SharedLogEntry,
 } from "../../web-ui/src/shared/logger-core";
 
 const responseErrorLogMap = new WeakMap<ServerResponse, string>();
 
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
-  const logsStore = await createServerLogsStore(config.logDir, config.logMaxEntries);
+  const logsStore = await createServerLogsStore(
+    config.logDir,
+    config.logMaxEntries,
+  );
   installServerConsoleForwarder(logsStore);
 
-  const workspaceStateStore = createFileWorkspaceStateStore(config.workspaceStateFile);
+  const workspaceStateStore = createFileWorkspaceStateStore(
+    config.workspaceStateFile,
+  );
   const initialWorkspaceState = await workspaceStateStore.load();
   const projectStore = createProjectStore({
     projects: initialWorkspaceState.projects,
-    activeProjectId: initialWorkspaceState.activeProjectId
+    activeProjectId: initialWorkspaceState.activeProjectId,
   });
   const sessionStore = createSessionStore();
   const sessionEvents = createSessionEventHub();
   let persistHistoryStoreChange = (): void => {
     return;
   };
-  const historyStore = createHistoryStore(initialWorkspaceState.qualityHistory, () => {
-    persistHistoryStoreChange();
-  });
+  const historyStore = createHistoryStore(
+    initialWorkspaceState.qualityHistory,
+    () => {
+      persistHistoryStoreChange();
+    },
+  );
   const qualityGateEventHub = createQualityGateEventHub();
   const providerStore = createProviderStore({
     selections: initialWorkspaceState.providerSelections,
-    settings: initialWorkspaceState.providerSettings
+    settings: initialWorkspaceState.providerSettings,
   });
   const kanbanStore = createKanbanStore(initialWorkspaceState.kanban);
-  const workflowCatalog = createWorkflowCatalogStore(initialWorkspaceState.workflows);
+  const workflowCatalog = createWorkflowCatalogStore(
+    initialWorkspaceState.workflows,
+  );
   const workspacePersistence = createWorkspacePersistence({
     stateStore: workspaceStateStore,
     initialState: initialWorkspaceState,
@@ -220,7 +240,7 @@ export const startServer = async (): Promise<void> => {
     providerStore,
     kanbanStore,
     historyStore,
-    workflowCatalog
+    workflowCatalog,
   });
   let historySaveQueue = Promise.resolve();
   persistHistoryStoreChange = () => {
@@ -234,13 +254,13 @@ export const startServer = async (): Promise<void> => {
   const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
   const commandPolicy = createCommandPolicy(
     config.commandAllowlist,
-    workspacePolicy
+    workspacePolicy,
   );
   const aiWorkbench = await createAiWorkbenchService({
-    workspaceRoot: config.workspaceRoots[0] ?? process.cwd()
+    workspaceRoot: config.workspaceRoots[0] ?? process.cwd(),
   });
   const workflowRuntime = createWorkflowRuntimeService({
-    readWorkspaceState: () => workspacePersistence.read()
+    readWorkspaceState: () => workspacePersistence.read(),
   });
   const commandRunner = createCommandRunnerAdapter();
   const qualityGateCatalog = createDefaultQualityGateCatalog();
@@ -268,13 +288,18 @@ export const startServer = async (): Promise<void> => {
       workflowRuntime,
       git,
       workspacePersistence,
-      workflowCatalog
+      workflowCatalog,
     ).catch((error: unknown) => {
-      console.error("server.unhandled", req.method ?? "UNKNOWN", req.url ?? "", error);
+      console.error(
+        "server.unhandled",
+        req.method ?? "UNKNOWN",
+        req.url ?? "",
+        error,
+      );
       if (!res.writableEnded) {
         respondError(res, {
           status: HttpStatus.InternalServerError,
-          message: ErrorMessage.InternalServerError
+          message: ErrorMessage.InternalServerError,
         });
       }
     });
@@ -285,7 +310,7 @@ export const startServer = async (): Promise<void> => {
     host: config.host,
     port: config.port,
     logDir: config.logDir,
-    logMaxEntries: config.logMaxEntries
+    logMaxEntries: config.logMaxEntries,
   });
 };
 
@@ -310,10 +335,12 @@ const createWorkspacePersistence = (input: {
 }): WorkspacePersistence => {
   let state = input.initialState;
 
-  const buildState = (overrides: {
-    settings?: WorkspaceSettingsSnapshot;
-    workbenchHistory?: WorkspaceWorkbenchHistory;
-  } = {}): WorkspaceState =>
+  const buildState = (
+    overrides: {
+      settings?: WorkspaceSettingsSnapshot;
+      workbenchHistory?: WorkspaceWorkbenchHistory;
+    } = {},
+  ): WorkspaceState =>
     createWorkspaceStateFromStores({
       projectSnapshot: input.projectStore.snapshot(),
       providerSnapshot: input.providerStore.snapshot(),
@@ -322,7 +349,7 @@ const createWorkspacePersistence = (input: {
       workflowSnapshot: input.workflowCatalog.snapshot(),
       settings: overrides.settings ?? state.settings,
       workbenchHistory: overrides.workbenchHistory ?? state.workbenchHistory,
-      previousState: state
+      previousState: state,
     });
 
   const saveCurrent = async (): Promise<WorkspaceState> => {
@@ -336,7 +363,9 @@ const createWorkspacePersistence = (input: {
     activeProjectId?: string | null;
   }): Promise<WorkspaceState> => {
     if (Object.hasOwn(update, "activeProjectId")) {
-      const activeResult = input.projectStore.setActive(update.activeProjectId ?? null);
+      const activeResult = input.projectStore.setActive(
+        update.activeProjectId ?? null,
+      );
       if (activeResult.type === ResultType.Err) {
         throw new Error(activeResult.error.message);
       }
@@ -361,7 +390,7 @@ const createWorkspacePersistence = (input: {
   return {
     read: () => state,
     saveCurrent,
-    updateUiState
+    updateUiState,
   };
 };
 
@@ -385,12 +414,12 @@ const handleRequest = async (
   workflowRuntime: WorkflowRuntimeService,
   git: GitRepository,
   workspacePersistence: WorkspacePersistence,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingUrl
+      message: ErrorMessage.MissingUrl,
     });
     return;
   }
@@ -436,7 +465,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleCreateProject(req, res, projectStore, workspacePolicy, workspacePersistence);
+    await handleCreateProject(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -446,7 +481,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleOpenProject(req, res, projectStore, workspacePolicy, workspacePersistence);
+    await handleOpenProject(
+      req,
+      res,
+      projectStore,
+      workspacePolicy,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -646,7 +687,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleProvidersSelect(req, res, projectStore, providerStore, workspacePersistence);
+    await handleProvidersSelect(
+      req,
+      res,
+      projectStore,
+      providerStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -656,7 +703,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleProviderSettingsUpdate(req, res, projectStore, providerStore, workspacePersistence);
+    await handleProviderSettingsUpdate(
+      req,
+      res,
+      projectStore,
+      providerStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -691,7 +744,7 @@ const handleRequest = async (
       res,
       projectStore,
       workflowCatalog,
-      workspacePersistence
+      workspacePersistence,
     );
     return;
   }
@@ -702,7 +755,12 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowDefinitionDelete(req, res, workflowCatalog, workspacePersistence);
+    await handleWorkflowDefinitionDelete(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -737,7 +795,7 @@ const handleRequest = async (
       res,
       projectStore,
       workflowCatalog,
-      workspacePersistence
+      workspacePersistence,
     );
     return;
   }
@@ -748,7 +806,12 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowAssetDelete(req, res, workflowCatalog, workspacePersistence);
+    await handleWorkflowAssetDelete(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -788,7 +851,12 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowExecutionDelete(req, res, workflowCatalog, workspacePersistence);
+    await handleWorkflowExecutionDelete(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -803,7 +871,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence
+      workspacePersistence,
     );
     return;
   }
@@ -814,7 +882,14 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowExecutionStream(req, res, url, workflowCatalog, workflowRuntime, workspacePersistence);
+    await handleWorkflowExecutionStream(
+      req,
+      res,
+      url,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -829,7 +904,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence
+      workspacePersistence,
     );
     return;
   }
@@ -846,7 +921,7 @@ const handleRequest = async (
       projectStore,
       workspacePolicy,
       commandPolicy,
-      git
+      git,
     );
     return;
   }
@@ -863,7 +938,7 @@ const handleRequest = async (
       projectStore,
       workspacePolicy,
       commandPolicy,
-      git
+      git,
     );
     return;
   }
@@ -881,7 +956,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      GitPathOperationKind.Stage
+      GitPathOperationKind.Stage,
     );
     return;
   }
@@ -899,7 +974,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      GitPathOperationKind.Unstage
+      GitPathOperationKind.Unstage,
     );
     return;
   }
@@ -917,7 +992,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      GitPathOperationKind.Revert
+      GitPathOperationKind.Revert,
     );
     return;
   }
@@ -934,7 +1009,7 @@ const handleRequest = async (
       projectStore,
       workspacePolicy,
       commandPolicy,
-      git
+      git,
     );
     return;
   }
@@ -951,7 +1026,7 @@ const handleRequest = async (
       projectStore,
       workspacePolicy,
       commandPolicy,
-      git
+      git,
     );
     return;
   }
@@ -969,7 +1044,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      "create"
+      "create",
     );
     return;
   }
@@ -987,7 +1062,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      "checkout"
+      "checkout",
     );
     return;
   }
@@ -1005,7 +1080,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      "push"
+      "push",
     );
     return;
   }
@@ -1023,7 +1098,7 @@ const handleRequest = async (
       workspacePolicy,
       commandPolicy,
       git,
-      "publish"
+      "publish",
     );
     return;
   }
@@ -1044,7 +1119,7 @@ const handleRequest = async (
       commandRunner,
       qualityGateEventHub,
       qualityGateCatalog,
-      workspacePersistence
+      workspacePersistence,
     );
     return;
   }
@@ -1075,7 +1150,13 @@ const handleRequest = async (
       return;
     }
 
-    handleQualityGateStreamRequest(req, res, url, historyStore, qualityGateEventHub);
+    handleQualityGateStreamRequest(
+      req,
+      res,
+      url,
+      historyStore,
+      qualityGateEventHub,
+    );
     return;
   }
 
@@ -1085,7 +1166,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardCreate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanBoardCreate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1105,7 +1192,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanBoardUpdate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1115,7 +1208,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanBoardDelete(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanBoardDelete(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1125,7 +1224,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnCreate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanColumnCreate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1145,7 +1250,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanColumnUpdate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1155,7 +1266,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanColumnDelete(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanColumnDelete(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1165,7 +1282,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskCreate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanTaskCreate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1185,7 +1308,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskUpdate(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanTaskUpdate(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1195,7 +1324,13 @@ const handleRequest = async (
       return;
     }
 
-    await handleKanbanTaskDelete(req, res, projectStore, kanbanStore, workspacePersistence);
+    await handleKanbanTaskDelete(
+      req,
+      res,
+      projectStore,
+      kanbanStore,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -1241,7 +1376,7 @@ const handleRequest = async (
 
   respondError(res, {
     status: HttpStatus.NotFound,
-    message: ErrorMessage.NotFound
+    message: ErrorMessage.NotFound,
   });
 };
 
@@ -1250,7 +1385,7 @@ const handleCreateProject = async (
   res: ServerResponse,
   store: ProjectStore,
   workspacePolicy: WorkspacePolicy,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1264,7 +1399,10 @@ const handleCreateProject = async (
     return;
   }
 
-  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
+  const rootResult = assertProjectRootIfPresent(
+    parsed.value.rootPath,
+    workspacePolicy,
+  );
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -1272,7 +1410,7 @@ const handleCreateProject = async (
 
   const created = store.create({
     ...parsed.value,
-    rootPath: rootResult.value
+    rootPath: rootResult.value,
   });
   if (created.type === ResultType.Err) {
     respondError(res, mapProjectStoreError(created.error));
@@ -1281,7 +1419,7 @@ const handleCreateProject = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
-    project: created.value
+    project: created.value,
   });
 };
 
@@ -1290,7 +1428,7 @@ const handleOpenProject = async (
   res: ServerResponse,
   store: ProjectStore,
   workspacePolicy: WorkspacePolicy,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1304,7 +1442,10 @@ const handleOpenProject = async (
     return;
   }
 
-  const rootResult = assertProjectRootIfPresent(parsed.value.rootPath, workspacePolicy);
+  const rootResult = assertProjectRootIfPresent(
+    parsed.value.rootPath,
+    workspacePolicy,
+  );
   if (rootResult.type === ResultType.Err) {
     respondError(res, rootResult.error);
     return;
@@ -1323,23 +1464,23 @@ const handleOpenProject = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    project: opened.value
+    project: opened.value,
   });
 };
 
 const handleWorkspaceStateGet = async (
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   respondJson(res, HttpStatus.Ok, {
-    state: workspacePersistence.read()
+    state: workspacePersistence.read(),
   });
 };
 
 const handleWorkspaceStateUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1349,7 +1490,7 @@ const handleWorkspaceStateUpdate = async (
 
   const parsed = parseWorkspaceStateUpdateRequest(
     bodyResult.value,
-    workspacePersistence.read()
+    workspacePersistence.read(),
   );
   if (parsed.type === ResultType.Err) {
     respondError(res, parsed.error);
@@ -1359,19 +1500,20 @@ const handleWorkspaceStateUpdate = async (
   try {
     const state = await workspacePersistence.updateUiState(parsed.value);
     respondJson(res, HttpStatus.Ok, {
-      state
+      state,
     });
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: error instanceof Error ? error.message : ErrorMessage.InvalidBody
+      message:
+        error instanceof Error ? error.message : ErrorMessage.InvalidBody,
     });
   }
 };
 
 export const parseWorkspaceStateUpdateRequest = (
   value: unknown,
-  currentState: WorkspaceState
+  currentState: WorkspaceState,
 ): Result<
   {
     settings?: WorkspaceSettingsSnapshot;
@@ -1383,7 +1525,7 @@ export const parseWorkspaceStateUpdateRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -1415,26 +1557,34 @@ export const parseWorkspaceStateUpdateRequest = (
 
 const parseWorkspaceStateUpdateValue = (
   value: Record<string, unknown>,
-  currentState: WorkspaceState
+  currentState: WorkspaceState,
 ): Result<WorkspaceState, ApiError> => {
   try {
-    return ok(parseWorkspaceState({
-      ...currentState,
-      ...(Object.hasOwn(value, "settings") ? { settings: value["settings"] } : {}),
-      ...(Object.hasOwn(value, "workbenchHistory") ? { workbenchHistory: value["workbenchHistory"] } : {}),
-      ...(Object.hasOwn(value, "activeProjectId") ? { activeProjectId: value["activeProjectId"] } : {})
-    }));
+    return ok(
+      parseWorkspaceState({
+        ...currentState,
+        ...(Object.hasOwn(value, "settings")
+          ? { settings: value["settings"] }
+          : {}),
+        ...(Object.hasOwn(value, "workbenchHistory")
+          ? { workbenchHistory: value["workbenchHistory"] }
+          : {}),
+        ...(Object.hasOwn(value, "activeProjectId")
+          ? { activeProjectId: value["activeProjectId"] }
+          : {}),
+      }),
+    );
   } catch {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 };
 
 const assertProjectRootIfPresent = (
   rootPath: string | null,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
 ): Result<string | null, ApiError> => {
   if (rootPath === null) {
     return ok(null);
@@ -1443,11 +1593,13 @@ const assertProjectRootIfPresent = (
   return workspacePolicy.assertPathAllowed(rootPath);
 };
 
-const readProjectFilesystemRoot = (project: Project): Result<string, ApiError> => {
+const readProjectFilesystemRoot = (
+  project: Project,
+): Result<string, ApiError> => {
   if (project.rootPath === null) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingRootPath
+      message: ErrorMessage.MissingRootPath,
     });
   }
 
@@ -1457,7 +1609,7 @@ const readProjectFilesystemRoot = (project: Project): Result<string, ApiError> =
 const handleFileTree = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1482,24 +1634,21 @@ const handleFileTree = async (
     return;
   }
 
-  const treeResult = await listFileTree(
-    rootPath.value,
-    parsed.value.path
-  );
+  const treeResult = await listFileTree(rootPath.value, parsed.value.path);
   if (treeResult.type === ResultType.Err) {
     respondError(res, treeResult.error);
     return;
   }
 
   respondJson(res, HttpStatus.Ok, {
-    entries: treeResult.value
+    entries: treeResult.value,
   });
 };
 
 const handleFileRead = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1524,18 +1673,14 @@ const handleFileRead = async (
     return;
   }
 
-  const readResult = await readFileContent(
-    rootPath.value,
-    parsed.value.path,
-    {
-      ...(parsed.value.startLine !== undefined
-        ? { startLine: parsed.value.startLine }
-        : {}),
-      ...(parsed.value.lineCount !== undefined
-        ? { lineCount: parsed.value.lineCount }
-        : {})
-    }
-  );
+  const readResult = await readFileContent(rootPath.value, parsed.value.path, {
+    ...(parsed.value.startLine !== undefined
+      ? { startLine: parsed.value.startLine }
+      : {}),
+    ...(parsed.value.lineCount !== undefined
+      ? { lineCount: parsed.value.lineCount }
+      : {}),
+  });
   if (readResult.type === ResultType.Err) {
     respondError(res, readResult.error);
     return;
@@ -1546,14 +1691,14 @@ const handleFileRead = async (
     startLine: readResult.value.startLine,
     endLine: readResult.value.endLine,
     totalLines: readResult.value.totalLines,
-    truncated: readResult.value.truncated
+    truncated: readResult.value.truncated,
   });
 };
 
 const handleFileSearch = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1582,7 +1727,7 @@ const handleFileSearch = async (
     query: parsed.value.query,
     isRegex: parsed.value.isRegex,
     matchCase: parsed.value.matchCase,
-    wholeWord: parsed.value.wholeWord
+    wholeWord: parsed.value.wholeWord,
   });
   if (searchResult.type === ResultType.Err) {
     respondError(res, searchResult.error);
@@ -1590,14 +1735,14 @@ const handleFileSearch = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    results: searchResult.value
+    results: searchResult.value,
   });
 };
 
 const handleFileDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1622,24 +1767,21 @@ const handleFileDelete = async (
     return;
   }
 
-  const deleteResult = await deleteFile(
-    rootPath.value,
-    parsed.value.path
-  );
+  const deleteResult = await deleteFile(rootPath.value, parsed.value.path);
   if (deleteResult.type === ResultType.Err) {
     respondError(res, deleteResult.error);
     return;
   }
 
   respondJson(res, HttpStatus.Ok, {
-    success: deleteResult.value.success
+    success: deleteResult.value.success,
   });
 };
 
 const handleFileCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1666,7 +1808,7 @@ const handleFileCreate = async (
 
   const createResult = await createDirectory(
     rootPath.value,
-    dirname(parsed.value.path)
+    dirname(parsed.value.path),
   );
   if (createResult.type === ResultType.Err) {
     respondError(res, createResult.error);
@@ -1676,7 +1818,7 @@ const handleFileCreate = async (
   const writeResult = await writeFileContent(
     rootPath.value,
     parsed.value.path,
-    parsed.value.content
+    parsed.value.content,
   );
   if (writeResult.type === ResultType.Err) {
     respondError(res, writeResult.error);
@@ -1685,14 +1827,14 @@ const handleFileCreate = async (
 
   respondJson(res, HttpStatus.Created, {
     path: parsed.value.path,
-    bytesWritten: writeResult.value.bytesWritten
+    bytesWritten: writeResult.value.bytesWritten,
   });
 };
 
 const handleFileMove = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1720,7 +1862,7 @@ const handleFileMove = async (
   const moveResult = await moveFile(
     rootPath.value,
     parsed.value.sourcePath,
-    parsed.value.targetPath
+    parsed.value.targetPath,
   );
   if (moveResult.type === ResultType.Err) {
     respondError(res, moveResult.error);
@@ -1728,14 +1870,14 @@ const handleFileMove = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    success: moveResult.value.success
+    success: moveResult.value.success,
   });
 };
 
 const handleFileWrite = async (
   req: IncomingMessage,
   res: ServerResponse,
-  store: ProjectStore
+  store: ProjectStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1763,7 +1905,7 @@ const handleFileWrite = async (
   const writeResult = await writeFileContent(
     rootPath.value,
     parsed.value.path,
-    parsed.value.content
+    parsed.value.content,
   );
   if (writeResult.type === ResultType.Err) {
     respondError(res, writeResult.error);
@@ -1771,7 +1913,7 @@ const handleFileWrite = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    bytesWritten: writeResult.value.bytesWritten
+    bytesWritten: writeResult.value.bytesWritten,
   });
 };
 
@@ -1779,7 +1921,7 @@ const handleSessionStart = async (
   req: IncomingMessage,
   res: ServerResponse,
   sessionStore: SessionStore,
-  sessionEvents: SessionEventHub
+  sessionEvents: SessionEventHub,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1802,7 +1944,7 @@ const handleSessionStart = async (
   sessionEvents.publish(createStatusEvent(started.value));
 
   respondJson(res, HttpStatus.Created, {
-    session: started.value
+    session: started.value,
   });
 };
 
@@ -1810,7 +1952,7 @@ const handleSessionStop = async (
   req: IncomingMessage,
   res: ServerResponse,
   sessionStore: SessionStore,
-  sessionEvents: SessionEventHub
+  sessionEvents: SessionEventHub,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1833,7 +1975,7 @@ const handleSessionStop = async (
   sessionEvents.publish(createStatusEvent(stopped.value));
 
   respondJson(res, HttpStatus.Ok, {
-    session: stopped.value
+    session: stopped.value,
   });
 };
 
@@ -1842,13 +1984,13 @@ const handleSessionStream = (
   res: ServerResponse,
   sessionStore: SessionStore,
   sessionEvents: SessionEventHub,
-  url: URL
+  url: URL,
 ): void => {
   const sessionId = url.searchParams.get(QueryParam.SessionId) ?? undefined;
   if (!sessionId || sessionId.trim().length === 0) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingSessionId
+      message: ErrorMessage.MissingSessionId,
     });
     return;
   }
@@ -1864,14 +2006,14 @@ const handleSessionStream = (
   stream.send({
     event: SessionEventType.Status,
     data: initialEvent,
-    id: initialEvent.id
+    id: initialEvent.id,
   });
 
   const unsubscribe = sessionEvents.subscribe(sessionId, (event) => {
     stream.send({
       event: event.type,
       data: event,
-      id: event.id
+      id: event.id,
     });
   });
 
@@ -1884,7 +2026,7 @@ const handleSessionStream = (
 const handleHistoryList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  historyStore: HistoryStore
+  historyStore: HistoryStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1905,14 +2047,14 @@ const handleHistoryList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    runs: listed.value
+    runs: listed.value,
   });
 };
 
 const handleHistoryEvents = async (
   req: IncomingMessage,
   res: ServerResponse,
-  historyStore: HistoryStore
+  historyStore: HistoryStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1933,14 +2075,14 @@ const handleHistoryEvents = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    events: events.value
+    events: events.value,
   });
 };
 
 const handleLogsQuery = async (
   req: IncomingMessage,
   res: ServerResponse,
-  logsStore: ServerLogsStore
+  logsStore: ServerLogsStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1961,14 +2103,14 @@ const handleLogsQuery = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    logs: logs.value
+    logs: logs.value,
   });
 };
 
 const handleLogsAppend = async (
   req: IncomingMessage,
   res: ServerResponse,
-  logsStore: ServerLogsStore
+  logsStore: ServerLogsStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1989,18 +2131,18 @@ const handleLogsAppend = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    success: true
+    success: true,
   });
 };
 
 const handleLogsReset = async (
   res: ServerResponse,
-  logsStore: ServerLogsStore
+  logsStore: ServerLogsStore,
 ): Promise<void> => {
   await logsStore.reset();
 
   respondJson(res, HttpStatus.Ok, {
-    success: true
+    success: true,
   });
 };
 
@@ -2008,7 +2150,7 @@ const handleProvidersList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  providerStore: ProviderStore
+  providerStore: ProviderStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2033,7 +2175,7 @@ const handleProvidersList = async (
 
     const selectionResult = providerStore.getSelection({
       projectId: parsed.value.projectId,
-      profileId: parsed.value.profileId
+      profileId: parsed.value.profileId,
     });
     if (selectionResult.type === ResultType.Err) {
       respondError(res, mapProviderStoreError(selectionResult.error));
@@ -2055,7 +2197,7 @@ const handleProvidersSelect = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2083,7 +2225,7 @@ const handleProvidersSelect = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    selection: selected.value
+    selection: selected.value,
   });
 };
 
@@ -2092,7 +2234,7 @@ const handleProviderSettingsUpdate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2120,7 +2262,7 @@ const handleProviderSettingsUpdate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    settings: updated.value
+    settings: updated.value,
   });
 };
 
@@ -2129,7 +2271,7 @@ const handleKanbanBoardCreate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2157,7 +2299,7 @@ const handleKanbanBoardCreate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
-    board: created.value
+    board: created.value,
   });
 };
 
@@ -2165,7 +2307,7 @@ const handleKanbanBoardList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2192,7 +2334,7 @@ const handleKanbanBoardList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    boards: listed.value
+    boards: listed.value,
   });
 };
 
@@ -2201,7 +2343,7 @@ const handleKanbanBoardUpdate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2229,7 +2371,7 @@ const handleKanbanBoardUpdate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    board: updated.value
+    board: updated.value,
   });
 };
 
@@ -2238,7 +2380,7 @@ const handleKanbanBoardDelete = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2266,7 +2408,7 @@ const handleKanbanBoardDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    board: deleted.value
+    board: deleted.value,
   });
 };
 
@@ -2275,7 +2417,7 @@ const handleKanbanColumnCreate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2303,7 +2445,7 @@ const handleKanbanColumnCreate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
-    column: created.value
+    column: created.value,
   });
 };
 
@@ -2311,7 +2453,7 @@ const handleKanbanColumnList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2338,7 +2480,7 @@ const handleKanbanColumnList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    columns: listed.value
+    columns: listed.value,
   });
 };
 
@@ -2347,7 +2489,7 @@ const handleKanbanColumnUpdate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2375,7 +2517,7 @@ const handleKanbanColumnUpdate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    column: updated.value
+    column: updated.value,
   });
 };
 
@@ -2384,7 +2526,7 @@ const handleKanbanColumnDelete = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2412,7 +2554,7 @@ const handleKanbanColumnDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    column: deleted.value
+    column: deleted.value,
   });
 };
 
@@ -2421,7 +2563,7 @@ const handleKanbanTaskCreate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2449,7 +2591,7 @@ const handleKanbanTaskCreate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
-    task: created.value
+    task: created.value,
   });
 };
 
@@ -2457,7 +2599,7 @@ const handleKanbanTaskList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  kanbanStore: KanbanStore
+  kanbanStore: KanbanStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2484,7 +2626,7 @@ const handleKanbanTaskList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    tasks: listed.value
+    tasks: listed.value,
   });
 };
 
@@ -2493,7 +2635,7 @@ const handleKanbanTaskUpdate = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2521,7 +2663,7 @@ const handleKanbanTaskUpdate = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    task: updated.value
+    task: updated.value,
   });
 };
 
@@ -2530,7 +2672,7 @@ const handleKanbanTaskDelete = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2558,7 +2700,7 @@ const handleKanbanTaskDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    task: deleted.value
+    task: deleted.value,
   });
 };
 
@@ -2568,7 +2710,7 @@ type ApiError = {
 };
 
 const readJsonBody = (
-  req: IncomingMessage
+  req: IncomingMessage,
 ): Promise<Result<unknown, ApiError>> =>
   new Promise((resolve) => {
     const chunks: string[] = [];
@@ -2582,8 +2724,8 @@ const readJsonBody = (
         resolve(
           err({
             status: HttpStatus.BadRequest,
-            message: ErrorMessage.EmptyBody
-          })
+            message: ErrorMessage.EmptyBody,
+          }),
         );
         return;
       }
@@ -2602,26 +2744,26 @@ const readJsonBody = (
       resolve(
         err({
           status: HttpStatus.BadRequest,
-          message: error.message
-        })
+          message: error.message,
+        }),
       );
     });
   });
 
 const parseFileDeleteRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; path: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2630,7 +2772,7 @@ const parseFileDeleteRequest = (
   const path = readRequiredString(
     value,
     FileField.Path,
-    ErrorMessage.MissingPath
+    ErrorMessage.MissingPath,
   );
   if (path.type === ResultType.Err) {
     return path;
@@ -2638,24 +2780,24 @@ const parseFileDeleteRequest = (
 
   return ok({
     projectId: projectId.value,
-    path: path.value
+    path: path.value,
   });
 };
 
 const parseFileCreateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; path: string; content: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2664,7 +2806,7 @@ const parseFileCreateRequest = (
   const path = readRequiredString(
     value,
     FileField.Path,
-    ErrorMessage.MissingPath
+    ErrorMessage.MissingPath,
   );
   if (path.type === ResultType.Err) {
     return path;
@@ -2673,7 +2815,7 @@ const parseFileCreateRequest = (
   const content = readRequiredStringAllowEmpty(
     value,
     FileField.Content,
-    ErrorMessage.MissingContent
+    ErrorMessage.MissingContent,
   );
   if (content.type === ResultType.Err) {
     return content;
@@ -2682,24 +2824,27 @@ const parseFileCreateRequest = (
   return ok({
     projectId: projectId.value,
     path: path.value,
-    content: content.value
+    content: content.value,
   });
 };
 
 const parseFileMoveRequest = (
-  value: unknown
-): Result<{ projectId: string; sourcePath: string; targetPath: string }, ApiError> => {
+  value: unknown,
+): Result<
+  { projectId: string; sourcePath: string; targetPath: string },
+  ApiError
+> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2708,7 +2853,7 @@ const parseFileMoveRequest = (
   const sourcePath = readRequiredString(
     value,
     FileMoveField.SourcePath,
-    ErrorMessage.MissingSourcePath
+    ErrorMessage.MissingSourcePath,
   );
   if (sourcePath.type === ResultType.Err) {
     return sourcePath;
@@ -2717,7 +2862,7 @@ const parseFileMoveRequest = (
   const targetPath = readRequiredString(
     value,
     FileMoveField.TargetPath,
-    ErrorMessage.MissingTargetPath
+    ErrorMessage.MissingTargetPath,
   );
   if (targetPath.type === ResultType.Err) {
     return targetPath;
@@ -2726,24 +2871,24 @@ const parseFileMoveRequest = (
   return ok({
     projectId: projectId.value,
     sourcePath: sourcePath.value,
-    targetPath: targetPath.value
+    targetPath: targetPath.value,
   });
 };
 
 const parseFileWriteRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; path: string; content: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2752,7 +2897,7 @@ const parseFileWriteRequest = (
   const path = readRequiredString(
     value,
     FileField.Path,
-    ErrorMessage.MissingPath
+    ErrorMessage.MissingPath,
   );
   if (path.type === ResultType.Err) {
     return path;
@@ -2761,7 +2906,7 @@ const parseFileWriteRequest = (
   const content = readRequiredStringAllowEmpty(
     value,
     FileField.Content,
-    ErrorMessage.MissingContent
+    ErrorMessage.MissingContent,
   );
   if (content.type === ResultType.Err) {
     return content;
@@ -2770,21 +2915,25 @@ const parseFileWriteRequest = (
   return ok({
     projectId: projectId.value,
     path: path.value,
-    content: content.value
+    content: content.value,
   });
 };
 
 const parseCreateProject = (
-  value: unknown
+  value: unknown,
 ): Result<ProjectCreateInput, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
-  const name = readRequiredString(value, ProjectField.Name, ErrorMessage.MissingName);
+  const name = readRequiredString(
+    value,
+    ProjectField.Name,
+    ErrorMessage.MissingName,
+  );
   if (name.type === ResultType.Err) {
     return name;
   }
@@ -2792,17 +2941,17 @@ const parseCreateProject = (
 
   return ok({
     name: name.value,
-    rootPath
+    rootPath,
   });
 };
 
 const parseOpenProject = (
-  value: unknown
+  value: unknown,
 ): Result<ProjectOpenInput, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -2812,29 +2961,29 @@ const parseOpenProject = (
   if (name) {
     return ok({
       name,
-      rootPath
+      rootPath,
     });
   }
 
   return ok({
-    rootPath
+    rootPath,
   });
 };
 
 const parseFileTreeRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; path?: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2845,17 +2994,17 @@ const parseFileTreeRequest = (
   if (path) {
     return ok({
       projectId: projectId.value,
-      path
+      path,
     });
   }
 
   return ok({
-    projectId: projectId.value
+    projectId: projectId.value,
   });
 };
 
 const parseFileSearchRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     projectId: string;
@@ -2869,14 +3018,14 @@ const parseFileSearchRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileSearchField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2885,7 +3034,7 @@ const parseFileSearchRequest = (
   const query = readRequiredString(
     value,
     FileSearchField.Query,
-    ErrorMessage.MissingQuery
+    ErrorMessage.MissingQuery,
   );
   if (query.type === ResultType.Err) {
     return query;
@@ -2911,12 +3060,12 @@ const parseFileSearchRequest = (
     query: query.value,
     isRegex: isRegex.value ?? false,
     matchCase: matchCase.value ?? false,
-    wholeWord: wholeWord.value ?? false
+    wholeWord: wholeWord.value ?? false,
   });
 };
 
 const parseFileReadRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     projectId: string;
@@ -2929,14 +3078,14 @@ const parseFileReadRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     FileField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -2945,18 +3094,24 @@ const parseFileReadRequest = (
   const path = readRequiredString(
     value,
     FileField.Path,
-    ErrorMessage.MissingPath
+    ErrorMessage.MissingPath,
   );
   if (path.type === ResultType.Err) {
     return path;
   }
 
-  const startLine = readOptionalPositiveIntegerField(value, FileField.StartLine);
+  const startLine = readOptionalPositiveIntegerField(
+    value,
+    FileField.StartLine,
+  );
   if (startLine.type === ResultType.Err) {
     return startLine;
   }
 
-  const lineCount = readOptionalPositiveIntegerField(value, FileField.LineCount);
+  const lineCount = readOptionalPositiveIntegerField(
+    value,
+    FileField.LineCount,
+  );
   if (lineCount.type === ResultType.Err) {
     return lineCount;
   }
@@ -2965,65 +3120,65 @@ const parseFileReadRequest = (
     projectId: projectId.value,
     path: path.value,
     ...(startLine.value !== undefined ? { startLine: startLine.value } : {}),
-    ...(lineCount.value !== undefined ? { lineCount: lineCount.value } : {})
+    ...(lineCount.value !== undefined ? { lineCount: lineCount.value } : {}),
   });
 };
 
 const parseSessionStartRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     SessionField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
   }
 
   return ok({
-    projectId: projectId.value
+    projectId: projectId.value,
   });
 };
 
 const parseSessionStopRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ sessionId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const sessionId = readRequiredString(
     value,
     SessionField.SessionId,
-    ErrorMessage.MissingSessionId
+    ErrorMessage.MissingSessionId,
   );
   if (sessionId.type === ResultType.Err) {
     return sessionId;
   }
 
   return ok({
-    sessionId: sessionId.value
+    sessionId: sessionId.value,
   });
 };
 
 const parseHistoryListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ status?: HistoryRunStatus; limit?: number }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -3061,32 +3216,36 @@ const parseHistoryListRequest = (
 };
 
 const parseHistoryEventsRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ runId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
-  const runId = readRequiredString(value, HistoryField.RunId, ErrorMessage.MissingRunId);
+  const runId = readRequiredString(
+    value,
+    HistoryField.RunId,
+    ErrorMessage.MissingRunId,
+  );
   if (runId.type === ResultType.Err) {
     return runId;
   }
 
   return ok({
-    runId: runId.value
+    runId: runId.value,
   });
 };
 
 const parseLogsQueryRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ level?: LogLevel; runId?: string; limit?: number }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -3137,28 +3296,42 @@ const LogsAppendField = {
   Timestamp: "timestamp",
   Level: "level",
   Message: "message",
-  RunId: "runId"
+  RunId: "runId",
 } as const;
 
-const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError> => {
+const parseLogsAppendRequest = (
+  value: unknown,
+): Result<ServerLogEntry, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
-  const id = readRequiredString(value, LogsAppendField.Id, ErrorMessage.InvalidBody);
+  const id = readRequiredString(
+    value,
+    LogsAppendField.Id,
+    ErrorMessage.InvalidBody,
+  );
   if (id.type === ResultType.Err) {
     return id;
   }
 
-  const timestamp = readRequiredString(value, LogsAppendField.Timestamp, ErrorMessage.InvalidBody);
+  const timestamp = readRequiredString(
+    value,
+    LogsAppendField.Timestamp,
+    ErrorMessage.InvalidBody,
+  );
   if (timestamp.type === ResultType.Err) {
     return timestamp;
   }
 
-  const levelValue = readRequiredString(value, LogsAppendField.Level, ErrorMessage.InvalidBody);
+  const levelValue = readRequiredString(
+    value,
+    LogsAppendField.Level,
+    ErrorMessage.InvalidBody,
+  );
   if (levelValue.type === ResultType.Err) {
     return levelValue;
   }
@@ -3168,7 +3341,11 @@ const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError
     return parsedLevel;
   }
 
-  const message = readRequiredString(value, LogsAppendField.Message, ErrorMessage.InvalidBody);
+  const message = readRequiredString(
+    value,
+    LogsAppendField.Message,
+    ErrorMessage.InvalidBody,
+  );
   if (message.type === ResultType.Err) {
     return message;
   }
@@ -3179,7 +3356,7 @@ const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError
     id: id.value,
     timestamp: timestamp.value,
     level: parsedLevel.value,
-    message: message.value
+    message: message.value,
   };
 
   if (runId) {
@@ -3190,36 +3367,48 @@ const parseLogsAppendRequest = (value: unknown): Result<ServerLogEntry, ApiError
 };
 
 const parseProvidersListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId?: string; profileId?: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
-  const projectIdValue = readOptionalStringField(value, ProviderField.ProjectId);
+  const projectIdValue = readOptionalStringField(
+    value,
+    ProviderField.ProjectId,
+  );
   if (projectIdValue.type === ResultType.Err) {
     return projectIdValue;
   }
 
-  const profileIdValue = readOptionalStringField(value, ProviderField.ProfileId);
+  const profileIdValue = readOptionalStringField(
+    value,
+    ProviderField.ProfileId,
+  );
   if (profileIdValue.type === ResultType.Err) {
     return profileIdValue;
   }
 
-  if (projectIdValue.value !== undefined && profileIdValue.value === undefined) {
+  if (
+    projectIdValue.value !== undefined &&
+    profileIdValue.value === undefined
+  ) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingProfileId
+      message: ErrorMessage.MissingProfileId,
     });
   }
 
-  if (profileIdValue.value !== undefined && projectIdValue.value === undefined) {
+  if (
+    profileIdValue.value !== undefined &&
+    projectIdValue.value === undefined
+  ) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -3237,19 +3426,22 @@ const parseProvidersListRequest = (
 };
 
 const parseProvidersSelectRequest = (
-  value: unknown
-): Result<{ projectId: string; profileId: string; providerId: string }, ApiError> => {
+  value: unknown,
+): Result<
+  { projectId: string; profileId: string; providerId: string },
+  ApiError
+> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     ProviderField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3258,7 +3450,7 @@ const parseProvidersSelectRequest = (
   const profileId = readRequiredString(
     value,
     ProviderField.ProfileId,
-    ErrorMessage.MissingProfileId
+    ErrorMessage.MissingProfileId,
   );
   if (profileId.type === ResultType.Err) {
     return profileId;
@@ -3267,7 +3459,7 @@ const parseProvidersSelectRequest = (
   const providerId = readRequiredString(
     value,
     ProviderField.ProviderId,
-    ErrorMessage.MissingProviderId
+    ErrorMessage.MissingProviderId,
   );
   if (providerId.type === ResultType.Err) {
     return providerId;
@@ -3276,27 +3468,32 @@ const parseProvidersSelectRequest = (
   return ok({
     projectId: projectId.value,
     profileId: profileId.value,
-    providerId: providerId.value
+    providerId: providerId.value,
   });
 };
 
 const parseProviderSettingsRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
-  { projectId: string; profileId: string; providerId: string; config: Record<string, unknown> },
+  {
+    projectId: string;
+    profileId: string;
+    providerId: string;
+    config: Record<string, unknown>;
+  },
   ApiError
 > => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     ProviderField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3305,7 +3502,7 @@ const parseProviderSettingsRequest = (
   const profileId = readRequiredString(
     value,
     ProviderField.ProfileId,
-    ErrorMessage.MissingProfileId
+    ErrorMessage.MissingProfileId,
   );
   if (profileId.type === ResultType.Err) {
     return profileId;
@@ -3314,7 +3511,7 @@ const parseProviderSettingsRequest = (
   const providerId = readRequiredString(
     value,
     ProviderField.ProviderId,
-    ErrorMessage.MissingProviderId
+    ErrorMessage.MissingProviderId,
   );
   if (providerId.type === ResultType.Err) {
     return providerId;
@@ -3323,7 +3520,7 @@ const parseProviderSettingsRequest = (
   const config = readRequiredRecord(
     value,
     ProviderField.Config,
-    ErrorMessage.MissingProviderConfig
+    ErrorMessage.MissingProviderConfig,
   );
   if (config.type === ResultType.Err) {
     return config;
@@ -3333,24 +3530,24 @@ const parseProviderSettingsRequest = (
     projectId: projectId.value,
     profileId: profileId.value,
     providerId: providerId.value,
-    config: config.value
+    config: config.value,
   });
 };
 
 const parseKanbanBoardCreateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; name: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3359,7 +3556,7 @@ const parseKanbanBoardCreateRequest = (
   const name = readRequiredString(
     value,
     KanbanBoardField.Name,
-    ErrorMessage.MissingBoardName
+    ErrorMessage.MissingBoardName,
   );
   if (name.type === ResultType.Err) {
     return name;
@@ -3367,48 +3564,48 @@ const parseKanbanBoardCreateRequest = (
 
   return ok({
     projectId: projectId.value,
-    name: name.value
+    name: name.value,
   });
 };
 
 const parseKanbanBoardListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
   }
 
   return ok({
-    projectId: projectId.value
+    projectId: projectId.value,
   });
 };
 
 const parseKanbanBoardUpdateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; boardId: string; name: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3417,7 +3614,7 @@ const parseKanbanBoardUpdateRequest = (
   const boardId = readRequiredString(
     value,
     KanbanBoardField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3426,7 +3623,7 @@ const parseKanbanBoardUpdateRequest = (
   const name = readRequiredString(
     value,
     KanbanBoardField.Name,
-    ErrorMessage.MissingBoardName
+    ErrorMessage.MissingBoardName,
   );
   if (name.type === ResultType.Err) {
     return name;
@@ -3435,24 +3632,24 @@ const parseKanbanBoardUpdateRequest = (
   return ok({
     projectId: projectId.value,
     boardId: boardId.value,
-    name: name.value
+    name: name.value,
   });
 };
 
 const parseKanbanBoardDeleteRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; boardId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3461,7 +3658,7 @@ const parseKanbanBoardDeleteRequest = (
   const boardId = readRequiredString(
     value,
     KanbanBoardField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3469,12 +3666,12 @@ const parseKanbanBoardDeleteRequest = (
 
   return ok({
     projectId: projectId.value,
-    boardId: boardId.value
+    boardId: boardId.value,
   });
 };
 
 const parseKanbanColumnCreateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   { projectId: string; boardId: string; name: string; position?: number },
   ApiError
@@ -3482,14 +3679,14 @@ const parseKanbanColumnCreateRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3498,7 +3695,7 @@ const parseKanbanColumnCreateRequest = (
   const boardId = readRequiredString(
     value,
     KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3507,7 +3704,7 @@ const parseKanbanColumnCreateRequest = (
   const name = readRequiredString(
     value,
     KanbanColumnField.Name,
-    ErrorMessage.MissingColumnName
+    ErrorMessage.MissingColumnName,
   );
   if (name.type === ResultType.Err) {
     return name;
@@ -3526,7 +3723,7 @@ const parseKanbanColumnCreateRequest = (
   } = {
     projectId: projectId.value,
     boardId: boardId.value,
-    name: name.value
+    name: name.value,
   };
 
   if (position.value !== undefined) {
@@ -3537,19 +3734,19 @@ const parseKanbanColumnCreateRequest = (
 };
 
 const parseKanbanColumnListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; boardId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3558,7 +3755,7 @@ const parseKanbanColumnListRequest = (
   const boardId = readRequiredString(
     value,
     KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3566,27 +3763,33 @@ const parseKanbanColumnListRequest = (
 
   return ok({
     projectId: projectId.value,
-    boardId: boardId.value
+    boardId: boardId.value,
   });
 };
 
 const parseKanbanColumnUpdateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
-  { projectId: string; boardId: string; columnId: string; name?: string; position?: number },
+  {
+    projectId: string;
+    boardId: string;
+    columnId: string;
+    name?: string;
+    position?: number;
+  },
   ApiError
 > => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3595,7 +3798,7 @@ const parseKanbanColumnUpdateRequest = (
   const boardId = readRequiredString(
     value,
     KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3604,7 +3807,7 @@ const parseKanbanColumnUpdateRequest = (
   const columnId = readRequiredString(
     value,
     KanbanColumnField.ColumnId,
-    ErrorMessage.MissingColumnId
+    ErrorMessage.MissingColumnId,
   );
   if (columnId.type === ResultType.Err) {
     return columnId;
@@ -3629,7 +3832,7 @@ const parseKanbanColumnUpdateRequest = (
   } = {
     projectId: projectId.value,
     boardId: boardId.value,
-    columnId: columnId.value
+    columnId: columnId.value,
   };
 
   if (name.value !== undefined) {
@@ -3643,7 +3846,7 @@ const parseKanbanColumnUpdateRequest = (
   if (input.name === undefined && input.position === undefined) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -3651,19 +3854,22 @@ const parseKanbanColumnUpdateRequest = (
 };
 
 const parseKanbanColumnDeleteRequest = (
-  value: unknown
-): Result<{ projectId: string; boardId: string; columnId: string }, ApiError> => {
+  value: unknown,
+): Result<
+  { projectId: string; boardId: string; columnId: string },
+  ApiError
+> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3672,7 +3878,7 @@ const parseKanbanColumnDeleteRequest = (
   const boardId = readRequiredString(
     value,
     KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3681,7 +3887,7 @@ const parseKanbanColumnDeleteRequest = (
   const columnId = readRequiredString(
     value,
     KanbanColumnField.ColumnId,
-    ErrorMessage.MissingColumnId
+    ErrorMessage.MissingColumnId,
   );
   if (columnId.type === ResultType.Err) {
     return columnId;
@@ -3690,12 +3896,12 @@ const parseKanbanColumnDeleteRequest = (
   return ok({
     projectId: projectId.value,
     boardId: boardId.value,
-    columnId: columnId.value
+    columnId: columnId.value,
   });
 };
 
 const parseKanbanTaskCreateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     projectId: string;
@@ -3710,14 +3916,14 @@ const parseKanbanTaskCreateRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3726,7 +3932,7 @@ const parseKanbanTaskCreateRequest = (
   const boardId = readRequiredString(
     value,
     KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3735,7 +3941,7 @@ const parseKanbanTaskCreateRequest = (
   const columnId = readRequiredString(
     value,
     KanbanTaskField.ColumnId,
-    ErrorMessage.MissingColumnId
+    ErrorMessage.MissingColumnId,
   );
   if (columnId.type === ResultType.Err) {
     return columnId;
@@ -3744,7 +3950,7 @@ const parseKanbanTaskCreateRequest = (
   const title = readRequiredString(
     value,
     KanbanTaskField.Title,
-    ErrorMessage.MissingTaskTitle
+    ErrorMessage.MissingTaskTitle,
   );
   if (title.type === ResultType.Err) {
     return title;
@@ -3752,7 +3958,7 @@ const parseKanbanTaskCreateRequest = (
 
   const description = readOptionalStringField(
     value,
-    KanbanTaskField.Description
+    KanbanTaskField.Description,
   );
   if (description.type === ResultType.Err) {
     return description;
@@ -3774,7 +3980,7 @@ const parseKanbanTaskCreateRequest = (
     projectId: projectId.value,
     boardId: boardId.value,
     columnId: columnId.value,
-    title: title.value
+    title: title.value,
   };
 
   if (description.value !== undefined) {
@@ -3789,7 +3995,7 @@ const parseKanbanTaskCreateRequest = (
 };
 
 const parseKanbanTaskListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   { projectId: string; boardId: string; columnId?: string },
   ApiError
@@ -3797,14 +4003,14 @@ const parseKanbanTaskListRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3813,7 +4019,7 @@ const parseKanbanTaskListRequest = (
   const boardId = readRequiredString(
     value,
     KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3826,7 +4032,7 @@ const parseKanbanTaskListRequest = (
 
   const input: { projectId: string; boardId: string; columnId?: string } = {
     projectId: projectId.value,
-    boardId: boardId.value
+    boardId: boardId.value,
   };
 
   if (columnId.value !== undefined) {
@@ -3837,7 +4043,7 @@ const parseKanbanTaskListRequest = (
 };
 
 const parseKanbanTaskUpdateRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     projectId: string;
@@ -3853,14 +4059,14 @@ const parseKanbanTaskUpdateRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3869,7 +4075,7 @@ const parseKanbanTaskUpdateRequest = (
   const boardId = readRequiredString(
     value,
     KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3878,7 +4084,7 @@ const parseKanbanTaskUpdateRequest = (
   const taskId = readRequiredString(
     value,
     KanbanTaskField.TaskId,
-    ErrorMessage.MissingTaskId
+    ErrorMessage.MissingTaskId,
   );
   if (taskId.type === ResultType.Err) {
     return taskId;
@@ -3891,7 +4097,7 @@ const parseKanbanTaskUpdateRequest = (
 
   const description = readOptionalStringField(
     value,
-    KanbanTaskField.Description
+    KanbanTaskField.Description,
   );
   if (description.type === ResultType.Err) {
     return description;
@@ -3918,7 +4124,7 @@ const parseKanbanTaskUpdateRequest = (
   } = {
     projectId: projectId.value,
     boardId: boardId.value,
-    taskId: taskId.value
+    taskId: taskId.value,
   };
 
   if (title.value !== undefined) {
@@ -3945,7 +4151,7 @@ const parseKanbanTaskUpdateRequest = (
   ) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -3953,19 +4159,19 @@ const parseKanbanTaskUpdateRequest = (
 };
 
 const parseKanbanTaskDeleteRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; boardId: string; taskId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const projectId = readRequiredString(
     value,
     KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -3974,7 +4180,7 @@ const parseKanbanTaskDeleteRequest = (
   const boardId = readRequiredString(
     value,
     KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId
+    ErrorMessage.MissingBoardId,
   );
   if (boardId.type === ResultType.Err) {
     return boardId;
@@ -3983,7 +4189,7 @@ const parseKanbanTaskDeleteRequest = (
   const taskId = readRequiredString(
     value,
     KanbanTaskField.TaskId,
-    ErrorMessage.MissingTaskId
+    ErrorMessage.MissingTaskId,
   );
   if (taskId.type === ResultType.Err) {
     return taskId;
@@ -3992,7 +4198,7 @@ const parseKanbanTaskDeleteRequest = (
   return ok({
     projectId: projectId.value,
     boardId: boardId.value,
-    taskId: taskId.value
+    taskId: taskId.value,
   });
 };
 
@@ -4000,7 +4206,7 @@ const handleWorkflowDefinitionList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4016,7 +4222,7 @@ const handleWorkflowDefinitionList = async (
 
   const result = executeWorkflowDefinitionList(parsed.value, {
     projectStore,
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4024,14 +4230,14 @@ const handleWorkflowDefinitionList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    definitions: result.value
+    definitions: result.value,
   });
 };
 
 const handleWorkflowDefinitionGet = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4046,7 +4252,7 @@ const handleWorkflowDefinitionGet = async (
   }
 
   const result = executeWorkflowDefinitionGet(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4054,7 +4260,7 @@ const handleWorkflowDefinitionGet = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    definition: result.value
+    definition: result.value,
   });
 };
 
@@ -4063,7 +4269,7 @@ const handleWorkflowDefinitionUpsert = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4079,7 +4285,7 @@ const handleWorkflowDefinitionUpsert = async (
 
   const result = executeWorkflowDefinitionUpsert(parsed.value, {
     projectStore,
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4088,7 +4294,7 @@ const handleWorkflowDefinitionUpsert = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    definition: result.value
+    definition: result.value,
   });
 };
 
@@ -4096,7 +4302,7 @@ const handleWorkflowDefinitionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4111,7 +4317,7 @@ const handleWorkflowDefinitionDelete = async (
   }
 
   const result = executeWorkflowDefinitionDelete(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4120,7 +4326,7 @@ const handleWorkflowDefinitionDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    definition: result.value
+    definition: result.value,
   });
 };
 
@@ -4128,7 +4334,7 @@ const handleWorkflowAssetList = async (
   req: IncomingMessage,
   res: ServerResponse,
   projectStore: ProjectStore,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4144,7 +4350,7 @@ const handleWorkflowAssetList = async (
 
   const result = executeWorkflowAssetList(parsed.value, {
     projectStore,
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4152,14 +4358,14 @@ const handleWorkflowAssetList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    assets: result.value
+    assets: result.value,
   });
 };
 
 const handleWorkflowAssetGet = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4174,7 +4380,7 @@ const handleWorkflowAssetGet = async (
   }
 
   const result = executeWorkflowAssetGet(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4182,7 +4388,7 @@ const handleWorkflowAssetGet = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    asset: result.value
+    asset: result.value,
   });
 };
 
@@ -4191,7 +4397,7 @@ const handleWorkflowAssetUpsert = async (
   res: ServerResponse,
   projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4207,7 +4413,7 @@ const handleWorkflowAssetUpsert = async (
 
   const result = executeWorkflowAssetUpsert(parsed.value, {
     projectStore,
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4216,7 +4422,7 @@ const handleWorkflowAssetUpsert = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    asset: result.value
+    asset: result.value,
   });
 };
 
@@ -4224,7 +4430,7 @@ const handleWorkflowAssetDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4239,7 +4445,7 @@ const handleWorkflowAssetDelete = async (
   }
 
   const result = executeWorkflowAssetDelete(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4248,14 +4454,14 @@ const handleWorkflowAssetDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    asset: result.value
+    asset: result.value,
   });
 };
 
 const handleWorkflowAssetUsageList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4270,7 +4476,7 @@ const handleWorkflowAssetUsageList = async (
   }
 
   const result = executeWorkflowAssetUsageList(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4278,14 +4484,14 @@ const handleWorkflowAssetUsageList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    usages: result.value
+    usages: result.value,
   });
 };
 
 const handleWorkflowExecutionList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4300,7 +4506,7 @@ const handleWorkflowExecutionList = async (
   }
 
   const result = executeWorkflowExecutionList(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4308,14 +4514,14 @@ const handleWorkflowExecutionList = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    executions: result.value
+    executions: result.value,
   });
 };
 
 const handleWorkflowExecutionGet = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore
+  workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4330,7 +4536,7 @@ const handleWorkflowExecutionGet = async (
   }
 
   const result = executeWorkflowExecutionGet(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4338,7 +4544,7 @@ const handleWorkflowExecutionGet = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    execution: result.value
+    execution: result.value,
   });
 };
 
@@ -4346,7 +4552,7 @@ const handleWorkflowExecutionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4361,7 +4567,7 @@ const handleWorkflowExecutionDelete = async (
   }
 
   const result = executeWorkflowExecutionDelete(parsed.value, {
-    catalog: workflowCatalog
+    catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4370,7 +4576,7 @@ const handleWorkflowExecutionDelete = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    execution: result.value
+    execution: result.value,
   });
 };
 
@@ -4379,7 +4585,7 @@ const handleWorkflowExecutionRun = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4395,7 +4601,7 @@ const handleWorkflowExecutionRun = async (
 
   const result = await executeWorkflowExecutionRun(parsed.value, {
     catalog: workflowCatalog,
-    runWorkflow: workflowRuntime.runWorkflow
+    runWorkflow: workflowRuntime.runWorkflow,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4404,7 +4610,7 @@ const handleWorkflowExecutionRun = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    execution: result.value
+    execution: result.value,
   });
 };
 
@@ -4414,13 +4620,13 @@ const handleWorkflowExecutionStream = async (
   url: URL,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingWorkflowId
+      message: ErrorMessage.MissingWorkflowId,
     });
     return;
   }
@@ -4436,10 +4642,10 @@ const handleWorkflowExecutionStream = async (
         onEvent: (event) => {
           stream.send({
             event: readWorkflowStreamEventName(event),
-            data: event
+            data: event,
           });
-        }
-      }
+        },
+      },
     );
 
     if (result.type === ResultType.Err) {
@@ -4450,8 +4656,8 @@ const handleWorkflowExecutionStream = async (
           workflowId,
           workflowRunId: "",
           finishedAt: new Date().toISOString(),
-          error: result.error.message
-        }
+          error: result.error.message,
+        },
       });
       return;
     }
@@ -4465,8 +4671,9 @@ const handleWorkflowExecutionStream = async (
         workflowId,
         workflowRunId: "",
         finishedAt: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Workflow stream failed."
-      }
+        error:
+          error instanceof Error ? error.message : "Workflow stream failed.",
+      },
     });
   } finally {
     stream.close();
@@ -4478,7 +4685,7 @@ const handleWorkflowNodeProviderTest = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4494,7 +4701,7 @@ const handleWorkflowNodeProviderTest = async (
 
   const result = await executeWorkflowNodeProviderTest(parsed.value, {
     catalog: workflowCatalog,
-    testProviderNode: workflowRuntime.testProviderNode
+    testProviderNode: workflowRuntime.testProviderNode,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4505,7 +4712,8 @@ const handleWorkflowNodeProviderTest = async (
   respondJson(res, HttpStatus.Ok, result.value);
 };
 
-const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string => event.type;
+const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string =>
+  event.type;
 
 const handleGitStatusRequest = async (
   req: IncomingMessage,
@@ -4513,7 +4721,7 @@ const handleGitStatusRequest = async (
   projectStore: ProjectStore,
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
-  git: GitRepository
+  git: GitRepository,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4531,7 +4739,7 @@ const handleGitStatusRequest = async (
     projectStore,
     workspacePolicy,
     commandPolicy,
-    git
+    git,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4539,7 +4747,7 @@ const handleGitStatusRequest = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    repository: result.value
+    repository: result.value,
   });
 };
 
@@ -4549,7 +4757,7 @@ const handleGitDiffRequest = async (
   projectStore: ProjectStore,
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
-  git: GitRepository
+  git: GitRepository,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4567,7 +4775,7 @@ const handleGitDiffRequest = async (
     projectStore,
     workspacePolicy,
     commandPolicy,
-    git
+    git,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4576,7 +4784,7 @@ const handleGitDiffRequest = async (
 
   respondJson(res, HttpStatus.Ok, {
     diff: result.value.diff,
-    staged: result.value.staged
+    staged: result.value.staged,
   });
 };
 
@@ -4586,7 +4794,7 @@ const handleGitCommitRequest = async (
   projectStore: ProjectStore,
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
-  git: GitRepository
+  git: GitRepository,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4604,7 +4812,7 @@ const handleGitCommitRequest = async (
     projectStore,
     workspacePolicy,
     commandPolicy,
-    git
+    git,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4612,7 +4820,7 @@ const handleGitCommitRequest = async (
   }
 
   respondJson(res, HttpStatus.Created, {
-    commit: result.value
+    commit: result.value,
   });
 };
 
@@ -4622,7 +4830,7 @@ const handleGitBranchListRequest = async (
   projectStore: ProjectStore,
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
-  git: GitRepository
+  git: GitRepository,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4640,7 +4848,7 @@ const handleGitBranchListRequest = async (
     projectStore,
     workspacePolicy,
     commandPolicy,
-    git
+    git,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4648,7 +4856,7 @@ const handleGitBranchListRequest = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    branches: result.value
+    branches: result.value,
   });
 };
 
@@ -4659,7 +4867,7 @@ const handleGitBranchMutationRequest = async (
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
   git: GitRepository,
-  operation: "create" | "checkout"
+  operation: "create" | "checkout",
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4673,27 +4881,32 @@ const handleGitBranchMutationRequest = async (
     return;
   }
 
-  const result = operation === "create"
-    ? await executeGitBranchCreate(parsed.value, {
-        projectStore,
-        workspacePolicy,
-        commandPolicy,
-        git
-      })
-    : await executeGitBranchCheckout(parsed.value, {
-        projectStore,
-        workspacePolicy,
-        commandPolicy,
-        git
-      });
+  const result =
+    operation === "create"
+      ? await executeGitBranchCreate(parsed.value, {
+          projectStore,
+          workspacePolicy,
+          commandPolicy,
+          git,
+        })
+      : await executeGitBranchCheckout(parsed.value, {
+          projectStore,
+          workspacePolicy,
+          commandPolicy,
+          git,
+        });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
     return;
   }
 
-  respondJson(res, operation === "create" ? HttpStatus.Created : HttpStatus.Ok, {
-    branch: result.value
-  });
+  respondJson(
+    res,
+    operation === "create" ? HttpStatus.Created : HttpStatus.Ok,
+    {
+      branch: result.value,
+    },
+  );
 };
 
 const handleGitBranchRemoteRequest = async (
@@ -4703,7 +4916,7 @@ const handleGitBranchRemoteRequest = async (
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
   git: GitRepository,
-  operation: "push" | "publish"
+  operation: "push" | "publish",
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4717,27 +4930,32 @@ const handleGitBranchRemoteRequest = async (
     return;
   }
 
-  const result = operation === "push"
-    ? await executeGitBranchPush(parsed.value, {
-        projectStore,
-        workspacePolicy,
-        commandPolicy,
-        git
-      })
-    : await executeGitBranchPublish(parsed.value, {
-        projectStore,
-        workspacePolicy,
-        commandPolicy,
-        git
-      });
+  const result =
+    operation === "push"
+      ? await executeGitBranchPush(parsed.value, {
+          projectStore,
+          workspacePolicy,
+          commandPolicy,
+          git,
+        })
+      : await executeGitBranchPublish(parsed.value, {
+          projectStore,
+          workspacePolicy,
+          commandPolicy,
+          git,
+        });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
     return;
   }
 
-  respondJson(res, operation === "publish" ? HttpStatus.Created : HttpStatus.Ok, {
-    branch: result.value
-  });
+  respondJson(
+    res,
+    operation === "publish" ? HttpStatus.Created : HttpStatus.Ok,
+    {
+      branch: result.value,
+    },
+  );
 };
 
 const handleGitPathOperationRequest = async (
@@ -4747,7 +4965,7 @@ const handleGitPathOperationRequest = async (
   workspacePolicy: WorkspacePolicy,
   commandPolicy: CommandPolicy,
   git: GitRepository,
-  operation: GitPathOperationKind
+  operation: GitPathOperationKind,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4765,7 +4983,7 @@ const handleGitPathOperationRequest = async (
     projectStore,
     workspacePolicy,
     commandPolicy,
-    git
+    git,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4773,7 +4991,7 @@ const handleGitPathOperationRequest = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    paths: result.value.paths
+    paths: result.value.paths,
   });
 };
 
@@ -4787,7 +5005,7 @@ const handleQualityGateRunRequest = async (
   commandRunner: CommandRunner,
   eventHub: QualityGateEventHub,
   catalog: QualityGateCatalog,
-  workspacePersistence: WorkspacePersistence
+  workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4808,7 +5026,7 @@ const handleQualityGateRunRequest = async (
     commandPolicy,
     commandRunner,
     eventHub,
-    catalog
+    catalog,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4817,14 +5035,14 @@ const handleQualityGateRunRequest = async (
 
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Created, {
-    run: result.value
+    run: result.value,
   });
 };
 
 const handleQualityGateListRequest = async (
   req: IncomingMessage,
   res: ServerResponse,
-  historyStore: HistoryStore
+  historyStore: HistoryStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4839,7 +5057,7 @@ const handleQualityGateListRequest = async (
   }
 
   const result = listQualityGateRuns(parsed.value, {
-    historyStore
+    historyStore,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4847,14 +5065,14 @@ const handleQualityGateListRequest = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    runs: result.value
+    runs: result.value,
   });
 };
 
 const handleQualityGateEventsRequest = async (
   req: IncomingMessage,
   res: ServerResponse,
-  historyStore: HistoryStore
+  historyStore: HistoryStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4869,7 +5087,7 @@ const handleQualityGateEventsRequest = async (
   }
 
   const result = listQualityGateEvents(parsed.value, {
-    historyStore
+    historyStore,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -4877,7 +5095,7 @@ const handleQualityGateEventsRequest = async (
   }
 
   respondJson(res, HttpStatus.Ok, {
-    events: result.value
+    events: result.value,
   });
 };
 
@@ -4886,7 +5104,7 @@ const handleQualityGateStreamRequest = (
   res: ServerResponse,
   url: URL,
   historyStore: HistoryStore,
-  eventHub: QualityGateEventHub
+  eventHub: QualityGateEventHub,
 ): void => {
   const parsed = parseQualityGateStreamRequest(url.searchParams);
   if (parsed.type === ResultType.Err) {
@@ -4895,7 +5113,7 @@ const handleQualityGateStreamRequest = (
   }
 
   const existing = listQualityGateEvents(parsed.value, {
-    historyStore
+    historyStore,
   });
   if (existing.type === ResultType.Err) {
     respondError(res, existing.error);
@@ -4907,7 +5125,7 @@ const handleQualityGateStreamRequest = (
     stream.send({
       event: QualityGateEventName.Progress,
       id: event.id,
-      data: event
+      data: event,
     });
   }
 
@@ -4915,7 +5133,7 @@ const handleQualityGateStreamRequest = (
     stream.send({
       event: QualityGateEventName.Progress,
       id: event.id,
-      data: event
+      data: event,
     });
   });
 
@@ -4928,7 +5146,7 @@ const handleQualityGateStreamRequest = (
 const handleAiSkillRun = async (
   req: IncomingMessage,
   res: ServerResponse,
-  aiWorkbench: AiWorkbenchService
+  aiWorkbench: AiWorkbenchService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4948,7 +5166,10 @@ const handleAiSkillRun = async (
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+      message:
+        error instanceof Error
+          ? error.message
+          : ErrorMessage.InternalServerError,
     });
   }
 };
@@ -4956,7 +5177,7 @@ const handleAiSkillRun = async (
 const handleAiWorkflowRun = async (
   req: IncomingMessage,
   res: ServerResponse,
-  aiWorkbench: AiWorkbenchService
+  aiWorkbench: AiWorkbenchService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4976,7 +5197,10 @@ const handleAiWorkflowRun = async (
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+      message:
+        error instanceof Error
+          ? error.message
+          : ErrorMessage.InternalServerError,
     });
   }
 };
@@ -4984,7 +5208,7 @@ const handleAiWorkflowRun = async (
 const handleAiEvalRun = async (
   req: IncomingMessage,
   res: ServerResponse,
-  aiWorkbench: AiWorkbenchService
+  aiWorkbench: AiWorkbenchService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5004,7 +5228,10 @@ const handleAiEvalRun = async (
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+      message:
+        error instanceof Error
+          ? error.message
+          : ErrorMessage.InternalServerError,
     });
   }
 };
@@ -5012,7 +5239,7 @@ const handleAiEvalRun = async (
 const handleAiMemoryQuery = async (
   req: IncomingMessage,
   res: ServerResponse,
-  aiWorkbench: AiWorkbenchService
+  aiWorkbench: AiWorkbenchService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5029,30 +5256,36 @@ const handleAiMemoryQuery = async (
   try {
     const result = await aiWorkbench.searchMemory(parsed.value);
     respondJson(res, HttpStatus.Ok, {
-      items: result
+      items: result,
     });
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
-      message: error instanceof Error ? error.message : ErrorMessage.InternalServerError
+      message:
+        error instanceof Error
+          ? error.message
+          : ErrorMessage.InternalServerError,
     });
   }
 };
 
 const parseAiSkillRunRequest = (
-  value: unknown
-): Result<{ skillName: string; sessionId: string; input: unknown }, ApiError> => {
+  value: unknown,
+): Result<
+  { skillName: string; sessionId: string; input: unknown },
+  ApiError
+> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const skillName = readRequiredString(
     value,
     AiField.SkillName,
-    ErrorMessage.MissingSkillName
+    ErrorMessage.MissingSkillName,
   );
   if (skillName.type === ResultType.Err) {
     return skillName;
@@ -5061,7 +5294,7 @@ const parseAiSkillRunRequest = (
   const sessionId = readRequiredString(
     value,
     SessionField.SessionId,
-    ErrorMessage.MissingSessionId
+    ErrorMessage.MissingSessionId,
   );
   if (sessionId.type === ResultType.Err) {
     return sessionId;
@@ -5070,19 +5303,19 @@ const parseAiSkillRunRequest = (
   if (!(AiField.Input in value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingInput
+      message: ErrorMessage.MissingInput,
     });
   }
 
   return ok({
     skillName: skillName.value,
     sessionId: sessionId.value,
-    input: value[AiField.Input]
+    input: value[AiField.Input],
   });
 };
 
 const parseAiWorkflowRunRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     skillName: string;
@@ -5095,14 +5328,14 @@ const parseAiWorkflowRunRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const skillName = readRequiredString(
     value,
     AiField.SkillName,
-    ErrorMessage.MissingSkillName
+    ErrorMessage.MissingSkillName,
   );
   if (skillName.type === ResultType.Err) {
     return skillName;
@@ -5111,7 +5344,7 @@ const parseAiWorkflowRunRequest = (
   const sessionId = readRequiredString(
     value,
     SessionField.SessionId,
-    ErrorMessage.MissingSessionId
+    ErrorMessage.MissingSessionId,
   );
   if (sessionId.type === ResultType.Err) {
     return sessionId;
@@ -5120,7 +5353,7 @@ const parseAiWorkflowRunRequest = (
   const question = readRequiredString(
     value,
     AiField.Question,
-    ErrorMessage.MissingQuestion
+    ErrorMessage.MissingQuestion,
   );
   if (question.type === ResultType.Err) {
     return question;
@@ -5135,36 +5368,36 @@ const parseAiWorkflowRunRequest = (
     skillName: skillName.value,
     sessionId: sessionId.value,
     question: question.value,
-    autoApprove: autoApprove.value ?? true
+    autoApprove: autoApprove.value ?? true,
   });
 };
 
 const parseAiEvalRunRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ datasetPath: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const datasetPath = readRequiredString(
     value,
     AiField.DatasetPath,
-    ErrorMessage.MissingDatasetPath
+    ErrorMessage.MissingDatasetPath,
   );
   if (datasetPath.type === ResultType.Err) {
     return datasetPath;
   }
 
   return ok({
-    datasetPath: datasetPath.value
+    datasetPath: datasetPath.value,
   });
 };
 
 const parseAiMemoryQueryRequest = (
-  value: unknown
+  value: unknown,
 ): Result<
   {
     sessionId: string;
@@ -5176,14 +5409,14 @@ const parseAiMemoryQueryRequest = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   const sessionId = readRequiredString(
     value,
     SessionField.SessionId,
-    ErrorMessage.MissingSessionId
+    ErrorMessage.MissingSessionId,
   );
   if (sessionId.type === ResultType.Err) {
     return sessionId;
@@ -5192,7 +5425,7 @@ const parseAiMemoryQueryRequest = (
   const query = readRequiredString(
     value,
     AiField.Query,
-    ErrorMessage.MissingQuestion
+    ErrorMessage.MissingQuestion,
   );
   if (query.type === ResultType.Err) {
     return query;
@@ -5206,13 +5439,13 @@ const parseAiMemoryQueryRequest = (
   return ok({
     sessionId: sessionId.value,
     query: query.value,
-    limit: limit.value ?? 10
+    limit: limit.value ?? 10,
   });
 };
 
 const getSessionById = (
   store: SessionStore,
-  id: string
+  id: string,
 ): Result<Session, ApiError> => {
   const result = store.getById(id);
   if (result.type === ResultType.Err) {
@@ -5226,13 +5459,13 @@ const mapSessionStoreError = (error: SessionStoreError): ApiError => {
   if (error.code === SessionStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: error.message
+    message: error.message,
   };
 };
 
@@ -5240,13 +5473,13 @@ const mapHistoryStoreError = (error: HistoryStoreError): ApiError => {
   if (error.code === HistoryStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: error.message
+    message: error.message,
   };
 };
 
@@ -5254,13 +5487,13 @@ const mapDomainLogsStoreError = (error: DomainLogsStoreError): ApiError => {
   if (error.code === DomainLogsStoreErrorCode.InvalidQuery) {
     return {
       status: HttpStatus.BadRequest,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.InternalServerError,
-    message: error.message
+    message: error.message,
   };
 };
 
@@ -5268,13 +5501,13 @@ const mapProviderStoreError = (error: ProviderStoreError): ApiError => {
   if (error.code === ProviderStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: error.message
+    message: error.message,
   };
 };
 
@@ -5282,19 +5515,19 @@ const mapKanbanStoreError = (error: KanbanStoreError): ApiError => {
   if (error.code === KanbanStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: error.message
+    message: error.message,
   };
 };
 
 const getProjectById = (
   store: ProjectStore,
-  id: string
+  id: string,
 ): Result<Project, ApiError> => {
   const result = store.getById(id);
   if (result.type === ResultType.Err) {
@@ -5311,20 +5544,20 @@ const mapProjectStoreError = (error: {
   if (error.code === ProjectStoreErrorCode.Conflict) {
     return {
       status: HttpStatus.Conflict,
-      message: error.message
+      message: error.message,
     };
   }
 
   if (error.code === ProjectStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: error.message
+    message: error.message,
   };
 };
 
@@ -5359,7 +5592,7 @@ const CorsHeaderName = {
   AccessControlAllowHeaders: "access-control-allow-headers",
   AccessControlAllowMethods: "access-control-allow-methods",
   AccessControlMaxAge: "access-control-max-age",
-  Vary: "vary"
+  Vary: "vary",
 } as const;
 
 const CorsHeaderValue = {
@@ -5367,14 +5600,17 @@ const CorsHeaderValue = {
   AllowMethods: "GET,POST,OPTIONS",
   MaxAgeSeconds: "600",
   OptionsMethod: "OPTIONS",
-  VaryOrigin: "origin"
+  VaryOrigin: "origin",
 } as const;
 
 const Separator = {
-  Space: " "
+  Space: " ",
 } as const;
 
-const handleCorsPreflight = (req: IncomingMessage, res: ServerResponse): boolean => {
+const handleCorsPreflight = (
+  req: IncomingMessage,
+  res: ServerResponse,
+): boolean => {
   const origin = readCorsOrigin(req);
   if (!origin || !isAllowedCorsOrigin(origin)) {
     return false;
@@ -5397,9 +5633,18 @@ const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
   }
 
   res.setHeader(CorsHeaderName.AccessControlAllowOrigin, origin);
-  res.setHeader(CorsHeaderName.AccessControlAllowHeaders, CorsHeaderValue.AllowHeaders);
-  res.setHeader(CorsHeaderName.AccessControlAllowMethods, CorsHeaderValue.AllowMethods);
-  res.setHeader(CorsHeaderName.AccessControlMaxAge, CorsHeaderValue.MaxAgeSeconds);
+  res.setHeader(
+    CorsHeaderName.AccessControlAllowHeaders,
+    CorsHeaderValue.AllowHeaders,
+  );
+  res.setHeader(
+    CorsHeaderName.AccessControlAllowMethods,
+    CorsHeaderValue.AllowMethods,
+  );
+  res.setHeader(
+    CorsHeaderName.AccessControlMaxAge,
+    CorsHeaderValue.MaxAgeSeconds,
+  );
   res.setHeader(CorsHeaderName.Vary, CorsHeaderValue.VaryOrigin);
 };
 
@@ -5429,17 +5674,17 @@ const installServerConsoleForwarder = (logsStore: ServerLogsStore): void => {
         timestamp: entry.timestamp,
         level: toServerLogLevel(entry.level),
         message: entry.message,
-        ...(entry.runId ? { runId: entry.runId } : {})
+        ...(entry.runId ? { runId: entry.runId } : {}),
       });
     },
-    createId: () => randomUUID()
+    createId: () => randomUUID(),
   });
 };
 
 const installRequestLogLifecycle = (
   req: IncomingMessage,
   res: ServerResponse,
-  startedAt: number
+  startedAt: number,
 ): void => {
   res.on("finish", () => {
     const durationMs = Date.now() - startedAt;
@@ -5448,7 +5693,7 @@ const installRequestLogLifecycle = (
       req.method ?? "UNKNOWN",
       req.url ?? "",
       res.statusCode.toString(),
-      `${durationMs.toString()}ms`
+      `${durationMs.toString()}ms`,
     ].join(Separator.Space);
     const errorMessage = responseErrorLogMap.get(res);
     responseErrorLogMap.delete(res);
@@ -5495,14 +5740,14 @@ const respondUnauthorized = (res: ServerResponse): void => {
   res.setHeader(HeaderName.WwwAuthenticate, BearerScheme);
   respondError(res, {
     status: HttpStatus.Unauthorized,
-    message: ErrorMessage.Unauthorized
+    message: ErrorMessage.Unauthorized,
   });
 };
 
 const respondMethodNotAllowed = (res: ServerResponse): void => {
   respondError(res, {
     status: HttpStatus.MethodNotAllowed,
-    message: ErrorMessage.MethodNotAllowed
+    message: ErrorMessage.MethodNotAllowed,
   });
 };
 
@@ -5510,12 +5755,16 @@ const respondError = (res: ServerResponse, error: ApiError): void => {
   responseErrorLogMap.set(res, error.message);
   respondJson(res, error.status, {
     error: {
-      message: error.message
-    }
+      message: error.message,
+    },
   });
 };
 
-const respondJson = (res: ServerResponse, status: number, body: unknown): void => {
+const respondJson = (
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+): void => {
   const payload = JSON.stringify(body);
 
   res.statusCode = status;
@@ -5529,13 +5778,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readRequiredString = (
   record: Record<string, unknown>,
   key: string,
-  missingMessage: string
+  missingMessage: string,
 ): Result<string, ApiError> => {
   const value = record[key];
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message: missingMessage
+      message: missingMessage,
     });
   }
 
@@ -5543,7 +5792,7 @@ const readRequiredString = (
   if (trimmed.length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message: missingMessage
+      message: missingMessage,
     });
   }
 
@@ -5553,13 +5802,13 @@ const readRequiredString = (
 const readRequiredStringAllowEmpty = (
   record: Record<string, unknown>,
   key: string,
-  missingMessage: string
+  missingMessage: string,
 ): Result<string, ApiError> => {
   const value = record[key];
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message: missingMessage
+      message: missingMessage,
     });
   }
 
@@ -5569,12 +5818,12 @@ const readRequiredStringAllowEmpty = (
 const readRequiredRecord = (
   record: Record<string, unknown>,
   key: string,
-  missingMessage: string
+  missingMessage: string,
 ): Result<Record<string, unknown>, ApiError> => {
   if (!(key in record)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: missingMessage
+      message: missingMessage,
     });
   }
 
@@ -5582,7 +5831,7 @@ const readRequiredRecord = (
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -5591,7 +5840,7 @@ const readRequiredRecord = (
 
 const readOptionalString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined => {
   const value = record[key];
   if (typeof value !== "string") {
@@ -5604,7 +5853,7 @@ const readOptionalString = (
 
 const readOptionalNullableString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null => {
   const value = record[key];
   if (typeof value !== "string") {
@@ -5617,7 +5866,7 @@ const readOptionalNullableString = (
 
 const readOptionalStringField = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<string | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -5627,7 +5876,7 @@ const readOptionalStringField = (
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -5637,7 +5886,7 @@ const readOptionalStringField = (
 
 const readOptionalNumberField = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<number | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -5647,7 +5896,7 @@ const readOptionalNumberField = (
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -5656,21 +5905,17 @@ const readOptionalNumberField = (
 
 const readOptionalPositiveIntegerField = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<number | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
     return ok(undefined);
   }
 
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 1
-  ) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -5679,7 +5924,7 @@ const readOptionalPositiveIntegerField = (
 
 const readOptionalBooleanField = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<boolean | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -5689,7 +5934,7 @@ const readOptionalBooleanField = (
   if (typeof value !== "boolean") {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -5697,7 +5942,7 @@ const readOptionalBooleanField = (
 };
 
 const parseHistoryRunStatus = (
-  value: string
+  value: string,
 ): Result<HistoryRunStatus, ApiError> => {
   if (isHistoryRunStatus(value)) {
     return ok(value);
@@ -5705,7 +5950,7 @@ const parseHistoryRunStatus = (
 
   return err({
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody
+    message: ErrorMessage.InvalidBody,
   });
 };
 
@@ -5716,7 +5961,7 @@ const parseLogLevel = (value: string): Result<LogLevel, ApiError> => {
 
   return err({
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody
+    message: ErrorMessage.InvalidBody,
   });
 };
 
@@ -5742,7 +5987,7 @@ const parseJson = (raw: string): Result<unknown, ApiError> => {
   } catch {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidJson
+      message: ErrorMessage.InvalidJson,
     });
   }
 };

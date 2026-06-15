@@ -11,15 +11,15 @@ const entryPath = join(
   "apps",
   "server-api",
   "src",
-  "index.js"
+  "index.js",
 );
 
 const child = spawn(process.execPath, ["--watch", entryPath], {
   stdio: "inherit",
   env: {
     ...process.env,
-    PORT: process.env.PORT ?? DevApiPort
-  }
+    PORT: process.env.PORT ?? DevApiPort,
+  },
 });
 
 child.on("exit", (code, signal) => {

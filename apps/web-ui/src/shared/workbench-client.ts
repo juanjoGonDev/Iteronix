@@ -3,20 +3,20 @@ import {
   parseEvaluationRunResponse,
   parseMemorySearchResults,
   parseSkillRunResponse,
-  parseWorkflowRunResponse
+  parseWorkflowRunResponse,
 } from "./workbench-codec.js";
 import type {
   EvaluationRunResponse,
   MemorySearchResult,
   SkillRunResponse,
-  WorkflowRunResponse
+  WorkflowRunResponse,
 } from "./workbench-types.js";
 
 const EndpointPath = {
   SkillRun: "/ai/skills/run",
   WorkflowRun: "/ai/workflows/run",
   EvalRun: "/ai/evals/run",
-  MemoryQuery: "/ai/memory/query"
+  MemoryQuery: "/ai/memory/query",
 } as const;
 
 export type WorkbenchClient = {
@@ -49,10 +49,10 @@ export const createWorkbenchClient = (): WorkbenchClient => ({
         skillName: input.skillName,
         sessionId: input.sessionId,
         input: {
-          question: input.question
-        }
+          question: input.question,
+        },
       },
-      parse: parseSkillRunResponse
+      parse: parseSkillRunResponse,
     }),
   runWorkflow: (input) =>
     requestJson({
@@ -61,17 +61,17 @@ export const createWorkbenchClient = (): WorkbenchClient => ({
         skillName: input.skillName,
         sessionId: input.sessionId,
         question: input.question,
-        autoApprove: input.autoApprove
+        autoApprove: input.autoApprove,
       },
-      parse: parseWorkflowRunResponse
+      parse: parseWorkflowRunResponse,
     }),
   runEvaluation: (input) =>
     requestJson({
       path: EndpointPath.EvalRun,
       body: {
-        datasetPath: input.datasetPath
+        datasetPath: input.datasetPath,
       },
-      parse: parseEvaluationRunResponse
+      parse: parseEvaluationRunResponse,
     }),
   queryMemory: (input) =>
     requestJson({
@@ -79,8 +79,8 @@ export const createWorkbenchClient = (): WorkbenchClient => ({
       body: {
         sessionId: input.sessionId,
         query: input.query,
-        limit: input.limit
+        limit: input.limit,
       },
-      parse: parseMemorySearchResults
-    })
+      parse: parseMemorySearchResults,
+    }),
 });

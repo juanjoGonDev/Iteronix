@@ -2,11 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
+import { ResultType, ok } from "./result";
 import {
-  ResultType,
-  ok
-} from "./result";
-import { createHistoryStore, HistoryEventType, HistoryRunStatus } from "./history";
+  createHistoryStore,
+  HistoryEventType,
+  HistoryRunStatus,
+} from "./history";
 import { createProjectStore } from "./projects";
 import { createCommandPolicy, createWorkspacePolicy } from "./sandbox";
 import { ErrorMessage, HttpStatus } from "./constants";
@@ -17,12 +18,12 @@ import {
   listQualityGateRuns,
   parseQualityGateRunRequest,
   startQualityGateRun,
-  type QualityGateCatalog
+  type QualityGateCatalog,
 } from "./quality-gates";
 import {
   CommandOutputSource,
   type CommandRunner,
-  type CommandRunResult
+  type CommandRunResult,
 } from "../../../packages/adapters/src/command-runner/command-runner";
 
 const tempRoots: string[] = [];
@@ -32,16 +33,16 @@ afterEach(async () => {
     tempRoots.splice(0).map(async (path) => {
       await rm(path, {
         recursive: true,
-        force: true
+        force: true,
       });
-    })
+    }),
   );
 });
 
 describe("quality gates api", () => {
   it("defaults to all quality gates when no explicit list is provided", () => {
     const parsed = parseQualityGateRunRequest({
-      projectId: "project-1"
+      projectId: "project-1",
     });
 
     expect(parsed.type).toBe(ResultType.Ok);
@@ -53,7 +54,7 @@ describe("quality gates api", () => {
       QualityGateId.Lint,
       QualityGateId.Typecheck,
       QualityGateId.Test,
-      QualityGateId.Build
+      QualityGateId.Build,
     ]);
   });
 
@@ -61,7 +62,7 @@ describe("quality gates api", () => {
     const projectRoot = await createTempProjectRoot();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: projectRoot
+      rootPath: projectRoot,
     });
     if (opened.type !== ResultType.Ok) {
       throw new Error("Expected opened project");
@@ -71,7 +72,7 @@ describe("quality gates api", () => {
     const workspacePolicy = createWorkspacePolicy([projectRoot]);
     const commandPolicy = createCommandPolicy(
       [basename(process.execPath)],
-      workspacePolicy
+      workspacePolicy,
     );
     const eventHub = createQualityGateEventHub();
     const streamedEvents: Array<{ type: string; text?: string }> = [];
@@ -85,8 +86,8 @@ describe("quality gates api", () => {
           QualityGateId.Lint,
           QualityGateId.Typecheck,
           QualityGateId.Test,
-          QualityGateId.Build
-        ]
+          QualityGateId.Build,
+        ],
       },
       {
         projectStore: store,
@@ -95,8 +96,8 @@ describe("quality gates api", () => {
         commandPolicy,
         commandRunner,
         eventHub,
-        catalog
-      }
+        catalog,
+      },
     );
 
     expect(started.type).toBe(ResultType.Ok);
@@ -109,18 +110,18 @@ describe("quality gates api", () => {
         typeof event.data["text"] === "string" ? event.data["text"] : undefined;
       streamedEvents.push({
         type: event.type,
-        ...(text ? { text } : {})
+        ...(text ? { text } : {}),
       });
     });
 
     await waitFor(async () => {
       const listed = listQualityGateRuns(
         {
-          projectId: opened.value.id
+          projectId: opened.value.id,
         },
         {
-          historyStore
-        }
+          historyStore,
+        },
       );
       if (listed.type !== ResultType.Ok) {
         return false;
@@ -134,11 +135,11 @@ describe("quality gates api", () => {
 
     const listed = listQualityGateRuns(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
       {
-        historyStore
-      }
+        historyStore,
+      },
     );
 
     expect(listed.type).toBe(ResultType.Ok);
@@ -151,11 +152,11 @@ describe("quality gates api", () => {
 
     const events = listQualityGateEvents(
       {
-        runId: started.value.id
+        runId: started.value.id,
       },
       {
-        historyStore
-      }
+        historyStore,
+      },
     );
 
     expect(events.type).toBe(ResultType.Ok);
@@ -167,21 +168,22 @@ describe("quality gates api", () => {
       events.value.some(
         (event) =>
           event.type === HistoryEventType.Message &&
-          event.data["text"] === "Running lint"
-      )
+          event.data["text"] === "Running lint",
+      ),
     ).toBe(true);
     expect(
       events.value.some(
         (event) =>
           event.type === HistoryEventType.Done &&
-          event.data["status"] === HistoryRunStatus.Completed
-      )
+          event.data["status"] === HistoryRunStatus.Completed,
+      ),
     ).toBe(true);
     expect(
       streamedEvents.some(
         (event) =>
-          event.type === HistoryEventType.Message && event.text === "Running lint"
-      )
+          event.type === HistoryEventType.Message &&
+          event.text === "Running lint",
+      ),
     ).toBe(true);
   });
 
@@ -189,23 +191,25 @@ describe("quality gates api", () => {
     const projectRoot = await createTempProjectRoot();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: projectRoot
+      rootPath: projectRoot,
     });
     if (opened.type !== ResultType.Ok) {
       throw new Error("Expected opened project");
     }
 
     const historyStore = createHistoryStore();
-    const workspacePolicy = createWorkspacePolicy([join(projectRoot, "blocked")]);
+    const workspacePolicy = createWorkspacePolicy([
+      join(projectRoot, "blocked"),
+    ]);
     const commandPolicy = createCommandPolicy(
       [basename(process.execPath)],
-      workspacePolicy
+      workspacePolicy,
     );
 
     const started = await startQualityGateRun(
       {
         projectId: opened.value.id,
-        gates: [QualityGateId.Lint]
+        gates: [QualityGateId.Lint],
       },
       {
         projectStore: store,
@@ -214,8 +218,8 @@ describe("quality gates api", () => {
         commandPolicy,
         commandRunner: createFakeCommandRunner(),
         eventHub: createQualityGateEventHub(),
-        catalog: createTestQualityGateCatalog()
-      }
+        catalog: createTestQualityGateCatalog(),
+      },
     );
 
     expect(started.type).toBe(ResultType.Err);
@@ -229,7 +233,7 @@ describe("quality gates api", () => {
     const projectRoot = await createTempProjectRoot();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: projectRoot
+      rootPath: projectRoot,
     });
     if (opened.type !== ResultType.Ok) {
       throw new Error("Expected opened project");
@@ -242,7 +246,7 @@ describe("quality gates api", () => {
     const started = await startQualityGateRun(
       {
         projectId: opened.value.id,
-        gates: [QualityGateId.Lint]
+        gates: [QualityGateId.Lint],
       },
       {
         projectStore: store,
@@ -251,8 +255,8 @@ describe("quality gates api", () => {
         commandPolicy,
         commandRunner: createFakeCommandRunner(),
         eventHub: createQualityGateEventHub(),
-        catalog: createTestQualityGateCatalog()
-      }
+        catalog: createTestQualityGateCatalog(),
+      },
     );
 
     expect(started.type).toBe(ResultType.Err);
@@ -273,16 +277,13 @@ const createTestQualityGateCatalog = (): QualityGateCatalog => ({
   [QualityGateId.Lint]: createNodeGateCommand(QualityGateId.Lint),
   [QualityGateId.Typecheck]: createNodeGateCommand(QualityGateId.Typecheck),
   [QualityGateId.Test]: createNodeGateCommand(QualityGateId.Test),
-  [QualityGateId.Build]: createNodeGateCommand(QualityGateId.Build)
+  [QualityGateId.Build]: createNodeGateCommand(QualityGateId.Build),
 });
 
 const createNodeGateCommand = (gate: QualityGateId) => ({
   id: gate,
   command: process.execPath,
-  args: [
-    "-e",
-    `process.stdout.write(${JSON.stringify(`gate:${gate}\\n`)});`
-  ]
+  args: ["-e", `process.stdout.write(${JSON.stringify(`gate:${gate}\\n`)});`],
 });
 
 const createFakeCommandRunner = (): CommandRunner => ({
@@ -299,7 +300,7 @@ const createFakeCommandRunner = (): CommandRunner => ({
     input.onOutput?.({
       source: CommandOutputSource.Stdout,
       text,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
     const result: CommandRunResult = {
       command: basename(input.command),
@@ -309,15 +310,15 @@ const createFakeCommandRunner = (): CommandRunner => ({
       stdout: text,
       stderr: "",
       startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString()
+      finishedAt: new Date().toISOString(),
     };
     return ok(result);
-  }
+  },
 });
 
 const waitFor = async (
   predicate: () => Promise<boolean>,
-  maxAttempts = 50
+  maxAttempts = 50,
 ): Promise<void> => {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (await predicate()) {

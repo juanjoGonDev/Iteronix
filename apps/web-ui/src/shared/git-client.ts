@@ -5,7 +5,7 @@ import type {
   GitCommitRecord,
   GitDiffRecord,
   GitPathOperationRecord,
-  GitRepositoryRecord
+  GitRepositoryRecord,
 } from "./workbench-types.js";
 
 const EndpointPath = {
@@ -19,20 +19,16 @@ const EndpointPath = {
   GitBranchesCreate: "/git/branches/create",
   GitBranchesCheckout: "/git/branches/checkout",
   GitBranchesPush: "/git/branches/push",
-  GitBranchesPublish: "/git/branches/publish"
+  GitBranchesPublish: "/git/branches/publish",
 } as const;
 
 export type GitClient = {
-  getStatus: (input: {
-    projectId: string;
-  }) => Promise<GitRepositoryRecord>;
+  getStatus: (input: { projectId: string }) => Promise<GitRepositoryRecord>;
   getDiff: (input: {
     projectId: string;
     staged: boolean;
   }) => Promise<GitDiffRecord>;
-  listBranches: (input: {
-    projectId: string;
-  }) => Promise<GitBranchListRecord>;
+  listBranches: (input: { projectId: string }) => Promise<GitBranchListRecord>;
   createBranch: (input: {
     projectId: string;
     branchName: string;
@@ -70,199 +66,231 @@ export const createGitClient = (): GitClient => ({
     requestJson({
       path: EndpointPath.GitStatus,
       body: {
-        projectId: input.projectId
+        projectId: input.projectId,
       },
-      parse: parseGitStatusResponse
+      parse: parseGitStatusResponse,
     }),
   getDiff: (input) =>
     requestJson({
       path: EndpointPath.GitDiff,
       body: {
         projectId: input.projectId,
-        staged: input.staged
+        staged: input.staged,
       },
-      parse: parseGitDiffResponse
+      parse: parseGitDiffResponse,
     }),
   listBranches: (input) =>
     requestJson({
       path: EndpointPath.GitBranchesList,
       body: {
-        projectId: input.projectId
+        projectId: input.projectId,
       },
-      parse: parseGitBranchListResponse
+      parse: parseGitBranchListResponse,
     }),
   createBranch: (input) =>
     requestJson({
       path: EndpointPath.GitBranchesCreate,
       body: {
         projectId: input.projectId,
-        branchName: input.branchName
+        branchName: input.branchName,
       },
-      parse: parseGitBranchOperationResponse
+      parse: parseGitBranchOperationResponse,
     }),
   checkoutBranch: (input) =>
     requestJson({
       path: EndpointPath.GitBranchesCheckout,
       body: {
         projectId: input.projectId,
-        branchName: input.branchName
+        branchName: input.branchName,
       },
-      parse: parseGitBranchOperationResponse
+      parse: parseGitBranchOperationResponse,
     }),
   pushCurrentBranch: (input) =>
     requestJson({
       path: EndpointPath.GitBranchesPush,
       body: {
-        projectId: input.projectId
+        projectId: input.projectId,
       },
-      parse: parseGitBranchOperationResponse
+      parse: parseGitBranchOperationResponse,
     }),
   publishCurrentBranch: (input) =>
     requestJson({
       path: EndpointPath.GitBranchesPublish,
       body: {
-        projectId: input.projectId
+        projectId: input.projectId,
       },
-      parse: parseGitBranchOperationResponse
+      parse: parseGitBranchOperationResponse,
     }),
   stagePaths: (input) =>
     requestJson({
       path: EndpointPath.GitStage,
       body: {
         projectId: input.projectId,
-        paths: [...input.paths]
+        paths: [...input.paths],
       },
-      parse: parseGitPathOperationResponse
+      parse: parseGitPathOperationResponse,
     }),
   unstagePaths: (input) =>
     requestJson({
       path: EndpointPath.GitUnstage,
       body: {
         projectId: input.projectId,
-        paths: [...input.paths]
+        paths: [...input.paths],
       },
-      parse: parseGitPathOperationResponse
+      parse: parseGitPathOperationResponse,
     }),
   revertPaths: (input) =>
     requestJson({
       path: EndpointPath.GitRevert,
       body: {
         projectId: input.projectId,
-        paths: [...input.paths]
+        paths: [...input.paths],
       },
-      parse: parseGitPathOperationResponse
+      parse: parseGitPathOperationResponse,
     }),
   createCommit: (input) =>
     requestJson({
       path: EndpointPath.GitCommit,
       body: {
         projectId: input.projectId,
-        message: input.message
+        message: input.message,
       },
-      parse: parseGitCommitResponse
-    })
+      parse: parseGitCommitResponse,
+    }),
 });
 
 export const parseGitStatusResponse = (value: unknown): GitRepositoryRecord =>
-  parseGitRepositoryRecord(readRequiredRecord(value, "gitStatusResponse", "repository"));
+  parseGitRepositoryRecord(
+    readRequiredRecord(value, "gitStatusResponse", "repository"),
+  );
 
 export const parseGitDiffResponse = (value: unknown): GitDiffRecord => {
   const record = ensureRecord(value, "gitDiffResponse");
 
   return {
     staged: readRequiredBoolean(record, "gitDiffResponse", "staged"),
-    diff: readRequiredString(record, "gitDiffResponse", "diff")
+    diff: readRequiredString(record, "gitDiffResponse", "diff"),
   };
 };
 
 export const parseGitBranchListResponse = (
-  value: unknown
+  value: unknown,
 ): GitBranchListRecord => {
   const record = ensureRecord(value, "gitBranchListResponse");
-  const branches = readRequiredRecord(record, "gitBranchListResponse", "branches");
+  const branches = readRequiredRecord(
+    record,
+    "gitBranchListResponse",
+    "branches",
+  );
 
   return {
-    local: readRequiredArray(branches, "gitBranchListResponse.branches", "local").map((branch) =>
-      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord"))
+    local: readRequiredArray(
+      branches,
+      "gitBranchListResponse.branches",
+      "local",
+    ).map((branch) =>
+      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord")),
     ),
-    remote: readRequiredArray(branches, "gitBranchListResponse.branches", "remote").map((branch) =>
-      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord"))
-    )
+    remote: readRequiredArray(
+      branches,
+      "gitBranchListResponse.branches",
+      "remote",
+    ).map((branch) =>
+      parseGitBranchRecord(ensureRecord(branch, "gitBranchRecord")),
+    ),
   };
 };
 
 export const parseGitBranchOperationResponse = (
-  value: unknown
+  value: unknown,
 ): GitBranchOperationRecord =>
-  parseGitBranchOperationRecord(readRequiredRecord(value, "gitBranchOperationResponse", "branch"));
+  parseGitBranchOperationRecord(
+    readRequiredRecord(value, "gitBranchOperationResponse", "branch"),
+  );
 
 export const parseGitPathOperationResponse = (
-  value: unknown
+  value: unknown,
 ): GitPathOperationRecord => {
   const record = ensureRecord(value, "gitPathOperationResponse");
 
   return {
-    paths: readRequiredArray(record, "gitPathOperationResponse", "paths").map((path) =>
-      readArrayString(path, "gitPathOperationResponse.paths")
-    )
+    paths: readRequiredArray(record, "gitPathOperationResponse", "paths").map(
+      (path) => readArrayString(path, "gitPathOperationResponse.paths"),
+    ),
   };
 };
 
 export const parseGitCommitResponse = (value: unknown): GitCommitRecord =>
-  parseGitCommitRecord(readRequiredRecord(value, "gitCommitResponse", "commit"));
+  parseGitCommitRecord(
+    readRequiredRecord(value, "gitCommitResponse", "commit"),
+  );
 
 const parseGitRepositoryRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): GitRepositoryRecord => ({
   ahead: readRequiredNumber(value, "gitRepositoryRecord", "ahead"),
   behind: readRequiredNumber(value, "gitRepositoryRecord", "behind"),
   clean: readRequiredBoolean(value, "gitRepositoryRecord", "clean"),
   stagedCount: readRequiredNumber(value, "gitRepositoryRecord", "stagedCount"),
-  unstagedCount: readRequiredNumber(value, "gitRepositoryRecord", "unstagedCount"),
-  untrackedCount: readRequiredNumber(value, "gitRepositoryRecord", "untrackedCount"),
-  entries: readRequiredArray(value, "gitRepositoryRecord", "entries").map((entry) =>
-    parseGitStatusEntryRecord(ensureRecord(entry, "gitStatusEntryRecord"))
+  unstagedCount: readRequiredNumber(
+    value,
+    "gitRepositoryRecord",
+    "unstagedCount",
+  ),
+  untrackedCount: readRequiredNumber(
+    value,
+    "gitRepositoryRecord",
+    "untrackedCount",
+  ),
+  entries: readRequiredArray(value, "gitRepositoryRecord", "entries").map(
+    (entry) =>
+      parseGitStatusEntryRecord(ensureRecord(entry, "gitStatusEntryRecord")),
   ),
   ...readOptionalString(value, "branch"),
-  ...readOptionalString(value, "upstream")
+  ...readOptionalString(value, "upstream"),
 });
 
-const parseGitStatusEntryRecord = (
-  value: Record<string, unknown>
-) => ({
+const parseGitStatusEntryRecord = (value: Record<string, unknown>) => ({
   path: readRequiredString(value, "gitStatusEntryRecord", "path"),
   indexStatus: readRequiredString(value, "gitStatusEntryRecord", "indexStatus"),
-  workingTreeStatus: readRequiredString(value, "gitStatusEntryRecord", "workingTreeStatus"),
+  workingTreeStatus: readRequiredString(
+    value,
+    "gitStatusEntryRecord",
+    "workingTreeStatus",
+  ),
   staged: readRequiredBoolean(value, "gitStatusEntryRecord", "staged"),
   unstaged: readRequiredBoolean(value, "gitStatusEntryRecord", "unstaged"),
   untracked: readRequiredBoolean(value, "gitStatusEntryRecord", "untracked"),
-  ...readOptionalString(value, "originalPath")
+  ...readOptionalString(value, "originalPath"),
 });
 
 const parseGitCommitRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): GitCommitRecord => ({
   hash: readRequiredString(value, "gitCommitRecord", "hash"),
-  message: readRequiredString(value, "gitCommitRecord", "message")
+  message: readRequiredString(value, "gitCommitRecord", "message"),
 });
 
 const parseGitBranchRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): GitBranchListRecord["local"][number] => ({
   name: readRequiredString(value, "gitBranchRecord", "name"),
   current: readRequiredBoolean(value, "gitBranchRecord", "current"),
   remote: readRequiredBoolean(value, "gitBranchRecord", "remote"),
-  ...readOptionalString(value, "upstream")
+  ...readOptionalString(value, "upstream"),
 });
 
 const parseGitBranchOperationRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): GitBranchOperationRecord => ({
   name: readRequiredString(value, "gitBranchOperationRecord", "name"),
-  ...readOptionalString(value, "upstream")
+  ...readOptionalString(value, "upstream"),
 });
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -273,7 +301,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredRecord = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): Record<string, unknown> => {
   const record = ensureRecord(value, label);
   return ensureRecord(record[key], `${label}.${key}`);
@@ -282,7 +310,7 @@ const readRequiredRecord = (
 const readRequiredArray = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -295,7 +323,7 @@ const readRequiredArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
@@ -308,7 +336,7 @@ const readRequiredString = (
 const readRequiredNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number => {
   const nested = value[key];
   if (typeof nested !== "number" || Number.isNaN(nested)) {
@@ -321,7 +349,7 @@ const readRequiredNumber = (
 const readRequiredBoolean = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): boolean => {
   const nested = value[key];
   if (typeof nested !== "boolean") {
@@ -331,10 +359,7 @@ const readRequiredBoolean = (
   return nested;
 };
 
-const readArrayString = (
-  value: unknown,
-  label: string
-): string => {
+const readArrayString = (value: unknown, label: string): string => {
   if (typeof value !== "string") {
     throw new Error(`Invalid ${label}`);
   }
@@ -344,7 +369,7 @@ const readArrayString = (
 
 const readOptionalString = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): Partial<Record<"branch" | "upstream" | "originalPath", string>> => {
   const nested = value[key];
   if (typeof nested !== "string" || nested.trim().length === 0) {
@@ -353,7 +378,7 @@ const readOptionalString = (
 
   if (key === "branch" || key === "upstream" || key === "originalPath") {
     return {
-      [key]: nested
+      [key]: nested,
     } as Partial<Record<"branch" | "upstream" | "originalPath", string>>;
   }
 

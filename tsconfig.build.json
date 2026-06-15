@@ -13,8 +13,5 @@
     "apps/desktop-main/src/**/*.ts",
     "packages/*/src/**/*.ts"
   ],
-  "exclude": [
-    "**/*.test.ts",
-    "**/*.test.tsx"
-  ]
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

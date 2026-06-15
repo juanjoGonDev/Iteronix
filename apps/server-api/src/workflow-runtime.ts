@@ -2,16 +2,22 @@ import {
   createWorkflowRuntime,
   WorkflowRuntimeEvent,
   type WorkflowProviderRunRequest,
-  type WorkflowProviderRunResult
+  type WorkflowProviderRunResult,
 } from "../../../packages/agents/src/workflow-runtime";
 import { createCodexCliProvider } from "../../../packages/adapters/src/codex-cli/provider";
 import { createOpenAiCompatibleProvider } from "../../../packages/adapters/src/openai-compatible/provider";
-import { LLMEventType, type LLMEvent } from "../../../packages/domain/src/llm/events";
-import type { LLMProviderPort, LLMRunResult } from "../../../packages/domain/src/llm/provider";
+import {
+  LLMEventType,
+  type LLMEvent,
+} from "../../../packages/domain/src/llm/events";
+import type {
+  LLMProviderPort,
+  LLMRunResult,
+} from "../../../packages/domain/src/llm/provider";
 import type {
   WorkflowAssetRecord,
   WorkflowDefinitionRecord,
-  WorkflowExecutionRecord
+  WorkflowExecutionRecord,
 } from "../../../packages/shared/src/workflows";
 import type { WorkspaceState } from "./workspace-state";
 
@@ -54,8 +60,11 @@ export const createWorkflowRuntimeService = (input: {
     runProviderNode: async (request) =>
       executeProviderNode(
         request,
-        resolveProviderProfile(input.readWorkspaceState(), request.node.config.provider?.providerId)
-      )
+        resolveProviderProfile(
+          input.readWorkspaceState(),
+          request.node.config.provider?.providerId,
+        ),
+      ),
   });
 
   const runWorkflow = async (request: {
@@ -66,7 +75,7 @@ export const createWorkflowRuntimeService = (input: {
     runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
-      ...(request.onEvent ? { onEvent: request.onEvent } : {})
+      ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
 
   const testProviderNode = async (request: {
@@ -82,7 +91,7 @@ export const createWorkflowRuntimeService = (input: {
     try {
       const profile = resolveProviderProfile(
         input.readWorkspaceState(),
-        request.node.config.provider?.providerId
+        request.node.config.provider?.providerId,
       );
       await executeProviderNode(
         {
@@ -95,7 +104,7 @@ export const createWorkflowRuntimeService = (input: {
             modelId: profile.modelId,
             reasoningLevel: "medium",
             temperature: 0.2,
-            verbosity: "medium"
+            verbosity: "medium",
           },
           envelope: {
             sessionId: `provider-test-${request.node.id}`,
@@ -108,18 +117,18 @@ export const createWorkflowRuntimeService = (input: {
             artifacts: [],
             citations: [],
             guardrailFindings: [],
-            messages: []
+            messages: [],
           },
           prompt: request.node.config.prompt?.trim().length
             ? request.node.config.prompt
-            : SmokeTestPrompt
+            : SmokeTestPrompt,
         },
-        profile
+        profile,
       );
       return {
         status: "passed",
         testedAt,
-        message: "Provider runtime responded to the workflow smoke test."
+        message: "Provider runtime responded to the workflow smoke test.",
       };
     } catch (error) {
       return {
@@ -128,26 +137,26 @@ export const createWorkflowRuntimeService = (input: {
         message:
           error instanceof Error && error.message.trim().length > 0
             ? error.message
-            : "Provider runtime test failed."
+            : "Provider runtime test failed.",
       };
     }
   };
 
   return {
     runWorkflow,
-    testProviderNode
+    testProviderNode,
   };
 };
 
 const executeProviderNode = async (
   request: WorkflowProviderRunRequest,
-  profile: ProviderProfile
+  profile: ProviderProfile,
 ): Promise<WorkflowProviderRunResult> => {
   const provider = createProvider(profile);
   const result = await provider.run({
     modelId: request.provider.modelId || profile.modelId,
     input: request.prompt,
-    temperature: request.provider.temperature
+    temperature: request.provider.temperature,
   });
   return collectProviderResult(result);
 };
@@ -161,10 +170,10 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
         ? [
             {
               id: profile.modelId,
-              displayName: profile.modelId
-            }
+              displayName: profile.modelId,
+            },
           ]
-        : []
+        : [],
     });
   }
 
@@ -174,10 +183,18 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
     profile.providerKind === "custom"
   ) {
     if (profile.endpointUrl.length === 0) {
-      throw new Error(`Workflow provider profile ${profile.id} is missing an endpoint URL.`);
+      throw new Error(
+        `Workflow provider profile ${profile.id} is missing an endpoint URL.`,
+      );
     }
-    if ((profile.providerKind === "openai" || profile.providerKind === "custom") && profile.apiKey.length === 0) {
-      throw new Error(`Workflow provider profile ${profile.id} is missing a bearer API key.`);
+    if (
+      (profile.providerKind === "openai" ||
+        profile.providerKind === "custom") &&
+      profile.apiKey.length === 0
+    ) {
+      throw new Error(
+        `Workflow provider profile ${profile.id} is missing a bearer API key.`,
+      );
     }
 
     return createOpenAiCompatibleProvider({
@@ -187,18 +204,20 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
         ? [
             {
               id: profile.modelId,
-              displayName: profile.modelId
-            }
+              displayName: profile.modelId,
+            },
           ]
-        : []
+        : [],
     });
   }
 
-  throw new Error(`Workflow provider kind ${profile.providerKind} is not supported by the runtime yet.`);
+  throw new Error(
+    `Workflow provider kind ${profile.providerKind} is not supported by the runtime yet.`,
+  );
 };
 
 const collectProviderResult = async (
-  result: LLMRunResult
+  result: LLMRunResult,
 ): Promise<WorkflowProviderRunResult> => {
   if (Symbol.asyncIterator in result) {
     return collectProviderEvents(result as AsyncIterable<LLMEvent>);
@@ -210,17 +229,17 @@ const collectProviderResult = async (
         completionTokens: result.usage.outputTokens,
         totalTokens: result.usage.totalTokens,
         estimatedCostEur: 0,
-        latencyMs: 0
+        latencyMs: 0,
       }
     : undefined;
   return {
     outputText: result.message,
-    ...(usage ? { usage } : {})
+    ...(usage ? { usage } : {}),
   };
 };
 
 const collectProviderEvents = async (
-  events: AsyncIterable<LLMEvent>
+  events: AsyncIterable<LLMEvent>,
 ): Promise<WorkflowProviderRunResult> => {
   let outputText = "";
   let usage: WorkflowProviderRunResult["usage"];
@@ -242,7 +261,7 @@ const collectProviderEvents = async (
         completionTokens: event.usage.outputTokens,
         totalTokens: event.usage.totalTokens,
         estimatedCostEur: 0,
-        latencyMs: 0
+        latencyMs: 0,
       };
       continue;
     }
@@ -253,23 +272,23 @@ const collectProviderEvents = async (
   }
 
   return {
-    outputText: outputText.trim()
-  ? outputText
-  : "OK",
-    ...(usage ? { usage } : {})
+    outputText: outputText.trim() ? outputText : "OK",
+    ...(usage ? { usage } : {}),
   };
 };
 
 const resolveProviderProfile = (
   workspaceState: WorkspaceState,
-  profileId: string | undefined
+  profileId: string | undefined,
 ): ProviderProfile => {
   const profiles = workspaceState.settings.providerProfiles
     .map(readProviderProfile)
     .filter((profile): profile is ProviderProfile => profile !== null);
   const profile = profiles.find((candidate) => candidate.id === profileId);
   if (!profile) {
-    throw new Error(`Workflow provider profile ${profileId ?? "unknown"} not found.`);
+    throw new Error(
+      `Workflow provider profile ${profileId ?? "unknown"} not found.`,
+    );
   }
 
   return profile;
@@ -286,7 +305,8 @@ const readProviderProfile = (value: unknown): ProviderProfile | null => {
     return null;
   }
 
-  const promptMode = readString(value["promptMode"]) === "arg" ? "arg" : "stdin";
+  const promptMode =
+    readString(value["promptMode"]) === "arg" ? "arg" : "stdin";
   return {
     id,
     providerKind,
@@ -294,7 +314,7 @@ const readProviderProfile = (value: unknown): ProviderProfile | null => {
     command: readString(value["command"]) || "codex",
     endpointUrl: readString(value["endpointUrl"]),
     promptMode,
-    apiKey: readProviderApiKey(value)
+    apiKey: readProviderApiKey(value),
   };
 };
 

@@ -6,7 +6,7 @@ import {
   type QualityGateId,
   type QualityGateRunRecord,
   type QualityGateRunStatus,
-  type ServerSentEventMessage
+  type ServerSentEventMessage,
 } from "./workbench-types.js";
 
 const EndpointPath = {
@@ -14,7 +14,7 @@ const EndpointPath = {
   QualityGatesRun: "/quality-gates/run",
   QualityGatesList: "/quality-gates/list",
   QualityGatesEvents: "/quality-gates/events",
-  QualityGatesStream: "/quality-gates/stream"
+  QualityGatesStream: "/quality-gates/stream",
 } as const;
 
 export type QualityGatesClient = {
@@ -47,18 +47,18 @@ export const createQualityGatesClient = (): QualityGatesClient => ({
       path: EndpointPath.ProjectOpen,
       body: {
         rootPath: input.rootPath,
-        ...(input.name ? { name: input.name } : {})
+        ...(input.name ? { name: input.name } : {}),
       },
-      parse: parseProjectOpenResponse
+      parse: parseProjectOpenResponse,
     }),
   runQualityGates: (input) =>
     requestJson({
       path: EndpointPath.QualityGatesRun,
       body: {
         projectId: input.projectId,
-        gates: [...input.gates]
+        gates: [...input.gates],
       },
-      parse: parseQualityGateRunResponse
+      parse: parseQualityGateRunResponse,
     }),
   listQualityGateRuns: (input) =>
     requestJson({
@@ -66,17 +66,17 @@ export const createQualityGatesClient = (): QualityGatesClient => ({
       body: {
         projectId: input.projectId,
         ...(input.status ? { status: input.status } : {}),
-        ...(input.limit !== undefined ? { limit: input.limit } : {})
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
       },
-      parse: parseQualityGateRunsResponse
+      parse: parseQualityGateRunsResponse,
     }),
   listQualityGateEvents: (input) =>
     requestJson({
       path: EndpointPath.QualityGatesEvents,
       body: {
-        runId: input.runId
+        runId: input.runId,
       },
-      parse: parseQualityGateEventsResponse
+      parse: parseQualityGateEventsResponse,
     }),
   streamQualityGateEvents: async (input) => {
     let buffer = "";
@@ -101,37 +101,39 @@ export const createQualityGatesClient = (): QualityGatesClient => ({
 
           boundaryIndex = buffer.indexOf("\n\n");
         }
-      }
+      },
     });
-  }
+  },
 });
 
 export const parseProjectOpenResponse = (value: unknown): ProjectRecord =>
-  parseProjectRecord(readRequiredRecord(value, "projectOpenResponse", "project"));
+  parseProjectRecord(
+    readRequiredRecord(value, "projectOpenResponse", "project"),
+  );
 
 export const parseQualityGateRunResponse = (
-  value: unknown
+  value: unknown,
 ): QualityGateRunRecord =>
   parseQualityGateRunRecord(
-    readRequiredRecord(value, "qualityGateRunResponse", "run")
+    readRequiredRecord(value, "qualityGateRunResponse", "run"),
   );
 
 export const parseQualityGateRunsResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<QualityGateRunRecord> =>
   readRequiredArray(value, "qualityGateRunsResponse", "runs").map((item) =>
-    parseQualityGateRunRecord(ensureRecord(item, "qualityGateRunRecord"))
+    parseQualityGateRunRecord(ensureRecord(item, "qualityGateRunRecord")),
   );
 
 export const parseQualityGateEventsResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<QualityGateEventRecord> =>
   readRequiredArray(value, "qualityGateEventsResponse", "events").map((item) =>
-    parseQualityGateEventRecord(item)
+    parseQualityGateEventRecord(item),
   );
 
 export const decodeServerSentEvents = (
-  value: string
+  value: string,
 ): ReadonlyArray<ServerSentEventMessage> => {
   const blocks = value
     .split(/\n\n/u)
@@ -144,7 +146,7 @@ export const decodeServerSentEvents = (
 };
 
 const parseServerSentEventBlock = (
-  value: string
+  value: string,
 ): ServerSentEventMessage | null => {
   const lines = value.split(/\n/u);
   let id: string | undefined;
@@ -175,7 +177,7 @@ const parseServerSentEventBlock = (
     return {
       ...(id ? { id } : {}),
       event: eventName,
-      data: JSON.parse(dataLines.join("\n"))
+      data: JSON.parse(dataLines.join("\n")),
     };
   } catch {
     return null;
@@ -187,11 +189,11 @@ const parseProjectRecord = (value: Record<string, unknown>): ProjectRecord => ({
   name: readRequiredString(value, "projectRecord", "name"),
   rootPath: readNullableString(value, "projectRecord", "rootPath"),
   createdAt: readRequiredString(value, "projectRecord", "createdAt"),
-  updatedAt: readRequiredString(value, "projectRecord", "updatedAt")
+  updatedAt: readRequiredString(value, "projectRecord", "updatedAt"),
 });
 
 const parseQualityGateRunRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): QualityGateRunRecord => {
   const currentGate = readOptionalQualityGateId(value, "currentGate");
   const failedGate = readOptionalQualityGateId(value, "failedGate");
@@ -204,21 +206,25 @@ const parseQualityGateRunRecord = (
       "running",
       "completed",
       "failed",
-      "canceled"
+      "canceled",
     ]),
     createdAt: readRequiredString(value, "qualityGateRunRecord", "createdAt"),
     updatedAt: readRequiredString(value, "qualityGateRunRecord", "updatedAt"),
-    gates: readRequiredArray(value, "qualityGateRunRecord", "gates").map((gate) =>
-      parseQualityGateId(gate, "qualityGateRunRecord.gates")
+    gates: readRequiredArray(value, "qualityGateRunRecord", "gates").map(
+      (gate) => parseQualityGateId(gate, "qualityGateRunRecord.gates"),
     ),
-    passedCount: readRequiredNumber(value, "qualityGateRunRecord", "passedCount"),
+    passedCount: readRequiredNumber(
+      value,
+      "qualityGateRunRecord",
+      "passedCount",
+    ),
     ...(currentGate ? { currentGate } : {}),
-    ...(failedGate ? { failedGate } : {})
+    ...(failedGate ? { failedGate } : {}),
   };
 };
 
 const parseQualityGateEventRecord = (
-  value: unknown
+  value: unknown,
 ): QualityGateEventRecord => {
   const record = ensureRecord(value, "qualityGateEventRecord");
 
@@ -231,10 +237,14 @@ const parseQualityGateEventRecord = (
       "usage",
       "error",
       "done",
-      "status"
+      "status",
     ]),
-    timestamp: readRequiredString(record, "qualityGateEventRecord", "timestamp"),
-    data: readRequiredRecord(record, "qualityGateEventRecord", "data")
+    timestamp: readRequiredString(
+      record,
+      "qualityGateEventRecord",
+      "timestamp",
+    ),
+    data: readRequiredRecord(record, "qualityGateEventRecord", "data"),
   };
 };
 
@@ -251,7 +261,10 @@ const parseQualityGateId = (value: unknown, label: string): QualityGateId => {
   throw new Error(`Invalid ${label}`);
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -262,7 +275,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredRecord = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): Record<string, unknown> => {
   const record = ensureRecord(value, label);
   const nested = record[key];
@@ -272,7 +285,7 @@ const readRequiredRecord = (
 const readRequiredArray = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const record = ensureRecord(value, label);
   const nested = record[key];
@@ -286,7 +299,7 @@ const readRequiredArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
@@ -299,7 +312,7 @@ const readRequiredString = (
 const readNullableString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string | null => {
   const nested = value[key];
   if (nested === null) {
@@ -316,7 +329,7 @@ const readNullableString = (
 const readRequiredNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number => {
   const nested = value[key];
   if (typeof nested !== "number" || Number.isNaN(nested)) {
@@ -328,7 +341,7 @@ const readRequiredNumber = (
 
 const readOptionalQualityGateId = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): QualityGateId | undefined => {
   const nested = value[key];
   return nested === undefined ? undefined : parseQualityGateId(nested, key);
@@ -338,7 +351,7 @@ const readEnum = <TValue extends string>(
   value: Record<string, unknown>,
   label: string,
   key: string,
-  allowed: ReadonlyArray<TValue>
+  allowed: ReadonlyArray<TValue>,
 ): TValue => {
   const nested = value[key];
   if (typeof nested !== "string" || !allowed.includes(nested as TValue)) {

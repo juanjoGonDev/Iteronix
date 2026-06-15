@@ -6,16 +6,16 @@ const EndpointPath = {
   ProjectOpen: "/projects/open",
   FilesTree: "/files/tree",
   FilesRead: "/files/read",
-  FilesSearch: "/files/search"
+  FilesSearch: "/files/search",
 } as const;
 
 export const ExplorerFileEntryKind = {
   Directory: "directory",
-  File: "file"
+  File: "file",
 } as const;
 
 export type ExplorerFileEntryKind =
-  typeof ExplorerFileEntryKind[keyof typeof ExplorerFileEntryKind];
+  (typeof ExplorerFileEntryKind)[keyof typeof ExplorerFileEntryKind];
 
 export type ExplorerFileEntryRecord = {
   path: string;
@@ -78,18 +78,18 @@ export const createExplorerClient = (): ExplorerClient => ({
       path: EndpointPath.ProjectOpen,
       body: {
         rootPath: input.rootPath,
-        ...(input.name ? { name: input.name } : {})
+        ...(input.name ? { name: input.name } : {}),
       },
-      parse: parseProjectOpenResponse
+      parse: parseProjectOpenResponse,
     }),
   listFileTree: (input) =>
     requestJson({
       path: EndpointPath.FilesTree,
       body: {
         projectId: input.projectId,
-        ...(input.path ? { path: input.path } : {})
+        ...(input.path ? { path: input.path } : {}),
       },
-      parse: parseExplorerFileTreeResponse
+      parse: parseExplorerFileTreeResponse,
     }),
   readFile: (input) =>
     requestJson({
@@ -97,10 +97,14 @@ export const createExplorerClient = (): ExplorerClient => ({
       body: {
         projectId: input.projectId,
         path: input.path,
-        ...(input.startLine !== undefined ? { startLine: input.startLine } : {}),
-        ...(input.lineCount !== undefined ? { lineCount: input.lineCount } : {})
+        ...(input.startLine !== undefined
+          ? { startLine: input.startLine }
+          : {}),
+        ...(input.lineCount !== undefined
+          ? { lineCount: input.lineCount }
+          : {}),
       },
-      parse: parseExplorerFileReadResponse
+      parse: parseExplorerFileReadResponse,
     }),
   searchFiles: (input) =>
     requestJson({
@@ -110,137 +114,141 @@ export const createExplorerClient = (): ExplorerClient => ({
         query: input.query,
         ...(input.isRegex ? { isRegex: true } : {}),
         ...(input.matchCase ? { matchCase: true } : {}),
-        ...(input.wholeWord ? { wholeWord: true } : {})
+        ...(input.wholeWord ? { wholeWord: true } : {}),
       },
-      parse: parseExplorerFileSearchResponse
-    })
+      parse: parseExplorerFileSearchResponse,
+    }),
 });
 
 export const parseExplorerFileTreeResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<ExplorerFileEntryRecord> =>
   readRequiredArray(value, "explorerFileTreeResponse", "entries").map((entry) =>
-    parseExplorerFileEntryRecord(ensureRecord(entry, "explorerFileEntryRecord"))
+    parseExplorerFileEntryRecord(
+      ensureRecord(entry, "explorerFileEntryRecord"),
+    ),
   );
 
 export const parseExplorerFileReadResponse = (
-  value: unknown
+  value: unknown,
 ): ExplorerFileContentRecord => {
   const record = ensureRecord(value, "explorerFileReadResponse");
-  const content = readRequiredString(record, "explorerFileReadResponse", "content");
-  const totalLines = readOptionalNumber(
+  const content = readRequiredString(
     record,
     "explorerFileReadResponse",
-    "totalLines"
-  ) ?? countExplorerContentLines(content);
-  const startLine = readOptionalNumber(
-    record,
-    "explorerFileReadResponse",
-    "startLine"
-  ) ?? 1;
-  const endLine = readOptionalNumber(
-    record,
-    "explorerFileReadResponse",
-    "endLine"
-  ) ?? startLine + countExplorerContentLines(content) - 1;
-  const truncated = readOptionalBoolean(
-    record,
-    "explorerFileReadResponse",
-    "truncated"
-  ) ?? false;
+    "content",
+  );
+  const totalLines =
+    readOptionalNumber(record, "explorerFileReadResponse", "totalLines") ??
+    countExplorerContentLines(content);
+  const startLine =
+    readOptionalNumber(record, "explorerFileReadResponse", "startLine") ?? 1;
+  const endLine =
+    readOptionalNumber(record, "explorerFileReadResponse", "endLine") ??
+    startLine + countExplorerContentLines(content) - 1;
+  const truncated =
+    readOptionalBoolean(record, "explorerFileReadResponse", "truncated") ??
+    false;
 
   return {
     content,
     startLine,
     endLine,
     totalLines,
-    truncated
+    truncated,
   };
 };
 
 export const parseExplorerFileSearchResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<ExplorerFileSearchResultRecord> =>
-  readRequiredArray(value, "explorerFileSearchResponse", "results").map((entry) =>
-    parseExplorerFileSearchResultRecord(
-      ensureRecord(entry, "explorerFileSearchResultRecord")
-    )
+  readRequiredArray(value, "explorerFileSearchResponse", "results").map(
+    (entry) =>
+      parseExplorerFileSearchResultRecord(
+        ensureRecord(entry, "explorerFileSearchResultRecord"),
+      ),
   );
 
 const parseExplorerFileEntryRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): ExplorerFileEntryRecord => ({
   path: readRequiredString(value, "explorerFileEntryRecord", "path"),
   name: readRequiredString(value, "explorerFileEntryRecord", "name"),
-  kind: readExplorerFileEntryKind(value, "explorerFileEntryRecord", "kind")
+  kind: readExplorerFileEntryKind(value, "explorerFileEntryRecord", "kind"),
 });
 
 const parseExplorerFileSearchResultRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): ExplorerFileSearchResultRecord => ({
   path: readRequiredString(value, "explorerFileSearchResultRecord", "path"),
   name: readRequiredString(value, "explorerFileSearchResultRecord", "name"),
   matches: readRequiredArray(
     value,
     "explorerFileSearchResultRecord",
-    "matches"
+    "matches",
   ).map((match) =>
     parseExplorerFileSearchMatchRecord(
-      ensureRecord(match, "explorerFileSearchMatchRecord")
-    )
-  )
+      ensureRecord(match, "explorerFileSearchMatchRecord"),
+    ),
+  ),
 });
 
 const parseExplorerFileSearchMatchRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): ExplorerFileSearchMatchRecord => ({
   lineNumber: readRequiredNumber(
     value,
     "explorerFileSearchMatchRecord",
-    "lineNumber"
+    "lineNumber",
   ),
-  lineText: readRequiredString(value, "explorerFileSearchMatchRecord", "lineText"),
+  lineText: readRequiredString(
+    value,
+    "explorerFileSearchMatchRecord",
+    "lineText",
+  ),
   ranges: readRequiredArray(
     value,
     "explorerFileSearchMatchRecord",
-    "ranges"
+    "ranges",
   ).map((range) =>
     parseExplorerFileSearchMatchRangeRecord(
-      ensureRecord(range, "explorerFileSearchMatchRangeRecord")
-    )
-  )
+      ensureRecord(range, "explorerFileSearchMatchRangeRecord"),
+    ),
+  ),
 });
 
 const parseExplorerFileSearchMatchRangeRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): ExplorerFileSearchMatchRangeRecord => ({
   start: readRequiredNumber(
     value,
     "explorerFileSearchMatchRangeRecord",
-    "start"
+    "start",
   ),
-  end: readRequiredNumber(
-    value,
-    "explorerFileSearchMatchRangeRecord",
-    "end"
-  )
+  end: readRequiredNumber(value, "explorerFileSearchMatchRangeRecord", "end"),
 });
 
 const readExplorerFileEntryKind = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): ExplorerFileEntryKind => {
   const kind = readRequiredString(value, label, key);
 
-  if (kind === ExplorerFileEntryKind.Directory || kind === ExplorerFileEntryKind.File) {
+  if (
+    kind === ExplorerFileEntryKind.Directory ||
+    kind === ExplorerFileEntryKind.File
+  ) {
     return kind;
   }
 
   throw new Error(`Invalid ${label}.${key}`);
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -251,7 +259,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredArray = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const record = ensureRecord(value, label);
   const entry = record[key];
@@ -266,7 +274,7 @@ const readRequiredArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const entry = value[key];
 
@@ -280,7 +288,7 @@ const readRequiredString = (
 const readRequiredNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number => {
   const entry = value[key];
 
@@ -294,7 +302,7 @@ const readRequiredNumber = (
 const readOptionalNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number | undefined => {
   const entry = value[key];
   if (entry === undefined) {
@@ -311,7 +319,7 @@ const readOptionalNumber = (
 const readOptionalBoolean = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): boolean | undefined => {
   const entry = value[key];
   if (entry === undefined) {

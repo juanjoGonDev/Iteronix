@@ -39,11 +39,14 @@ describe("command policy", () => {
   it("allows an allowlisted command within the root", () => {
     const root = resolve(RootName);
     const workspacePolicy = createWorkspacePolicy([root]);
-    const commandPolicy = createCommandPolicy([AllowedCommand], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [AllowedCommand],
+      workspacePolicy,
+    );
     const result = commandPolicy.assertCommandAllowed({
       command: AllowedCommand,
       rootPath: root,
-      cwd: resolve(root, ChildName)
+      cwd: resolve(root, ChildName),
     });
 
     expect(result.type).toBe(ResultType.Ok);
@@ -55,10 +58,13 @@ describe("command policy", () => {
   it("rejects a non-allowlisted command", () => {
     const root = resolve(RootName);
     const workspacePolicy = createWorkspacePolicy([root]);
-    const commandPolicy = createCommandPolicy([AllowedCommand], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [AllowedCommand],
+      workspacePolicy,
+    );
     const result = commandPolicy.assertCommandAllowed({
       command: BlockedCommand,
-      rootPath: root
+      rootPath: root,
     });
 
     expect(result.type).toBe(ResultType.Err);
@@ -71,11 +77,14 @@ describe("command policy", () => {
   it("rejects commands outside the allowed root", () => {
     const root = resolve(RootName);
     const workspacePolicy = createWorkspacePolicy([root]);
-    const commandPolicy = createCommandPolicy([AllowedCommand], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [AllowedCommand],
+      workspacePolicy,
+    );
     const result = commandPolicy.assertCommandAllowed({
       command: AllowedCommand,
       rootPath: root,
-      cwd: resolve(OtherRootName)
+      cwd: resolve(OtherRootName),
     });
 
     expect(result.type).toBe(ResultType.Err);

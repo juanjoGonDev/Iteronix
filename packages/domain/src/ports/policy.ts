@@ -6,11 +6,10 @@ export const PolicyAction = {
   ExecuteCommand: "execute_command",
   NetworkRequest: "network_request",
   ReadSecret: "read_secret",
-  WriteSecret: "write_secret"
+  WriteSecret: "write_secret",
 } as const;
 
-export type PolicyAction =
-  typeof PolicyAction[keyof typeof PolicyAction];
+export type PolicyAction = (typeof PolicyAction)[keyof typeof PolicyAction];
 
 export type PolicyRequest = {
   action: PolicyAction;
@@ -20,11 +19,11 @@ export type PolicyRequest = {
 
 export const PolicyDecisionType = {
   Allow: "allow",
-  Deny: "deny"
+  Deny: "deny",
 } as const;
 
 export type PolicyDecisionType =
-  typeof PolicyDecisionType[keyof typeof PolicyDecisionType];
+  (typeof PolicyDecisionType)[keyof typeof PolicyDecisionType];
 
 export type PolicyDecision = {
   type: PolicyDecisionType;
@@ -34,11 +33,11 @@ export type PolicyDecision = {
 export const PolicyErrorCode = {
   Unavailable: "unavailable",
   InvalidRequest: "invalid_request",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type PolicyErrorCode =
-  typeof PolicyErrorCode[keyof typeof PolicyErrorCode];
+  (typeof PolicyErrorCode)[keyof typeof PolicyErrorCode];
 
 export type PolicyError = {
   code: PolicyErrorCode;
@@ -47,5 +46,7 @@ export type PolicyError = {
 };
 
 export type PolicyPort = {
-  evaluate: (request: PolicyRequest) => Promise<Result<PolicyDecision, PolicyError>>;
+  evaluate: (
+    request: PolicyRequest,
+  ) => Promise<Result<PolicyDecision, PolicyError>>;
 };

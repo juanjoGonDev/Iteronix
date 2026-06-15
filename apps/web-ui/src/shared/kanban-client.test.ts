@@ -5,40 +5,40 @@ import {
   parseKanbanColumnResponse,
   parseKanbanColumnsResponse,
   parseKanbanTaskResponse,
-  parseKanbanTasksResponse
+  parseKanbanTasksResponse,
 } from "./kanban-client.js";
 
 describe("kanban-client parsers", () => {
   it("parses kanban board responses", () => {
     expect(parseKanbanBoardResponse({ board: createBoardRecord() })).toEqual(
-      createBoardRecord()
+      createBoardRecord(),
     );
-    expect(parseKanbanBoardsResponse({ boards: [createBoardRecord()] })).toEqual(
-      [createBoardRecord()]
-    );
+    expect(
+      parseKanbanBoardsResponse({ boards: [createBoardRecord()] }),
+    ).toEqual([createBoardRecord()]);
   });
 
   it("parses kanban column responses", () => {
     expect(parseKanbanColumnResponse({ column: createColumnRecord() })).toEqual(
-      createColumnRecord()
+      createColumnRecord(),
     );
     expect(
-      parseKanbanColumnsResponse({ columns: [createColumnRecord()] })
+      parseKanbanColumnsResponse({ columns: [createColumnRecord()] }),
     ).toEqual([createColumnRecord()]);
   });
 
   it("parses kanban task responses with optional descriptions", () => {
     expect(parseKanbanTaskResponse({ task: createTaskRecord() })).toEqual(
-      createTaskRecord()
+      createTaskRecord(),
     );
     expect(parseKanbanTasksResponse({ tasks: [createTaskRecord()] })).toEqual([
-      createTaskRecord()
+      createTaskRecord(),
     ]);
   });
 
   it("rejects malformed kanban payloads", () => {
     expect(() => parseKanbanTaskResponse({ task: { id: "task-1" } })).toThrow(
-      "Invalid kanbanTaskRecord.boardId"
+      "Invalid kanbanTaskRecord.boardId",
     );
   });
 });
@@ -48,7 +48,7 @@ const createBoardRecord = () => ({
   projectId: "project-1",
   name: "Workbench",
   createdAt: "2026-04-29T07:00:00.000Z",
-  updatedAt: "2026-04-29T07:00:00.000Z"
+  updatedAt: "2026-04-29T07:00:00.000Z",
 });
 
 const createColumnRecord = () => ({
@@ -57,7 +57,7 @@ const createColumnRecord = () => ({
   name: "TODO",
   position: 1,
   createdAt: "2026-04-29T07:00:00.000Z",
-  updatedAt: "2026-04-29T07:00:00.000Z"
+  updatedAt: "2026-04-29T07:00:00.000Z",
 });
 
 const createTaskRecord = () => ({
@@ -68,5 +68,5 @@ const createTaskRecord = () => ({
   description: "Use the server as source of truth",
   position: 0,
   createdAt: "2026-04-29T07:00:00.000Z",
-  updatedAt: "2026-04-29T07:00:00.000Z"
+  updatedAt: "2026-04-29T07:00:00.000Z",
 });

@@ -1,18 +1,26 @@
-import { Component, createElement, type ComponentProps } from "./shared/Component.js";
+import {
+  Component,
+  createElement,
+  type ComponentProps,
+} from "./shared/Component.js";
 import { MainLayout, Header } from "./components/Layout.js";
 import { Sidebar } from "./components/Navigation.js";
-import { APP_VERSION, COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "./shared/constants.js";
+import {
+  APP_VERSION,
+  COMPACT_VIEWPORT_MAX_WIDTH,
+  ROUTES,
+} from "./shared/constants.js";
 import { router } from "./shared/Router.js";
 import { installClientLogForwarder } from "./shared/logger-impl.js";
 import {
   ProjectSessionEventName,
   readActiveProjectSessionLabel,
   readProjectSession,
-  type ProjectSessionState
+  type ProjectSessionState,
 } from "./shared/project-session.js";
 import {
   createWorkspaceStateClient,
-  hydrateWorkspaceStateClients
+  hydrateWorkspaceStateClients,
 } from "./shared/workspace-state-client.js";
 import { DashboardScreen } from "./screens/Dashboard.js";
 import { Explorer } from "./screens/Explorer.js";
@@ -29,10 +37,10 @@ const ScreenId = {
   Kanban: "kanban",
   Workflows: "workflows",
   History: "history",
-  Settings: "settings"
+  Settings: "settings",
 } as const;
 
-type ScreenId = typeof ScreenId[keyof typeof ScreenId];
+type ScreenId = (typeof ScreenId)[keyof typeof ScreenId];
 
 const RootRoute = "/";
 
@@ -43,7 +51,7 @@ const ScreenLabel: Record<ScreenId, string> = {
   kanban: "Kanban",
   workflows: "Workflows",
   history: "History",
-  settings: "Settings"
+  settings: "Settings",
 };
 
 interface AppState {
@@ -60,7 +68,8 @@ interface AppProps extends ComponentProps {
 const ScreenHostTestId = "app-screen-host";
 
 export class App extends Component<AppProps, AppState> {
-  private activeScreenInstance: Component<ComponentProps, unknown> | null = null;
+  private activeScreenInstance: Component<ComponentProps, unknown> | null =
+    null;
   private activeScreenId: ScreenId | null = null;
   private readonly workspaceStateClient = createWorkspaceStateClient();
 
@@ -69,7 +78,7 @@ export class App extends Component<AppProps, AppState> {
       currentScreen: ScreenId.Overview,
       sidebarCollapsed: readIsCompactViewport(),
       projectSession: readProjectSession(),
-      isCompactViewport: readIsCompactViewport()
+      isCompactViewport: readIsCompactViewport(),
     });
 
     installClientLogForwarder();
@@ -77,7 +86,7 @@ export class App extends Component<AppProps, AppState> {
 
     console.info("Application started", {
       version: APP_VERSION,
-      screen: ScreenId.Overview
+      screen: ScreenId.Overview,
     });
   }
 
@@ -89,7 +98,9 @@ export class App extends Component<AppProps, AppState> {
   }
 
   override render(): HTMLElement {
-    const projectLabel = readActiveProjectSessionLabel(this.state.projectSession);
+    const projectLabel = readActiveProjectSessionLabel(
+      this.state.projectSession,
+    );
     const hasProject = projectLabel.length > 0;
 
     return createElement(MainLayout, {
@@ -97,35 +108,42 @@ export class App extends Component<AppProps, AppState> {
         brand: {
           name: "Iteronix",
           icon: "terminal",
-          version: `v${APP_VERSION}`
+          version: `v${APP_VERSION}`,
         },
         project: hasProject
           ? {
               label: projectLabel,
-              rootPath: this.state.projectSession.projectRootPath
+              rootPath: this.state.projectSession.projectRootPath,
             }
           : null,
         onProjectClick: () => router.navigate(ROUTES.PROJECTS),
         navigation: this.buildNavigationItems(),
-        onToggle: () => this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
-        collapsed: this.state.sidebarCollapsed
+        onToggle: () =>
+          this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
+        collapsed: this.state.sidebarCollapsed,
       }),
       header: () => this.renderHeader(),
       className: "transition-all duration-300",
       sidebarCollapsed: this.state.sidebarCollapsed,
-      children: this.renderCurrentScreen()
+      children: this.renderCurrentScreen(),
     });
   }
 
   override onMount(): void {
-    window.addEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
+    window.addEventListener(
+      ProjectSessionEventName.Changed,
+      this.handleProjectSessionChanged,
+    );
     window.addEventListener("resize", this.handleViewportResize);
     void this.hydrateWorkspaceState();
     this.mountActiveScreenInstance();
   }
 
   override onUnmount(): void {
-    window.removeEventListener(ProjectSessionEventName.Changed, this.handleProjectSessionChanged);
+    window.removeEventListener(
+      ProjectSessionEventName.Changed,
+      this.handleProjectSessionChanged,
+    );
     window.removeEventListener("resize", this.handleViewportResize);
     this.activeScreenInstance?.unmount();
     this.activeScreenInstance = null;
@@ -134,13 +152,23 @@ export class App extends Component<AppProps, AppState> {
 
   private setupRouter(): void {
     router.register(RootRoute, () => this.updateScreen(ScreenId.Overview));
-    router.register(ROUTES.OVERVIEW, () => this.updateScreen(ScreenId.Overview));
-    router.register(ROUTES.PROJECTS, () => this.updateScreen(ScreenId.Projects));
-    router.register(ROUTES.EXPLORER, () => this.updateScreen(ScreenId.Explorer));
+    router.register(ROUTES.OVERVIEW, () =>
+      this.updateScreen(ScreenId.Overview),
+    );
+    router.register(ROUTES.PROJECTS, () =>
+      this.updateScreen(ScreenId.Projects),
+    );
+    router.register(ROUTES.EXPLORER, () =>
+      this.updateScreen(ScreenId.Explorer),
+    );
     router.register(ROUTES.KANBAN, () => this.updateScreen(ScreenId.Kanban));
-    router.register(ROUTES.WORKFLOWS, () => this.updateScreen(ScreenId.Workflows));
+    router.register(ROUTES.WORKFLOWS, () =>
+      this.updateScreen(ScreenId.Workflows),
+    );
     router.register(ROUTES.HISTORY, () => this.updateScreen(ScreenId.History));
-    router.register(ROUTES.SETTINGS, () => this.updateScreen(ScreenId.Settings));
+    router.register(ROUTES.SETTINGS, () =>
+      this.updateScreen(ScreenId.Settings),
+    );
     router.start();
   }
 
@@ -152,13 +180,48 @@ export class App extends Component<AppProps, AppState> {
     onClick: (event: Event) => void;
   }> {
     return [
-      this.createNavigationItem(ScreenId.Overview, "dashboard", ScreenLabel.overview, ROUTES.OVERVIEW),
-      this.createNavigationItem(ScreenId.Projects, "folder_open", ScreenLabel.projects, ROUTES.PROJECTS),
-      this.createNavigationItem(ScreenId.Explorer, "code", ScreenLabel.explorer, ROUTES.EXPLORER),
-      this.createNavigationItem(ScreenId.Kanban, "view_kanban", ScreenLabel.kanban, ROUTES.KANBAN),
-      this.createNavigationItem(ScreenId.Workflows, "account_tree", ScreenLabel.workflows, ROUTES.WORKFLOWS),
-      this.createNavigationItem(ScreenId.History, "history", ScreenLabel.history, ROUTES.HISTORY),
-      this.createNavigationItem(ScreenId.Settings, "settings", ScreenLabel.settings, ROUTES.SETTINGS)
+      this.createNavigationItem(
+        ScreenId.Overview,
+        "dashboard",
+        ScreenLabel.overview,
+        ROUTES.OVERVIEW,
+      ),
+      this.createNavigationItem(
+        ScreenId.Projects,
+        "folder_open",
+        ScreenLabel.projects,
+        ROUTES.PROJECTS,
+      ),
+      this.createNavigationItem(
+        ScreenId.Explorer,
+        "code",
+        ScreenLabel.explorer,
+        ROUTES.EXPLORER,
+      ),
+      this.createNavigationItem(
+        ScreenId.Kanban,
+        "view_kanban",
+        ScreenLabel.kanban,
+        ROUTES.KANBAN,
+      ),
+      this.createNavigationItem(
+        ScreenId.Workflows,
+        "account_tree",
+        ScreenLabel.workflows,
+        ROUTES.WORKFLOWS,
+      ),
+      this.createNavigationItem(
+        ScreenId.History,
+        "history",
+        ScreenLabel.history,
+        ROUTES.HISTORY,
+      ),
+      this.createNavigationItem(
+        ScreenId.Settings,
+        "settings",
+        ScreenLabel.settings,
+        ROUTES.SETTINGS,
+      ),
     ];
   }
 
@@ -166,7 +229,7 @@ export class App extends Component<AppProps, AppState> {
     screen: ScreenId,
     icon: string,
     label: string,
-    href: string
+    href: string,
   ): {
     icon: string;
     label: string;
@@ -182,16 +245,20 @@ export class App extends Component<AppProps, AppState> {
       onClick: (event: Event) => {
         event.preventDefault();
         router.navigate(href);
-      }
+      },
     };
   }
 
   private renderHeader(): HTMLElement {
-    const actions = buildHeaderActions(this.state.currentScreen, this.state.isCompactViewport);
+    const actions = buildHeaderActions(
+      this.state.currentScreen,
+      this.state.isCompactViewport,
+    );
 
     return createElement(Header, {
       title:
-        this.state.currentScreen === ScreenId.Overview || this.state.isCompactViewport
+        this.state.currentScreen === ScreenId.Overview ||
+        this.state.isCompactViewport
           ? null
           : ScreenLabel[this.state.currentScreen],
       breadcrumbs:
@@ -201,22 +268,22 @@ export class App extends Component<AppProps, AppState> {
             ? [{ label: ScreenLabel[this.state.currentScreen] }]
             : [
                 { label: "Iteronix", href: ROUTES.OVERVIEW },
-                { label: ScreenLabel[this.state.currentScreen] }
+                { label: ScreenLabel[this.state.currentScreen] },
               ],
       actions,
       user: {
         name: "John Doe",
         email: "john@example.com",
-        avatar: null
+        avatar: null,
       },
-      className: this.state.isCompactViewport ? "px-3" : ""
+      className: this.state.isCompactViewport ? "px-3" : "",
     });
   }
 
   private renderCurrentScreen(): HTMLElement {
     return createElement("div", {
       className: "h-full w-full",
-      "data-testid": ScreenHostTestId
+      "data-testid": ScreenHostTestId,
     });
   }
 
@@ -229,16 +296,18 @@ export class App extends Component<AppProps, AppState> {
   private readonly handleProjectSessionChanged = (): void => {
     const nextSession = readProjectSession();
     if (
-      nextSession.projectRootPath === this.state.projectSession.projectRootPath &&
+      nextSession.projectRootPath ===
+        this.state.projectSession.projectRootPath &&
       nextSession.projectName === this.state.projectSession.projectName &&
-      JSON.stringify(nextSession.recentProjects) === JSON.stringify(this.state.projectSession.recentProjects)
+      JSON.stringify(nextSession.recentProjects) ===
+        JSON.stringify(this.state.projectSession.recentProjects)
     ) {
       return;
     }
 
     this.invalidateActiveScreenInstance();
     this.setState({
-      projectSession: nextSession
+      projectSession: nextSession,
     });
   };
 
@@ -250,7 +319,7 @@ export class App extends Component<AppProps, AppState> {
 
     this.setState({
       isCompactViewport,
-      sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed
+      sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed,
     });
   };
 
@@ -260,7 +329,7 @@ export class App extends Component<AppProps, AppState> {
       hydrateWorkspaceStateClients(state);
       this.invalidateActiveScreenInstance();
       this.setState({
-        projectSession: readProjectSession()
+        projectSession: readProjectSession(),
       });
     } catch {
       return;
@@ -275,7 +344,7 @@ export class App extends Component<AppProps, AppState> {
 
   private mountActiveScreenInstance(): void {
     const screenHost = this.element?.querySelector(
-      `[data-testid="${ScreenHostTestId}"]`
+      `[data-testid="${ScreenHostTestId}"]`,
     );
     if (!(screenHost instanceof HTMLElement)) {
       return;
@@ -283,7 +352,9 @@ export class App extends Component<AppProps, AppState> {
 
     if (this.activeScreenId !== this.state.currentScreen) {
       this.activeScreenInstance?.unmount();
-      this.activeScreenInstance = this.createScreenInstance(this.state.currentScreen);
+      this.activeScreenInstance = this.createScreenInstance(
+        this.state.currentScreen,
+      );
       this.activeScreenId = this.state.currentScreen;
       screenHost.replaceChildren();
       this.activeScreenInstance.mount(screenHost);
@@ -303,7 +374,9 @@ export class App extends Component<AppProps, AppState> {
     }
   }
 
-  private createScreenInstance(screen: ScreenId): Component<ComponentProps, unknown> {
+  private createScreenInstance(
+    screen: ScreenId,
+  ): Component<ComponentProps, unknown> {
     if (screen === ScreenId.Overview) {
       return new DashboardScreen({});
     }
@@ -334,7 +407,7 @@ export class App extends Component<AppProps, AppState> {
 
     return new PlaceholderScreen({
       title: "Unavailable screen",
-      description: `The route for ${screen} is not wired yet.`
+      description: `The route for ${screen} is not wired yet.`,
     });
   }
 }
@@ -346,24 +419,43 @@ interface PlaceholderScreenProps extends ComponentProps {
 
 class PlaceholderScreen extends Component<PlaceholderScreenProps> {
   override render(): HTMLElement {
-    return createElement("div", {
-      className: "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8"
-    }, [
-      createElement("div", {
-        className: "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left"
-      }, [
-        createElement("h1", { className: "text-2xl font-semibold text-white" }, [this.props.title]),
-        createElement("p", { className: "mt-3 max-w-xl text-sm leading-6 text-text-secondary" }, [
-          this.props.description
-        ])
-      ])
-    ]);
+    return createElement(
+      "div",
+      {
+        className:
+          "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8",
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left",
+          },
+          [
+            createElement(
+              "h1",
+              { className: "text-2xl font-semibold text-white" },
+              [this.props.title],
+            ),
+            createElement(
+              "p",
+              {
+                className:
+                  "mt-3 max-w-xl text-sm leading-6 text-text-secondary",
+              },
+              [this.props.description],
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
 const buildHeaderActions = (
   screen: ScreenId,
-  isCompactViewport: boolean
+  isCompactViewport: boolean,
 ): {
   notifications: {
     unread: number;
@@ -396,19 +488,19 @@ const buildHeaderActions = (
   } = {
     notifications: {
       unread: 0,
-      onClick: () => router.navigate(ROUTES.HISTORY)
-    }
+      onClick: () => router.navigate(ROUTES.HISTORY),
+    },
   };
 
   if (screen === ScreenId.Overview && !isCompactViewport) {
     actions.status = {
       api: "API online",
-      runners: "workbench ready"
+      runners: "workbench ready",
     };
     actions.primary = {
       icon: "smart_toy",
       label: "Open Workbench",
-      onClick: () => router.navigate(ROUTES.WORKFLOWS)
+      onClick: () => router.navigate(ROUTES.WORKFLOWS),
     };
   }
 
@@ -416,7 +508,8 @@ const buildHeaderActions = (
 };
 
 const readIsCompactViewport = (): boolean =>
-  typeof window !== "undefined" && window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
+  typeof window !== "undefined" &&
+  window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
 
 document.addEventListener("DOMContentLoaded", () => {
   const loadingScreen = document.getElementById("loading-screen");

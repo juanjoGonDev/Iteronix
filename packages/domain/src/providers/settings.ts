@@ -4,7 +4,7 @@ import type {
   JsonSchema,
   JsonSchemaValidationError,
   JsonSchemaValidationIssue,
-  JsonSchemaValidatorPort
+  JsonSchemaValidatorPort,
 } from "./schema";
 
 export type ProviderSettingsSchema = JsonSchema;
@@ -26,11 +26,11 @@ export type ProviderSettingsValidationInput = {
 
 export const ProviderSettingsErrorCode = {
   ValidationFailed: "validation_failed",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type ProviderSettingsErrorCode =
-  typeof ProviderSettingsErrorCode[keyof typeof ProviderSettingsErrorCode];
+  (typeof ProviderSettingsErrorCode)[keyof typeof ProviderSettingsErrorCode];
 
 export type ProviderSettingsError = {
   code: ProviderSettingsErrorCode;
@@ -41,9 +41,12 @@ export type ProviderSettingsError = {
 
 export const validateProviderSettings = async <TConfig>(
   validator: JsonSchemaValidatorPort,
-  input: ProviderSettingsValidationInput
+  input: ProviderSettingsValidationInput,
 ): Promise<Result<ProviderSettings<TConfig>, ProviderSettingsError>> => {
-  const validation = await validator.validate<TConfig>(input.schema, input.value);
+  const validation = await validator.validate<TConfig>(
+    input.schema,
+    input.value,
+  );
   if (validation.type === ResultType.Ok) {
     return {
       type: ResultType.Ok,
@@ -51,32 +54,32 @@ export const validateProviderSettings = async <TConfig>(
         providerId: input.providerId,
         profileId: input.profileId,
         config: validation.value,
-        updatedAt: input.updatedAt
-      }
+        updatedAt: input.updatedAt,
+      },
     };
   }
 
   return {
     type: ResultType.Err,
-    error: toProviderSettingsError(validation.error)
+    error: toProviderSettingsError(validation.error),
   };
 };
 
 const toProviderSettingsError = (
-  error: JsonSchemaValidationError
+  error: JsonSchemaValidationError,
 ): ProviderSettingsError => {
   if (error.issues) {
     return {
       code: ProviderSettingsErrorCode.ValidationFailed,
       message: error.message,
       retryable: error.retryable,
-      issues: error.issues
+      issues: error.issues,
     };
   }
 
   return {
     code: ProviderSettingsErrorCode.ValidationFailed,
     message: error.message,
-    retryable: error.retryable
+    retryable: error.retryable,
   };
 };

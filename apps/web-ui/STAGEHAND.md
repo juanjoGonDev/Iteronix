@@ -26,24 +26,25 @@ Para que la IA pueda interactuar con la UI:
 // Esto es solo documentación para referencia de la IA
 
 // Navegar a una página
-await page.goto('http://localhost:5173/#dashboard');
+await page.goto("http://localhost:5173/#dashboard");
 
 // Click en elementos
 await page.click('[data-testid="new-project-button"]');
 
 // Rellenar formularios
-await page.fill('input[name="apiKey"]', 'sk-...');
+await page.fill('input[name="apiKey"]', "sk-...");
 
 // Scroll
-await page.scroll('down', 500);
+await page.scroll("down", 500);
 
 // Extraer texto
-const text = await page.getText('h1');
+const text = await page.getText("h1");
 ```
 
 ### 🎯 Objetivo del Sistema
 
 La arquitectura de componentes reutilizables permite que la IA:
+
 1. **Identifique elementos** por data-testid, className o selectores CSS
 2. **Interactúe** con formularios, botones, y navegación
 3. **Valide** comportamientos esperados

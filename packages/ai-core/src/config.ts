@@ -18,7 +18,7 @@ export type WorkbenchEnvironmentConfig = {
 
 export const parseWorkbenchEnvironment = (
   env: NodeJS.ProcessEnv,
-  workspaceRoot: string
+  workspaceRoot: string,
 ): WorkbenchEnvironmentConfig => {
   const parsed = workbenchEnvironmentSchema.parse(env);
   const config: WorkbenchEnvironmentConfig = {
@@ -29,7 +29,7 @@ export const parseWorkbenchEnvironment = (
     retrievalCacheTtlSeconds: parsed.AI_RETRIEVAL_CACHE_TTL_SECONDS,
     maxIndexedFiles: parsed.AI_MAX_INDEXED_FILES,
     rateLimitPoints: parsed.AI_RATE_LIMIT_POINTS,
-    rateLimitDurationSeconds: parsed.AI_RATE_LIMIT_DURATION_SECONDS
+    rateLimitDurationSeconds: parsed.AI_RATE_LIMIT_DURATION_SECONDS,
   };
   const otlpEndpoint = toOptional(parsed.OTEL_EXPORTER_OTLP_ENDPOINT);
   const qdrantUrl = toOptional(parsed.AI_QDRANT_URL);
@@ -69,12 +69,20 @@ const workbenchEnvironmentSchema = z.object({
   AI_MEMORY_DIR: z.string().default(".iteronix/memory"),
   AI_EVIDENCE_DIR: z.string().default(".iteronix/evidence"),
   AI_VECTOR_DIR: z.string().default(".iteronix/vector"),
-  AI_RETRIEVAL_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  AI_RETRIEVAL_CACHE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
   AI_MAX_INDEXED_FILES: z.coerce.number().int().positive().default(200),
   AI_RATE_LIMIT_POINTS: z.coerce.number().int().positive().default(60),
-  AI_RATE_LIMIT_DURATION_SECONDS: z.coerce.number().int().positive().default(60),
+  AI_RATE_LIMIT_DURATION_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
   AI_QDRANT_URL: z.string().optional(),
   AI_QDRANT_API_KEY: z.string().optional(),
-  AI_PGVECTOR_CONNECTION_STRING: z.string().optional()
+  AI_PGVECTOR_CONNECTION_STRING: z.string().optional(),
 });

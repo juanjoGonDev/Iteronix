@@ -3,9 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import {
-  createAiWorkbenchService
-} from "./ai-workbench";
+import { createAiWorkbenchService } from "./ai-workbench";
 
 describe("ai workbench service", () => {
   it("runs the example skill end to end", async () => {
@@ -20,59 +18,59 @@ describe("ai workbench service", () => {
           name: "example-skill",
           version: "1.0.0",
           description: "Answers with citations",
-          tags: ["server"]
+          tags: ["server"],
         },
         inputSchema: {
           type: "object",
           properties: {
             question: {
-              type: "string"
-            }
+              type: "string",
+            },
           },
-          required: ["question"]
+          required: ["question"],
         },
         outputSchema: {
           type: "object",
           properties: {
             answer: {
-              type: "string"
+              type: "string",
             },
             confidence: {
-              type: "number"
-            }
+              type: "number",
+            },
           },
-          required: ["answer", "confidence"]
+          required: ["answer", "confidence"],
         },
         toolAllowlist: ["retrieve_context", "session_memory"],
         promptTemplate: "Answer from repo docs and cite sources.",
         evaluationRubric: ["Requires citations."],
         options: {
-          useRag: true
-        }
+          useRag: true,
+        },
       }),
-      "utf8"
+      "utf8",
     );
 
     mkdirSync(join(workspace, "docs"), { recursive: true });
     writeFileSync(
       join(workspace, "docs", "overview.md"),
       "Iteronix includes memory, RAG, skills, orchestration and observability.",
-      "utf8"
+      "utf8",
     );
 
     const service = await createAiWorkbenchService({
       workspaceRoot: workspace,
       skillsDir,
       memoryDir: join(workspace, ".iteronix", "memory"),
-      evidenceDir: join(workspace, ".iteronix", "evidence")
+      evidenceDir: join(workspace, ".iteronix", "evidence"),
     });
 
     const result = await service.runSkill({
       skillName: "example-skill",
       sessionId: "session-server-1",
       input: {
-        question: "What does Iteronix include?"
-      }
+        question: "What does Iteronix include?",
+      },
     });
 
     expect(result.output.answer).toContain("Iteronix");
@@ -94,44 +92,44 @@ describe("ai workbench service", () => {
           name: "example-skill",
           version: "1.0.0",
           description: "Answers with citations",
-          tags: ["server"]
+          tags: ["server"],
         },
         inputSchema: {
           type: "object",
           properties: {
             question: {
-              type: "string"
-            }
+              type: "string",
+            },
           },
-          required: ["question"]
+          required: ["question"],
         },
         outputSchema: {
           type: "object",
           properties: {
             answer: {
-              type: "string"
+              type: "string",
             },
             confidence: {
-              type: "number"
-            }
+              type: "number",
+            },
           },
-          required: ["answer", "confidence"]
+          required: ["answer", "confidence"],
         },
         toolAllowlist: ["retrieve_context", "session_memory"],
         promptTemplate: "Answer from repo docs and cite sources.",
         evaluationRubric: ["Requires citations."],
         options: {
-          useRag: true
-        }
+          useRag: true,
+        },
       }),
-      "utf8"
+      "utf8",
     );
 
     mkdirSync(join(workspace, "docs"), { recursive: true });
     writeFileSync(
       join(workspace, "docs", "overview.md"),
       "Iteronix includes memory, RAG, skills, orchestration and observability.",
-      "utf8"
+      "utf8",
     );
     writeFileSync(
       join(datasetDir, "minimal-suite.jsonl"),
@@ -140,23 +138,23 @@ describe("ai workbench service", () => {
         mode: "skill",
         skillName: "example-skill",
         input: {
-          question: "What does Iteronix include?"
+          question: "What does Iteronix include?",
         },
         expectedAnswerIncludes: ["Iteronix"],
-        minimumCitations: 1
+        minimumCitations: 1,
       }),
-      "utf8"
+      "utf8",
     );
 
     const service = await createAiWorkbenchService({
       workspaceRoot: workspace,
       skillsDir,
       memoryDir: join(workspace, ".iteronix", "memory"),
-      evidenceDir: join(workspace, ".iteronix", "evidence")
+      evidenceDir: join(workspace, ".iteronix", "evidence"),
     });
 
     const result = await service.runEvaluation({
-      datasetPath: "packages/eval/fixtures/minimal-suite.jsonl"
+      datasetPath: "packages/eval/fixtures/minimal-suite.jsonl",
     });
 
     expect(result.summary.total).toBe(1);
@@ -175,37 +173,37 @@ describe("ai workbench service", () => {
           name: "example-skill",
           version: "1.0.0",
           description: "Answers with citations",
-          tags: ["server"]
+          tags: ["server"],
         },
         inputSchema: {
           type: "object",
           properties: {
             question: {
-              type: "string"
-            }
+              type: "string",
+            },
           },
-          required: ["question"]
+          required: ["question"],
         },
         outputSchema: {
           type: "object",
           properties: {
             answer: {
-              type: "string"
+              type: "string",
             },
             confidence: {
-              type: "number"
-            }
+              type: "number",
+            },
           },
-          required: ["answer", "confidence"]
+          required: ["answer", "confidence"],
         },
         toolAllowlist: ["retrieve_context", "session_memory"],
         promptTemplate: "Answer from repo docs and cite sources.",
         evaluationRubric: ["Requires citations."],
         options: {
-          useRag: true
-        }
+          useRag: true,
+        },
       }),
-      "utf8"
+      "utf8",
     );
 
     mkdirSync(join(workspace, "docs"), { recursive: true });
@@ -216,62 +214,66 @@ describe("ai workbench service", () => {
         "",
         "Iteronix includes a headless server API and reusable web UI.",
         "",
-        "Iteronix includes memory, skills and evaluation."
+        "Iteronix includes memory, skills and evaluation.",
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
     writeFileSync(
       join(workspace, "docs", "AI_WORKBENCH.md"),
       [
         "# AI Workbench",
         "",
-        "The current AI workbench architecture uses planner, retriever, executor and reviewer."
+        "The current AI workbench architecture uses planner, retriever, executor and reviewer.",
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
 
     const service = await createAiWorkbenchService({
       workspaceRoot: workspace,
       skillsDir,
       memoryDir: join(workspace, ".iteronix", "memory"),
-      evidenceDir: join(workspace, ".iteronix", "evidence")
+      evidenceDir: join(workspace, ".iteronix", "evidence"),
     });
 
     const includes = await service.runSkill({
       skillName: "example-skill",
       sessionId: "session-dedup-1",
       input: {
-        question: "What does Iteronix include?"
-      }
+        question: "What does Iteronix include?",
+      },
     });
     const architecture = await service.runSkill({
       skillName: "example-skill",
       sessionId: "session-dedup-2",
       input: {
-        question: "What is the current AI workbench architecture?"
-      }
+        question: "What is the current AI workbench architecture?",
+      },
     });
 
     expect(includes.output.answer).toContain("Iteronix");
     expect(architecture.output.answer.toLowerCase()).toContain("architecture");
-    expect(new Set(includes.citations.map((citation) => citation.sourceId)).size).toBe(
-      includes.citations.length
-    );
     expect(
-      new Set(architecture.citations.map((citation) => citation.sourceId)).size
+      new Set(includes.citations.map((citation) => citation.sourceId)).size,
+    ).toBe(includes.citations.length);
+    expect(
+      new Set(architecture.citations.map((citation) => citation.sourceId)).size,
     ).toBe(architecture.citations.length);
-    expect(includes.citations.every((citation) => isDocumentationCitation(citation.uri))).toBe(
-      true
-    );
     expect(
-      architecture.citations.every((citation) => isDocumentationCitation(citation.uri))
+      includes.citations.every((citation) =>
+        isDocumentationCitation(citation.uri),
+      ),
     ).toBe(true);
-    expect(includes.evidenceReport.retrievedSources.length).toBeGreaterThanOrEqual(
-      includes.citations.length
-    );
-    expect(architecture.evidenceReport.retrievedSources.length).toBeGreaterThanOrEqual(
-      architecture.citations.length
-    );
+    expect(
+      architecture.citations.every((citation) =>
+        isDocumentationCitation(citation.uri),
+      ),
+    ).toBe(true);
+    expect(
+      includes.evidenceReport.retrievedSources.length,
+    ).toBeGreaterThanOrEqual(includes.citations.length);
+    expect(
+      architecture.evidenceReport.retrievedSources.length,
+    ).toBeGreaterThanOrEqual(architecture.citations.length);
   });
 });
 

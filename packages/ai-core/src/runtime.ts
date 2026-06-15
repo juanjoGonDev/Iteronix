@@ -4,11 +4,11 @@ export const ToolSideEffect = {
   None: "none",
   Filesystem: "filesystem",
   Network: "network",
-  Process: "process"
+  Process: "process",
 } as const;
 
 export type ToolSideEffect =
-  typeof ToolSideEffect[keyof typeof ToolSideEffect];
+  (typeof ToolSideEffect)[keyof typeof ToolSideEffect];
 
 export type Citation = {
   chunkId: string;
@@ -65,10 +65,7 @@ const InvalidTimestamp = 0;
 export type ToolRegistry = {
   list: () => ReadonlyArray<ToolDefinition>;
   get: (toolId: string) => ToolDefinition | undefined;
-  execute: (
-    toolId: string,
-    args: Record<string, unknown>
-  ) => Promise<unknown>;
+  execute: (toolId: string, args: Record<string, unknown>) => Promise<unknown>;
 };
 
 export const createRunContext = (input: {
@@ -82,11 +79,11 @@ export const createRunContext = (input: {
   sessionId: input.sessionId,
   createdAt: input.createdAt ?? new Date().toISOString(),
   providerId: input.providerId ?? "internal-workbench",
-  modelId: input.modelId ?? "deterministic"
+  modelId: input.modelId ?? "deterministic",
 });
 
 export const createToolRegistry = (
-  tools: ReadonlyArray<ToolDefinition>
+  tools: ReadonlyArray<ToolDefinition>,
 ): ToolRegistry => {
   const toolsById = new Map<string, ToolDefinition>();
 
@@ -96,11 +93,12 @@ export const createToolRegistry = (
 
   const list = (): ReadonlyArray<ToolDefinition> => [...toolsById.values()];
 
-  const get = (toolId: string): ToolDefinition | undefined => toolsById.get(toolId);
+  const get = (toolId: string): ToolDefinition | undefined =>
+    toolsById.get(toolId);
 
   const execute = async (
     toolId: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
   ): Promise<unknown> => {
     const tool = get(toolId);
     if (!tool) {
@@ -113,21 +111,21 @@ export const createToolRegistry = (
   return {
     list,
     get,
-    execute
+    execute,
   };
 };
 
 export const createConfidenceScore = (
   score: number,
-  signals: ReadonlyArray<string>
+  signals: ReadonlyArray<string>,
 ): ConfidenceScore => ({
   score,
   label: toConfidenceLabel(score),
-  signals
+  signals,
 });
 
 export const collapseCitationsBySource = (
-  citations: ReadonlyArray<Citation>
+  citations: ReadonlyArray<Citation>,
 ): ReadonlyArray<Citation> => {
   const citationsBySource = new Map<string, Citation>();
 
@@ -158,13 +156,11 @@ export const createUsageRecord = (input: {
     completionTokens,
     totalTokens: promptTokens + completionTokens,
     estimatedCostUsd: input.estimatedCostUsd ?? 0,
-    latencyMs: input.latencyMs
+    latencyMs: input.latencyMs,
   };
 };
 
-const toConfidenceLabel = (
-  score: number
-): "low" | "medium" | "high" => {
+const toConfidenceLabel = (score: number): "low" | "medium" | "high" => {
   if (score >= 0.75) {
     return "high";
   }
@@ -176,17 +172,22 @@ const toConfidenceLabel = (
   return "low";
 };
 
-const compareCitationPresentation = (left: Citation, right: Citation): number => {
+const compareCitationPresentation = (
+  left: Citation,
+  right: Citation,
+): number => {
   if (left.score !== right.score) {
     return right.score - left.score;
   }
 
-  const updatedAtOrder = readTimestamp(right.updatedAt) - readTimestamp(left.updatedAt);
+  const updatedAtOrder =
+    readTimestamp(right.updatedAt) - readTimestamp(left.updatedAt);
   if (updatedAtOrder !== 0) {
     return updatedAtOrder;
   }
 
-  const retrievedAtOrder = readTimestamp(right.retrievedAt) - readTimestamp(left.retrievedAt);
+  const retrievedAtOrder =
+    readTimestamp(right.retrievedAt) - readTimestamp(left.retrievedAt);
   if (retrievedAtOrder !== 0) {
     return retrievedAtOrder;
   }

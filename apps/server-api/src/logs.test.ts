@@ -4,7 +4,7 @@ import {
   createLogsStore,
   LogLevel,
   LogsStoreErrorCode,
-  type LogEntry
+  type LogEntry,
 } from "./logs";
 
 const RUN_ID_ONE = "run-1";
@@ -18,7 +18,7 @@ const entryOne: LogEntry = {
   timestamp: TIMESTAMP_ONE,
   level: LogLevel.Info,
   message: "Started",
-  runId: RUN_ID_ONE
+  runId: RUN_ID_ONE,
 };
 
 const entryTwo: LogEntry = {
@@ -26,7 +26,7 @@ const entryTwo: LogEntry = {
   timestamp: TIMESTAMP_TWO,
   level: LogLevel.Error,
   message: "Failed",
-  runId: RUN_ID_ONE
+  runId: RUN_ID_ONE,
 };
 
 const entryThree: LogEntry = {
@@ -34,17 +34,17 @@ const entryThree: LogEntry = {
   timestamp: TIMESTAMP_THREE,
   level: LogLevel.Info,
   message: "Completed",
-  runId: RUN_ID_TWO
+  runId: RUN_ID_TWO,
 };
 
 describe("logs store", () => {
   it("filters by level and run id", () => {
     const store = createLogsStore({
-      entries: [entryOne, entryTwo, entryThree]
+      entries: [entryOne, entryTwo, entryThree],
     });
     const result = store.query({
       level: LogLevel.Info,
-      runId: RUN_ID_ONE
+      runId: RUN_ID_ONE,
     });
 
     expect(result.type).toBe(ResultType.Ok);
@@ -56,7 +56,7 @@ describe("logs store", () => {
 
   it("applies limit", () => {
     const store = createLogsStore({
-      entries: [entryOne, entryTwo, entryThree]
+      entries: [entryOne, entryTwo, entryThree],
     });
     const result = store.query({ limit: 2 });
 
@@ -69,7 +69,7 @@ describe("logs store", () => {
 
   it("rejects negative limit", () => {
     const store = createLogsStore({
-      entries: [entryOne, entryTwo]
+      entries: [entryOne, entryTwo],
     });
     const result = store.query({ limit: -1 });
 

@@ -6,7 +6,7 @@ import {
   HistoryRunStatus,
   HistoryStoreErrorCode,
   type HistoryEvent,
-  type HistoryRunRecord
+  type HistoryRunRecord,
 } from "./history";
 
 const RUN_ID_ONE = "run-1";
@@ -24,7 +24,7 @@ const runOne: HistoryRunRecord = {
   status: HistoryRunStatus.Completed,
   createdAt: CREATED_AT,
   updatedAt: UPDATED_AT,
-  input: INPUT_TEXT
+  input: INPUT_TEXT,
 };
 
 const runTwo: HistoryRunRecord = {
@@ -34,7 +34,7 @@ const runTwo: HistoryRunRecord = {
   status: HistoryRunStatus.Failed,
   createdAt: CREATED_AT,
   updatedAt: UPDATED_AT,
-  input: INPUT_TEXT
+  input: INPUT_TEXT,
 };
 
 const eventOne: HistoryEvent = {
@@ -42,9 +42,9 @@ const eventOne: HistoryEvent = {
   runId: RUN_ID_ONE,
   type: HistoryEventType.Message,
   data: {
-    text: "alpha"
+    text: "alpha",
   },
-  timestamp: CREATED_AT
+  timestamp: CREATED_AT,
 };
 
 const eventTwo: HistoryEvent = {
@@ -52,9 +52,9 @@ const eventTwo: HistoryEvent = {
   runId: RUN_ID_ONE,
   type: HistoryEventType.Delta,
   data: {
-    delta: "beta"
+    delta: "beta",
   },
-  timestamp: UPDATED_AT
+  timestamp: UPDATED_AT,
 };
 
 describe("history store", () => {
@@ -83,7 +83,7 @@ describe("history store", () => {
   it("returns events for a run", () => {
     const store = createHistoryStore({
       runs: [runOne, runTwo],
-      events: [eventOne, eventTwo]
+      events: [eventOne, eventTwo],
     });
     const result = store.listEvents(RUN_ID_ONE);
 

@@ -4,23 +4,23 @@ type LocationLike = Pick<Location, "origin">;
 
 const RuntimeHost = {
   Localhost: "localhost",
-  Loopback: "127.0.0.1"
+  Loopback: "127.0.0.1",
 } as const;
 
 const RuntimePort = {
   ApiDefault: 4000,
   ApiDev: 4001,
-  WebUiDev: 4000
+  WebUiDev: 4000,
 } as const;
 
 export const LocalStorageKey = {
   ServerUrl: "iteronix_server_url",
-  AuthToken: "iteronix_auth_token"
+  AuthToken: "iteronix_auth_token",
 } as const;
 
 export const DefaultServerConnection = {
   serverUrl: `http://${RuntimeHost.Localhost}:${RuntimePort.ApiDefault}`,
-  authToken: "dev-token"
+  authToken: "dev-token",
 } as const;
 
 export type ServerConnection = {
@@ -30,24 +30,24 @@ export type ServerConnection = {
 
 export const readServerConnection = (
   storage: StorageLike = window.localStorage,
-  location: LocationLike | undefined = window.location
+  location: LocationLike | undefined = window.location,
 ): ServerConnection => {
   const serverUrl = storage.getItem(LocalStorageKey.ServerUrl);
   const authToken = storage.getItem(LocalStorageKey.AuthToken);
 
   return {
     serverUrl: normalizeServerUrl(serverUrl, location),
-    authToken: normalizeAuthToken(authToken)
+    authToken: normalizeAuthToken(authToken),
   };
 };
 
 export const writeServerConnection = (
   connection: ServerConnection,
-  storage: StorageLike = window.localStorage
+  storage: StorageLike = window.localStorage,
 ): ServerConnection => {
   const normalized = {
     serverUrl: normalizeServerUrl(connection.serverUrl, window.location),
-    authToken: normalizeAuthToken(connection.authToken)
+    authToken: normalizeAuthToken(connection.authToken),
   };
 
   storage.setItem(LocalStorageKey.ServerUrl, normalized.serverUrl);
@@ -58,7 +58,7 @@ export const writeServerConnection = (
 
 const normalizeServerUrl = (
   value: string | null | undefined,
-  location: LocationLike | undefined
+  location: LocationLike | undefined,
 ): string => {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -90,20 +90,22 @@ const readDefaultServerUrl = (location: LocationLike | undefined): string => {
     return localDevOrigin;
   }
 
-  return location ? trimTrailingSlash(location.origin) : DefaultServerConnection.serverUrl;
+  return location
+    ? trimTrailingSlash(location.origin)
+    : DefaultServerConnection.serverUrl;
 };
 
 const shouldUseLocalDevApiOrigin = (
   serverUrl: string,
   location: LocationLike | undefined,
-  localDevOrigin: string | undefined
+  localDevOrigin: string | undefined,
 ): boolean =>
   location !== undefined &&
   serverUrl === trimTrailingSlash(location.origin) &&
   localDevOrigin !== undefined;
 
 const readLocalDevApiOrigin = (
-  location: LocationLike | undefined
+  location: LocationLike | undefined,
 ): string | undefined => {
   if (!location) {
     return undefined;

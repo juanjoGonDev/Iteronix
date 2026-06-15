@@ -7,24 +7,27 @@ import {
   KanbanColumnPanel,
   KanbanTaskModal,
   type KanbanTask,
-  type KanbanTaskStatus
+  type KanbanTaskStatus,
 } from "../components/KanbanPrimitives.js";
 import { PageNoticeStack } from "../components/PageScaffold.js";
 import {
   createKanbanBoardView,
   defaultKanbanBoardName,
-  defaultKanbanColumnDefinitions
+  defaultKanbanColumnDefinitions,
 } from "./kanban-state.js";
 import {
   createKanbanClient,
   type KanbanBoardRecord,
   type KanbanClient,
-  type KanbanColumnRecord
+  type KanbanColumnRecord,
 } from "../shared/kanban-client.js";
-import { createQualityGatesClient, type QualityGatesClient } from "../shared/quality-gates-client.js";
+import {
+  createQualityGatesClient,
+  type QualityGatesClient,
+} from "../shared/quality-gates-client.js";
 import {
   readActiveProjectSessionLabel,
-  readProjectSession
+  readProjectSession,
 } from "../shared/project-session.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
 
@@ -51,7 +54,7 @@ type KanbanPendingAction = "load" | "create" | "move" | "save" | "delete";
 const TaskDefaults = {
   Title: "New Task",
   Description: "Click to edit description",
-  Position: 0
+  Position: 0,
 } as const;
 
 const KanbanMessage = {
@@ -65,7 +68,7 @@ const KanbanMessage = {
   CreateNotice: "Creating task...",
   MoveNotice: "Moving task...",
   SaveNotice: "Saving task...",
-  DeleteNotice: "Deleting task..."
+  DeleteNotice: "Deleting task...",
 } as const;
 
 export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
@@ -76,7 +79,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     super(props, {
       columns: defaultKanbanColumnDefinitions.map((definition) => ({
         id: definition.id,
-        title: definition.title
+        title: definition.title,
       })),
       tasks: [],
       columnIdsByStatus: {},
@@ -87,7 +90,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       taskDraft: null,
       pendingAction: null,
       errorMessage: null,
-      noticeMessage: null
+      noticeMessage: null,
     });
     this.kanbanClient = createKanbanClient();
     this.qualityGatesClient = createQualityGatesClient();
@@ -102,7 +105,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     if (!session.projectRootPath) {
       this.setState({
         errorMessage: KanbanMessage.OpenProjectFirst,
-        noticeMessage: null
+        noticeMessage: null,
       });
       return;
     }
@@ -110,13 +113,13 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       pendingAction: "load",
       errorMessage: null,
-      noticeMessage: KanbanMessage.LoadNotice
+      noticeMessage: KanbanMessage.LoadNotice,
     });
 
     try {
       const project = await this.qualityGatesClient.openProject({
         rootPath: session.projectRootPath,
-        name: readActiveProjectSessionLabel(session)
+        name: readActiveProjectSessionLabel(session),
       });
       const board = await this.readOrCreateBoard(project.id);
       await this.reloadBoardData(project, board.id, null);
@@ -124,28 +127,33 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       this.setState({
         pendingAction: null,
         errorMessage: KanbanMessage.LoadFailed,
-        noticeMessage: null
+        noticeMessage: null,
       });
     }
   }
 
-  private async readOrCreateBoard(projectId: string): Promise<KanbanBoardRecord> {
+  private async readOrCreateBoard(
+    projectId: string,
+  ): Promise<KanbanBoardRecord> {
     const boards = await this.kanbanClient.listBoards({ projectId });
-    return boards[0] ?? this.kanbanClient.createBoard({
-      projectId,
-      name: defaultKanbanBoardName
-    });
+    return (
+      boards[0] ??
+      this.kanbanClient.createBoard({
+        projectId,
+        name: defaultKanbanBoardName,
+      })
+    );
   }
 
   private async reloadBoardData(
     project: ProjectRecord,
     boardId: string,
-    noticeMessage: string | null
+    noticeMessage: string | null,
   ): Promise<void> {
     const columns = await this.readOrCreateColumns(project.id, boardId);
     const tasks = await this.kanbanClient.listTasks({
       projectId: project.id,
-      boardId
+      boardId,
     });
     const view = createKanbanBoardView(columns, tasks);
 
@@ -160,23 +168,24 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       taskDraft: null,
       pendingAction: null,
       errorMessage: null,
-      noticeMessage
+      noticeMessage,
     });
   }
 
   private async readOrCreateColumns(
     projectId: string,
-    boardId: string
+    boardId: string,
   ): Promise<ReadonlyArray<KanbanColumnRecord>> {
     const existingColumns = await this.kanbanClient.listColumns({
       projectId,
-      boardId
+      boardId,
     });
     const createdColumns: KanbanColumnRecord[] = [];
 
     for (const definition of defaultKanbanColumnDefinitions) {
       const exists = existingColumns.some(
-        (column) => column.name.toLowerCase() === definition.title.toLowerCase()
+        (column) =>
+          column.name.toLowerCase() === definition.title.toLowerCase(),
       );
 
       if (!exists) {
@@ -185,8 +194,8 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
             projectId,
             boardId,
             name: definition.title,
-            position: definition.position
-          })
+            position: definition.position,
+          }),
         );
       }
     }
@@ -206,12 +215,20 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     }
   }
 
-  private async handleDrop(columnId: KanbanTaskStatus, event: DragEvent): Promise<void> {
+  private async handleDrop(
+    columnId: KanbanTaskStatus,
+    event: DragEvent,
+  ): Promise<void> {
     event.preventDefault();
     const taskId = event.dataTransfer?.getData("text/plain");
     const targetColumnId = this.state.columnIdsByStatus[columnId];
 
-    if (!taskId || !targetColumnId || !this.state.project || !this.state.boardId) {
+    if (
+      !taskId ||
+      !targetColumnId ||
+      !this.state.project ||
+      !this.state.boardId
+    ) {
       this.setState({ draggedTask: null });
       return;
     }
@@ -219,7 +236,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       pendingAction: "move",
       errorMessage: null,
-      noticeMessage: KanbanMessage.MoveNotice
+      noticeMessage: KanbanMessage.MoveNotice,
     });
 
     try {
@@ -227,7 +244,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         projectId: this.state.project.id,
         boardId: this.state.boardId,
         taskId,
-        columnId: targetColumnId
+        columnId: targetColumnId,
       });
       await this.reloadBoardData(this.state.project, this.state.boardId, null);
     } catch {
@@ -235,7 +252,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         pendingAction: null,
         draggedTask: null,
         errorMessage: KanbanMessage.MoveFailed,
-        noticeMessage: null
+        noticeMessage: null,
       });
     }
   }
@@ -249,7 +266,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       pendingAction: "create",
       errorMessage: null,
-      noticeMessage: KanbanMessage.CreateNotice
+      noticeMessage: KanbanMessage.CreateNotice,
     });
 
     try {
@@ -259,14 +276,14 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         columnId: targetColumnId,
         title: TaskDefaults.Title,
         description: TaskDefaults.Description,
-        position: this.readNextTaskPosition(columnId)
+        position: this.readNextTaskPosition(columnId),
       });
       await this.reloadBoardData(this.state.project, this.state.boardId, null);
     } catch {
       this.setState({
         pendingAction: null,
         errorMessage: KanbanMessage.CreateFailed,
-        noticeMessage: null
+        noticeMessage: null,
       });
     }
   }
@@ -278,7 +295,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
   private handleTaskClick(task: KanbanTask): void {
     this.setState({
       selectedTask: task,
-      taskDraft: task
+      taskDraft: task,
     });
   }
 
@@ -291,8 +308,8 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       taskDraft: {
         ...draft,
-        title: value
-      }
+        title: value,
+      },
     });
   }
 
@@ -305,8 +322,8 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       taskDraft: {
         ...draft,
-        description: value
-      }
+        description: value,
+      },
     });
   }
 
@@ -318,7 +335,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       pendingAction: "save",
       errorMessage: null,
-      noticeMessage: KanbanMessage.SaveNotice
+      noticeMessage: KanbanMessage.SaveNotice,
     });
 
     try {
@@ -327,14 +344,14 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         boardId: this.state.boardId,
         taskId: task.id,
         title: task.title,
-        description: task.description
+        description: task.description,
       });
       await this.reloadBoardData(this.state.project, this.state.boardId, null);
     } catch {
       this.setState({
         pendingAction: null,
         errorMessage: KanbanMessage.SaveFailed,
-        noticeMessage: null
+        noticeMessage: null,
       });
     }
   }
@@ -347,21 +364,21 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     this.setState({
       pendingAction: "delete",
       errorMessage: null,
-      noticeMessage: KanbanMessage.DeleteNotice
+      noticeMessage: KanbanMessage.DeleteNotice,
     });
 
     try {
       await this.kanbanClient.deleteTask({
         projectId: this.state.project.id,
         boardId: this.state.boardId,
-        taskId: task.id
+        taskId: task.id,
       });
       await this.reloadBoardData(this.state.project, this.state.boardId, null);
     } catch {
       this.setState({
         pendingAction: null,
         errorMessage: KanbanMessage.DeleteFailed,
-        noticeMessage: null
+        noticeMessage: null,
       });
     }
   }
@@ -378,13 +395,13 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       {
         className:
           "relative flex-1 overflow-x-auto overflow-y-hidden bg-[#0d1218] p-6 board-scroll",
-        "data-pending-action": this.state.pendingAction ?? ""
+        "data-pending-action": this.state.pendingAction ?? "",
       },
       [
         createElement(PageNoticeStack, {
           errorMessage: this.state.errorMessage,
           noticeMessage: this.state.noticeMessage,
-          className: "absolute left-6 right-6 top-6 z-20"
+          className: "absolute left-6 right-6 top-6 z-20",
         }),
         createElement(
           "div",
@@ -401,29 +418,37 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
                   void this.handleCreateTask(nextColumnId);
                 },
                 onTaskClick: (task: KanbanTask) => this.handleTaskClick(task),
-                onTaskDragStart: (task: KanbanTask, event: DragEvent) => this.handleDragStart(task, event),
-                onTaskDragOver: (event: DragEvent) => this.handleDragOver(event),
-                onTaskDrop: (nextColumnId: KanbanTaskStatus, event: DragEvent) => {
+                onTaskDragStart: (task: KanbanTask, event: DragEvent) =>
+                  this.handleDragStart(task, event),
+                onTaskDragOver: (event: DragEvent) =>
+                  this.handleDragOver(event),
+                onTaskDrop: (
+                  nextColumnId: KanbanTaskStatus,
+                  event: DragEvent,
+                ) => {
                   void this.handleDrop(nextColumnId, event);
-                }
-              })
+                },
+              }),
             ),
-          ]
+          ],
         ),
 
-        taskDraft && createElement(KanbanTaskModal, {
-          task: taskDraft,
-          onClose: () => this.setState({ selectedTask: null, taskDraft: null }),
-          onDelete: (task: KanbanTask) => {
-            void this.handleDeleteTask(task);
-          },
-          onSave: (task: KanbanTask) => {
-            void this.handleSaveTask(task);
-          },
-          onTitleChange: (value: string) => this.handleTaskTitleChange(value),
-          onDescriptionChange: (value: string) => this.handleTaskDescriptionChange(value)
-        }),
-      ]
+        taskDraft &&
+          createElement(KanbanTaskModal, {
+            task: taskDraft,
+            onClose: () =>
+              this.setState({ selectedTask: null, taskDraft: null }),
+            onDelete: (task: KanbanTask) => {
+              void this.handleDeleteTask(task);
+            },
+            onSave: (task: KanbanTask) => {
+              void this.handleSaveTask(task);
+            },
+            onTitleChange: (value: string) => this.handleTaskTitleChange(value),
+            onDescriptionChange: (value: string) =>
+              this.handleTaskDescriptionChange(value),
+          }),
+      ],
     );
   }
 }
@@ -433,5 +458,5 @@ const createEmptyTaskGroups = (): Record<KanbanTaskStatus, KanbanTask[]> => ({
   todo: [],
   in_progress: [],
   qa: [],
-  done: []
+  done: [],
 });

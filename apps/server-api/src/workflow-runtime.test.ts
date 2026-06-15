@@ -15,43 +15,43 @@ describe("workflow runtime provider adapters", () => {
         invocationCount += 1;
         calls.push({
           url: String(url),
-          init
+          init,
         });
         return new Response(
           JSON.stringify({
             choices: [
               {
                 message: {
-                  content: "Local provider reply"
-                }
-              }
+                  content: "Local provider reply",
+                },
+              },
             ],
             usage: {
               prompt_tokens: 11,
               completion_tokens: 7,
-              total_tokens: 18
-            }
+              total_tokens: 18,
+            },
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
+              "content-type": "application/json",
+            },
+          },
         );
       },
       models: [
         {
           id: "gpt-4.1",
-          displayName: "gpt-4.1"
-        }
-      ]
+          displayName: "gpt-4.1",
+        },
+      ],
     });
 
     const result = await provider.run({
       modelId: "gpt-4.1",
       input: "Say hello",
-      temperature: 0.2
+      temperature: 0.2,
     });
 
     expect(invocationCount).toBe(1);
@@ -60,16 +60,16 @@ describe("workflow runtime provider adapters", () => {
       method: "POST",
       headers: {
         Authorization: "Bearer secret-token",
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+      },
     });
     expect(result).toEqual({
       message: "Local provider reply",
       usage: {
         inputTokens: 11,
         outputTokens: 7,
-        totalTokens: 18
-      }
+        totalTokens: 18,
+      },
     });
   });
 });

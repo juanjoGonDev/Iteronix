@@ -3,7 +3,10 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createGitCliAdapter, GitCommandName } from "../../../packages/adapters/src/git/git-adapter";
+import {
+  createGitCliAdapter,
+  GitCommandName,
+} from "../../../packages/adapters/src/git/git-adapter";
 import { ErrorMessage, HttpStatus } from "./constants";
 import {
   executeGitBranchCheckout,
@@ -17,7 +20,7 @@ import {
   executeGitStatus,
   parseGitBranchMutationRequest,
   parseGitCommitRequest,
-  parseGitPathRequest
+  parseGitPathRequest,
 } from "./git";
 import { createProjectStore } from "./projects";
 import { ResultType } from "./result";
@@ -30,9 +33,9 @@ afterEach(async () => {
     tempRoots.splice(0).map(async (path) => {
       await rm(path, {
         recursive: true,
-        force: true
+        force: true,
       });
-    })
+    }),
   );
 });
 
@@ -41,7 +44,7 @@ describe("git api", () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
@@ -53,19 +56,22 @@ describe("git api", () => {
     runGit(repo.path, ["add", "staged.txt"]);
 
     const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
 
     const status = await executeGitStatus(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
       {
         projectStore: store,
         workspacePolicy,
         commandPolicy,
-        git: adapter
-      }
+        git: adapter,
+      },
     );
 
     expect(status.type).toBe(ResultType.Ok);
@@ -73,20 +79,24 @@ describe("git api", () => {
       return;
     }
 
-    expect(status.value.entries.some((entry) => entry.path === "tracked.txt")).toBe(true);
-    expect(status.value.entries.some((entry) => entry.path === "staged.txt")).toBe(true);
+    expect(
+      status.value.entries.some((entry) => entry.path === "tracked.txt"),
+    ).toBe(true);
+    expect(
+      status.value.entries.some((entry) => entry.path === "staged.txt"),
+    ).toBe(true);
 
     const diff = await executeGitDiff(
       {
         projectId: opened.value.id,
-        staged: true
+        staged: true,
       },
       {
         projectStore: store,
         workspacePolicy,
         commandPolicy,
-        git: adapter
-      }
+        git: adapter,
+      },
     );
 
     expect(diff.type).toBe(ResultType.Ok);
@@ -100,7 +110,7 @@ describe("git api", () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
@@ -111,33 +121,38 @@ describe("git api", () => {
     runGit(repo.path, ["add", "commit.txt"]);
 
     const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
 
     const commit = await executeGitCommit(
       {
         projectId: opened.value.id,
-        message: "feat(server-api): add git status endpoint"
+        message: "feat(server-api): add git status endpoint",
       },
       {
         projectStore: store,
         workspacePolicy,
         commandPolicy,
-        git: adapter
-      }
+        git: adapter,
+      },
     );
 
     expect(commit.type).toBe(ResultType.Ok);
     if (commit.type === ResultType.Ok) {
       expect(commit.value.hash).toMatch(/^[0-9a-f]{40}$/);
-      expect(commit.value.message).toBe("feat(server-api): add git status endpoint");
+      expect(commit.value.message).toBe(
+        "feat(server-api): add git status endpoint",
+      );
     }
   });
 
   it("rejects invalid conventional commit messages", async () => {
     const parsed = parseGitCommitRequest({
       projectId: "project-1",
-      message: "update stuff"
+      message: "update stuff",
     });
 
     expect(parsed.type).toBe(ResultType.Err);
@@ -150,7 +165,7 @@ describe("git api", () => {
   it("rejects invalid branch names", () => {
     const parsed = parseGitBranchMutationRequest({
       projectId: "project-1",
-      branchName: "bad branch"
+      branchName: "bad branch",
     });
 
     expect(parsed.type).toBe(ResultType.Err);
@@ -163,14 +178,14 @@ describe("git api", () => {
   it("parses git path operation requests with one or more paths", () => {
     const parsed = parseGitPathRequest({
       projectId: "project-1",
-      paths: [" tracked.txt ", "src/index.ts"]
+      paths: [" tracked.txt ", "src/index.ts"],
     });
 
     expect(parsed.type).toBe(ResultType.Ok);
     if (parsed.type === ResultType.Ok) {
       expect(parsed.value).toEqual({
         projectId: "project-1",
-        paths: ["tracked.txt", "src/index.ts"]
+        paths: ["tracked.txt", "src/index.ts"],
       });
     }
   });
@@ -179,7 +194,7 @@ describe("git api", () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
@@ -190,22 +205,25 @@ describe("git api", () => {
     await writeFile(join(repo.path, "new-file.txt"), "new file\n", "utf8");
 
     const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
     const dependencies = {
       projectStore: store,
       workspacePolicy,
       commandPolicy,
-      git: adapter
+      git: adapter,
     };
 
     const staged = await executeGitPathOperation(
       {
         projectId: opened.value.id,
-        paths: ["tracked.txt", "new-file.txt"]
+        paths: ["tracked.txt", "new-file.txt"],
       },
       "stage",
-      dependencies
+      dependencies,
     );
 
     expect(staged.type).toBe(ResultType.Ok);
@@ -218,10 +236,10 @@ describe("git api", () => {
     const unstaged = await executeGitPathOperation(
       {
         projectId: opened.value.id,
-        paths: ["tracked.txt"]
+        paths: ["tracked.txt"],
       },
       "unstage",
-      dependencies
+      dependencies,
     );
 
     expect(unstaged.type).toBe(ResultType.Ok);
@@ -234,10 +252,10 @@ describe("git api", () => {
     const reverted = await executeGitPathOperation(
       {
         projectId: opened.value.id,
-        paths: ["tracked.txt"]
+        paths: ["tracked.txt"],
       },
       "revert",
-      dependencies
+      dependencies,
     );
 
     expect(reverted.type).toBe(ResultType.Ok);
@@ -249,26 +267,30 @@ describe("git api", () => {
 
     const status = await executeGitStatus(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(status.type).toBe(ResultType.Ok);
     if (status.type === ResultType.Ok) {
       expect(status.value.stagedCount).toBe(1);
       expect(status.value.unstagedCount).toBe(0);
-      expect(status.value.entries.some((entry) => entry.path === "new-file.txt" && entry.staged)).toBe(true);
+      expect(
+        status.value.entries.some(
+          (entry) => entry.path === "new-file.txt" && entry.staged,
+        ),
+      ).toBe(true);
     }
   });
 
   it("lists branches, creates one and checks it out through the api contract", async () => {
     const repo = await createTempGitRepository({
-      withRemote: true
+      withRemote: true,
     });
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
@@ -276,20 +298,23 @@ describe("git api", () => {
     }
 
     const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
     const dependencies = {
       projectStore: store,
       workspacePolicy,
       commandPolicy,
-      git: adapter
+      git: adapter,
     };
 
     const branches = await executeGitBranchList(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(branches.type).toBe(ResultType.Ok);
@@ -297,15 +322,23 @@ describe("git api", () => {
       return;
     }
 
-    expect(branches.value.local.some((branch) => branch.name === repo.defaultBranch && branch.current)).toBe(true);
-    expect(branches.value.remote.some((branch) => branch.name === "origin/feature/remote-only")).toBe(true);
+    expect(
+      branches.value.local.some(
+        (branch) => branch.name === repo.defaultBranch && branch.current,
+      ),
+    ).toBe(true);
+    expect(
+      branches.value.remote.some(
+        (branch) => branch.name === "origin/feature/remote-only",
+      ),
+    ).toBe(true);
 
     const created = await executeGitBranchCreate(
       {
         projectId: opened.value.id,
-        branchName: "feature/server-first"
+        branchName: "feature/server-first",
       },
-      dependencies
+      dependencies,
     );
 
     expect(created.type).toBe(ResultType.Ok);
@@ -318,9 +351,9 @@ describe("git api", () => {
     const checkedOut = await executeGitBranchCheckout(
       {
         projectId: opened.value.id,
-        branchName: "feature/server-first"
+        branchName: "feature/server-first",
       },
-      dependencies
+      dependencies,
     );
 
     expect(checkedOut.type).toBe(ResultType.Ok);
@@ -332,9 +365,9 @@ describe("git api", () => {
 
     const status = await executeGitStatus(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(status.type).toBe(ResultType.Ok);
@@ -345,11 +378,11 @@ describe("git api", () => {
 
   it("publishes the current branch to origin and pushes the upstream through the api contract", async () => {
     const repo = await createTempGitRepository({
-      withRemote: true
+      withRemote: true,
     });
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
@@ -359,20 +392,23 @@ describe("git api", () => {
     runGit(repo.path, ["checkout", "feature/local-only"]);
 
     const workspacePolicy = createWorkspacePolicy([repo.workspaceRoot]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
     const dependencies = {
       projectStore: store,
       workspacePolicy,
       commandPolicy,
-      git: adapter
+      git: adapter,
     };
 
     const published = await executeGitBranchPublish(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(published.type).toBe(ResultType.Ok);
@@ -385,9 +421,9 @@ describe("git api", () => {
 
     const publishedStatus = await executeGitStatus(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(publishedStatus.type).toBe(ResultType.Ok);
@@ -403,9 +439,9 @@ describe("git api", () => {
 
     const pushed = await executeGitBranchPush(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
-      dependencies
+      dependencies,
     );
 
     expect(pushed.type).toBe(ResultType.Ok);
@@ -420,7 +456,10 @@ describe("git api", () => {
     expect(pushed.value.name).toBe("feature/local-only");
     expect(pushed.value.upstream).toBe("origin/feature/local-only");
     expect(runGit(repo.path, ["rev-parse", "HEAD"]).trim()).toBe(
-      runGit(repo.remotePath, ["rev-parse", "refs/heads/feature/local-only"]).trim()
+      runGit(repo.remotePath, [
+        "rev-parse",
+        "refs/heads/feature/local-only",
+      ]).trim(),
     );
   });
 
@@ -428,27 +467,32 @@ describe("git api", () => {
     const repo = await createTempGitRepository();
     const store = createProjectStore();
     const opened = store.open({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     if (opened.type !== ResultType.Ok) {
       throw new Error("Expected opened project");
     }
 
-    const workspacePolicy = createWorkspacePolicy([join(repo.workspaceRoot, "different-root")]);
-    const commandPolicy = createCommandPolicy([GitCommandName], workspacePolicy);
+    const workspacePolicy = createWorkspacePolicy([
+      join(repo.workspaceRoot, "different-root"),
+    ]);
+    const commandPolicy = createCommandPolicy(
+      [GitCommandName],
+      workspacePolicy,
+    );
     const adapter = createGitCliAdapter();
 
     const status = await executeGitStatus(
       {
-        projectId: opened.value.id
+        projectId: opened.value.id,
       },
       {
         projectStore: store,
         workspacePolicy,
         commandPolicy,
-        git: adapter
-      }
+        git: adapter,
+      },
     );
 
     expect(status.type).toBe(ResultType.Err);
@@ -462,7 +506,7 @@ describe("git api", () => {
 const createTempGitRepository = async (
   input: {
     withRemote?: boolean;
-  } = {}
+  } = {},
 ): Promise<{
   path: string;
   workspaceRoot: string;
@@ -474,7 +518,7 @@ const createTempGitRepository = async (
   tempRoots.push(workspaceRoot);
 
   await mkdir(repoPath, {
-    recursive: true
+    recursive: true,
   });
 
   runGit(repoPath, ["init"]);
@@ -483,7 +527,11 @@ const createTempGitRepository = async (
   await writeFile(join(repoPath, "tracked.txt"), "initial\n", "utf8");
   runGit(repoPath, ["add", "tracked.txt"]);
   runGit(repoPath, ["commit", "-m", "chore(test): seed repository"]);
-  const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const defaultBranch = runGit(repoPath, [
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD",
+  ]).trim();
   runGit(repoPath, ["branch", "feature/local-only"]);
 
   let remotePath: string | undefined;
@@ -503,12 +551,12 @@ const createTempGitRepository = async (
     path: repoPath,
     workspaceRoot,
     defaultBranch,
-    ...(remotePath ? { remotePath } : {})
+    ...(remotePath ? { remotePath } : {}),
   };
 };
 
 const runGit = (cwd: string, args: ReadonlyArray<string>): string =>
   execFileSync(GitCommandName, [...args], {
     cwd,
-    encoding: "utf8"
+    encoding: "utf8",
   });

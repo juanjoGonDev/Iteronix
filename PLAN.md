@@ -198,15 +198,14 @@ Prevent inconsistent navigation/iconography and avoid partially working UI.
   - [x] One icon set for the entire app (no mixing)
   - [x] Shared tokens: spacing/typography/colors/radius/shadows
 - [x] Implement a single Layout Shell used by all screens:
-
   - [x] Header + Sidebar + Main + optional Right Panel
   - [x] No per-screen shell variants
+
 - [ ] All screens use shared page scaffolding for page title, notices, tabs and top-level content rhythm:
   - [x] Shared page scaffold extracted for `apps/web-ui`
   - [x] Remove duplicated page wrappers from the remaining standard screens
 
 - [ ] Interaction completeness gate (per screen):
-
   - [x] Every clickable element must either:
     - [x] work end-to-end, OR
     - [x] be visibly disabled + explain "Not available yet"
@@ -766,7 +765,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Asset deletion is blocked server-side while usage records still reference the asset
     - Manual trigger remains the only accepted runtime trigger in the API contract during the MVP
     - Workflows UI is intentionally untouched in this phase
-  - `06.6` provider-settings continuity refinement completed on `2026-06-05`:`r`n    - `apps/web-ui/src/screens/Settings.ts` and `settings-state.ts` now persist API-backed bearer keys through the shared workspace/API flow instead of browser-session-only state, as requested by product direction`r`n    - The Settings provider picker now exposes a first-class `custom` profile kind for local OpenAI-compatible gateways`r`n    - `apps/server-api/src/providers.ts` and `workflow-runtime.ts` now list and execute `custom` profiles through the shared OpenAI-compatible bearer adapter`r`n  - `06.6` Codex CLI workflow baseline and provider continuity implemented on `2026-05-16`:
+  - `06.6` provider-settings continuity refinement completed on `2026-06-05`:`r`n - `apps/web-ui/src/screens/Settings.ts` and `settings-state.ts` now persist API-backed bearer keys through the shared workspace/API flow instead of browser-session-only state, as requested by product direction`r`n - The Settings provider picker now exposes a first-class `custom` profile kind for local OpenAI-compatible gateways`r`n - `apps/server-api/src/providers.ts` and `workflow-runtime.ts` now list and execute `custom` profiles through the shared OpenAI-compatible bearer adapter`r`n - `06.6` Codex CLI workflow baseline and provider continuity implemented on `2026-05-16`:
     - `packages/shared/src/workflows.ts` now includes the normalized `WorkflowContextEnvelope` continuity contract and related artifact/citation/guardrail records
     - `packages/agents/src/workflow-runtime.ts` now runs the saved workflow graph baseline for manual trigger, prompt asset, provider-run/agent, terminal passthrough and human-review checkpoint handling
     - `apps/server-api` now exposes `/workflows/executions/run` and `/workflows/providers/test`, resolving saved Codex CLI provider profiles server-side and persisting execution history plus provider smoke-test metadata
@@ -801,4 +800,3 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
 - Multi-user collaboration
 - Cloud sync / hosted SaaS
 - Full plugin marketplace
-

@@ -4,7 +4,7 @@ import {
   SecretErrorMessage,
   SecretKey,
   SecretProviderType,
-  SecretService
+  SecretService,
 } from "./constants";
 import { err, ok, ResultType, type Result } from "./result";
 
@@ -22,12 +22,16 @@ export type SecretStore = {
 
 type KeychainProvider = {
   getPassword: (service: string, account: string) => Promise<string | null>;
-  setPassword: (service: string, account: string, password: string) => Promise<void>;
+  setPassword: (
+    service: string,
+    account: string,
+    password: string,
+  ) => Promise<void>;
   deletePassword: (service: string, account: string) => Promise<boolean>;
 };
 
 export const createSecretStore = (
-  provider?: KeychainProvider | null
+  provider?: KeychainProvider | null,
 ): SecretStore => {
   if (provider) {
     return createKeychainStore(provider);
@@ -49,19 +53,21 @@ const loadKeychainProvider = (): Result<KeychainProvider, SecretError> => {
   } catch {
     return err({
       code: SecretErrorCode.Unavailable,
-      message: SecretErrorMessage.Unavailable
+      message: SecretErrorMessage.Unavailable,
     });
   }
 };
 
-const parseKeychainProvider = (value: unknown): Result<KeychainProvider, SecretError> => {
+const parseKeychainProvider = (
+  value: unknown,
+): Result<KeychainProvider, SecretError> => {
   if (isKeychainProvider(value)) {
     return ok(value);
   }
 
   return err({
     code: SecretErrorCode.Unavailable,
-    message: SecretErrorMessage.Unavailable
+    message: SecretErrorMessage.Unavailable,
   });
 };
 
@@ -81,12 +87,15 @@ const createKeychainStore = (provider: KeychainProvider): SecretStore => ({
   provider: SecretProviderType.Keychain,
   getAuthToken: async () => {
     try {
-      const value = await provider.getPassword(SecretService, SecretKey.AuthToken);
+      const value = await provider.getPassword(
+        SecretService,
+        SecretKey.AuthToken,
+      );
       return ok(value ?? null);
     } catch {
       return err({
         code: SecretErrorCode.OperationFailed,
-        message: SecretErrorMessage.OperationFailed
+        message: SecretErrorMessage.OperationFailed,
       });
     }
   },
@@ -95,7 +104,7 @@ const createKeychainStore = (provider: KeychainProvider): SecretStore => ({
     if (trimmed.length === 0) {
       return err({
         code: SecretErrorCode.InvalidToken,
-        message: SecretErrorMessage.InvalidToken
+        message: SecretErrorMessage.InvalidToken,
       });
     }
     try {
@@ -104,7 +113,7 @@ const createKeychainStore = (provider: KeychainProvider): SecretStore => ({
     } catch {
       return err({
         code: SecretErrorCode.OperationFailed,
-        message: SecretErrorMessage.OperationFailed
+        message: SecretErrorMessage.OperationFailed,
       });
     }
   },
@@ -115,10 +124,10 @@ const createKeychainStore = (provider: KeychainProvider): SecretStore => ({
     } catch {
       return err({
         code: SecretErrorCode.OperationFailed,
-        message: SecretErrorMessage.OperationFailed
+        message: SecretErrorMessage.OperationFailed,
       });
     }
-  }
+  },
 });
 
 const createMemoryStore = (): SecretStore => {
@@ -131,7 +140,7 @@ const createMemoryStore = (): SecretStore => {
       if (trimmed.length === 0) {
         return err({
           code: SecretErrorCode.InvalidToken,
-          message: SecretErrorMessage.InvalidToken
+          message: SecretErrorMessage.InvalidToken,
         });
       }
       token = trimmed;
@@ -140,6 +149,6 @@ const createMemoryStore = (): SecretStore => {
     clearAuthToken: async () => {
       token = null;
       return ok(undefined);
-    }
+    },
   };
 };

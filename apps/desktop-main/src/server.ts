@@ -15,12 +15,12 @@ export type ServerStartError = {
 };
 
 export const startLocalServer = (
-  config: LocalServerConfig
+  config: LocalServerConfig,
 ): Result<LocalServerHandle, ServerStartError> => {
   if (!existsSync(config.entryPath)) {
     return err({
       code: ServerStartErrorCode.EntryMissing,
-      message: `Server entry not found: ${config.entryPath}`
+      message: `Server entry not found: ${config.entryPath}`,
     });
   }
 
@@ -29,7 +29,7 @@ export const startLocalServer = (
     [ServerEnvKey.Port]: String(config.port),
     [ServerEnvKey.Host]: config.host,
     [ServerEnvKey.AuthToken]: config.authToken,
-    [ServerEnvKey.WorkspaceRoots]: config.workspaceRoots.join(";")
+    [ServerEnvKey.WorkspaceRoots]: config.workspaceRoots.join(";"),
   };
 
   if (config.commandAllowlist.length > 0) {
@@ -38,7 +38,7 @@ export const startLocalServer = (
 
   const child = spawn(process.execPath, [config.entryPath], {
     env,
-    stdio: "inherit"
+    stdio: "inherit",
   });
 
   return ok({
@@ -47,6 +47,6 @@ export const startLocalServer = (
       if (!child.killed) {
         child.kill();
       }
-    }
+    },
   });
 };

@@ -3,10 +3,10 @@ import type { Result } from "../result";
 export const SecretScope = {
   Global: "global",
   Project: "project",
-  Profile: "profile"
+  Profile: "profile",
 } as const;
 
-export type SecretScope = typeof SecretScope[keyof typeof SecretScope];
+export type SecretScope = (typeof SecretScope)[keyof typeof SecretScope];
 
 export type SecretRef = {
   key: string;
@@ -24,11 +24,11 @@ export const SecretsErrorCode = {
   NotFound: "not_found",
   Forbidden: "forbidden",
   StorageError: "storage_error",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type SecretsErrorCode =
-  typeof SecretsErrorCode[keyof typeof SecretsErrorCode];
+  (typeof SecretsErrorCode)[keyof typeof SecretsErrorCode];
 
 export type SecretsError = {
   code: SecretsErrorCode;
@@ -38,9 +38,12 @@ export type SecretsError = {
 
 export type SecretsPort = {
   getSecret: (ref: SecretRef) => Promise<Result<string, SecretsError>>;
-  setSecret: (ref: SecretRef, value: string) => Promise<Result<void, SecretsError>>;
+  setSecret: (
+    ref: SecretRef,
+    value: string,
+  ) => Promise<Result<void, SecretsError>>;
   deleteSecret: (ref: SecretRef) => Promise<Result<void, SecretsError>>;
   listSecrets: (
-    scope: SecretScope
+    scope: SecretScope,
   ) => Promise<Result<ReadonlyArray<SecretMetadata>, SecretsError>>;
 };

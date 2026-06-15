@@ -127,7 +127,7 @@
   - `pnpm test` - PASO ✓ (61 tests, 0 failed)
   - Tests específicos: 6 tests para server-logs-store pasan
 - Issues/Risks:
-  - **Browser logging**: El navegador no puede escribir directamente al filesystem del servidor en `/apps/web-ui/logs`. 
+  - **Browser logging**: El navegador no puede escribir directamente al filesystem del servidor en `/apps/web-ui/logs`.
   - **Opciones para browser logging**:
     1. Endpoint HTTP POST `/api/logs` para que el navegador envíe logs al servidor
     2. No hacer logging en el navegador y solo en el servidor
@@ -200,7 +200,7 @@
 - Changes:
   - **Fixed constants.ts**: ROUTES vs ROUTES inconsistency resolved - todo el archivo usa ROUTES consistentemente
   - **Fixed index.ts imports**: Changed from `.js` to `.ts` extensions
-  - **Fixed index.ts references**: Corrected all ROUTES.* references to proper ROUTES.* format
+  - **Fixed index.ts references**: Corrected all ROUTES._ references to proper ROUTES._ format
   - **Cleaned up code**: Removed unnecessary `...{}` spread operator
   - **Route mapping**: Ensured proper key-value mapping in SCREENS constants
 - Commands:
@@ -697,8 +697,6 @@
 - Next:
   - Integrar `validate:source-linking` en CI si se quiere evitar regresiones browser fuera del entorno local
 
-
-
 ### 2026-04-24 01:34 (Europe/Madrid) — CI Browser Validation Integration
 
 - Summary: Integrada la validación browser de source-linking en el workflow de CI para que ejecute el flujo Puppeteer después del build y publique screenshots sólo cuando el job falla.
@@ -1083,6 +1081,7 @@
   - El nuevo validador browser queda local por ahora; aún no está integrado en CI
 - Next:
   - El siguiente paso con más valor es completar el flujo Git server-first con stage/unstage/discard controlados y luego exponerlo en la misma pantalla `Projects`
+
 ### 2026-04-25 22:35 (Europe/Madrid) — Git Staging Controls End-to-End
 
 - Summary: Cerrado el flujo server-first de stage/unstage/revert para Git entre `packages/adapters`, `apps/server-api` y `apps/web-ui`, reutilizando el screen `Projects` y extendiendo el validador browser existente en lugar de abrir otra pantalla o introducir scripts paralelos.
@@ -1109,6 +1108,7 @@
   - El validador adapter en Windows necesitó tolerar CRLF al comprobar `git restore`; la cobertura relevante quedó en restauración de contenido y flujo API/UI, no en los metadatos de line endings del working tree local
 - Next:
   - El siguiente paso con más valor ya no es documental: exponer staging/unstaging masivo por selección y diff file-switching fino desde `Projects` para repositorios con muchos cambios
+
 ### 2026-04-26 01:56 (Europe/Madrid) — Projects Git Workspace Bulk Selection
 
 - Summary: Cerrada la ampliación del workspace Git en `Projects` con selección múltiple por fichero, acciones bulk server-first para stage/unstage y navegación de diff enfocada por path, manteniendo `revert` limitado a cambios tracked unstaged con confirmación.
@@ -1135,6 +1135,7 @@
   - El validador browser de Git depende de recompilar `apps/web-ui` antes de ejecutarse porque consume el preview built; quedó cubierto por `pnpm build` dentro del cierre de gates
 - Next:
   - El siguiente paso útil ya no es refinar textos ni validadores: toca integrar el flujo Git UI en CI o ampliar capacidades Git server-first de mayor valor, como selección por lotes en diff grandes o acciones de commit/push reviewadas
+
 ### 2026-04-26 02:33 (Europe/Madrid) — CI Git Browser Validation
 
 - Summary: Integrada la validación browser `validate:git-workspace` en GitHub Actions reutilizando exactamente el mismo setup de Puppeteer/Chrome y la misma política de screenshots sólo en fallo que ya usaban las otras validaciones de `apps/web-ui`.
@@ -1158,6 +1159,7 @@
   - Ninguno nuevo; la paridad local cubre el orden y los comandos del workflow actualizado
 - Next:
   - El siguiente paso con más valor ya no es añadir más validadores, sino completar la superficie Git server-first con operaciones de branch/push o revisión previa al commit desde la misma pantalla `Projects`
+
 ### 2026-04-26 03:54 (Europe/Madrid) — Git Branch Operations Server-First
 
 - Summary: Implementadas operaciones server-first de ramas Git entre adapter, API y `Projects`, incluyendo listado local/remoto, creación de rama local y checkout de ramas existentes dentro del sandbox del workspace.
@@ -1186,6 +1188,7 @@
   - El slice actual lista ramas remotas pero no hace checkout directo de referencias remotas desde UI; queda como siguiente incremento natural si hace falta tracking branch automático
 - Next:
   - El siguiente paso con más valor es completar operaciones Git de mayor impacto práctico, como push/branch publish o diff review previa a commit desde el mismo workspace
+
 ### 2026-04-27 11:17 (Europe/Madrid) — Git Publish Operations Server-First
 
 - Summary: Cerrado el flujo server-first de publish/push Git entre adapter, API y `Projects`, reutilizando el panel de ramas existente y el mismo validador browser stateful del workspace Git.
@@ -1210,6 +1213,7 @@
   - El slice actual publica siempre contra `origin`; si en el futuro hay múltiples remotes hará falta añadir selección explícita o política por proyecto
 - Next:
   - El siguiente paso con más valor ya no es más Git superficial: toca revisión/diff server-first más profunda o PR/remote review workflow sobre la misma base Git ya consolidada
+
 ### 2026-04-27 11:41 (Europe/Madrid) — Screen Stabilization Audit
 
 - Summary: Revisión del estado real del proyecto para cortar el bucle de tareas superficiales y redefinir el plan por pantalla con validación browser y backlog en Notion.
@@ -1237,6 +1241,7 @@
   - `Dashboard` sigue siendo una showcase estática con quick actions muertas
 - Next:
   - El siguiente prompt correcto es cerrar `Explorer` end-to-end sobre `/files/tree` y `/files/read`, con validación browser real y sin tocar otras pantallas
+
 ### 2026-04-27 12:05 (Europe/Madrid) — Explorer End-to-End
 
 - Summary: `Explorer` ya funciona sobre la API real de archivos, reutiliza la sesión de proyecto abierta en `Projects` y quedó protegida por una validación browser determinista propia.
@@ -1267,6 +1272,7 @@
   - No se ha abierto edición de archivos en esta tarea; la pantalla comunica explícitamente que el slice es read-only
 - Next:
   - Esperar confirmación del usuario para mover la tarjeta de Notion a `Listo`; después, la siguiente pantalla correcta es `Settings`
+
 ### 2026-04-27 12:30 (Europe/Madrid) — Explorer / Projects Dev Port Conflict
 
 - Summary: Corregido el `404` real al abrir proyecto desde `Projects` y `Explorer` en desarrollo; la UI en `:4000` estaba llamando a su propio servidor estático en vez de al backend.
@@ -1299,6 +1305,7 @@
   - La tarea funcional de `Explorer` sigue pendiente de confirmación del usuario antes de mover la tarjeta de Notion a `Listo`
 - Next:
   - Esperar confirmación del usuario de que `Projects` y `Explorer` ya abren correctamente con el reparto `UI :4000 / API :4001`; si falla algo más, seguir dentro de la misma tarjeta antes de pasar a `Settings`
+
 ### 2026-04-27 18:18 (Europe/Madrid) — Explorer Integrated UX Revision
 
 - Summary: Refinado `Explorer` tras feedback visual del usuario para convertirlo en una vista única tipo editor, con selector global de proyecto en la sidebar, búsqueda con debounce al teclear y preview con color por lenguaje.
@@ -1330,6 +1337,7 @@
   - La tarea queda funcionalmente lista, pero la tarjeta no debe moverse a `Listo` hasta confirmación explícita del usuario
 - Next:
   - Esperar validación visual del usuario sobre el nuevo `Explorer`; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+
 ### 2026-04-27 18:44 (Europe/Madrid) — Explorer Search Debounce Focus Fix
 
 - Summary: Corregido el bug del buscador de `Explorer` que perdía el foco al aplicar el debounce y bloqueaba la escritura continua.
@@ -1356,6 +1364,7 @@
   - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la interacción real ya es correcta
 - Next:
   - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+
 ### 2026-04-27 18:50 (Europe/Madrid) — Explorer Recursive Search Discovery
 
 - Summary: Corregido el bug restante del buscador de `Explorer`: ahora puede encontrar archivos dentro de directorios todavía no abiertos manualmente.
@@ -1383,6 +1392,7 @@
   - La tarjeta no debe moverse a `Listo` hasta que el usuario confirme que la UX real ya es correcta
 - Next:
   - Esperar validación del usuario sobre el buscador corregido; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+
 ### 2026-04-28 11:09 (Europe/Madrid) — Explorer Responsive Shell Refinement
 
 - Summary: Ajustado el `Explorer` para viewport estrecho y corregido el componente compartido que impedía validar los toggles compactos; la vista móvil ahora usa rail lateral colapsado y workspace integrado.
@@ -1406,6 +1416,7 @@
   - La investigación sobre incrustar Monaco o APIs de VS Code debe apoyarse en fuentes oficiales y no debe romper el requisito de responsive
 - Next:
   - Pasar gates completos del repo, validar visualmente el Explorer con el usuario y decidir después si la siguiente mejora del workbench es shell compartido o salto a `Settings`
+
 ### 2026-04-28 12:03 (Europe/Madrid) — Explorer VS Code-Like Search Workbench
 
 - Summary: Reorientado `Explorer` hacia un workbench mucho más cercano a VS Code sin cambiar de pantalla ni incrustar un IDE remoto completo; ahora separa `Explorer` y `Search`, hace búsqueda real dentro de ficheros vía servidor y mantiene comportamiento responsive.
@@ -1442,6 +1453,7 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente la nueva disposición del Explorer
 - Next:
   - Esperar validación visual del usuario sobre el nuevo workbench del Explorer; si lo acepta, mover la tarjeta de Notion a `Listo` y abrir `02. Settings screen end-to-end`
+
 ### 2026-04-28 12:32 (Europe/Madrid) — Explorer Tabs, Persistence and Shell Decoupling
 
 - Summary: Completado el salto del `Explorer` hacia un flujo de editor más cercano a VS Code con múltiples pestañas, persistencia por workspace, foco exacto desde resultados de búsqueda y corrección del remount al colapsar la sidebar global.
@@ -1466,6 +1478,7 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario confirme visualmente la UX final del `Explorer`
 - Next:
   - Pasar gates completos del repo, dejar el árbol limpio con commit manual y esperar validación del usuario antes de tocar `Settings`
+
 ### 2026-04-28 12:35 (Europe/Madrid) — Explorer Final Verification
 
 - Summary: Reejecutados los gates completos y las validaciones browser tras endurecer el harness de debounce del Explorer; el estado final queda en verde sin mover aún la tarjeta de Notion a `Listo`.
@@ -1488,6 +1501,7 @@
   - Ningún gate abierto; la única condición pendiente es la validación visual del usuario para cerrar la tarea de Explorer
 - Next:
   - Esperar confirmación del usuario sobre el Explorer antes de mover la tarjeta a `Listo` y abrir `Settings`
+
 ### 2026-04-28 16:57 (Europe/Madrid) — Explorer Performance and Search Controls
 
 - Summary: Cerrada la iteración del `Explorer` centrada en estabilidad de árbol y pestañas, resultados de búsqueda más parecidos a VS Code y apertura perezosa de archivos grandes para evitar bloqueos al cargar contenido pesado.
@@ -1519,6 +1533,7 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario valide visualmente que la UX del Explorer le convence
 - Next:
   - Esperar validación visual del usuario sobre el nuevo comportamiento de árbol, tabs y previews grandes antes de abrir `Settings`
+
 ### 2026-04-28 17:24 (Europe/Madrid) — Explorer Live Runtime Validation
 
 - Summary: Validado el `Explorer` contra la app real en `http://localhost:4000` con backend vivo en `http://localhost:4001`, descartando falsos negativos del harness y confirmando que el comportamiento clave del árbol, tabs, previews grandes y búsqueda agrupada se sostiene fuera del stub.
@@ -1540,6 +1555,7 @@
   - La tarea sigue sin poder cerrarse porque la aceptación final del `Explorer` depende del usuario, no del harness
 - Next:
   - Esperar la aceptación explícita del usuario sobre el `Explorer`; sólo entonces mover la tarjeta de Notion a `Listo` y abrir `Settings`
+
 ### 2026-04-28 18:07 (Europe/Madrid) — Explorer Scroll-Driven Lazy Preview
 
 - Summary: Sustituida la paginación manual del preview grande en `Explorer` por carga perezosa al hacer scroll, manteniendo la tarea `01. Explorer screen end-to-end` como única activa y sin moverla aún a `Listo`.
@@ -1562,6 +1578,7 @@
   - La tarea no debe moverse a `Listo` hasta que el usuario confirme visualmente que el Explorer ya le convence
 - Next:
   - Pasar gates completos del repo, mantener la tarjeta de Notion en `En progreso` y esperar confirmación del usuario antes de abrir `Settings`
+
 ### 2026-04-28 21:31 (Europe/Madrid) — Explorer Lazy Preview Scroll Stability
 
 - Summary: Corregida la regresión del lazy loading inferior en `Explorer`: al cargar más líneas hacia abajo el preview ya no vuelve al principio, y la carga empieza antes de alcanzar el final exacto del rango visible.
@@ -1582,6 +1599,7 @@
   - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
 - Next:
   - Ejecutar gates completos, dejar el árbol limpio con commit manual y esperar confirmación del usuario sobre el Explorer antes de abrir `Settings`
+
 ### 2026-04-28 21:44 (Europe/Madrid) — Explorer Preview Threshold and Wrapping
 
 - Summary: Ajustado el lazy loading inferior del `Explorer` para arrancar cuando el usuario supera aproximadamente el 60% del scroll disponible, y habilitado el wrap automático de líneas largas dentro del preview del editor.
@@ -1601,6 +1619,7 @@
   - La tarea sigue abierta en Notion hasta aceptación explícita del usuario
 - Next:
   - Pasar gates completos, dejar el árbol limpio con commit manual y esperar validación del usuario antes de mover Explorer a `Listo`
+
 ### 2026-04-28 22:13 (Europe/Madrid) — Explorer Accepted, Settings Activated
 
 - Summary: El usuario ha aceptado explícitamente `Explorer`, así que el siguiente foco único pasa a `Settings` sin abrir otra pantalla en paralelo.
@@ -1619,6 +1638,7 @@
   - El tablero de Notion no puede quedar movido a `Listo`/`En progreso` desde esta sesión mientras el conector siga fallando por schema/auth; el estado operativo correcto queda documentado en comentarios intentados y en el repo
 - Next:
   - Empezar `Settings` como única tarea activa y mantenerla en progreso hasta validación funcional explícita del usuario
+
 ### 2026-04-28 22:34 (Europe/Madrid) — Settings Multi-Provider Configuration
 
 - Summary: Reemplazada la pantalla `Settings` por una implementación funcional orientada a perfiles de providers múltiples, con persistencia local, sincronización backend selectiva para Codex CLI y validación browser determinista `load -> edit -> save -> reload`.
@@ -1650,6 +1670,7 @@
   - El backend real sólo expone `codex-cli` como runtime provider hoy; la pantalla ya soporta perfilar OpenAI/Anthropic/Ollama, pero su activación efectiva en flujos dependerá de registrar esos adapters en iteraciones posteriores
 - Next:
   - Esperar la validación explícita del usuario sobre `Settings`; sólo después se podrá mover la tarea a `Listo` y abrir la siguiente pantalla
+
 ### 2026-04-28 23:08 (Europe/Madrid) — Settings Visual Hierarchy and Responsive Polish
 
 - Summary: Refinado el diseño visual de `Settings` para corregir el bajo contraste sobre el fondo claro, el espaciado de tabs y botones, y la presencia excesiva de la barra de acciones, con validación directa mediante capturas Playwright en desktop y móvil.
@@ -1670,6 +1691,7 @@
   - La validación Playwright fue manual/visual en esta iteración; la cobertura automatizada funcional del screen sigue viniendo del harness `validate:settings`
 - Next:
   - Cerrar gates completos, mantener `Settings` como única tarea activa y esperar feedback del usuario sobre el diseño antes de mover la tarjeta a `Listo`
+
 ### 2026-04-28 23:17 (Europe/Madrid) — Residual Status Chips Cleanup
 
 - Summary: Eliminados los chips vacíos residuales vistos en `Settings` y corregida la causa base en el helper compartido de componentes para que `StatusBadge` reciba correctamente su contenido cuando se instancia con `createElement`.
@@ -1699,6 +1721,7 @@
   - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque el bug visual ya está corregido
 - Next:
   - Esperar confirmación visual del usuario sobre `Settings`; si aparece otro detalle de UX, seguir sólo en esta pantalla antes de abrir la siguiente
+
 ### 2026-04-28 23:36 (Europe/Madrid) — Settings Button Semantics
 
 - Summary: Normalizada la semántica visual de acciones destructivas en `Settings` para que `Remove` y `Reset defaults` usen un rojo explícito y coherente con el sistema de botones compartido.
@@ -1728,6 +1751,7 @@
   - `Settings` sigue en `En progreso` hasta aceptación explícita del usuario aunque la semántica visual ya esté corregida
 - Next:
   - Esperar validación visual del usuario sobre `Settings`; si aparece otra incoherencia de color o jerarquía, seguir sólo en esta pantalla antes de abrir la siguiente
+
 ### 2026-04-29 08:43 (Europe/Madrid) — Main Sidebar Short Viewport Scroll
 
 - Summary: Corregido el menú principal en pantallas bajas para que la navegación central tenga scroll vertical independiente y todas las opciones sigan siendo alcanzables.
@@ -1751,6 +1775,7 @@
   - `Settings` sigue como tarea de pantalla activa hasta aceptación explícita del usuario; este cambio fue un bug global bloqueante del shell
 - Next:
   - Esperar validación del usuario sobre la sidebar en su pantalla pequeña; si queda aceptada, volver al cierre visual de `Settings`
+
 ### 2026-04-29 09:03 (Europe/Madrid) — Shared Page Scaffolding
 
 - Summary: Extraído un `PageScaffold` compartido para unificar la estructura superior de las pantallas y aplicado el primer refactor visible sobre `Dashboard` y `Settings`, eliminando wrappers de cabecera y tabs definidos localmente.
@@ -1772,6 +1797,7 @@
   - `Dashboard` mantiene acciones aún no server-backed; esta iteración sólo unifica estructura y estilo, no completa esos flujos
 - Next:
   - Cerrar quality gates completos y, si siguen en verde, continuar con la siguiente migración de componentes del checklist
+
 ### 2026-04-29 09:04 (Europe/Madrid) — Shared Page Scaffolding Validation
 
 - Summary: Cerrados los quality gates del repositorio y validado el flujo de `Settings` en navegador tras migrar al scaffold compartido.
@@ -1790,6 +1816,7 @@
   - Sigue pendiente una validación visual/determinista equivalente para `Dashboard` una vez se empiecen a sustituir sus bloques internos por componentes compartidos
 - Next:
   - Continuar con el punto 3 del checklist de Notion: extraer campos reutilizables para `Settings`
+
 ### 2026-04-29 09:13 (Europe/Madrid) — Shared Settings Fields
 
 - Summary: Extraídos los campos reutilizables de `Settings` a un componente compartido y migradas las secciones de provider, limits, notifications y API sin cambiar `data-testid` ni contratos de interacción.
@@ -1807,6 +1834,7 @@
   - `Settings` todavía mantiene celdas de solo lectura locales en la pestaña general; no forman parte de la aceptación actual, pero siguen siendo candidatas a extracción si se repiten en otras pantallas
 - Next:
   - Ejecutar los quality gates completos y la validación `validate:settings`, luego continuar con las primitivas reutilizables de `Overview`
+
 ### 2026-04-29 09:18 (Europe/Madrid) — Shared Overview Primitives
 
 - Summary: Extraídas primitivas reutilizables para `Overview` y migrado `Dashboard.ts` para que deje de poseer el markup repetido de metric cards, actividad y quick actions.
@@ -1824,6 +1852,7 @@
   - `Dashboard` sigue usando acciones stubbed en quick actions y en la tabla; esa deuda funcional permanece abierta en el plan y no se abordó en este refactor estructural
 - Next:
   - Ejecutar los quality gates completos y continuar con el refactor component-first de `Kanban`
+
 ### 2026-04-29 09:25 (Europe/Madrid) — Shared Kanban Primitives
 
 - Summary: Extraídas primitivas reutilizables para `Kanban` y migrado `Kanban.ts` para que deje de poseer el shell repetido de columnas, task cards y modal de detalle.
@@ -1847,6 +1876,7 @@
   - El test de render DOM se sustituyó por cobertura de helpers porque el harness Vitest actual del repo no instala entorno DOM
 - Next:
   - Continuar con la migración de pantallas restantes a scaffolding compartido
+
 ### 2026-04-29 09:39 (Europe/Madrid) — Remaining Shared Screen Scaffolding
 
 - Summary: Migradas las pantallas estándar restantes a scaffolding compartido y extraídos los campos/meta cells repetidos del workbench a primitivas comunes.
@@ -1871,6 +1901,7 @@
   - La deuda funcional de `Kanban` persistente y acciones stubbed de `Dashboard` sigue abierta en `PLAN.md`
 - Next:
   - Continuar con estabilización funcional, no más refactor estructural salvo duplicación nueva
+
 ### 2026-04-29 09:48 (Europe/Madrid) — Kanban Server Persistence
 
 - Summary: Implementada persistencia server-backed para `Kanban` sobre el API `/kanban/*`, retirando las tareas seed locales como fuente de verdad.
@@ -1893,6 +1924,7 @@
   - La prioridad queda en estado visual por defecto hasta que el API de tareas soporte ese campo
 - Next:
   - Ejecutar quality gates completos y corregir cualquier fallo antes de cerrar la tarea
+
 ### 2026-04-29 09:51 (Europe/Madrid) — Kanban Persistence Validation
 
 - Summary: Cerrados los quality gates obligatorios tras la migración server-backed de Kanban.
@@ -1910,6 +1942,7 @@
   - Pendiente cubrir Kanban con browser automation end-to-end contra servidor stub o real controlado
 - Next:
   - Implementar validación determinista de navegador para Kanban load/create/move/edit/delete si se continúa la estabilización
+
 ### 2026-04-29 15:42 (Europe/Madrid) — Settings Visual Components
 
 - Summary: Corregida la deuda visual de Settings desde primitivas compartidas y validada con el flujo browser determinista.
@@ -1933,6 +1966,7 @@
   - Falta confirmación visual final del usuario para mover `02. Settings screen end-to-end` a `Listo`
 - Next:
   - Ejecutar gates completos y mantener el foco en Settings hasta aceptación del usuario
+
 ### 2026-04-29 15:43 (Europe/Madrid) — Settings Gates
 
 - Summary: Ejecutados los gates completos después de la corrección visual de Settings.
@@ -1950,6 +1984,7 @@
   - Sin fallos de gates
 - Next:
   - Esperar revisión del usuario sobre Settings antes de mover la tarea a `Listo` o pasar a otra pantalla
+
 ### 2026-04-29 16:15 (Europe/Madrid) — Global Toast Feedback
 
 - Summary: Convertido el sistema compartido de avisos en toasts globales para eliminar banners inline de pantallas estándar.
@@ -1972,6 +2007,7 @@
   - Pendiente ejecutar gates completos antes de cierre
 - Next:
   - Ejecutar gates completos y commitear la corrección
+
 ### 2026-04-29 16:16 (Europe/Madrid) — Global Toast Gates
 
 - Summary: Cerrados los gates obligatorios y validaciones browser después de convertir avisos compartidos a toasts globales.
@@ -1990,6 +2026,7 @@
   - Sin fallos de gates
 - Next:
   - Esperar aceptación visual del sistema de toasts y continuar sólo con la siguiente pantalla cuando el usuario lo confirme
+
 ### 2026-04-29 16:30 (Europe/Madrid) — Explorer Toast Gap Fix
 
 - Summary: Eliminado el hueco residual que aparecía en Explorer cuando un aviso se publicaba como toast global.
@@ -2005,6 +2042,7 @@
   - Ninguno identificado
 - Next:
   - Ejecutar validaciones relevantes y commit manual
+
 ### 2026-04-29 17:06 (Europe/Madrid) — Explorer Toast Gap Gates
 
 - Summary: Validada la eliminación del hueco residual de toasts en Explorer.
@@ -2052,6 +2090,7 @@
   - No se ejecutó `validate:source-linking` porque el cambio no toca Workflows/History ni el panel de evidencias.
 - Next:
   - Commit manual y revisión visual del usuario en la app local.
+
 ### 2026-04-29 21:32 (Europe/Madrid) — Server-first Workspace Persistence
 
 - Summary: Implementada persistencia server-first del estado de workspace para eliminar localStorage como fuente de verdad de proyectos, settings e historial del Workbench.
@@ -2142,7 +2181,6 @@
 - Next:
   - Ejecutar gates completos y validaciones relevantes, luego commit manual y revisión del usuario.
 
-
 ### 2026-05-06 11:15 (Europe/Madrid) — Settings Accepted, Workflows Scoped
 
 - Summary: El usuario aceptó `Settings`; la tarjeta de Notion se movió a `Listo` y se creó una nueva tarea prioritaria para rehacer `Workflows` como editor integrado estilo n8n.
@@ -2162,6 +2200,7 @@
   - El tablero actual no tiene propiedad explícita de prioridad; la prioridad P0 quedó reflejada en el título y contenido de la nueva tarea.
 - Next:
   - Descomponer `Workflows` en fases implementables antes de tocar código UI/server.
+
 ### 2026-05-06 17:35 (Europe/Madrid) — Workflows Scope Extended
 
 - Summary: Añadidos al alcance de `Workflows` el contrato JSON visual por nodo, el mapeo fácil entre output/input y el modelo de múltiples guardrails con severidades y límite de validaciones.
@@ -2181,6 +2220,7 @@
   - El modelo exacto de mapeo de datos entre nodos y el editor visual del contrato JSON siguen siendo decisiones de diseño abiertas antes de empezar la implementación.
 - Next:
   - Descomponer `Workflows` en fases y subtareas antes de tocar `apps/web-ui`, `apps/server-api` o `packages/agents`.
+
 ### 2026-05-06 17:44 (Europe/Madrid) — Workflows Phases Locked Before Coding
 
 - Summary: La tarea principal de `Workflows` pasó a `En progreso` en Notion y quedó descompuesta en fases/subtareas concretas con frontera MVP, dependencias y criterios de salida antes de tocar código.
@@ -2201,6 +2241,7 @@
   - Sigue abierta la decisión exacta del contrato de handoff de contexto entre proveedores y del UX final del editor visual de JSON; eso pertenece a `06.1`.
 - Next:
   - Ejecutar la fase `06.1 Workflows contracts and MVP boundary lock` antes de escribir código del editor.
+
 ### 2026-05-06 17:40 (Europe/Madrid) — Workflows 06.1 Contract Lock
 
 - Summary: Cerrada la fase `06.1` sin tocar runtime; se fijó el contrato MVP del editor `Workflows` en Notion y en `docs/WORKFLOWS_EDITOR_MVP.md`.
@@ -2224,6 +2265,7 @@
   - Los tipos demo actuales de `workbench` siguen siendo lineales; `06.2` deberá introducir contratos nuevos sin intentar forzar compatibilidad con ese shape.
 - Next:
   - Empezar `06.2` con persistencia server-first y contratos API usando `docs/WORKFLOWS_EDITOR_MVP.md` como única referencia funcional.
+
 ### 2026-05-06 21:25 (Europe/Madrid) — Workflows 06.2 Server-first Persistence
 
 - Summary: Implementada la base server-first de `Workflows` sin tocar la UI; el servidor ya persiste definiciones, assets reutilizables, usage records y ejecuciones dentro del workspace state.
@@ -2248,6 +2290,7 @@
   - La ejecución real de workflows sigue siendo la demo lineal de `ai-workbench`; `06.2` sólo introduce persistencia e interfaz server-first.
 - Next:
   - Validar gates globales, dejar comentario en Notion y pasar a la siguiente fase sólo tras confirmación del usuario.
+
 ### 2026-05-06 22:39 (Europe/Madrid) — Workflows 06.3 Integrated Editor Shell
 
 - Summary: Implementada la fase `06.3` en `apps/web-ui` con un editor integrado tipo workbench para `Workflows`, consumiendo exclusivamente el catálogo server-first de la fase `06.2`.
@@ -2273,6 +2316,7 @@
   - El `workspaceId` sigue derivándose en la UI desde catálogo/workspace actual hasta que el servidor exponga un identificador canónico directo.
 - Next:
   - Esperar validación visual del usuario para mantener `06.3` en progreso o pasar a `06.4` si el editor base queda aceptado.
+
 ### 2026-05-06 23:42 (Europe/Madrid) — Workflows 06.3 Connection UX Refinement
 
 - Summary: Refinada la UX de conexión de nodos en `Workflows` para acercarla al comportamiento de `n8n` antes de abrir `06.4`.
@@ -2296,6 +2340,7 @@
   - La interacción ya es n8n-like en conexión básica, pero aún no hay fan-out/fan-in avanzado con tooling semántico adicional sobre cada edge.
 - Next:
   - Esperar validación visual del usuario sobre `06.3` ya refinada; si queda aceptada, pasar a `06.4` con contratos JSON, mapping y guardrails reutilizables.
+
 ### 2026-05-07 00:18 (Europe/Madrid) — Workflows 06.3 n8n Drag Behavior Fix
 
 - Summary: Corregido el comportamiento de conexión en `Workflows` tras feedback de uso real; el patrón principal ahora es `drag from output -> drop on input`, y un mismo output puede abrir varias conexiones.
@@ -2368,6 +2413,7 @@
   - The user still needs to validate the real running app before `06.3` can move to `Listo`.
 - Next:
   - Commit and request user acceptance of `06.3` connection behavior.
+
 ### 2026-05-11 12:44 (Europe/Madrid) — Workflows 06.3 Connection Deletion
 
 - Summary: Added edge deletion to the Workflows canvas and reduced SVG arrow marker size after user feedback.
@@ -2393,6 +2439,7 @@
   - `06.3` remains in progress until explicit user acceptance.
 - Next:
   - Commit, then ask for real-app acceptance.
+
 ### 2026-05-11 12:53 (Europe/Madrid) — Workflows 06.3 Trash Delete Hardening
 
 - Summary: Hardened the Workflows connection delete affordance after live feedback that clicking the control did not reliably remove the connection.
@@ -2462,7 +2509,6 @@
 - Next:
   - Continue SDD with `/sdd-new <change>` or `/sdd-explore <topic>` using Engram artifacts.
 
-
 ### 2026-05-14 12:45 (Europe/Madrid) — Skill Registry Refresh
 
 - Summary: Refreshed the delegator skill registry using the explicit `skill-registry` workflow.
@@ -2513,7 +2559,6 @@
 - Next:
   - Commit, then request validation of the Workflows inspector UX before closing `06.3`.
 
-
 ### 2026-05-14 17:13 (Europe/Madrid) — Workflows 06.3 Real-App Acceptance
 
 - Summary: Validated the real running Workflows editor against the 06.3 inspector UX acceptance criteria and accepted the subtask.
@@ -2534,6 +2579,7 @@
   - Temporary validation writes were restored through the workflow definition API after persistence checks.
 - Next:
   - Start `06.4 JSON contracts, data mapping and guardrail composition UI` only after the user confirms the next prompt.
+
 ### 2026-05-14 23:33 (Europe/Madrid) — Codex RTK Global Setup
 
 - Summary: Installed RTK support for Codex global instructions after verifying the existing RTK version did not support `--codex`.
@@ -2555,6 +2601,7 @@
   - `rtk init --show` still emphasizes Claude hook status; for Codex this is expected because Codex setup uses AGENTS.md + RTK.md rather than Claude settings hooks.
 - Next:
   - Restart Codex so the new global RTK instruction is loaded.
+
 ### 2026-05-14 23:56 (Europe/Madrid) — Caveman Skill Registry Refresh
 
 - Summary: Refreshed the skill registry after discovering Caveman skills under `.agents/skills` and configured Caveman default mode for token-efficient Codex usage.
@@ -2574,6 +2621,7 @@
   - Caveman still may not appear in Codex `<available_skills>` until the runtime rescans/restarts, but registry and memory now know where it lives.
 - Next:
   - Inject Caveman/Cavecrew compact rules into future sub-agent prompts when delegating.
+
 ### 2026-05-15 00:23 (Europe/Madrid) — Workflows 06.4 Contracts, Mapping and Guardrail Validation
 
 - Summary: Continued only `06.4` and fixed the real regression chain in the Workflows editor: JSON contracts now persist through save/reload, edge mappings can add explicit upstream output entries, and attached guardrails can be reopened and edited reliably from the node inspector.
@@ -2600,6 +2648,7 @@
   - `.atl/skill-registry.md` remains a separate pre-existing local diff and is not part of this 06.4 implementation scope.
 - Next:
   - Create the focused conventional commit for the 06.4 slice and wait for user acceptance before closing the Notion subtask.
+
 ### 2026-05-15 01:22 (Europe/Madrid) — Workflows 06.4 Contract Editor Redesign
 
 - Summary:
@@ -2626,6 +2675,7 @@
   - `.atl/skill-registry.md` remains an unrelated pre-existing diff and is still out of scope for this 06.4 slice.
 - Next:
   - Get explicit user acceptance on the redesigned contract editor before changing the Notion subtask status or creating the requested manual conventional commit.
+
 ### 2026-05-15 18:31 (Europe/Madrid) — Workflows 06.4 Deep Authoring Modal
 
 - Summary:
@@ -2652,6 +2702,7 @@
   - `06.4` remains in progress until the user explicitly accepts the new modal-based UX.
 - Next:
   - Add the Notion progress comment, then request explicit user validation of the new modal/editor flow before moving `06.4` to `Listo`.
+
 ### 2026-05-15 18:47 (Europe/Madrid) — Workflows 06.4 Acceptance Validation
 
 - Summary:
@@ -2770,6 +2821,7 @@
   - `validate-workflows.ts` intentionally remains unchanged in this slice, so the new snapshot relies on existing workspace gates until the final `06.5` validation pass.
 - Next:
   - Implement the next `06.5` slice for persisted run-level alert/failure surfacing polish without starting any `06.6` runtime/provider continuity work.
+
 ### 2026-05-16 16:35 (Europe/Madrid) — Workflows 06.5D Persisted Attention Surface
 
 - Summary:
@@ -2962,6 +3014,7 @@
   - Logger-core tests still print one intentional console warning line because the test validates the real wrapped console path.
 - Next:
   - Expose server logs in the UI with filtering/search so save/config failures can be inspected without filesystem access.
+
 ### 2026-06-05 08:24 (Europe/Madrid) — Workflow Editor Live Run UX Slice
 
 - Summary:

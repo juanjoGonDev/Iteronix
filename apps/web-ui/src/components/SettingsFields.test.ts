@@ -6,7 +6,7 @@ import {
   SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
-  SettingsToggleField
+  SettingsToggleField,
 } from "./SettingsFields.js";
 
 describe("SettingsFields", () => {
@@ -17,14 +17,14 @@ describe("SettingsFields", () => {
         value: "gpt-4o",
         placeholder: "Enter model",
         testId: "settings-provider-model",
-        onChange: () => undefined
+        onChange: () => undefined,
       }).render();
 
       new SettingsNumberField({
         label: "Maximum loops",
         value: 50,
         testId: "settings-max-loops",
-        onChange: () => undefined
+        onChange: () => undefined,
       }).render();
 
       new SettingsSecretField({
@@ -32,7 +32,7 @@ describe("SettingsFields", () => {
         value: "secret",
         placeholder: "Session only in web mode",
         testId: "settings-provider-api-key",
-        onChange: () => undefined
+        onChange: () => undefined,
       }).render();
     });
 
@@ -49,9 +49,9 @@ describe("SettingsFields", () => {
         testId: "settings-provider-kind",
         options: [
           { value: "codex-cli", label: "Codex CLI" },
-          { value: "openai", label: "OpenAI" }
+          { value: "openai", label: "OpenAI" },
         ],
-        onChange: () => undefined
+        onChange: () => undefined,
       }).render();
 
       new SettingsToggleField({
@@ -59,7 +59,7 @@ describe("SettingsFields", () => {
         description: "Play a local confirmation tone when a run finishes.",
         checked: true,
         testId: "settings-sound-enabled",
-        onChange: () => undefined
+        onChange: () => undefined,
       }).render();
     });
 
@@ -108,13 +108,13 @@ const renderWithFakeDocument = (callback: () => void): string[] => {
       createElement: () => new FakeHtmlElement(),
       createTextNode: (value: string) => ({
         nodeType: 3,
-        textContent: value
-      })
-    }
+        textContent: value,
+      }),
+    },
   });
   Object.defineProperty(globalThis, "HTMLElement", {
     configurable: true,
-    value: FakeHtmlElement
+    value: FakeHtmlElement,
   });
 
   try {
@@ -125,7 +125,7 @@ const renderWithFakeDocument = (callback: () => void): string[] => {
     } else {
       Object.defineProperty(globalThis, "document", {
         configurable: true,
-        value: originalDocument
+        value: originalDocument,
       });
     }
 
@@ -134,7 +134,7 @@ const renderWithFakeDocument = (callback: () => void): string[] => {
     } else {
       Object.defineProperty(globalThis, "HTMLElement", {
         configurable: true,
-        value: originalHtmlElement
+        value: originalHtmlElement,
       });
     }
   }

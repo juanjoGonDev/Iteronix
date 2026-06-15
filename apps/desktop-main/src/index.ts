@@ -3,7 +3,7 @@ import {
   resolveDesktopConfig,
   type LocalServerConfig,
   type LocalServerConfigInput,
-  type RemoteDesktopConfig
+  type RemoteDesktopConfig,
 } from "./config";
 import { err, ok, ResultType, type Result } from "./result";
 import {
@@ -12,9 +12,13 @@ import {
   resolveConfigPath,
   writePersistedConfig,
   type PersistedConfig,
-  type PersistenceError
+  type PersistenceError,
 } from "./persistence";
-import { createSecretStore, type SecretError, type SecretStore } from "./secrets";
+import {
+  createSecretStore,
+  type SecretError,
+  type SecretStore,
+} from "./secrets";
 import { startLocalServer } from "./server";
 
 const run = async (): Promise<void> => {
@@ -26,7 +30,11 @@ const run = async (): Promise<void> => {
     return;
   }
 
-  const envForConfig = buildEnvForConfig(process.env, persisted.value, disconnect);
+  const envForConfig = buildEnvForConfig(
+    process.env,
+    persisted.value,
+    disconnect,
+  );
   const config = resolveDesktopConfig(envForConfig, process.cwd());
 
   if (config.type === ResultType.Err) {
@@ -47,7 +55,7 @@ const run = async (): Promise<void> => {
     const persistedResult = persistRemoteConfig(
       config.value,
       configPath,
-      disconnect
+      disconnect,
     );
     if (persistedResult.type === ResultType.Err) {
       exitWithError(persistedResult.error.message);
@@ -55,13 +63,19 @@ const run = async (): Promise<void> => {
     return;
   }
 
-  const authToken = await resolveAuthToken(config.value.server.authToken, secrets);
+  const authToken = await resolveAuthToken(
+    config.value.server.authToken,
+    secrets,
+  );
   if (authToken.type === ResultType.Err) {
     exitWithError(authToken.error.message);
     return;
   }
 
-  const serverConfig = buildLocalServerConfig(config.value.server, authToken.value);
+  const serverConfig = buildLocalServerConfig(
+    config.value.server,
+    authToken.value,
+  );
   const server = startLocalServer(serverConfig);
   if (server.type === ResultType.Err) {
     exitWithError(server.error.message);
@@ -83,7 +97,7 @@ const parseDisconnectFlag = (value: string | undefined): boolean => {
 
 const loadPersistedConfig = (
   filePath: string,
-  disconnect: boolean
+  disconnect: boolean,
 ): Result<PersistedConfig, PersistenceError> => {
   if (disconnect) {
     const cleared = clearPersistedConfig(filePath);
@@ -98,7 +112,7 @@ const loadPersistedConfig = (
 const buildEnvForConfig = (
   env: NodeJS.ProcessEnv,
   persisted: PersistedConfig,
-  disconnect: boolean
+  disconnect: boolean,
 ): NodeJS.ProcessEnv => {
   const nextEnv: NodeJS.ProcessEnv = { ...env };
   if (disconnect) {
@@ -116,7 +130,7 @@ const buildEnvForConfig = (
 const persistRemoteConfig = (
   config: RemoteDesktopConfig,
   filePath: string,
-  disconnect: boolean
+  disconnect: boolean,
 ): Result<void, PersistenceError> => {
   if (disconnect) {
     return ok(undefined);
@@ -125,13 +139,13 @@ const persistRemoteConfig = (
     return ok(undefined);
   }
   return writePersistedConfig(filePath, {
-    remoteUrl: config.serverUrl
+    remoteUrl: config.serverUrl,
   });
 };
 
 const resolveAuthToken = async (
   provided: string | undefined,
-  store: SecretStore
+  store: SecretStore,
 ): Promise<Result<string, AuthTokenError | SecretError>> => {
   if (provided) {
     const saved = await store.setAuthToken(provided);
@@ -149,20 +163,20 @@ const resolveAuthToken = async (
     return ok(stored.value);
   }
   return err({
-    message: ConfigErrorMessage.MissingAuthToken
+    message: ConfigErrorMessage.MissingAuthToken,
   });
 };
 
 const buildLocalServerConfig = (
   input: LocalServerConfigInput,
-  authToken: string
+  authToken: string,
 ): LocalServerConfig => ({
   entryPath: input.entryPath,
   host: input.host,
   port: input.port,
   authToken,
   workspaceRoots: input.workspaceRoots,
-  commandAllowlist: input.commandAllowlist
+  commandAllowlist: input.commandAllowlist,
 });
 
 type AuthTokenError = {

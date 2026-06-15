@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MemoryRecordKind,
   createInMemoryMemoryStore,
-  createMemoryManager
+  createMemoryManager,
 } from "./index";
 
 const CurrentTime = "2026-03-12T10:00:00.000Z";
@@ -15,7 +15,7 @@ describe("memory manager", () => {
     const store = createInMemoryMemoryStore();
     const manager = createMemoryManager({
       store,
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     await manager.rememberWorking({
@@ -23,28 +23,28 @@ describe("memory manager", () => {
       runId: "run-old",
       content: "Recent build note",
       createdAt: OldTime,
-      ttlSeconds: 60
+      ttlSeconds: 60,
     });
     await manager.rememberWorking({
       sessionId: "session-1",
       runId: "run-new",
       content: "Recent build note",
       createdAt: RecentTime,
-      ttlSeconds: 600
+      ttlSeconds: 600,
     });
     await manager.rememberWorking({
       sessionId: "session-1",
       runId: "run-duplicate",
       content: "Recent build note",
       createdAt: DuplicateTime,
-      ttlSeconds: 600
+      ttlSeconds: 600,
     });
 
     const results = await manager.search({
       sessionId: "session-1",
       query: "recent build",
       limit: 5,
-      kinds: [MemoryRecordKind.Working]
+      kinds: [MemoryRecordKind.Working],
     });
 
     expect(results).toHaveLength(1);
@@ -56,7 +56,7 @@ describe("memory manager", () => {
     const store = createInMemoryMemoryStore();
     const manager = createMemoryManager({
       store,
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     await manager.rememberEpisodic({
@@ -64,7 +64,7 @@ describe("memory manager", () => {
       runId: "run-pii",
       content: "Contact juan@example.com for deployment",
       createdAt: RecentTime,
-      pii: true
+      pii: true,
     });
 
     const results = await manager.search({
@@ -72,7 +72,7 @@ describe("memory manager", () => {
       query: "deployment contact",
       limit: 5,
       kinds: [MemoryRecordKind.Episodic],
-      piiMode: "redact"
+      piiMode: "redact",
     });
 
     expect(results).toHaveLength(1);

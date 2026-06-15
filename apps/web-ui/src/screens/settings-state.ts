@@ -3,18 +3,18 @@ export const ProviderKind = {
   OpenAI: "openai",
   Anthropic: "anthropic",
   Ollama: "ollama",
-  Custom: "custom"
+  Custom: "custom",
 } as const;
 
-export type ProviderKind = typeof ProviderKind[keyof typeof ProviderKind];
+export type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
 export const ProviderPromptMode = {
   Stdin: "stdin",
-  Arg: "arg"
+  Arg: "arg",
 } as const;
 
 export type ProviderPromptMode =
-  typeof ProviderPromptMode[keyof typeof ProviderPromptMode];
+  (typeof ProviderPromptMode)[keyof typeof ProviderPromptMode];
 
 export type ProviderProfileRecord = {
   id: string;
@@ -37,21 +37,24 @@ export type ProviderSyncRequest = {
   config: Record<string, unknown>;
 };
 
-const ProviderDefaults: Record<ProviderKind, {
-  name: string;
-  endpointUrl: string;
-  apiKey: string;
-  apiKeyEnvVar: string;
-  command: string;
-  promptMode: ProviderPromptMode;
-}> = {
+const ProviderDefaults: Record<
+  ProviderKind,
+  {
+    name: string;
+    endpointUrl: string;
+    apiKey: string;
+    apiKeyEnvVar: string;
+    command: string;
+    promptMode: ProviderPromptMode;
+  }
+> = {
   [ProviderKind.CodexCli]: {
     name: "Codex CLI",
     endpointUrl: "",
     apiKey: "",
     apiKeyEnvVar: "",
     command: "codex",
-    promptMode: ProviderPromptMode.Stdin
+    promptMode: ProviderPromptMode.Stdin,
   },
   [ProviderKind.OpenAI]: {
     name: "OpenAI",
@@ -59,7 +62,7 @@ const ProviderDefaults: Record<ProviderKind, {
     apiKey: "",
     apiKeyEnvVar: "OPENAI_API_KEY",
     command: "",
-    promptMode: ProviderPromptMode.Stdin
+    promptMode: ProviderPromptMode.Stdin,
   },
   [ProviderKind.Anthropic]: {
     name: "Anthropic",
@@ -67,7 +70,7 @@ const ProviderDefaults: Record<ProviderKind, {
     apiKey: "",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
     command: "",
-    promptMode: ProviderPromptMode.Stdin
+    promptMode: ProviderPromptMode.Stdin,
   },
   [ProviderKind.Ollama]: {
     name: "Ollama",
@@ -75,7 +78,7 @@ const ProviderDefaults: Record<ProviderKind, {
     apiKey: "",
     apiKeyEnvVar: "",
     command: "",
-    promptMode: ProviderPromptMode.Stdin
+    promptMode: ProviderPromptMode.Stdin,
   },
   [ProviderKind.Custom]: {
     name: "Custom",
@@ -83,17 +86,18 @@ const ProviderDefaults: Record<ProviderKind, {
     apiKey: "",
     apiKeyEnvVar: "",
     command: "",
-    promptMode: ProviderPromptMode.Stdin
-  }
+    promptMode: ProviderPromptMode.Stdin,
+  },
 };
 
-export const createDefaultProviderProfiles = (): ReadonlyArray<ProviderProfileRecord> => [
-  createProviderProfile(ProviderKind.CodexCli)
-];
+export const createDefaultProviderProfiles =
+  (): ReadonlyArray<ProviderProfileRecord> => [
+    createProviderProfile(ProviderKind.CodexCli),
+  ];
 
 export const createProviderProfile = (
   kind: ProviderKind,
-  timestamp: string = new Date().toISOString()
+  timestamp: string = new Date().toISOString(),
 ): ProviderProfileRecord => {
   const defaults = ProviderDefaults[kind];
 
@@ -108,14 +112,14 @@ export const createProviderProfile = (
     command: defaults.command,
     promptMode: defaults.promptMode,
     createdAt: timestamp,
-    updatedAt: timestamp
+    updatedAt: timestamp,
   };
 };
 
 export const updateProviderProfile = (
   profile: ProviderProfileRecord,
   patch: Partial<ProviderProfileRecord>,
-  timestamp: string = new Date().toISOString()
+  timestamp: string = new Date().toISOString(),
 ): ProviderProfileRecord => {
   const nextKind = patch.providerKind ?? profile.providerKind;
   const defaults = ProviderDefaults[nextKind];
@@ -124,29 +128,65 @@ export const updateProviderProfile = (
     ...profile,
     ...patch,
     providerKind: nextKind,
-    endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
-    apiKey: patch.apiKey ?? (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
-    apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
-    command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
-    promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
-    updatedAt: timestamp
+    endpointUrl:
+      patch.endpointUrl ??
+      (nextKind === profile.providerKind
+        ? profile.endpointUrl
+        : defaults.endpointUrl),
+    apiKey:
+      patch.apiKey ??
+      (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
+    apiKeyEnvVar:
+      patch.apiKeyEnvVar ??
+      (nextKind === profile.providerKind
+        ? profile.apiKeyEnvVar
+        : defaults.apiKeyEnvVar),
+    command:
+      patch.command ??
+      (nextKind === profile.providerKind ? profile.command : defaults.command),
+    promptMode:
+      patch.promptMode ??
+      (nextKind === profile.providerKind
+        ? profile.promptMode
+        : defaults.promptMode),
+    updatedAt: timestamp,
   });
 
-  return normalizedProfile ?? {
+  return (
+    normalizedProfile ?? {
       ...profile,
       ...patch,
       providerKind: nextKind,
-      endpointUrl: patch.endpointUrl ?? (nextKind === profile.providerKind ? profile.endpointUrl : defaults.endpointUrl),
-      apiKey: patch.apiKey ?? (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
-      apiKeyEnvVar: patch.apiKeyEnvVar ?? (nextKind === profile.providerKind ? profile.apiKeyEnvVar : defaults.apiKeyEnvVar),
-      command: patch.command ?? (nextKind === profile.providerKind ? profile.command : defaults.command),
-      promptMode: patch.promptMode ?? (nextKind === profile.providerKind ? profile.promptMode : defaults.promptMode),
-      updatedAt: timestamp
-  };
+      endpointUrl:
+        patch.endpointUrl ??
+        (nextKind === profile.providerKind
+          ? profile.endpointUrl
+          : defaults.endpointUrl),
+      apiKey:
+        patch.apiKey ??
+        (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
+      apiKeyEnvVar:
+        patch.apiKeyEnvVar ??
+        (nextKind === profile.providerKind
+          ? profile.apiKeyEnvVar
+          : defaults.apiKeyEnvVar),
+      command:
+        patch.command ??
+        (nextKind === profile.providerKind
+          ? profile.command
+          : defaults.command),
+      promptMode:
+        patch.promptMode ??
+        (nextKind === profile.providerKind
+          ? profile.promptMode
+          : defaults.promptMode),
+      updatedAt: timestamp,
+    }
+  );
 };
 
 export const normalizeProviderProfiles = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<ProviderProfileRecord> => {
   if (!Array.isArray(value)) {
     return [];
@@ -170,28 +210,29 @@ export const normalizeProviderProfiles = (
 
 export const createProviderSyncRequests = (
   profiles: ReadonlyArray<ProviderProfileRecord>,
-  projectId: string
+  projectId: string,
 ): ReadonlyArray<ProviderSyncRequest> =>
   profiles
-    .filter((profile) =>
-      profile.providerKind === ProviderKind.CodexCli ||
-      profile.providerKind === ProviderKind.OpenAI ||
-      profile.providerKind === ProviderKind.Ollama ||
-      profile.providerKind === ProviderKind.Custom
+    .filter(
+      (profile) =>
+        profile.providerKind === ProviderKind.CodexCli ||
+        profile.providerKind === ProviderKind.OpenAI ||
+        profile.providerKind === ProviderKind.Ollama ||
+        profile.providerKind === ProviderKind.Custom,
     )
     .map((profile) => ({
       projectId,
       profileId: profile.id,
       providerId: readRuntimeProviderId(profile.providerKind),
-      config: createRuntimeProviderConfig(profile)
+      config: createRuntimeProviderConfig(profile),
     }));
 
 const createRuntimeProviderConfig = (
-  profile: ProviderProfileRecord
+  profile: ProviderProfileRecord,
 ): Record<string, unknown> => {
   if (profile.providerKind !== ProviderKind.CodexCli) {
     const config: Record<string, unknown> = {
-      endpointUrl: profile.endpointUrl
+      endpointUrl: profile.endpointUrl,
     };
 
     if (profile.apiKey.length > 0) {
@@ -206,8 +247,8 @@ const createRuntimeProviderConfig = (
       config["models"] = [
         {
           id: profile.modelId,
-          displayName: profile.modelId
-        }
+          displayName: profile.modelId,
+        },
       ];
     }
 
@@ -216,15 +257,15 @@ const createRuntimeProviderConfig = (
 
   const config: Record<string, unknown> = {
     command: profile.command,
-    promptMode: profile.promptMode
+    promptMode: profile.promptMode,
   };
 
   if (profile.modelId.length > 0) {
     config["models"] = [
       {
         id: profile.modelId,
-        displayName: profile.modelId
-      }
+        displayName: profile.modelId,
+      },
     ];
   }
 
@@ -236,7 +277,7 @@ const readRuntimeProviderId = (providerKind: ProviderKind): ProviderKind => {
 };
 
 const normalizeProviderProfile = (
-  value: unknown
+  value: unknown,
 ): ProviderProfileRecord | null => {
   if (!isRecord(value)) {
     return null;
@@ -263,7 +304,7 @@ const normalizeProviderProfile = (
     command: readString(value["command"]) || defaults.command,
     promptMode: readPromptMode(value["promptMode"]) ?? defaults.promptMode,
     createdAt: createdAt.length > 0 ? createdAt : new Date().toISOString(),
-    updatedAt: updatedAt.length > 0 ? updatedAt : new Date().toISOString()
+    updatedAt: updatedAt.length > 0 ? updatedAt : new Date().toISOString(),
   };
 };
 

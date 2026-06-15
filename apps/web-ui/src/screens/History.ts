@@ -1,9 +1,13 @@
-import { Component, createElement, type ComponentProps } from "../shared/Component.js";
+import {
+  Component,
+  createElement,
+  type ComponentProps,
+} from "../shared/Component.js";
 import { Button } from "../components/Button.js";
 import {
   PageFrame,
   PageIntro,
-  PageNoticeStack
+  PageNoticeStack,
 } from "../components/PageScaffold.js";
 import {
   CitationsList,
@@ -14,19 +18,19 @@ import {
   SectionPanel,
   WorkflowStepsList,
   renderWorkbenchMetaCell as renderMetaCell,
-  renderWorkbenchTextField as renderInputField
+  renderWorkbenchTextField as renderInputField,
 } from "../components/WorkbenchPanels.js";
 import { createWorkbenchClient } from "../shared/workbench-client.js";
 import { createWorkbenchHistoryStore } from "../shared/workbench-history.js";
 import {
   createWorkspaceStateClient,
-  hydrateWorkspaceStateClients
+  hydrateWorkspaceStateClients,
 } from "../shared/workspace-state-client.js";
 import {
   MinimalEvalDatasetPath,
   type WorkbenchEvalHistoryRecord,
   type WorkbenchHistoryState,
-  type WorkbenchRunHistoryRecord
+  type WorkbenchRunHistoryRecord,
 } from "../shared/workbench-types.js";
 
 interface HistoryScreenState {
@@ -40,7 +44,10 @@ interface HistoryScreenState {
   noticeMessage: string | null;
 }
 
-export class HistoryScreen extends Component<ComponentProps, HistoryScreenState> {
+export class HistoryScreen extends Component<
+  ComponentProps,
+  HistoryScreenState
+> {
   private readonly historyStore = createWorkbenchHistoryStore();
   private readonly workspaceStateClient = createWorkspaceStateClient();
 
@@ -56,7 +63,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       datasetPath: MinimalEvalDatasetPath,
       pendingAction: null,
       errorMessage: null,
-      noticeMessage: null
+      noticeMessage: null,
     };
   }
 
@@ -68,30 +75,38 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
     return createElement(PageFrame, {}, [
       createElement(PageIntro, {
         title: "Run history",
-        description: "Browse locally persisted workbench runs, inspect evidence and citations, and trigger the repository-backed evaluation suite from the UI."
+        description:
+          "Browse locally persisted workbench runs, inspect evidence and citations, and trigger the repository-backed evaluation suite from the UI.",
       }),
       createElement(PageNoticeStack, {
         errorMessage: this.state.errorMessage,
-        noticeMessage: this.state.noticeMessage
+        noticeMessage: this.state.noticeMessage,
       }),
-      createElement("div", { className: "grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]" }, [
-        createElement("div", { className: "flex flex-col gap-6" }, [
-          this.renderEvalPanel(),
-          this.renderListPanel()
-        ]),
-        createElement("div", { className: "flex flex-col gap-6" }, [
-          this.renderSelectionPanel()
-        ])
-      ])
+      createElement(
+        "div",
+        { className: "grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]" },
+        [
+          createElement("div", { className: "flex flex-col gap-6" }, [
+            this.renderEvalPanel(),
+            this.renderListPanel(),
+          ]),
+          createElement("div", { className: "flex flex-col gap-6" }, [
+            this.renderSelectionPanel(),
+          ]),
+        ],
+      ),
     ]);
   }
 
   private renderEvalPanel(): HTMLElement {
-    const awaitingReviews = this.state.history.runs.filter((run) => run.status === "awaiting_approval").length;
+    const awaitingReviews = this.state.history.runs.filter(
+      (run) => run.status === "awaiting_approval",
+    ).length;
 
     return createElement(SectionPanel, {
       title: "Eval suite",
-      subtitle: "Runs the minimal JSONL dataset through the same backend service used by the rest of the workbench.",
+      subtitle:
+        "Runs the minimal JSONL dataset through the same backend service used by the rest of the workbench.",
       actions: createElement(Button, {
         variant: "primary",
         size: "sm",
@@ -99,74 +114,87 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         onClick: () => {
           void this.handleRunEvaluation();
         },
-        children: this.state.pendingAction === "eval" ? "Running" : "Run eval"
+        children: this.state.pendingAction === "eval" ? "Running" : "Run eval",
       }),
       children: createElement("div", { className: "flex flex-col gap-4" }, [
         renderInputField({
           label: "Dataset path",
           value: this.state.datasetPath,
           placeholder: MinimalEvalDatasetPath,
-          onChange: (value) => this.setState({ datasetPath: value })
+          onChange: (value) => this.setState({ datasetPath: value }),
         }),
         createElement("div", { className: "grid gap-3 sm:grid-cols-3" }, [
           renderMetaCell("Runs", String(this.state.history.runs.length)),
           renderMetaCell("Awaiting", String(awaitingReviews)),
-          renderMetaCell("Evals", String(this.state.history.evals.length))
-        ])
-      ])
+          renderMetaCell("Evals", String(this.state.history.evals.length)),
+        ]),
+      ]),
     });
   }
 
   private renderListPanel(): HTMLElement {
-    const runItems = this.state.history.runs.map((run) => this.renderListItem({
-      id: run.id,
-      kind: "run",
-      title: run.question,
-      meta: `${run.kind} • ${run.status.replace(/_/g, " ")}`,
-      timestamp: run.updatedAt
-    }));
-    const evalItems = this.state.history.evals.map((evaluation) => this.renderListItem({
-      id: evaluation.id,
-      kind: "eval",
-      title: evaluation.datasetPath,
-      meta: `${evaluation.result.summary.passed}/${evaluation.result.summary.total} passed`,
-      timestamp: evaluation.updatedAt
-    }));
+    const runItems = this.state.history.runs.map((run) =>
+      this.renderListItem({
+        id: run.id,
+        kind: "run",
+        title: run.question,
+        meta: `${run.kind} • ${run.status.replace(/_/g, " ")}`,
+        timestamp: run.updatedAt,
+      }),
+    );
+    const evalItems = this.state.history.evals.map((evaluation) =>
+      this.renderListItem({
+        id: evaluation.id,
+        kind: "eval",
+        title: evaluation.datasetPath,
+        meta: `${evaluation.result.summary.passed}/${evaluation.result.summary.total} passed`,
+        timestamp: evaluation.updatedAt,
+      }),
+    );
 
     return createElement(SectionPanel, {
       title: "History browser",
-      subtitle: "Skill runs, workflow runs and evaluation executions stored in local browser history.",
+      subtitle:
+        "Skill runs, workflow runs and evaluation executions stored in local browser history.",
       children: createElement("div", { className: "flex flex-col gap-4" }, [
         createElement("div", { className: "flex gap-3" }, [
           createElement(Button, {
-            variant: this.state.selectedKind === "run" ? "primary" : "secondary",
+            variant:
+              this.state.selectedKind === "run" ? "primary" : "secondary",
             size: "sm",
             onClick: () => this.selectFirst("run"),
-            children: `Runs ${this.state.history.runs.length}`
+            children: `Runs ${this.state.history.runs.length}`,
           }),
           createElement(Button, {
-            variant: this.state.selectedKind === "eval" ? "primary" : "secondary",
+            variant:
+              this.state.selectedKind === "eval" ? "primary" : "secondary",
             size: "sm",
             onClick: () => this.selectFirst("eval"),
-            children: `Evals ${this.state.history.evals.length}`
-          })
+            children: `Evals ${this.state.history.evals.length}`,
+          }),
         ]),
         this.state.selectedKind === "run"
           ? runItems.length > 0
-            ? createElement("div", { className: "flex flex-col gap-3" }, [runItems])
+            ? createElement("div", { className: "flex flex-col gap-3" }, [
+                runItems,
+              ])
             : createElement(EmptyStatePanel, {
                 icon: "history",
                 title: "No runs stored",
-                description: "Execute the example skill or the workflow in the Workflows screen to populate this list."
+                description:
+                  "Execute the example skill or the workflow in the Workflows screen to populate this list.",
               })
           : evalItems.length > 0
-            ? createElement("div", { className: "flex flex-col gap-3" }, [evalItems])
+            ? createElement("div", { className: "flex flex-col gap-3" }, [
+                evalItems,
+              ])
             : createElement(EmptyStatePanel, {
                 icon: "rule",
                 title: "No evals stored",
-                description: "Run the minimal dataset to record CI-style evaluation results here."
-              })
-      ])
+                description:
+                  "Run the minimal dataset to record CI-style evaluation results here.",
+              }),
+      ]),
     });
   }
 
@@ -185,7 +213,8 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
     return createElement(EmptyStatePanel, {
       icon: "visibility",
       title: "Nothing selected",
-      description: "Choose a stored run or evaluation from the left column to inspect its details."
+      description:
+        "Choose a stored run or evaluation from the left column to inspect its details.",
     });
   }
 
@@ -198,38 +227,87 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         title: run.question,
         subtitle: `${run.skillName} • ${run.sessionId}`,
         actions: createElement(ConfidenceBadge, {
-          confidence: finalResult.confidence
+          confidence: finalResult.confidence,
         }),
         children: createElement("div", { className: "flex flex-col gap-5" }, [
           createElement("div", { className: "grid gap-3 md:grid-cols-3" }, [
             renderMetaCell("Status", run.status.replace(/_/g, " ")),
             renderMetaCell("Trace", finalResult.traceId.slice(0, 8)),
-            renderMetaCell("Updated", formatTimestamp(run.updatedAt))
+            renderMetaCell("Updated", formatTimestamp(run.updatedAt)),
           ]),
-          createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
-            createElement("p", { className: "text-xs uppercase tracking-wide text-text-secondary" }, ["Answer"]),
-            createElement("p", { className: "mt-2 text-sm leading-7 text-white" }, [finalResult.output.answer])
-          ]),
+          createElement(
+            "div",
+            {
+              className:
+                "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4",
+            },
+            [
+              createElement(
+                "p",
+                {
+                  className:
+                    "text-xs uppercase tracking-wide text-text-secondary",
+                },
+                ["Answer"],
+              ),
+              createElement(
+                "p",
+                { className: "mt-2 text-sm leading-7 text-white" },
+                [finalResult.output.answer],
+              ),
+            ],
+          ),
           run.kind === "workflow"
             ? createElement(SectionPanel, {
                 title: "Workflow stages",
-                subtitle: "Planner, retriever, executor and reviewer summaries for this run.",
+                subtitle:
+                  "Planner, retriever, executor and reviewer summaries for this run.",
                 children: createElement(WorkflowStepsList, {
-                  steps: run.result.steps
-                })
+                  steps: run.result.steps,
+                }),
               })
             : "",
           review
-            ? createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4" }, [
-                createElement("div", { className: "flex items-center justify-between gap-3" }, [
-                  createElement("p", { className: "text-sm font-semibold text-white" }, ["Reviewer note"]),
-                  createElement("span", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [review.decision])
-                ]),
-                createElement("p", { className: "mt-2 text-sm leading-6 text-text-secondary" }, [review.reason]),
-                createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [formatTimestamp(review.decidedAt)])
-              ])
-            : ""
-        ])
+            ? createElement(
+                "div",
+                {
+                  className:
+                    "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-4",
+                },
+                [
+                  createElement(
+                    "div",
+                    { className: "flex items-center justify-between gap-3" },
+                    [
+                      createElement(
+                        "p",
+                        { className: "text-sm font-semibold text-white" },
+                        ["Reviewer note"],
+                      ),
+                      createElement(
+                        "span",
+                        {
+                          className:
+                            "text-xs uppercase tracking-wide text-text-secondary",
+                        },
+                        [review.decision],
+                      ),
+                    ],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-2 text-sm leading-6 text-text-secondary" },
+                    [review.reason],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-2 text-xs text-text-secondary" },
+                    [formatTimestamp(review.decidedAt)],
+                  ),
+                ],
+              )
+            : "",
+        ]),
       }),
       createElement(SectionPanel, {
         title: "Evidence report",
@@ -237,33 +315,42 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         children: createElement(EvidenceReportPanel, {
           report: finalResult.evidenceReport,
           activeSourceId: this.state.selectedEvidenceSourceId,
-          onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId })
-        })
-      }),
-      createElement("div", { className: "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" }, [
-        createElement(SectionPanel, {
-          title: "Citations",
-          subtitle: "Retrieved sources and provenance for the selected run.",
-          children: createElement(CitationsList, {
-            citations: finalResult.citations,
-            evidenceSources: finalResult.evidenceReport.retrievedSources,
-            activeSourceId: this.state.selectedEvidenceSourceId,
-            onSourceSelect: (sourceId) => this.setState({ selectedEvidenceSourceId: sourceId }),
-            emptyLabel: "This run did not store citations."
-          })
+          onSourceSelect: (sourceId) =>
+            this.setState({ selectedEvidenceSourceId: sourceId }),
         }),
-        createElement(SectionPanel, {
-          title: "Session memory",
-          subtitle: "Persisted working and episodic items for the same session.",
-          children: createElement(MemoryList, {
-            items: run.memory
-          })
-        })
-      ])
+      }),
+      createElement(
+        "div",
+        { className: "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" },
+        [
+          createElement(SectionPanel, {
+            title: "Citations",
+            subtitle: "Retrieved sources and provenance for the selected run.",
+            children: createElement(CitationsList, {
+              citations: finalResult.citations,
+              evidenceSources: finalResult.evidenceReport.retrievedSources,
+              activeSourceId: this.state.selectedEvidenceSourceId,
+              onSourceSelect: (sourceId) =>
+                this.setState({ selectedEvidenceSourceId: sourceId }),
+              emptyLabel: "This run did not store citations.",
+            }),
+          }),
+          createElement(SectionPanel, {
+            title: "Session memory",
+            subtitle:
+              "Persisted working and episodic items for the same session.",
+            children: createElement(MemoryList, {
+              items: run.memory,
+            }),
+          }),
+        ],
+      ),
     ]);
   }
 
-  private renderEvalDetail(evaluation: WorkbenchEvalHistoryRecord): HTMLElement {
+  private renderEvalDetail(
+    evaluation: WorkbenchEvalHistoryRecord,
+  ): HTMLElement {
     return createElement("div", { className: "flex flex-col gap-6" }, [
       createElement(SectionPanel, {
         title: "Evaluation result",
@@ -273,29 +360,72 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
             renderMetaCell("Total", String(evaluation.result.summary.total)),
             renderMetaCell("Passed", String(evaluation.result.summary.passed)),
             renderMetaCell("Failed", String(evaluation.result.summary.failed)),
-            renderMetaCell("Updated", formatTimestamp(evaluation.updatedAt))
+            renderMetaCell("Updated", formatTimestamp(evaluation.updatedAt)),
           ]),
-          createElement("div", { className: "rounded-lg border border-border-dark bg-background-dark/40 overflow-hidden" }, [
-            createElement("div", { className: "grid grid-cols-[140px_110px_140px_minmax(0,1fr)] border-b border-border-dark px-4 py-3 text-xs uppercase tracking-wide text-text-secondary" }, [
-              createElement("span", {}, ["Case"]),
-              createElement("span", {}, ["Status"]),
-              createElement("span", {}, ["Trace"]),
-              createElement("span", {}, ["Reasons"])
-            ]),
-            evaluation.result.results.map((result) =>
-              createElement("div", {
-                key: `${evaluation.id}-${result.caseId}`,
-                className: "grid grid-cols-[140px_110px_140px_minmax(0,1fr)] gap-3 border-b border-border-dark px-4 py-3 text-sm last:border-b-0"
-              }, [
-                createElement("span", { className: "font-medium text-white" }, [result.caseId]),
-                createElement("span", { className: result.passed ? "text-emerald-300" : "text-rose-300" }, [result.passed ? "passed" : "failed"]),
-                createElement("span", { className: "font-mono text-text-secondary" }, [result.traceId.slice(0, 8)]),
-                createElement("span", { className: "text-text-secondary" }, [result.reasons.length > 0 ? result.reasons.join("; ") : "No issues recorded."])
-              ])
-            )
-          ])
-        ])
-      })
+          createElement(
+            "div",
+            {
+              className:
+                "rounded-lg border border-border-dark bg-background-dark/40 overflow-hidden",
+            },
+            [
+              createElement(
+                "div",
+                {
+                  className:
+                    "grid grid-cols-[140px_110px_140px_minmax(0,1fr)] border-b border-border-dark px-4 py-3 text-xs uppercase tracking-wide text-text-secondary",
+                },
+                [
+                  createElement("span", {}, ["Case"]),
+                  createElement("span", {}, ["Status"]),
+                  createElement("span", {}, ["Trace"]),
+                  createElement("span", {}, ["Reasons"]),
+                ],
+              ),
+              evaluation.result.results.map((result) =>
+                createElement(
+                  "div",
+                  {
+                    key: `${evaluation.id}-${result.caseId}`,
+                    className:
+                      "grid grid-cols-[140px_110px_140px_minmax(0,1fr)] gap-3 border-b border-border-dark px-4 py-3 text-sm last:border-b-0",
+                  },
+                  [
+                    createElement(
+                      "span",
+                      { className: "font-medium text-white" },
+                      [result.caseId],
+                    ),
+                    createElement(
+                      "span",
+                      {
+                        className: result.passed
+                          ? "text-emerald-300"
+                          : "text-rose-300",
+                      },
+                      [result.passed ? "passed" : "failed"],
+                    ),
+                    createElement(
+                      "span",
+                      { className: "font-mono text-text-secondary" },
+                      [result.traceId.slice(0, 8)],
+                    ),
+                    createElement(
+                      "span",
+                      { className: "text-text-secondary" },
+                      [
+                        result.reasons.length > 0
+                          ? result.reasons.join("; ")
+                          : "No issues recorded.",
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ]),
+      }),
     ]);
   }
 
@@ -306,38 +436,65 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
     meta: string;
     timestamp: string;
   }): HTMLElement {
-    const selected = this.state.selectedKind === input.kind && this.state.selectedId === input.id;
+    const selected =
+      this.state.selectedKind === input.kind &&
+      this.state.selectedId === input.id;
 
-    return createElement("button", {
-      className: `rounded-lg border px-3 py-3 text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-border-dark bg-background-dark/40 hover:bg-surface-dark-hover"}`,
-      onClick: () => this.setState({
-        selectedKind: input.kind,
-        selectedId: input.id,
-        selectedEvidenceSourceId: null
-      })
-    }, [
-      createElement("p", { className: "truncate text-sm font-medium text-white" }, [input.title]),
-      createElement("p", { className: "mt-1 text-xs uppercase tracking-wide text-text-secondary" }, [input.meta]),
-      createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [formatTimestamp(input.timestamp)])
-    ]);
+    return createElement(
+      "button",
+      {
+        className: `rounded-lg border px-3 py-3 text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-border-dark bg-background-dark/40 hover:bg-surface-dark-hover"}`,
+        onClick: () =>
+          this.setState({
+            selectedKind: input.kind,
+            selectedId: input.id,
+            selectedEvidenceSourceId: null,
+          }),
+      },
+      [
+        createElement(
+          "p",
+          { className: "truncate text-sm font-medium text-white" },
+          [input.title],
+        ),
+        createElement(
+          "p",
+          {
+            className:
+              "mt-1 text-xs uppercase tracking-wide text-text-secondary",
+          },
+          [input.meta],
+        ),
+        createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [
+          formatTimestamp(input.timestamp),
+        ]),
+      ],
+    );
   }
 
   private async handleRunEvaluation(): Promise<void> {
     if (!this.state.datasetPath.trim()) {
-      this.setState({ errorMessage: "A dataset path is required.", noticeMessage: null });
+      this.setState({
+        errorMessage: "A dataset path is required.",
+        noticeMessage: null,
+      });
       return;
     }
 
-    this.setState({ pendingAction: "eval", errorMessage: null, noticeMessage: null });
+    this.setState({
+      pendingAction: "eval",
+      errorMessage: null,
+      noticeMessage: null,
+    });
 
     try {
       const client = createWorkbenchClient();
       const result = await client.runEvaluation({
-        datasetPath: this.state.datasetPath.trim()
+        datasetPath: this.state.datasetPath.trim(),
       });
       const record = this.historyStore.saveEvalRun({
         datasetPath: this.state.datasetPath.trim(),
-        result
+        result,
       });
       await this.persistWorkbenchHistory();
       const history = this.historyStore.load();
@@ -348,22 +505,26 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         selectedEvidenceSourceId: null,
         pendingAction: null,
         noticeMessage: "Evaluation stored in History.",
-        errorMessage: null
+        errorMessage: null,
       });
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: error instanceof Error ? error.message : "Could not run the evaluation suite.",
-        noticeMessage: null
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "Could not run the evaluation suite.",
+        noticeMessage: null,
       });
     }
   }
 
   private selectFirst(kind: "run" | "eval"): void {
     const history = this.historyStore.load();
-    const selectedId = kind === "run"
-      ? history.runs[0]?.id ?? null
-      : history.evals[0]?.id ?? null;
+    const selectedId =
+      kind === "run"
+        ? (history.runs[0]?.id ?? null)
+        : (history.evals[0]?.id ?? null);
 
     this.setState({
       history,
@@ -371,7 +532,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
       selectedId,
       selectedEvidenceSourceId: null,
       errorMessage: null,
-      noticeMessage: null
+      noticeMessage: null,
     });
   }
 
@@ -385,7 +546,7 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
         history,
         selectedKind: selection.kind,
         selectedId: selection.id,
-        selectedEvidenceSourceId: null
+        selectedEvidenceSourceId: null,
       });
     } catch {
       return;
@@ -394,20 +555,26 @@ export class HistoryScreen extends Component<ComponentProps, HistoryScreenState>
 
   private async persistWorkbenchHistory(): Promise<void> {
     await this.workspaceStateClient.update({
-      workbenchHistory: this.historyStore.load()
+      workbenchHistory: this.historyStore.load(),
     });
   }
 
   private getSelectedRun(): WorkbenchRunHistoryRecord | undefined {
-    return this.state.history.runs.find((run) => run.id === this.state.selectedId);
+    return this.state.history.runs.find(
+      (run) => run.id === this.state.selectedId,
+    );
   }
 
   private getSelectedEval(): WorkbenchEvalHistoryRecord | undefined {
-    return this.state.history.evals.find((evaluation) => evaluation.id === this.state.selectedId);
+    return this.state.history.evals.find(
+      (evaluation) => evaluation.id === this.state.selectedId,
+    );
   }
 }
 
-const pickInitialSelection = (history: WorkbenchHistoryState): {
+const pickInitialSelection = (
+  history: WorkbenchHistoryState,
+): {
   kind: "run" | "eval";
   id: string | null;
 } => {
@@ -415,13 +582,13 @@ const pickInitialSelection = (history: WorkbenchHistoryState): {
   if (runId) {
     return {
       kind: "run",
-      id: runId
+      id: runId,
     };
   }
 
   return {
     kind: "eval",
-    id: history.evals[0]?.id ?? null
+    id: history.evals[0]?.id ?? null,
   };
 };
 

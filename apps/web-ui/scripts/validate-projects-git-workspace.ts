@@ -1,9 +1,16 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
-import { DefaultServerConnection, LocalStorageKey } from "../src/shared/server-config.js";
+import {
+  DefaultServerConnection,
+  LocalStorageKey,
+} from "../src/shared/server-config.js";
 import type { ProjectRecord } from "../src/shared/workbench-types.js";
 import {
   assertBrowserValidationBuildOutput,
@@ -13,7 +20,7 @@ import {
   startPreviewServer,
   stopProcess,
   waitForCondition,
-  waitForHttpReady
+  waitForHttpReady,
 } from "./browser-validation-runtime.js";
 
 const ValidationConfig = {
@@ -26,7 +33,7 @@ const ValidationConfig = {
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
   ViewportWidth: 1440,
-  ViewportHeight: 1600
+  ViewportHeight: 1600,
 } as const;
 
 const RequestPath = {
@@ -43,14 +50,14 @@ const RequestPath = {
   GitBranchesCreate: "/git/branches/create",
   GitBranchesCheckout: "/git/branches/checkout",
   GitBranchesPush: "/git/branches/push",
-  GitBranchesPublish: "/git/branches/publish"
+  GitBranchesPublish: "/git/branches/publish",
 } as const;
 
 const ResponseHeader = {
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
-  ContentType: "Content-Type"
+  ContentType: "Content-Type",
 } as const;
 
 const ValidationText = {
@@ -59,26 +66,34 @@ const ValidationText = {
   StagedDiffButton: "Staged diff (2)",
   UnstagedDiffButton: "Unstaged diff (1)",
   CreateCommit: "Create commit",
-  InvalidCommit: "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
+  InvalidCommit:
+    "Use a Conventional Commit message such as feat(projects): add git workspace panel.",
   BranchCreated: "Branch feature/browser-validation created.",
   BranchSwitched: "Switched to branch feature/browser-validation.",
-  BranchPublished: "Published branch feature/browser-validation to origin/feature/browser-validation.",
-  BranchPushed: "Pushed branch feature/browser-validation to origin/feature/browser-validation.",
-  BranchSynced: "Current branch is already synced with origin/feature/browser-validation.",
+  BranchPublished:
+    "Published branch feature/browser-validation to origin/feature/browser-validation.",
+  BranchPushed:
+    "Pushed branch feature/browser-validation to origin/feature/browser-validation.",
+  BranchSynced:
+    "Current branch is already synced with origin/feature/browser-validation.",
   BulkStageSuccess: "2 files staged.",
   BulkUnstageSuccess: "2 files moved out of the index.",
-  QualityGatesReverted: "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
+  QualityGatesReverted:
+    "Unstaged changes reverted for apps/web-ui/src/shared/quality-gates-client.ts.",
   CommitCreated: "Commit 9f3c2ad1 created.",
   StagedDiffZero: "Staged diff (0)",
   UnstagedDiffZero: "Unstaged diff (0)",
-  StagedDiffMarker: "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
-  ProjectsStateDiffMarker: "diff --git a/apps/web-ui/src/screens/projects-state.ts b/apps/web-ui/src/screens/projects-state.ts",
-  UnstagedDiffMarker: "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts"
+  StagedDiffMarker:
+    "diff --git a/apps/web-ui/src/screens/Projects.ts b/apps/web-ui/src/screens/Projects.ts",
+  ProjectsStateDiffMarker:
+    "diff --git a/apps/web-ui/src/screens/projects-state.ts b/apps/web-ui/src/screens/projects-state.ts",
+  UnstagedDiffMarker:
+    "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts",
 } as const;
 
 const FixtureTimestamp = {
   ProjectCreatedAt: "2026-04-25T08:00:00.000Z",
-  ProjectUpdatedAt: "2026-04-25T08:10:00.000Z"
+  ProjectUpdatedAt: "2026-04-25T08:10:00.000Z",
 } as const;
 
 const FixtureProject: ProjectRecord = {
@@ -86,7 +101,7 @@ const FixtureProject: ProjectRecord = {
   name: "Iteronix",
   rootPath: "D:/projects/Iteronix",
   createdAt: FixtureTimestamp.ProjectCreatedAt,
-  updatedAt: FixtureTimestamp.ProjectUpdatedAt
+  updatedAt: FixtureTimestamp.ProjectUpdatedAt,
 };
 
 const FixtureFilePath = {
@@ -94,16 +109,16 @@ const FixtureFilePath = {
   ProjectsState: "apps/web-ui/src/screens/projects-state.ts",
   QualityGatesClient: "apps/web-ui/src/shared/quality-gates-client.ts",
   GitDetails: "apps/web-ui/src/screens/GitDetails.ts",
-  GitSummary: "apps/web-ui/src/screens/GitSummary.ts"
+  GitSummary: "apps/web-ui/src/screens/GitSummary.ts",
 } as const;
 
 const StubFileStatus = {
   Staged: "staged",
   Unstaged: "unstaged",
-  Untracked: "untracked"
+  Untracked: "untracked",
 } as const;
 
-type StubFileStatus = typeof StubFileStatus[keyof typeof StubFileStatus];
+type StubFileStatus = (typeof StubFileStatus)[keyof typeof StubFileStatus];
 
 const FixtureDiff = {
   ProjectsStaged: [
@@ -112,7 +127,7 @@ const FixtureDiff = {
     "--- a/apps/web-ui/src/screens/Projects.ts",
     "+++ b/apps/web-ui/src/screens/Projects.ts",
     "@@ -12,6 +12,9 @@",
-    "+import { createGitClient } from \"../shared/git-client.js\";"
+    '+import { createGitClient } from "../shared/git-client.js";',
   ].join("\n"),
   ProjectsStateStaged: [
     "diff --git a/apps/web-ui/src/screens/projects-state.ts b/apps/web-ui/src/screens/projects-state.ts",
@@ -120,7 +135,7 @@ const FixtureDiff = {
     "--- a/apps/web-ui/src/screens/projects-state.ts",
     "+++ b/apps/web-ui/src/screens/projects-state.ts",
     "@@ -1,5 +1,12 @@",
-    "+export const readGitSelectionCount = () => 2;"
+    "+export const readGitSelectionCount = () => 2;",
   ].join("\n"),
   GitDetailsStaged: [
     "diff --git a/apps/web-ui/src/screens/GitDetails.ts b/apps/web-ui/src/screens/GitDetails.ts",
@@ -128,7 +143,7 @@ const FixtureDiff = {
     "--- /dev/null",
     "+++ b/apps/web-ui/src/screens/GitDetails.ts",
     "@@ -0,0 +1,5 @@",
-    "+export const GitDetails = \"ready\";"
+    '+export const GitDetails = "ready";',
   ].join("\n"),
   GitSummaryStaged: [
     "diff --git a/apps/web-ui/src/screens/GitSummary.ts b/apps/web-ui/src/screens/GitSummary.ts",
@@ -136,7 +151,7 @@ const FixtureDiff = {
     "--- /dev/null",
     "+++ b/apps/web-ui/src/screens/GitSummary.ts",
     "@@ -0,0 +1,5 @@",
-    "+export const GitSummary = \"ready\";"
+    '+export const GitSummary = "ready";',
   ].join("\n"),
   QualityGatesUnstaged: [
     "diff --git a/apps/web-ui/src/shared/quality-gates-client.ts b/apps/web-ui/src/shared/quality-gates-client.ts",
@@ -144,13 +159,13 @@ const FixtureDiff = {
     "--- a/apps/web-ui/src/shared/quality-gates-client.ts",
     "+++ b/apps/web-ui/src/shared/quality-gates-client.ts",
     "@@ -1,5 +1,8 @@",
-    "+export type QualityGatesClient = {"
-  ].join("\n")
+    "+export type QualityGatesClient = {",
+  ].join("\n"),
 } as const;
 
 const FixtureCommit = {
   hash: "9f3c2ad1",
-  message: "feat(projects): add git workspace panel"
+  message: "feat(projects): add git workspace panel",
 } as const;
 
 type StubState = {
@@ -173,7 +188,9 @@ type StubFile = {
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
-const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
+const runtimeOptions = parseBrowserValidationRuntimeOptions(
+  process.argv.slice(2),
+);
 
 await validateProjectsGitWorkspace();
 
@@ -181,7 +198,7 @@ async function validateProjectsGitWorkspace(): Promise<void> {
   await assertBrowserValidationBuildOutput(buildOutputPath);
   await prepareBrowserValidationDirectory({
     directory: screenshotDirectory,
-    preserveScreenshots: runtimeOptions.preserveScreenshots
+    preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
   const previewServer = startPreviewServer(projectRoot);
@@ -189,39 +206,52 @@ async function validateProjectsGitWorkspace(): Promise<void> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    await waitForHttpReady(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForHttpReady(`${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForHttpReady(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await waitForHttpReady(
+      `${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
     browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox"]
+      args: ["--no-sandbox"],
     });
 
     const page = await browser.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
+      height: ValidationConfig.ViewportHeight,
     });
     await seedBrowserStorage(page);
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ProjectsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.ProjectsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
 
     await waitForPageText(page, ValidationText.ScreenTitle);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "before-open",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
-    await setInputValueByTestId(page, "quality-gates-project-root", FixtureProject.rootPath ?? "");
+    await setInputValueByTestId(
+      page,
+      "quality-gates-project-root",
+      FixtureProject.rootPath ?? "",
+    );
     await clickNamedButton(page, ValidationText.OpenProject);
     await waitForPageTexts(page, [
       FixtureProject.name,
@@ -232,21 +262,25 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       FixtureFilePath.ProjectsState,
       FixtureFilePath.QualityGatesClient,
       FixtureFilePath.GitDetails,
-      FixtureFilePath.GitSummary
+      FixtureFilePath.GitSummary,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-open",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
-    await typeIntoInputByTestId(page, "git-branch-name", "feature/browser-validation");
+    await typeIntoInputByTestId(
+      page,
+      "git-branch-name",
+      "feature/browser-validation",
+    );
     await waitForButtonEnabled(page, "Create branch");
     await clickNamedButton(page, "Create branch");
     await waitForPageTexts(page, [
       ValidationText.BranchCreated,
-      "feature/browser-validation"
+      "feature/browser-validation",
     ]);
     await clickGitBranchAction(page, "feature/browser-validation", "Checkout");
     await waitForPageText(page, ValidationText.BranchSwitched);
@@ -255,20 +289,20 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "after-branch-checkout",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await waitForButtonEnabled(page, "Publish branch");
     await clickNamedButton(page, "Publish branch");
     await waitForPageTexts(page, [
       ValidationText.BranchPublished,
-      "origin/feature/browser-validation"
+      "origin/feature/browser-validation",
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-branch-publish",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await setGitPathSelection(page, FixtureFilePath.GitDetails, true);
@@ -280,26 +314,26 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       "Staged changes",
       FixtureFilePath.GitDetails,
       FixtureFilePath.GitSummary,
-      "Staged diff (4)"
+      "Staged diff (4)",
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-bulk-stage",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await clickGitRowAction(page, FixtureFilePath.Projects, "Focus diff");
     await waitForFocusedPath(page, FixtureFilePath.Projects);
     await waitForDiffOutput(page, {
       includes: [ValidationText.StagedDiffMarker],
-      excludes: [ValidationText.ProjectsStateDiffMarker]
+      excludes: [ValidationText.ProjectsStateDiffMarker],
     });
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-focus-staged-file",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await setGitPathSelection(page, FixtureFilePath.GitDetails, true);
@@ -311,85 +345,95 @@ async function validateProjectsGitWorkspace(): Promise<void> {
       "Untracked files",
       FixtureFilePath.GitDetails,
       FixtureFilePath.GitSummary,
-      "Staged diff (2)"
+      "Staged diff (2)",
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-bulk-unstage",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
-    await clickGitRowAction(page, FixtureFilePath.QualityGatesClient, "Focus diff");
+    await clickGitRowAction(
+      page,
+      FixtureFilePath.QualityGatesClient,
+      "Focus diff",
+    );
     await waitForFocusedPath(page, FixtureFilePath.QualityGatesClient);
     await waitForDiffOutput(page, {
       includes: [ValidationText.UnstagedDiffMarker],
-      excludes: [ValidationText.StagedDiffMarker]
+      excludes: [ValidationText.StagedDiffMarker],
     });
 
     const revertDialog = waitForNextDialog(
       page,
-      readRevertDialogMessage(FixtureFilePath.QualityGatesClient)
+      readRevertDialogMessage(FixtureFilePath.QualityGatesClient),
     );
     await clickGitRowAction(page, FixtureFilePath.QualityGatesClient, "Revert");
     await revertDialog;
     await waitForPageTexts(page, [
       ValidationText.QualityGatesReverted,
-      ValidationText.UnstagedDiffZero
+      ValidationText.UnstagedDiffZero,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-revert",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await clickNamedButton(page, ValidationText.StagedDiffButton);
     await waitForPageTexts(page, [
       ValidationText.StagedDiffMarker,
       ValidationText.ProjectsStateDiffMarker,
-      "Create commit"
+      "Create commit",
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-staged-diff",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await typeIntoInputByTestId(page, "git-commit-message", "ship it");
     await waitForPageText(page, ValidationText.InvalidCommit);
 
-    await typeIntoInputByTestId(page, "git-commit-message", FixtureCommit.message);
+    await typeIntoInputByTestId(
+      page,
+      "git-commit-message",
+      FixtureCommit.message,
+    );
     await waitForButtonEnabled(page, ValidationText.CreateCommit);
     await clickNamedButton(page, ValidationText.CreateCommit);
     await waitForPageTexts(page, [
       ValidationText.CommitCreated,
       ValidationText.StagedDiffZero,
       ValidationText.UnstagedDiffZero,
-      FixtureFilePath.GitDetails
+      FixtureFilePath.GitDetails,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-commit",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
     await waitForButtonEnabled(page, "Push upstream");
     await clickNamedButton(page, "Push upstream");
     await waitForPageTexts(page, [
       ValidationText.BranchPushed,
-      ValidationText.BranchSynced
+      ValidationText.BranchSynced,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-push",
-      artifactName: "projects-git-workspace"
+      artifactName: "projects-git-workspace",
     });
 
-    console.log("Browser validation passed for the Projects git workspace flow.");
+    console.log(
+      "Browser validation passed for the Projects git workspace flow.",
+    );
   } finally {
     if (browser) {
       await browser.close();
@@ -408,9 +452,9 @@ async function startGitWorkspaceStubServer(): Promise<{
     localBranches: ["feature/git-ui", "develop"],
     remoteBranches: ["origin/feature/git-ui", "origin/release/next"],
     trackedUpstreams: {
-      "feature/git-ui": "origin/feature/git-ui"
+      "feature/git-ui": "origin/feature/git-ui",
     },
-    aheadCount: 2
+    aheadCount: 2,
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -431,20 +475,23 @@ async function startGitWorkspaceStubServer(): Promise<{
           }
           resolve();
         });
-      })
+      }),
   };
 }
 
 async function handleStubRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubState
+  state: StubState,
 ): Promise<void> {
-  const requestUrl = new URL(request.url ?? "/", ValidationConfig.StubApiBaseUrl);
+  const requestUrl = new URL(
+    request.url ?? "/",
+    ValidationConfig.StubApiBaseUrl,
+  );
 
   if (requestUrl.pathname === ValidationConfig.StubHealthPath) {
     writeJson(response, 200, {
-      ok: true
+      ok: true,
     });
     return;
   }
@@ -457,133 +504,175 @@ async function handleStubRequest(
 
   if (!isAuthorized(request)) {
     writeJson(response, 401, {
-      message: "Unauthorized"
+      message: "Unauthorized",
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.ProjectOpen) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.ProjectOpen
+  ) {
     await handleProjectOpen(request, response);
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.QualityGatesList) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.QualityGatesList
+  ) {
     writeJson(response, 200, {
-      runs: []
+      runs: [],
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.QualityGatesEvents) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.QualityGatesEvents
+  ) {
     writeJson(response, 200, {
-      events: []
+      events: [],
     });
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitStatus) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitStatus
+  ) {
     await handleGitStatus(request, response, state);
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitDiff) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitDiff
+  ) {
     await handleGitDiff(request, response, state);
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitStage) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitStage
+  ) {
     await handleGitPathMutation(request, response, state, "stage");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitUnstage) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitUnstage
+  ) {
     await handleGitPathMutation(request, response, state, "unstage");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitRevert) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitRevert
+  ) {
     await handleGitPathMutation(request, response, state, "revert");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitCommit) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitCommit
+  ) {
     await handleGitCommit(request, response, state);
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesList) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitBranchesList
+  ) {
     await handleGitBranchesList(request, response, state);
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesCreate) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitBranchesCreate
+  ) {
     await handleGitBranchMutation(request, response, state, "create");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesCheckout) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitBranchesCheckout
+  ) {
     await handleGitBranchMutation(request, response, state, "checkout");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesPublish) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitBranchesPublish
+  ) {
     await handleGitBranchRemoteMutation(request, response, state, "publish");
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === RequestPath.GitBranchesPush) {
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.GitBranchesPush
+  ) {
     await handleGitBranchRemoteMutation(request, response, state, "push");
     return;
   }
 
   writeJson(response, 404, {
-    message: "Not found"
+    message: "Not found",
   });
 }
 
 async function handleProjectOpen(
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const rootPath = readRequiredString(body, "rootPath");
 
   if (rootPath !== FixtureProject.rootPath) {
     writeJson(response, 400, {
-      message: "Unexpected project root"
+      message: "Unexpected project root",
     });
     return;
   }
 
   writeJson(response, 200, {
-    project: FixtureProject
+    project: FixtureProject,
   });
 }
 
 async function handleGitStatus(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubState
+  state: StubState,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
 
   writeJson(response, 200, {
-    repository: createGitRepositoryResponse(state)
+    repository: createGitRepositoryResponse(state),
   });
 }
 
 async function handleGitDiff(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubState
+  state: StubState,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
@@ -591,14 +680,14 @@ async function handleGitDiff(
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
 
   writeJson(response, 200, {
     staged,
-    diff: createGitDiffResponse(state, staged)
+    diff: createGitDiffResponse(state, staged),
   });
 }
 
@@ -606,7 +695,7 @@ async function handleGitPathMutation(
   request: IncomingMessage,
   response: ServerResponse,
   state: StubState,
-  operation: "stage" | "unstage" | "revert"
+  operation: "stage" | "unstage" | "revert",
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
@@ -614,7 +703,7 @@ async function handleGitPathMutation(
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
@@ -631,20 +720,20 @@ async function handleGitPathMutation(
     }
   } catch (error) {
     writeJson(response, 400, {
-      message: error instanceof Error ? error.message : "Invalid git mutation"
+      message: error instanceof Error ? error.message : "Invalid git mutation",
     });
     return;
   }
 
   writeJson(response, 200, {
-    paths
+    paths,
   });
 }
 
 async function handleGitCommit(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubState
+  state: StubState,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
@@ -652,14 +741,14 @@ async function handleGitCommit(
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
 
   if (message !== FixtureCommit.message) {
     writeJson(response, 400, {
-      message: "Unexpected commit message"
+      message: "Unexpected commit message",
     });
     return;
   }
@@ -667,21 +756,21 @@ async function handleGitCommit(
   applyGitCommit(state);
 
   writeJson(response, 201, {
-    commit: FixtureCommit
+    commit: FixtureCommit,
   });
 }
 
 async function handleGitBranchesList(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubState
+  state: StubState,
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
@@ -694,16 +783,16 @@ async function handleGitBranchesList(
         remote: false,
         ...(state.trackedUpstreams[name]
           ? {
-              upstream: state.trackedUpstreams[name]
+              upstream: state.trackedUpstreams[name],
             }
-          : {})
+          : {}),
       })),
       remote: state.remoteBranches.map((name) => ({
         name,
         current: false,
-        remote: true
-      }))
-    }
+        remote: true,
+      })),
+    },
   });
 }
 
@@ -711,14 +800,14 @@ async function handleGitBranchRemoteMutation(
   request: IncomingMessage,
   response: ServerResponse,
   state: StubState,
-  operation: "publish" | "push"
+  operation: "publish" | "push",
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
@@ -735,15 +824,15 @@ async function handleGitBranchRemoteMutation(
     writeJson(response, 201, {
       branch: {
         name: branchName,
-        upstream
-      }
+        upstream,
+      },
     });
     return;
   }
 
   if (!state.trackedUpstreams[branchName]) {
     writeJson(response, 400, {
-      message: "Current branch has no upstream configured."
+      message: "Current branch has no upstream configured.",
     });
     return;
   }
@@ -753,8 +842,8 @@ async function handleGitBranchRemoteMutation(
   writeJson(response, 200, {
     branch: {
       name: branchName,
-      upstream
-    }
+      upstream,
+    },
   });
 }
 
@@ -762,7 +851,7 @@ async function handleGitBranchMutation(
   request: IncomingMessage,
   response: ServerResponse,
   state: StubState,
-  operation: "create" | "checkout"
+  operation: "create" | "checkout",
 ): Promise<void> {
   const body = await readJsonBody(request);
   const projectId = readRequiredString(body, "projectId");
@@ -770,7 +859,7 @@ async function handleGitBranchMutation(
 
   if (projectId !== FixtureProject.id) {
     writeJson(response, 400, {
-      message: "Unexpected project id"
+      message: "Unexpected project id",
     });
     return;
   }
@@ -782,15 +871,15 @@ async function handleGitBranchMutation(
 
     writeJson(response, 201, {
       branch: {
-        name: branchName
-      }
+        name: branchName,
+      },
     });
     return;
   }
 
   if (!state.localBranches.includes(branchName)) {
     writeJson(response, 400, {
-      message: "Unexpected branch"
+      message: "Unexpected branch",
     });
     return;
   }
@@ -799,8 +888,8 @@ async function handleGitBranchMutation(
 
   writeJson(response, 200, {
     branch: {
-      name: branchName
-    }
+      name: branchName,
+    },
   });
 }
 
@@ -810,32 +899,32 @@ function createInitialStubFiles(): Record<string, StubFile> {
       path: FixtureFilePath.Projects,
       tracked: true,
       status: StubFileStatus.Staged,
-      stagedDiff: FixtureDiff.ProjectsStaged
+      stagedDiff: FixtureDiff.ProjectsStaged,
     },
     [FixtureFilePath.ProjectsState]: {
       path: FixtureFilePath.ProjectsState,
       tracked: true,
       status: StubFileStatus.Staged,
-      stagedDiff: FixtureDiff.ProjectsStateStaged
+      stagedDiff: FixtureDiff.ProjectsStateStaged,
     },
     [FixtureFilePath.QualityGatesClient]: {
       path: FixtureFilePath.QualityGatesClient,
       tracked: true,
       status: StubFileStatus.Unstaged,
-      unstagedDiff: FixtureDiff.QualityGatesUnstaged
+      unstagedDiff: FixtureDiff.QualityGatesUnstaged,
     },
     [FixtureFilePath.GitDetails]: {
       path: FixtureFilePath.GitDetails,
       tracked: false,
       status: StubFileStatus.Untracked,
-      stagedDiff: FixtureDiff.GitDetailsStaged
+      stagedDiff: FixtureDiff.GitDetailsStaged,
     },
     [FixtureFilePath.GitSummary]: {
       path: FixtureFilePath.GitSummary,
       tracked: false,
       status: StubFileStatus.Untracked,
-      stagedDiff: FixtureDiff.GitSummaryStaged
-    }
+      stagedDiff: FixtureDiff.GitSummaryStaged,
+    },
   };
 }
 
@@ -868,7 +957,7 @@ function createGitRepositoryResponse(state: StubState): {
     branch: state.currentBranch,
     ...(state.trackedUpstreams[state.currentBranch]
       ? {
-          upstream: state.trackedUpstreams[state.currentBranch]
+          upstream: state.trackedUpstreams[state.currentBranch],
         }
       : {}),
     ahead: state.aheadCount,
@@ -877,7 +966,7 @@ function createGitRepositoryResponse(state: StubState): {
     stagedCount,
     unstagedCount,
     untrackedCount,
-    entries
+    entries,
   };
 }
 
@@ -896,7 +985,7 @@ function createGitStatusEntry(file: StubFile): {
       workingTreeStatus: " ",
       staged: true,
       unstaged: false,
-      untracked: false
+      untracked: false,
     };
   }
 
@@ -907,7 +996,7 @@ function createGitStatusEntry(file: StubFile): {
       workingTreeStatus: "M",
       staged: false,
       unstaged: true,
-      untracked: false
+      untracked: false,
     };
   }
 
@@ -918,24 +1007,23 @@ function createGitStatusEntry(file: StubFile): {
       workingTreeStatus: "?",
       staged: false,
       unstaged: false,
-      untracked: true
+      untracked: true,
     };
   }
 
   return null;
 }
 
-function createGitDiffResponse(
-  state: StubState,
-  staged: boolean
-): string {
+function createGitDiffResponse(state: StubState, staged: boolean): string {
   const diffs = Object.values(state.files)
     .filter((file) =>
       staged
-        ? file.status === StubFileStatus.Staged && typeof file.stagedDiff === "string"
-        : file.status === StubFileStatus.Unstaged && typeof file.unstagedDiff === "string"
+        ? file.status === StubFileStatus.Staged &&
+          typeof file.stagedDiff === "string"
+        : file.status === StubFileStatus.Unstaged &&
+          typeof file.unstagedDiff === "string",
     )
-    .map((file) => staged ? file.stagedDiff : file.unstagedDiff)
+    .map((file) => (staged ? file.stagedDiff : file.unstagedDiff))
     .filter((diff): diff is string => typeof diff === "string");
 
   return diffs.join("\n\n");
@@ -945,7 +1033,7 @@ function applyGitStage(state: StubState, path: string): void {
   const file = readStubFile(state, path);
   state.files[path] = {
     ...file,
-    status: StubFileStatus.Staged
+    status: StubFileStatus.Staged,
   };
 }
 
@@ -953,7 +1041,7 @@ function applyGitUnstage(state: StubState, path: string): void {
   const file = readStubFile(state, path);
   state.files[path] = {
     ...file,
-    status: file.tracked ? StubFileStatus.Unstaged : StubFileStatus.Untracked
+    status: file.tracked ? StubFileStatus.Unstaged : StubFileStatus.Untracked,
   };
 }
 
@@ -986,7 +1074,10 @@ function readStubFile(state: StubState, path: string): StubFile {
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
-  return request.headers.authorization === `Bearer ${DefaultServerConnection.authToken}`;
+  return (
+    request.headers.authorization ===
+    `Bearer ${DefaultServerConnection.authToken}`
+  );
 }
 
 async function seedBrowserStorage(page: Page): Promise<void> {
@@ -1002,39 +1093,40 @@ async function seedBrowserStorage(page: Page): Promise<void> {
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: DefaultServerConnection.authToken,
-      keys: LocalStorageKey
-    }
+      keys: LocalStorageKey,
+    },
   );
 }
 
 async function setInputValueByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const updated = await page.evaluate(
-    (input: {
-      testId: string;
-      value: string;
-    }) => {
+    (input: { testId: string; value: string }) => {
       const element = document.querySelector(`[data-testid="${input.testId}"]`);
       if (!(element instanceof HTMLInputElement)) {
         return false;
       }
 
       element.value = input.value;
-      element.dispatchEvent(new Event("input", {
-        bubbles: true
-      }));
-      element.dispatchEvent(new Event("change", {
-        bubbles: true
-      }));
+      element.dispatchEvent(
+        new Event("input", {
+          bubbles: true,
+        }),
+      );
+      element.dispatchEvent(
+        new Event("change", {
+          bubbles: true,
+        }),
+      );
       return true;
     },
     {
       testId,
-      value
-    }
+      value,
+    },
   );
 
   if (!updated) {
@@ -1045,12 +1137,12 @@ async function setInputValueByTestId(
 async function typeIntoInputByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const selector = `[data-testid="${testId}"]`;
   await page.waitForSelector(selector);
   await page.click(selector, {
-    clickCount: 3
+    clickCount: 3,
   });
   await page.keyboard.press("Backspace");
   await page.type(selector, value);
@@ -1059,7 +1151,7 @@ async function typeIntoInputByTestId(
 async function clickNamedButton(page: Page, label: string): Promise<void> {
   const clicked = await page.evaluate((buttonLabel: string) => {
     const button = Array.from(document.querySelectorAll("button")).find(
-      (element) => element.textContent?.trim() === buttonLabel
+      (element) => element.textContent?.trim() === buttonLabel,
     );
 
     if (!(button instanceof HTMLButtonElement)) {
@@ -1078,30 +1170,27 @@ async function clickNamedButton(page: Page, label: string): Promise<void> {
 async function clickGitRowAction(
   page: Page,
   path: string,
-  label: string
+  label: string,
 ): Promise<void> {
   const clicked = await page.evaluate(
-    (input: {
-      path: string;
-      label: string;
-    }) => {
+    (input: { path: string; label: string }) => {
       const container = Array.from(document.querySelectorAll("div"))
         .filter((element) => {
           const text = element.textContent ?? "";
           return (
             text.includes(input.path) &&
             Array.from(element.querySelectorAll("button")).some(
-              (button) => button.textContent?.trim() === input.label
+              (button) => button.textContent?.trim() === input.label,
             )
           );
         })
         .sort(
           (left, right) =>
-            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0),
         )[0];
       const button = container
         ? Array.from(container.querySelectorAll("button")).find(
-            (element) => element.textContent?.trim() === input.label
+            (element) => element.textContent?.trim() === input.label,
           )
         : undefined;
 
@@ -1114,8 +1203,8 @@ async function clickGitRowAction(
     },
     {
       path,
-      label
-    }
+      label,
+    },
   );
 
   if (!clicked) {
@@ -1126,30 +1215,27 @@ async function clickGitRowAction(
 async function clickGitBranchAction(
   page: Page,
   branchName: string,
-  label: string
+  label: string,
 ): Promise<void> {
   const clicked = await page.evaluate(
-    (input: {
-      branchName: string;
-      label: string;
-    }) => {
+    (input: { branchName: string; label: string }) => {
       const container = Array.from(document.querySelectorAll("div"))
         .filter((element) => {
           const text = element.textContent ?? "";
           return (
             text.includes(input.branchName) &&
             Array.from(element.querySelectorAll("button")).some(
-              (button) => button.textContent?.trim() === input.label
+              (button) => button.textContent?.trim() === input.label,
             )
           );
         })
         .sort(
           (left, right) =>
-            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
+            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0),
         )[0];
       const button = container
         ? Array.from(container.querySelectorAll("button")).find(
-            (element) => element.textContent?.trim() === input.label
+            (element) => element.textContent?.trim() === input.label,
           )
         : undefined;
 
@@ -1162,8 +1248,8 @@ async function clickGitBranchAction(
     },
     {
       branchName,
-      label
-    }
+      label,
+    },
   );
 
   if (!clicked) {
@@ -1174,46 +1260,53 @@ async function clickGitBranchAction(
 async function setGitPathSelection(
   page: Page,
   path: string,
-  selected: boolean
+  selected: boolean,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const result = await page.evaluate((input: {
-      path: string;
-      selected: boolean;
-    }) => {
-      const container = Array.from(document.querySelectorAll("div"))
-        .filter((element) => {
-          const text = element.textContent ?? "";
-          return text.includes(input.path);
-        })
-        .filter((element) =>
-          Array.from(element.querySelectorAll('input[type="checkbox"]')).length > 0
-        )
-        .sort(
-          (left, right) =>
-            (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0)
-        )[0];
-      const checkbox = container?.querySelector('input[type="checkbox"]');
-      if (!(checkbox instanceof HTMLInputElement)) {
-        return false;
-      }
+  await waitForCondition(
+    async () => {
+      const result = await page.evaluate(
+        (input: { path: string; selected: boolean }) => {
+          const container = Array.from(document.querySelectorAll("div"))
+            .filter((element) => {
+              const text = element.textContent ?? "";
+              return text.includes(input.path);
+            })
+            .filter(
+              (element) =>
+                Array.from(element.querySelectorAll('input[type="checkbox"]'))
+                  .length > 0,
+            )
+            .sort(
+              (left, right) =>
+                (left.textContent?.length ?? 0) -
+                (right.textContent?.length ?? 0),
+            )[0];
+          const checkbox = container?.querySelector('input[type="checkbox"]');
+          if (!(checkbox instanceof HTMLInputElement)) {
+            return false;
+          }
 
-      if (checkbox.checked === input.selected) {
-        return true;
-      }
+          if (checkbox.checked === input.selected) {
+            return true;
+          }
 
-      checkbox.click();
-      return checkbox.checked === input.selected;
-    }, {
-      path,
-      selected
-    });
+          checkbox.click();
+          return checkbox.checked === input.selected;
+        },
+        {
+          path,
+          selected,
+        },
+      );
 
-    return result;
-  }, `git selection ${selected ? "enable" : "disable"} for ${path}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return result;
+    },
+    `git selection ${selected ? "enable" : "disable"} for ${path}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 function waitForNextDialog(page: Page, expectedMessage: string): Promise<void> {
@@ -1237,65 +1330,98 @@ function waitForNextDialog(page: Page, expectedMessage: string): Promise<void> {
 }
 
 async function waitForPageText(page: Page, text: string): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return bodyText.includes(text);
-  }, `page text "${text}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return bodyText.includes(text);
+    },
+    `page text "${text}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForPageTexts(
   page: Page,
-  expectedTexts: ReadonlyArray<string>
+  expectedTexts: ReadonlyArray<string>,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return expectedTexts.every((text) => bodyText.includes(text));
-  }, `page texts "${expectedTexts.join(", ")}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return expectedTexts.every((text) => bodyText.includes(text));
+    },
+    `page texts "${expectedTexts.join(", ")}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForButtonEnabled(page: Page, label: string): Promise<void> {
-  await waitForCondition(async () => {
-    return page.evaluate((buttonLabel: string) => {
-      const button = Array.from(document.querySelectorAll("button")).find(
-        (element) => element.textContent?.trim() === buttonLabel
-      );
+  await waitForCondition(
+    async () => {
+      return page.evaluate((buttonLabel: string) => {
+        const button = Array.from(document.querySelectorAll("button")).find(
+          (element) => element.textContent?.trim() === buttonLabel,
+        );
 
-      return button instanceof HTMLButtonElement && button.disabled === false;
-    }, label);
-  }, `button "${label}" enabled`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+        return button instanceof HTMLButtonElement && button.disabled === false;
+      }, label);
+    },
+    `button "${label}" enabled`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForFocusedPath(page: Page, path: string): Promise<void> {
-  await waitForCondition(async () => {
-    return page.evaluate((expectedPath: string) => {
-      const element = document.querySelector('[data-testid="git-focused-path"]');
-      return element instanceof HTMLElement && element.innerText.includes(expectedPath);
-    }, path);
-  }, `focused path "${path}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      return page.evaluate((expectedPath: string) => {
+        const element = document.querySelector(
+          '[data-testid="git-focused-path"]',
+        );
+        return (
+          element instanceof HTMLElement &&
+          element.innerText.includes(expectedPath)
+        );
+      }, path);
+    },
+    `focused path "${path}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForCurrentBranch(page: Page, branchName: string): Promise<void> {
-  await waitForCondition(async () => {
-    return page.evaluate((expectedBranch: string) => {
-      const element = document.querySelector('[data-testid="git-current-branch"]');
-      return element instanceof HTMLElement && element.innerText.includes(expectedBranch);
-    }, branchName);
-  }, `current branch "${branchName}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForCurrentBranch(
+  page: Page,
+  branchName: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      return page.evaluate((expectedBranch: string) => {
+        const element = document.querySelector(
+          '[data-testid="git-current-branch"]',
+        );
+        return (
+          element instanceof HTMLElement &&
+          element.innerText.includes(expectedBranch)
+        );
+      }, branchName);
+    },
+    `current branch "${branchName}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForDiffOutput(
@@ -1303,28 +1429,37 @@ async function waitForDiffOutput(
   input: {
     includes: ReadonlyArray<string>;
     excludes: ReadonlyArray<string>;
-  }
+  },
 ): Promise<void> {
-  await waitForCondition(async () => {
-    return page.evaluate((expected: {
-      includes: ReadonlyArray<string>;
-      excludes: ReadonlyArray<string>;
-    }) => {
-      const element = document.querySelector('[data-testid="git-diff-output"]');
-      if (!(element instanceof HTMLElement)) {
-        return false;
-      }
+  await waitForCondition(
+    async () => {
+      return page.evaluate(
+        (expected: {
+          includes: ReadonlyArray<string>;
+          excludes: ReadonlyArray<string>;
+        }) => {
+          const element = document.querySelector(
+            '[data-testid="git-diff-output"]',
+          );
+          if (!(element instanceof HTMLElement)) {
+            return false;
+          }
 
-      const text = element.innerText;
-      return (
-        expected.includes.every((value) => text.includes(value)) &&
-        expected.excludes.every((value) => !text.includes(value))
+          const text = element.innerText;
+          return (
+            expected.includes.every((value) => text.includes(value)) &&
+            expected.excludes.every((value) => !text.includes(value))
+          );
+        },
+        input,
       );
-    }, input);
-  }, `diff output ${input.includes.join(", ")}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+    },
+    `diff output ${input.includes.join(", ")}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -1416,11 +1551,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function writeJson(
   response: ServerResponse,
   statusCode: number,
-  value: Readonly<Record<string, unknown>>
+  value: Readonly<Record<string, unknown>>,
 ): void {
   response.writeHead(statusCode, {
     ...createCorsHeaders(),
-    [ResponseHeader.ContentType]: "application/json"
+    [ResponseHeader.ContentType]: "application/json",
   });
   response.end(JSON.stringify(value));
 }
@@ -1429,6 +1564,6 @@ function createCorsHeaders(): Record<string, string> {
   return {
     [ResponseHeader.AllowOrigin]: "*",
     [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
-    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS"
+    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

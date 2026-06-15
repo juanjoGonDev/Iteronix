@@ -5,7 +5,7 @@ import {
   createProjectSessionStorage,
   readActiveProjectSessionLabel,
   readProjectSession,
-  writeProjectSession
+  writeProjectSession,
 } from "./project-session.js";
 
 describe("project session storage", () => {
@@ -16,21 +16,21 @@ describe("project session storage", () => {
     writeProjectSession(
       {
         projectRootPath: "D:/projects/Iteronix",
-        projectName: "Iteronix"
+        projectName: "Iteronix",
       },
-      storage
+      storage,
     );
     session.saveRecentProject({
       rootPath: "D:/projects/Iteronix",
-      name: "Iteronix"
+      name: "Iteronix",
     });
     session.saveRecentProject({
       rootPath: "D:/projects/Another",
-      name: "Another"
+      name: "Another",
     });
     session.saveRecentProject({
       rootPath: "D:/projects/Iteronix",
-      name: "Iteronix"
+      name: "Iteronix",
     });
 
     const persisted = readProjectSession(storage);
@@ -39,12 +39,12 @@ describe("project session storage", () => {
     expect(persisted.recentProjects).toEqual([
       {
         rootPath: "D:/projects/Iteronix",
-        name: "Iteronix"
+        name: "Iteronix",
       },
       {
         rootPath: "D:/projects/Another",
-        name: "Another"
-      }
+        name: "Another",
+      },
     ]);
   });
 
@@ -55,13 +55,13 @@ describe("project session storage", () => {
     writeProjectSession(
       {
         projectRootPath: "",
-        projectName: "Workflow Lab"
+        projectName: "Workflow Lab",
       },
-      storage
+      storage,
     );
     session.saveRecentProject({
       rootPath: null,
-      name: "Workflow Lab"
+      name: "Workflow Lab",
     });
 
     expect(readProjectSession(storage)).toEqual({
@@ -70,9 +70,9 @@ describe("project session storage", () => {
       recentProjects: [
         {
           rootPath: null,
-          name: "Workflow Lab"
-        }
-      ]
+          name: "Workflow Lab",
+        },
+      ],
     });
   });
 
@@ -82,7 +82,7 @@ describe("project session storage", () => {
 
     session.saveRecentProject({
       rootPath: "D:/projects/Iteronix",
-      name: "Iteronix"
+      name: "Iteronix",
     });
     writeProjectSession(
       {
@@ -91,11 +91,11 @@ describe("project session storage", () => {
         recentProjects: [
           {
             rootPath: "D:/projects/Iteronix",
-            name: "Iteronix"
-          }
-        ]
+            name: "Iteronix",
+          },
+        ],
       },
-      storage
+      storage,
     );
 
     clearProjectSession(storage);
@@ -106,9 +106,9 @@ describe("project session storage", () => {
       recentProjects: [
         {
           rootPath: "D:/projects/Iteronix",
-          name: "Iteronix"
-        }
-      ]
+          name: "Iteronix",
+        },
+      ],
     });
   });
 
@@ -124,17 +124,17 @@ describe("project session storage", () => {
         dispatchEvent: (event: Event) => {
           dispatched.push(event.type);
           return true;
-        }
-      }
+        },
+      },
     });
 
     try {
       writeProjectSession(
         {
           projectRootPath: "D:/projects/Iteronix",
-          projectName: "Iteronix"
+          projectName: "Iteronix",
         },
-        storage
+        storage,
       );
     } finally {
       if (originalWindow === undefined) {
@@ -142,7 +142,7 @@ describe("project session storage", () => {
       } else {
         Object.defineProperty(globalThis, "window", {
           configurable: true,
-          value: originalWindow
+          value: originalWindow,
         });
       }
     }
@@ -155,16 +155,16 @@ describe("project session storage", () => {
       readActiveProjectSessionLabel({
         projectRootPath: "D:\\projects\\Iteronix",
         projectName: "",
-        recentProjects: []
-      })
+        recentProjects: [],
+      }),
     ).toBe("Iteronix");
 
     expect(
       readActiveProjectSessionLabel({
         projectRootPath: "D:\\projects\\Iteronix",
         projectName: "Workbench",
-        recentProjects: []
-      })
+        recentProjects: [],
+      }),
     ).toBe("Workbench");
   });
 });
@@ -186,6 +186,6 @@ const createMemoryStorage = (): Storage => {
     },
     setItem: (key: string, value: string) => {
       values.set(key, value);
-    }
+    },
   };
 };

@@ -11,8 +11,8 @@ const child = spawn(
   ["--watch", "../../dist/apps/desktop-main/src/index.js"],
   {
     stdio: "inherit",
-    env
-  }
+    env,
+  },
 );
 
 child.on("exit", (code) => {

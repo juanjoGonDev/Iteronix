@@ -4,11 +4,11 @@ import { randomUUID } from "node:crypto";
 export const MemoryRecordKind = {
   Working: "working",
   Episodic: "episodic",
-  Semantic: "semantic"
+  Semantic: "semantic",
 } as const;
 
 export type MemoryRecordKind =
-  typeof MemoryRecordKind[keyof typeof MemoryRecordKind];
+  (typeof MemoryRecordKind)[keyof typeof MemoryRecordKind];
 
 export type MemoryRecord = {
   id: string;
@@ -88,7 +88,7 @@ export const createMemoryManager = (input: {
       createdAt,
       expiresAt: createExpiry(createdAt, request.ttlSeconds),
       pii: false,
-      tags: request.tags ?? []
+      tags: request.tags ?? [],
     });
     await input.store.put(record);
     return record;
@@ -109,7 +109,7 @@ export const createMemoryManager = (input: {
       content: request.content,
       createdAt: request.createdAt ?? now().toISOString(),
       pii: request.pii ?? false,
-      tags: request.tags ?? []
+      tags: request.tags ?? [],
     });
     await input.store.put(record);
     return record;
@@ -125,7 +125,7 @@ export const createMemoryManager = (input: {
       content: request.content,
       createdAt: request.createdAt ?? now().toISOString(),
       pii: false,
-      tags: request.tags ?? []
+      tags: request.tags ?? [],
     });
     await input.store.put(record);
     return record;
@@ -146,12 +146,12 @@ export const createMemoryManager = (input: {
       .map((record) => applyPiiMode(record, piiMode))
       .filter(
         (
-          record
+          record,
         ): record is {
           record: MemoryRecord;
           score: number;
           redacted: boolean;
-        } => record !== undefined
+        } => record !== undefined,
       )
       .slice(0, request.limit);
 
@@ -159,8 +159,8 @@ export const createMemoryManager = (input: {
       ...record,
       score,
       metadata: {
-        redacted
-      }
+        redacted,
+      },
     }));
   };
 
@@ -168,7 +168,7 @@ export const createMemoryManager = (input: {
     rememberWorking,
     rememberEpisodic,
     rememberSemantic,
-    search
+    search,
   };
 };
 
@@ -183,12 +183,12 @@ export const createInMemoryMemoryStore = (): MemoryStorePort => {
 
   return {
     put,
-    list
+    list,
   };
 };
 
 export const createFileMemoryStore = async (
-  baseDir: string
+  baseDir: string,
 ): Promise<MemoryStorePort> => {
   const filePath = `${baseDir}/memory.json`;
   await mkdir(baseDir, { recursive: true });
@@ -205,7 +205,7 @@ export const createFileMemoryStore = async (
 
   return {
     put,
-    list
+    list,
   };
 };
 
@@ -228,10 +228,14 @@ const filterRecords = (
     sessionId?: string | undefined;
     kinds?: ReadonlyArray<MemoryRecordKind> | undefined;
   },
-  now: Date
+  now: Date,
 ): ReadonlyArray<MemoryRecord> =>
   records.filter((record) => {
-    if (request.sessionId && record.sessionId && record.sessionId !== request.sessionId) {
+    if (
+      request.sessionId &&
+      record.sessionId &&
+      record.sessionId !== request.sessionId
+    ) {
       return false;
     }
 
@@ -239,7 +243,10 @@ const filterRecords = (
       return false;
     }
 
-    if (record.expiresAt && new Date(record.expiresAt).getTime() <= now.getTime()) {
+    if (
+      record.expiresAt &&
+      new Date(record.expiresAt).getTime() <= now.getTime()
+    ) {
       return false;
     }
 
@@ -247,7 +254,7 @@ const filterRecords = (
   });
 
 const deduplicateRecords = (
-  records: ReadonlyArray<MemoryRecord>
+  records: ReadonlyArray<MemoryRecord>,
 ): ReadonlyArray<MemoryRecord> => {
   const seen = new Set<string>();
   const deduplicated: MemoryRecord[] = [];
@@ -268,18 +275,18 @@ const deduplicateRecords = (
 const rankRecords = (
   records: ReadonlyArray<MemoryRecord>,
   query: string,
-  now: Date
+  now: Date,
 ): ReadonlyArray<{ record: MemoryRecord; score: number }> =>
   [...records]
     .map((record) => ({
       record,
-      score: computeRelevanceScore(record, query, now)
+      score: computeRelevanceScore(record, query, now),
     }))
     .sort((left, right) => right.score - left.score);
 
 const applyPiiMode = (
   input: { record: MemoryRecord; score: number },
-  piiMode: "allow" | "redact" | "drop"
+  piiMode: "allow" | "redact" | "drop",
 ):
   | {
       record: MemoryRecord;
@@ -291,7 +298,7 @@ const applyPiiMode = (
     return {
       record: input.record,
       score: input.score,
-      redacted: false
+      redacted: false,
     };
   }
 
@@ -302,10 +309,10 @@ const applyPiiMode = (
   return {
     record: {
       ...input.record,
-      content: redactPii(input.record.content)
+      content: redactPii(input.record.content),
     },
     score: input.score,
-    redacted: true
+    redacted: true,
   };
 };
 
@@ -327,32 +334,34 @@ const createMemoryRecord = (input: {
   createdAt: input.createdAt,
   expiresAt: input.expiresAt,
   pii: input.pii,
-  tags: input.tags
+  tags: input.tags,
 });
 
 const createExpiry = (
   createdAt: string,
-  ttlSeconds: number | undefined
+  ttlSeconds: number | undefined,
 ): string | undefined => {
   if (ttlSeconds === undefined) {
     return undefined;
   }
 
-  return new Date(new Date(createdAt).getTime() + ttlSeconds * 1000).toISOString();
+  return new Date(
+    new Date(createdAt).getTime() + ttlSeconds * 1000,
+  ).toISOString();
 };
 
 const sortByRecency = (
-  records: ReadonlyArray<MemoryRecord>
+  records: ReadonlyArray<MemoryRecord>,
 ): ReadonlyArray<MemoryRecord> =>
   [...records].sort(
     (left, right) =>
-      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
 
 const computeRelevanceScore = (
   record: MemoryRecord,
   query: string,
-  now: Date
+  now: Date,
 ): number => {
   const overlap = computeTokenOverlap(record.content, query);
   const ageMinutes =
@@ -387,7 +396,7 @@ const tokenize = (value: string): Set<string> =>
     value
       .toLowerCase()
       .split(/[^a-z0-9]+/i)
-      .filter((token) => token.length > 0)
+      .filter((token) => token.length > 0),
   );
 
 const normalizeText = (value: string): string =>

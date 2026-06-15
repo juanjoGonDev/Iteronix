@@ -7,11 +7,11 @@ export const JsonSchemaType = {
   Boolean: "boolean",
   Object: "object",
   Array: "array",
-  Null: "null"
+  Null: "null",
 } as const;
 
 export type JsonSchemaType =
-  typeof JsonSchemaType[keyof typeof JsonSchemaType];
+  (typeof JsonSchemaType)[keyof typeof JsonSchemaType];
 
 export type JsonSchema = {
   $id?: string;
@@ -46,13 +46,11 @@ export type JsonSchemaValidationIssue = {
 export const JsonSchemaValidationErrorCode = {
   InvalidSchema: "invalid_schema",
   ValidationFailed: "validation_failed",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type JsonSchemaValidationErrorCode =
-  typeof JsonSchemaValidationErrorCode[
-    keyof typeof JsonSchemaValidationErrorCode
-  ];
+  (typeof JsonSchemaValidationErrorCode)[keyof typeof JsonSchemaValidationErrorCode];
 
 export type JsonSchemaValidationError = {
   code: JsonSchemaValidationErrorCode;
@@ -64,6 +62,6 @@ export type JsonSchemaValidationError = {
 export type JsonSchemaValidatorPort = {
   validate: <T>(
     schema: JsonSchema,
-    data: unknown
+    data: unknown,
   ) => Promise<Result<T, JsonSchemaValidationError>>;
 };

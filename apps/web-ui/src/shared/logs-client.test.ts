@@ -10,9 +10,9 @@ describe("logs client", () => {
           timestamp: "2026-06-05T08:00:00.000Z",
           level: ServerLogLevel.Error,
           message: "save failed",
-          runId: "run-1"
-        }
-      ]
+          runId: "run-1",
+        },
+      ],
     });
 
     expect(parsed).toEqual([
@@ -21,12 +21,14 @@ describe("logs client", () => {
         timestamp: "2026-06-05T08:00:00.000Z",
         level: ServerLogLevel.Error,
         message: "save failed",
-        runId: "run-1"
-      }
+        runId: "run-1",
+      },
     ]);
   });
 
   it("rejects invalid payloads", () => {
-    expect(() => parseLogsQueryResponse({ logs: [{}] })).toThrowError("Invalid serverLogEntry.id");
+    expect(() => parseLogsQueryResponse({ logs: [{}] })).toThrowError(
+      "Invalid serverLogEntry.id",
+    );
   });
 });

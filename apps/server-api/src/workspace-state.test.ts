@@ -2,7 +2,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHistoryStore, HistoryEventType, HistoryRunStatus } from "./history";
+import {
+  createHistoryStore,
+  HistoryEventType,
+  HistoryRunStatus,
+} from "./history";
 import { createKanbanStore } from "./kanban";
 import { createProjectStore } from "./projects";
 import { createProviderStore } from "./providers";
@@ -12,12 +16,12 @@ import {
   WorkflowExecutionStatus,
   WorkflowNodeKind,
   WorkflowRecordStatus,
-  WorkflowTriggerKind
+  WorkflowTriggerKind,
 } from "../../../packages/shared/src/workflows";
 import {
   WorkspaceStateVersion,
   createDefaultWorkspaceState,
-  createFileWorkspaceStateStore
+  createFileWorkspaceStateStore,
 } from "./workspace-state";
 
 const tempRoots: string[] = [];
@@ -27,9 +31,9 @@ afterEach(async () => {
     tempRoots.splice(0).map(async (path) => {
       await rm(path, {
         recursive: true,
-        force: true
+        force: true,
       });
-    })
+    }),
   );
 });
 
@@ -60,8 +64,8 @@ describe("workspace state persistence", () => {
           name: "Iteronix",
           rootPath: "D:/projects/Iteronix",
           createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
       ],
       settings: {
         ...initial.settings,
@@ -69,21 +73,21 @@ describe("workspace state persistence", () => {
         workflowLimits: {
           infiniteLoops: true,
           maxLoops: 75,
-          externalCalls: false
+          externalCalls: false,
         },
         serverConnection: {
           serverUrl: "https://server.example.com",
-          authToken: "server-token"
-        }
+          authToken: "server-token",
+        },
       },
       workbenchHistory: {
         runs: [
           {
             id: "run-1",
-            kind: "skill"
-          }
+            kind: "skill",
+          },
         ],
-        evals: []
+        evals: [],
       },
       workflows: {
         definitions: [
@@ -100,21 +104,21 @@ describe("workspace state persistence", () => {
             trigger: {
               kind: WorkflowTriggerKind.Manual,
               enabled: true,
-              config: {}
+              config: {},
             },
             viewport: {
               x: 0,
               y: 0,
-              zoom: 1
+              zoom: 1,
             },
             executionPolicy: {
               maxNodeRetries: 1,
-              allowManualCheckpointResume: true
+              allowManualCheckpointResume: true,
             },
             defaultContextPolicy: {
               language: "en",
               carryMessagesLimit: 8,
-              carryArtifactLimit: 8
+              carryArtifactLimit: 8,
             },
             tags: [],
             nodes: [
@@ -124,20 +128,20 @@ describe("workspace state persistence", () => {
                 label: "Prompt",
                 position: {
                   x: 0,
-                  y: 0
+                  y: 0,
                 },
                 width: 320,
                 collapsed: false,
                 config: {
-                  assetId: "asset-1"
+                  assetId: "asset-1",
                 },
                 inputPorts: [],
                 outputPorts: [],
-                attachedGuardrails: []
-              }
+                attachedGuardrails: [],
+              },
             ],
-            edges: []
-          }
+            edges: [],
+          },
         ],
         assets: [
           {
@@ -153,8 +157,8 @@ describe("workspace state persistence", () => {
             version: 1,
             tags: [],
             createdAt: "2026-04-29T10:00:00.000Z",
-            updatedAt: "2026-04-29T10:00:00.000Z"
-          }
+            updatedAt: "2026-04-29T10:00:00.000Z",
+          },
         ],
         assetUsages: [
           {
@@ -164,8 +168,8 @@ describe("workspace state persistence", () => {
             nodeId: "node-1",
             nodeKind: WorkflowNodeKind.AssetPrompt,
             role: "primary",
-            createdAt: "2026-04-29T10:00:00.000Z"
-          }
+            createdAt: "2026-04-29T10:00:00.000Z",
+          },
         ],
         executions: [
           {
@@ -182,13 +186,13 @@ describe("workspace state persistence", () => {
               completionTokens: 20,
               totalTokens: 30,
               estimatedCostEur: 0.1,
-              latencyMs: 100
+              latencyMs: 100,
             },
             contextSessionId: "context-1",
-            nodeRuns: []
-          }
-        ]
-      }
+            nodeRuns: [],
+          },
+        ],
+      },
     });
 
     const loaded = await store.load();
@@ -199,21 +203,21 @@ describe("workspace state persistence", () => {
       settings: {
         serverConnection: {
           serverUrl: "https://server.example.com",
-          authToken: "server-token"
-        }
+          authToken: "server-token",
+        },
       },
       workflows: {
         definitions: [
           {
-            id: "workflow-1"
-          }
+            id: "workflow-1",
+          },
         ],
         executions: [
           {
-            id: "execution-1"
-          }
-        ]
-      }
+            id: "execution-1",
+          },
+        ],
+      },
     });
     expect(loaded).toEqual(saved);
     expect(loaded.workflows.definitions).toHaveLength(1);
@@ -231,9 +235,9 @@ describe("workspace state persistence", () => {
           name: "Iteronix",
           rootPath: "D:/projects/Iteronix",
           createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
+      ],
     });
     const providerStore = createProviderStore({
       selections: [
@@ -241,8 +245,8 @@ describe("workspace state persistence", () => {
           projectId: "project-1",
           profileId: "planner",
           providerId: "codex-cli",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
       ],
       settings: [
         {
@@ -250,11 +254,11 @@ describe("workspace state persistence", () => {
           profileId: "planner",
           providerId: "codex-cli",
           config: {
-            command: "codex"
+            command: "codex",
           },
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
+      ],
     });
     const kanbanStore = createKanbanStore({
       boards: [
@@ -263,8 +267,8 @@ describe("workspace state persistence", () => {
           projectId: "project-1",
           name: "Main",
           createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
       ],
       columns: [
         {
@@ -273,8 +277,8 @@ describe("workspace state persistence", () => {
           name: "TODO",
           position: 0,
           createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
       ],
       tasks: [
         {
@@ -284,9 +288,9 @@ describe("workspace state persistence", () => {
           title: "Persist workspace",
           position: 0,
           createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-29T10:00:00.000Z",
+        },
+      ],
     });
     const historyStore = createHistoryStore({
       runs: [
@@ -298,8 +302,8 @@ describe("workspace state persistence", () => {
           createdAt: "2026-04-29T10:00:00.000Z",
           updatedAt: "2026-04-29T10:00:00.000Z",
           input: "lint",
-          projectId: "project-1"
-        }
+          projectId: "project-1",
+        },
       ],
       events: [
         {
@@ -307,11 +311,11 @@ describe("workspace state persistence", () => {
           runId: "run-1",
           type: HistoryEventType.Done,
           data: {
-            status: "completed"
+            status: "completed",
           },
-          timestamp: "2026-04-29T10:00:00.000Z"
-        }
-      ]
+          timestamp: "2026-04-29T10:00:00.000Z",
+        },
+      ],
     });
 
     expect(projectStore.snapshot().activeProjectId).toBe("project-1");

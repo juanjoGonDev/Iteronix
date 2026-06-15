@@ -52,7 +52,7 @@ export const createEvaluationRunner = (input: {
               skillName: evaluationCase.skillName,
               sessionId: `eval-${evaluationCase.id}`,
               projectRoot: request.datasetPath,
-              input: evaluationCase.input
+              input: evaluationCase.input,
             })
           : (
               await input.workflowOrchestrator.run({
@@ -60,7 +60,7 @@ export const createEvaluationRunner = (input: {
                 sessionId: `eval-${evaluationCase.id}`,
                 projectRoot: request.datasetPath,
                 question: evaluationCase.input.question,
-                autoApprove: true
+                autoApprove: true,
               })
             ).final;
 
@@ -69,7 +69,7 @@ export const createEvaluationRunner = (input: {
         caseId: evaluationCase.id,
         passed: reasons.length === 0,
         traceId: execution.traceId,
-        reasons
+        reasons,
       });
     }
 
@@ -77,18 +77,20 @@ export const createEvaluationRunner = (input: {
       summary: {
         total: results.length,
         passed: results.filter((result) => result.passed).length,
-        failed: results.filter((result) => !result.passed).length
+        failed: results.filter((result) => !result.passed).length,
       },
-      results
+      results,
     };
   };
 
   return {
-    runDataset
+    runDataset,
   };
 };
 
-const readDataset = async (datasetPath: string): Promise<ReadonlyArray<EvaluationCase>> => {
+const readDataset = async (
+  datasetPath: string,
+): Promise<ReadonlyArray<EvaluationCase>> => {
   const content = await readFile(datasetPath, "utf8");
   return content
     .split(/\r?\n/)
@@ -98,7 +100,7 @@ const readDataset = async (datasetPath: string): Promise<ReadonlyArray<Evaluatio
 
 const scoreExecution = (
   execution: Awaited<ReturnType<SkillRunner["run"]>>,
-  evaluationCase: EvaluationCase
+  evaluationCase: EvaluationCase,
 ): ReadonlyArray<string> => {
   const reasons: string[] = [];
 
@@ -109,7 +111,9 @@ const scoreExecution = (
   }
 
   if (execution.citations.length < evaluationCase.minimumCitations) {
-    reasons.push(`Expected at least ${evaluationCase.minimumCitations} citations`);
+    reasons.push(
+      `Expected at least ${evaluationCase.minimumCitations} citations`,
+    );
   }
 
   return reasons;

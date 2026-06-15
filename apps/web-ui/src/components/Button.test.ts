@@ -13,15 +13,15 @@ describe("Button", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       const button = new Button({
         children: "Files",
-        "data-testid": "explorer-compact-toggle-files"
+        "data-testid": "explorer-compact-toggle-files",
       });
 
       button.render();
@@ -31,12 +31,14 @@ describe("Button", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
 
-    expect(recorded).toContain("attr:data-testid=explorer-compact-toggle-files");
+    expect(recorded).toContain(
+      "attr:data-testid=explorer-compact-toggle-files",
+    );
   });
 
   it("uses destructive rose styling for the danger variant", () => {
@@ -50,15 +52,15 @@ describe("Button", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       const button = new Button({
         variant: "danger",
-        children: "Remove"
+        children: "Remove",
       });
 
       button.render();
@@ -68,17 +70,18 @@ describe("Button", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
 
     expect(
-      recorded.some((entry) =>
-        entry.includes("bg-rose-500/15") &&
-        entry.includes("text-rose-100") &&
-        entry.includes("border-rose-500/40")
-      )
+      recorded.some(
+        (entry) =>
+          entry.includes("bg-rose-500/15") &&
+          entry.includes("text-rose-100") &&
+          entry.includes("border-rose-500/40"),
+      ),
     ).toBe(true);
   });
 });
@@ -87,11 +90,12 @@ const createFakeElement = (recorded: string[]) => {
   const element = {
     dataset: {} as Record<string, string>,
     appendChild: (_child: unknown) => undefined,
-    addEventListener: (_eventName: string, _listener: EventListener) => undefined,
+    addEventListener: (_eventName: string, _listener: EventListener) =>
+      undefined,
     setAttribute: (key: string, value: string) => {
       recorded.push(`attr:${key}=${value}`);
     },
-    style: {} as CSSStyleDeclaration
+    style: {} as CSSStyleDeclaration,
   };
 
   Object.defineProperty(element, "className", {
@@ -99,7 +103,7 @@ const createFakeElement = (recorded: string[]) => {
     get: () => "",
     set: (value: string) => {
       recorded.push(`class:${value}`);
-    }
+    },
   });
 
   return element;

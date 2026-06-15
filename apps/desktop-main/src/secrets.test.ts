@@ -23,7 +23,7 @@ describe("createSecretStore", () => {
     const provider = {
       getPassword: async () => "stored",
       setPassword: async () => {},
-      deletePassword: async () => true
+      deletePassword: async () => true,
     };
 
     const store = createSecretStore(provider);

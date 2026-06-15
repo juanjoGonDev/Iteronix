@@ -1,9 +1,9 @@
 export const ResultType = {
   Ok: "ok",
-  Err: "err"
+  Err: "err",
 } as const;
 
-export type ResultType = typeof ResultType[keyof typeof ResultType];
+export type ResultType = (typeof ResultType)[keyof typeof ResultType];
 
 export type Ok<T> = {
   type: typeof ResultType.Ok;
@@ -19,10 +19,10 @@ export type Result<T, E> = Ok<T> | Err<E>;
 
 export const ok = <T>(value: T): Ok<T> => ({
   type: ResultType.Ok,
-  value
+  value,
 });
 
 export const err = <E>(error: E): Err<E> => ({
   type: ResultType.Err,
-  error
+  error,
 });

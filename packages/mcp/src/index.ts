@@ -4,11 +4,11 @@ import { z } from "zod";
 
 export const McpTransportKind = {
   Stdio: "stdio",
-  Sse: "sse"
+  Sse: "sse",
 } as const;
 
 export type McpTransportKind =
-  typeof McpTransportKind[keyof typeof McpTransportKind];
+  (typeof McpTransportKind)[keyof typeof McpTransportKind];
 
 export type StaticMcpServerRegistry = {
   skills: ReadonlyArray<string>;
@@ -61,7 +61,7 @@ export type McpServerInstance = {
         text: string;
         mimeType?: string | undefined;
       }>;
-    }>
+    }>,
   ) => unknown;
   registerTool: (
     name: string,
@@ -74,7 +74,7 @@ export type McpServerInstance = {
         type: "text";
         text: string;
       }>;
-    }>
+    }>,
   ) => unknown;
   registerPrompt: (
     name: string,
@@ -90,7 +90,7 @@ export type McpServerInstance = {
           text: string;
         };
       }>;
-    }>
+    }>,
   ) => unknown;
 };
 
@@ -108,7 +108,7 @@ export const createStaticMcpServerRegistry = (input: {
   memorySessions: ReadonlyArray<string>;
 }): StaticMcpServerRegistry => ({
   skills: input.skills,
-  memorySessions: input.memorySessions
+  memorySessions: input.memorySessions,
 });
 
 export const createMcpClient = (input: {
@@ -121,7 +121,11 @@ export const createMcpClient = (input: {
 
 export const createInMemoryTransportPair = (): [McpTransport, McpTransport] => {
   const sdk = loadModule("inMemory.js");
-  const createLinkedPair = readStaticMethod(sdk, "InMemoryTransport", "createLinkedPair");
+  const createLinkedPair = readStaticMethod(
+    sdk,
+    "InMemoryTransport",
+    "createLinkedPair",
+  );
   const result = createLinkedPair();
   if (!Array.isArray(result) || result.length !== 2) {
     throw new Error("Invalid in-memory transport pair");
@@ -130,13 +134,15 @@ export const createInMemoryTransportPair = (): [McpTransport, McpTransport] => {
   return [ensureTransport(result[0]), ensureTransport(result[1])];
 };
 
-export const createMcpClientConnection = (config: McpConnectionConfig): {
+export const createMcpClientConnection = (
+  config: McpConnectionConfig,
+): {
   client: McpClient;
   transport: McpTransport;
 } => {
   const client = createMcpClient({
     name: "iteronix-client",
-    version: "0.0.1"
+    version: "0.0.1",
   });
 
   if (config.transport === McpTransportKind.Stdio) {
@@ -146,7 +152,7 @@ export const createMcpClientConnection = (config: McpConnectionConfig): {
     const transport = constructValue(Constructor, [parameters]);
     return {
       client,
-      transport: ensureTransport(transport)
+      transport: ensureTransport(transport),
     };
   }
 
@@ -155,11 +161,13 @@ export const createMcpClientConnection = (config: McpConnectionConfig): {
   const transport = constructValue(Constructor, [new URL(config.url)]);
   return {
     client,
-    transport: ensureTransport(transport)
+    transport: ensureTransport(transport),
   };
 };
 
-export const discoverMcpCapabilities = async (client: McpClient): Promise<{
+export const discoverMcpCapabilities = async (
+  client: McpClient,
+): Promise<{
   tools: ReadonlyArray<string>;
   resources: ReadonlyArray<string>;
   prompts: ReadonlyArray<string>;
@@ -167,13 +175,13 @@ export const discoverMcpCapabilities = async (client: McpClient): Promise<{
   const [tools, resources, prompts] = await Promise.all([
     client.listTools(),
     client.listResources(),
-    client.listPrompts()
+    client.listPrompts(),
   ]);
 
   return {
     tools: tools.tools.map((tool) => tool.name),
     resources: resources.resources.map((resource) => resource.uri),
-    prompts: prompts.prompts.map((prompt) => prompt.name)
+    prompts: prompts.prompts.map((prompt) => prompt.name),
   };
 };
 
@@ -197,9 +205,9 @@ export const createIteronixMcpServer = (input: {
     constructValue(readConstructor(loadModule("server/mcp.js"), "McpServer"), [
       {
         name: "iteronix-mcp",
-        version: "0.0.1"
-      }
-    ])
+        version: "0.0.1",
+      },
+    ]),
   );
 
   server.registerResource(
@@ -207,17 +215,17 @@ export const createIteronixMcpServer = (input: {
     "iteronix://skills",
     {
       title: "Skills",
-      description: "Loaded Iteronix skills"
+      description: "Loaded Iteronix skills",
     },
     async () => ({
       contents: [
         {
           uri: "iteronix://skills",
           text: JSON.stringify({ skills: input.registry.skills }),
-          mimeType: "application/json"
-        }
-      ]
-    })
+          mimeType: "application/json",
+        },
+      ],
+    }),
   );
 
   for (const sessionId of input.registry.memorySessions) {
@@ -226,17 +234,17 @@ export const createIteronixMcpServer = (input: {
       `iteronix://memory/${sessionId}`,
       {
         title: `Memory ${sessionId}`,
-        description: "Session memory reference"
+        description: "Session memory reference",
       },
       async () => ({
         contents: [
           {
             uri: `iteronix://memory/${sessionId}`,
             text: JSON.stringify({ sessionId }),
-            mimeType: "application/json"
-          }
-        ]
-      })
+            mimeType: "application/json",
+          },
+        ],
+      }),
     );
   }
 
@@ -246,17 +254,19 @@ export const createIteronixMcpServer = (input: {
       description: "Run an Iteronix skill",
       inputSchema: z.object({
         skillName: z.string(),
-        input: z.record(z.string(), z.unknown()).optional()
-      })
+        input: z.record(z.string(), z.unknown()).optional(),
+      }),
     },
     async (args) => ({
       content: [
         {
           type: "text",
-          text: JSON.stringify(await runSkillHandler(input.handlers.runSkill, args))
-        }
-      ]
-    })
+          text: JSON.stringify(
+            await runSkillHandler(input.handlers.runSkill, args),
+          ),
+        },
+      ],
+    }),
   );
 
   server.registerTool(
@@ -265,17 +275,19 @@ export const createIteronixMcpServer = (input: {
       description: "Search Iteronix memory",
       inputSchema: z.object({
         sessionId: z.string(),
-        query: z.string().optional()
-      })
+        query: z.string().optional(),
+      }),
     },
     async (args) => ({
       content: [
         {
           type: "text",
-          text: JSON.stringify(await runMemoryHandler(input.handlers.queryMemory, args))
-        }
-      ]
-    })
+          text: JSON.stringify(
+            await runMemoryHandler(input.handlers.queryMemory, args),
+          ),
+        },
+      ],
+    }),
   );
 
   server.registerTool(
@@ -283,19 +295,21 @@ export const createIteronixMcpServer = (input: {
     {
       description: "Run an Iteronix evaluation dataset",
       inputSchema: z.object({
-        datasetId: z.string()
-      })
+        datasetId: z.string(),
+      }),
     },
     async (args) => ({
       content: [
         {
           type: "text",
-          text: JSON.stringify(await input.handlers.runEvaluation({
-            datasetId: readRequiredString(args, "datasetId")
-          }))
-        }
-      ]
-    })
+          text: JSON.stringify(
+            await input.handlers.runEvaluation({
+              datasetId: readRequiredString(args, "datasetId"),
+            }),
+          ),
+        },
+      ],
+    }),
   );
 
   server.registerPrompt(
@@ -304,8 +318,8 @@ export const createIteronixMcpServer = (input: {
       description: "Prompt template for skill execution",
       argsSchema: {
         skillName: z.string(),
-        question: z.string()
-      }
+        question: z.string(),
+      },
     },
     async (args) => ({
       messages: [
@@ -313,11 +327,11 @@ export const createIteronixMcpServer = (input: {
           role: "user",
           content: {
             type: "text",
-            text: `Run ${readRequiredString(args, "skillName")} for question: ${readRequiredString(args, "question")}`
-          }
-        }
-      ]
-    })
+            text: `Run ${readRequiredString(args, "skillName")} for question: ${readRequiredString(args, "question")}`,
+          },
+        },
+      ],
+    }),
   );
 
   return server;
@@ -328,7 +342,7 @@ const runSkillHandler = async (
     skillName: string;
     input?: Record<string, unknown>;
   }) => Promise<Record<string, unknown>>,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
   const skillName = readRequiredString(args, "skillName");
   const inputValue = readOptionalRecord(args, "input");
@@ -342,11 +356,13 @@ const runMemoryHandler = async (
     sessionId: string;
     query?: string;
   }) => Promise<Record<string, unknown>>,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
   const sessionId = readRequiredString(args, "sessionId");
   const query = readOptionalString(args, "query");
-  return query === undefined ? handler({ sessionId }) : handler({ sessionId, query });
+  return query === undefined
+    ? handler({ sessionId })
+    : handler({ sessionId, query });
 };
 
 const createClientRuntime = (input: {
@@ -359,7 +375,7 @@ const createClientRuntime = (input: {
 };
 
 const buildStdioParameters = (
-  config: Extract<McpConnectionConfig, { transport: "stdio" }>
+  config: Extract<McpConnectionConfig, { transport: "stdio" }>,
 ): {
   command: string;
   args: string[];
@@ -373,7 +389,7 @@ const buildStdioParameters = (
     env?: Record<string, string> | undefined;
   } = {
     command: config.command,
-    args: config.args ? [...config.args] : []
+    args: config.args ? [...config.args] : [],
   };
 
   if (config.cwd !== undefined) {
@@ -394,7 +410,7 @@ const loadModule = (modulePath: string): Record<string, unknown> => {
     "@modelcontextprotocol",
     "sdk",
     "dist",
-    "cjs"
+    "cjs",
   );
   const loaded = loadUnknownModule(join(packageRoot, modulePath));
   return isRecord(loaded) ? loaded : {};
@@ -402,7 +418,7 @@ const loadModule = (modulePath: string): Record<string, unknown> => {
 
 const readConstructor = (
   moduleValue: Record<string, unknown>,
-  exportName: string
+  exportName: string,
 ): UnknownConstructor => {
   const value = moduleValue[exportName];
   if (!isConstructor(value)) {
@@ -415,8 +431,8 @@ const readConstructor = (
 const readStaticMethod = (
   moduleValue: Record<string, unknown>,
   exportName: string,
-  methodName: string
-): () => unknown => {
+  methodName: string,
+): (() => unknown) => {
   const Constructor = readConstructor(moduleValue, exportName);
   const method = Constructor[methodName];
   if (!isFunction(method)) {
@@ -432,7 +448,7 @@ const ensureMcpClient = (value: unknown): McpClient => {
     connect: readMethod(record, "connect"),
     listTools: readMethod(record, "listTools"),
     listResources: readMethod(record, "listResources"),
-    listPrompts: readMethod(record, "listPrompts")
+    listPrompts: readMethod(record, "listPrompts"),
   };
 };
 
@@ -442,7 +458,7 @@ const ensureMcpServer = (value: unknown): McpServerInstance => {
     connect: readMethod(record, "connect"),
     registerResource: readMethod(record, "registerResource"),
     registerTool: readMethod(record, "registerTool"),
-    registerPrompt: readMethod(record, "registerPrompt")
+    registerPrompt: readMethod(record, "registerPrompt"),
   };
 };
 
@@ -450,7 +466,7 @@ const ensureTransport = (value: unknown): McpTransport => {
   const record = ensureRecord(value, "transport");
   const transport: McpTransport = {
     close: readMethod(record, "close"),
-    send: readMethod(record, "send")
+    send: readMethod(record, "send"),
   };
   const start = record["start"];
   if (typeof start === "function") {
@@ -468,7 +484,10 @@ const ensureTransport = (value: unknown): McpTransport => {
   }
 
   if (typeof record["onmessage"] === "function") {
-    transport.onmessage = record["onmessage"] as (message: unknown, extra?: unknown) => void;
+    transport.onmessage = record["onmessage"] as (
+      message: unknown,
+      extra?: unknown,
+    ) => void;
   }
 
   return transport;
@@ -476,17 +495,21 @@ const ensureTransport = (value: unknown): McpTransport => {
 
 const readMethod = <TMethod extends (...args: never[]) => unknown>(
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): TMethod => {
   const value = record[key];
   if (typeof value !== "function") {
     throw new Error(`Missing method ${key}`);
   }
 
-  return ((...args: never[]) => Promise.resolve(Reflect.apply(value, record, args))) as TMethod;
+  return ((...args: never[]) =>
+    Promise.resolve(Reflect.apply(value, record, args))) as TMethod;
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!isRecord(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -494,7 +517,10 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
   return value;
 };
 
-const readRequiredString = (record: Record<string, unknown>, key: string): string => {
+const readRequiredString = (
+  record: Record<string, unknown>,
+  key: string,
+): string => {
   const value = record[key];
   if (typeof value !== "string") {
     throw new Error(`Missing ${key}`);
@@ -505,7 +531,7 @@ const readRequiredString = (record: Record<string, unknown>, key: string): strin
 
 const readOptionalString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined => {
   const value = record[key];
   return typeof value === "string" ? value : undefined;
@@ -513,23 +539,24 @@ const readOptionalString = (
 
 const readOptionalRecord = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Record<string, unknown> | undefined => {
   const value = record[key];
   return isRecord(value) ? value : undefined;
 };
 
-const loadUnknownModule = (modulePath: string): unknown => requireModule(modulePath);
+const loadUnknownModule = (modulePath: string): unknown =>
+  requireModule(modulePath);
 
 const constructValue = (
   Constructor: UnknownConstructor,
-  args: ReadonlyArray<unknown>
+  args: ReadonlyArray<unknown>,
 ): unknown => new Constructor(...args);
 
 const invokeFunction = (
   functionValue: UnknownFunction,
   target: unknown,
-  args: ReadonlyArray<unknown>
+  args: ReadonlyArray<unknown>,
 ): unknown => Reflect.apply(functionValue, target, args);
 
 const isConstructor = (value: unknown): value is UnknownConstructor =>

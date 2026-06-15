@@ -8,7 +8,7 @@ const EndpointPath = {
   TasksCreate: "/kanban/tasks/create",
   TasksList: "/kanban/tasks/list",
   TasksUpdate: "/kanban/tasks/update",
-  TasksDelete: "/kanban/tasks/delete"
+  TasksDelete: "/kanban/tasks/delete",
 } as const;
 
 export type KanbanBoardRecord = {
@@ -40,8 +40,13 @@ export type KanbanTaskRecord = {
 };
 
 export type KanbanClient = {
-  listBoards: (input: { projectId: string }) => Promise<ReadonlyArray<KanbanBoardRecord>>;
-  createBoard: (input: { projectId: string; name: string }) => Promise<KanbanBoardRecord>;
+  listBoards: (input: {
+    projectId: string;
+  }) => Promise<ReadonlyArray<KanbanBoardRecord>>;
+  createBoard: (input: {
+    projectId: string;
+    name: string;
+  }) => Promise<KanbanBoardRecord>;
   listColumns: (input: {
     projectId: string;
     boardId: string;
@@ -85,25 +90,25 @@ export const createKanbanClient = (): KanbanClient => ({
     requestJson({
       path: EndpointPath.BoardsList,
       body: { projectId: input.projectId },
-      parse: parseKanbanBoardsResponse
+      parse: parseKanbanBoardsResponse,
     }),
   createBoard: (input) =>
     requestJson({
       path: EndpointPath.BoardsCreate,
       body: {
         projectId: input.projectId,
-        name: input.name
+        name: input.name,
       },
-      parse: parseKanbanBoardResponse
+      parse: parseKanbanBoardResponse,
     }),
   listColumns: (input) =>
     requestJson({
       path: EndpointPath.ColumnsList,
       body: {
         projectId: input.projectId,
-        boardId: input.boardId
+        boardId: input.boardId,
       },
-      parse: parseKanbanColumnsResponse
+      parse: parseKanbanColumnsResponse,
     }),
   createColumn: (input) =>
     requestJson({
@@ -112,18 +117,18 @@ export const createKanbanClient = (): KanbanClient => ({
         projectId: input.projectId,
         boardId: input.boardId,
         name: input.name,
-        position: input.position
+        position: input.position,
       },
-      parse: parseKanbanColumnResponse
+      parse: parseKanbanColumnResponse,
     }),
   listTasks: (input) =>
     requestJson({
       path: EndpointPath.TasksList,
       body: {
         projectId: input.projectId,
-        boardId: input.boardId
+        boardId: input.boardId,
       },
-      parse: parseKanbanTasksResponse
+      parse: parseKanbanTasksResponse,
     }),
   createTask: (input) =>
     requestJson({
@@ -134,9 +139,9 @@ export const createKanbanClient = (): KanbanClient => ({
         columnId: input.columnId,
         title: input.title,
         description: input.description,
-        position: input.position
+        position: input.position,
       },
-      parse: parseKanbanTaskResponse
+      parse: parseKanbanTaskResponse,
     }),
   updateTask: (input) =>
     requestJson({
@@ -147,10 +152,12 @@ export const createKanbanClient = (): KanbanClient => ({
         taskId: input.taskId,
         ...(input.columnId !== undefined ? { columnId: input.columnId } : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.position !== undefined ? { position: input.position } : {})
+        ...(input.description !== undefined
+          ? { description: input.description }
+          : {}),
+        ...(input.position !== undefined ? { position: input.position } : {}),
       },
-      parse: parseKanbanTaskResponse
+      parse: parseKanbanTaskResponse,
     }),
   deleteTask: (input) =>
     requestJson({
@@ -158,67 +165,77 @@ export const createKanbanClient = (): KanbanClient => ({
       body: {
         projectId: input.projectId,
         boardId: input.boardId,
-        taskId: input.taskId
+        taskId: input.taskId,
       },
-      parse: parseKanbanTaskResponse
-    })
+      parse: parseKanbanTaskResponse,
+    }),
 });
 
 export const parseKanbanBoardResponse = (value: unknown): KanbanBoardRecord =>
-  parseKanbanBoardRecord(readRequiredRecord(value, "kanbanBoardResponse", "board"));
+  parseKanbanBoardRecord(
+    readRequiredRecord(value, "kanbanBoardResponse", "board"),
+  );
 
 export const parseKanbanBoardsResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<KanbanBoardRecord> =>
   readRequiredArray(value, "kanbanBoardsResponse", "boards").map((item) =>
-    parseKanbanBoardRecord(ensureRecord(item, "kanbanBoardRecord"))
+    parseKanbanBoardRecord(ensureRecord(item, "kanbanBoardRecord")),
   );
 
 export const parseKanbanColumnResponse = (value: unknown): KanbanColumnRecord =>
-  parseKanbanColumnRecord(readRequiredRecord(value, "kanbanColumnResponse", "column"));
+  parseKanbanColumnRecord(
+    readRequiredRecord(value, "kanbanColumnResponse", "column"),
+  );
 
 export const parseKanbanColumnsResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<KanbanColumnRecord> =>
   readRequiredArray(value, "kanbanColumnsResponse", "columns").map((item) =>
-    parseKanbanColumnRecord(ensureRecord(item, "kanbanColumnRecord"))
+    parseKanbanColumnRecord(ensureRecord(item, "kanbanColumnRecord")),
   );
 
 export const parseKanbanTaskResponse = (value: unknown): KanbanTaskRecord =>
-  parseKanbanTaskRecord(readRequiredRecord(value, "kanbanTaskResponse", "task"));
+  parseKanbanTaskRecord(
+    readRequiredRecord(value, "kanbanTaskResponse", "task"),
+  );
 
 export const parseKanbanTasksResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<KanbanTaskRecord> =>
   readRequiredArray(value, "kanbanTasksResponse", "tasks").map((item) =>
-    parseKanbanTaskRecord(ensureRecord(item, "kanbanTaskRecord"))
+    parseKanbanTaskRecord(ensureRecord(item, "kanbanTaskRecord")),
   );
 
 const parseKanbanBoardRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): KanbanBoardRecord => ({
   id: readRequiredString(value, "kanbanBoardRecord", "id"),
   projectId: readRequiredString(value, "kanbanBoardRecord", "projectId"),
   name: readRequiredString(value, "kanbanBoardRecord", "name"),
   createdAt: readRequiredString(value, "kanbanBoardRecord", "createdAt"),
-  updatedAt: readRequiredString(value, "kanbanBoardRecord", "updatedAt")
+  updatedAt: readRequiredString(value, "kanbanBoardRecord", "updatedAt"),
 });
 
 const parseKanbanColumnRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): KanbanColumnRecord => ({
   id: readRequiredString(value, "kanbanColumnRecord", "id"),
   boardId: readRequiredString(value, "kanbanColumnRecord", "boardId"),
   name: readRequiredString(value, "kanbanColumnRecord", "name"),
   position: readRequiredNumber(value, "kanbanColumnRecord", "position"),
   createdAt: readRequiredString(value, "kanbanColumnRecord", "createdAt"),
-  updatedAt: readRequiredString(value, "kanbanColumnRecord", "updatedAt")
+  updatedAt: readRequiredString(value, "kanbanColumnRecord", "updatedAt"),
 });
 
 const parseKanbanTaskRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): KanbanTaskRecord => {
-  const description = readOptionalString(value, "kanbanTaskRecord", "description");
+  const description = readOptionalString(
+    value,
+    "kanbanTaskRecord",
+    "description",
+  );
 
   return {
     id: readRequiredString(value, "kanbanTaskRecord", "id"),
@@ -228,11 +245,14 @@ const parseKanbanTaskRecord = (
     position: readRequiredNumber(value, "kanbanTaskRecord", "position"),
     createdAt: readRequiredString(value, "kanbanTaskRecord", "createdAt"),
     updatedAt: readRequiredString(value, "kanbanTaskRecord", "updatedAt"),
-    ...(description !== undefined ? { description } : {})
+    ...(description !== undefined ? { description } : {}),
   };
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -243,7 +263,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredRecord = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): Record<string, unknown> => {
   const record = ensureRecord(value, label);
   return ensureRecord(record[key], `${label}.${key}`);
@@ -252,7 +272,7 @@ const readRequiredRecord = (
 const readRequiredArray = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const record = ensureRecord(value, label);
   const nested = record[key];
@@ -266,7 +286,7 @@ const readRequiredArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
@@ -279,7 +299,7 @@ const readRequiredString = (
 const readOptionalString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string | undefined => {
   const nested = value[key];
   if (nested === undefined) {
@@ -296,7 +316,7 @@ const readOptionalString = (
 const readRequiredNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number => {
   const nested = value[key];
   if (typeof nested !== "number" || Number.isNaN(nested)) {

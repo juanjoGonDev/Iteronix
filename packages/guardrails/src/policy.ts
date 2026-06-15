@@ -1,9 +1,9 @@
 export const SecurityMode = {
   Block: "block",
-  Audit: "audit"
+  Audit: "audit",
 } as const;
 
-export type SecurityMode = typeof SecurityMode[keyof typeof SecurityMode];
+export type SecurityMode = (typeof SecurityMode)[keyof typeof SecurityMode];
 
 export type SecurityViolation = {
   id: string;
@@ -47,7 +47,7 @@ export const createSecurityPolicy = (input: {
 }): SecurityPolicy => ({
   mode: input.mode ?? SecurityMode.Block,
   toolAllowlistBySkill: input.toolAllowlistBySkill,
-  groundedResponsesRequired: input.groundedResponsesRequired ?? true
+  groundedResponsesRequired: input.groundedResponsesRequired ?? true,
 });
 
 export const createGuardrailsEngine = (input: {
@@ -83,26 +83,28 @@ export const createGuardrailsEngine = (input: {
   return {
     checkInput,
     checkToolCall,
-    checkOutput
+    checkOutput,
   };
 };
 
 const buildGuardrailResult = (
   mode: SecurityMode,
-  violations: ReadonlyArray<SecurityViolation>
+  violations: ReadonlyArray<SecurityViolation>,
 ): GuardrailResult => ({
   allowed: mode !== SecurityMode.Block || violations.length === 0,
-  violations
+  violations,
 });
 
-const detectInputViolations = (text: string): ReadonlyArray<SecurityViolation> => {
+const detectInputViolations = (
+  text: string,
+): ReadonlyArray<SecurityViolation> => {
   const violations: SecurityViolation[] = [];
 
   if (matchesPromptInjection(text)) {
     violations.push({
       id: "prompt-injection",
       message: "Prompt injection pattern detected",
-      category: "prompt_injection"
+      category: "prompt_injection",
     });
   }
 
@@ -110,7 +112,7 @@ const detectInputViolations = (text: string): ReadonlyArray<SecurityViolation> =
     violations.push({
       id: "pii-detected",
       message: "Potential PII detected",
-      category: "pii"
+      category: "pii",
     });
   }
 
@@ -124,7 +126,7 @@ const detectToolViolations = (
     toolId: string;
     sideEffect: string;
     args: Record<string, unknown>;
-  }
+  },
 ): ReadonlyArray<SecurityViolation> => {
   const allowlist = policy.toolAllowlistBySkill[input.skillName] ?? [];
   if (allowlist.includes(input.toolId)) {
@@ -135,8 +137,8 @@ const detectToolViolations = (
     {
       id: "tool-denied",
       message: `Tool ${input.toolId} is not allowed`,
-      category: "tool"
-    }
+      category: "tool",
+    },
   ];
 };
 
@@ -146,7 +148,7 @@ const detectOutputViolations = (
     skillName: string;
     citationsCount: number;
     requiresGrounding: boolean;
-  }
+  },
 ): ReadonlyArray<SecurityViolation> => {
   if (
     policy.groundedResponsesRequired &&
@@ -157,8 +159,8 @@ const detectOutputViolations = (
       {
         id: "grounding-required",
         message: "Grounded output requires citations",
-        category: "output"
-      }
+        category: "output",
+      },
     ];
   }
 

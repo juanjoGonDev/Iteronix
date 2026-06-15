@@ -3,7 +3,7 @@ import {
   compileSerializableSchema,
   createRunContext,
   createUsageRecord,
-  type EvidenceReport
+  type EvidenceReport,
 } from "../../ai-core/src/index";
 import type { GuardrailsEngine } from "../../guardrails/src/index";
 import type { MemoryManager } from "../../memory/src/index";
@@ -54,18 +54,22 @@ export const createSkillRunner = (input: {
 
     const context = createRunContext({
       sessionId: request.sessionId,
-      createdAt: now().toISOString()
+      createdAt: now().toISOString(),
     });
     const startedAt = Date.now();
-    const parsedInput = compileSerializableSchema(skill.inputSchema).parse(request.input);
+    const parsedInput = compileSerializableSchema(skill.inputSchema).parse(
+      request.input,
+    );
     const question = readQuestionValue(parsedInput);
 
     const inputGuard = await input.guardrails.checkInput({
       skillName: skill.metadata.name,
-      text: question
+      text: question,
     });
     if (!inputGuard.allowed) {
-      throw new Error(inputGuard.violations.map((violation) => violation.message).join("; "));
+      throw new Error(
+        inputGuard.violations.map((violation) => violation.message).join("; "),
+      );
     }
 
     await input.memoryManager.rememberWorking({
@@ -74,23 +78,46 @@ export const createSkillRunner = (input: {
       content: question,
       createdAt: context.createdAt,
       ttlSeconds: 3600,
-      tags: [skill.metadata.name, "working"]
+      tags: [skill.metadata.name, "working"],
     });
 
-    const memoryContext = await loadSessionMemory(input.memoryManager, request.sessionId, question);
-    const ragResult = await maybeRetrieveContext(input.guardrails, input.ragService, skill, request.sessionId, question);
+    const memoryContext = await loadSessionMemory(
+      input.memoryManager,
+      request.sessionId,
+      question,
+    );
+    const ragResult = await maybeRetrieveContext(
+      input.guardrails,
+      input.ragService,
+      skill,
+      request.sessionId,
+      question,
+    );
     const citations = collapseCitationsBySource(ragResult.citations);
-    const outputCandidate = createOutputCandidate(question, ragResult.context, citations.length > 0, memoryContext, skill.promptTemplate, ragResult.confidence.score);
-    const parsedOutput = compileSerializableSchema(skill.outputSchema).parse(outputCandidate);
+    const outputCandidate = createOutputCandidate(
+      question,
+      ragResult.context,
+      citations.length > 0,
+      memoryContext,
+      skill.promptTemplate,
+      ragResult.confidence.score,
+    );
+    const parsedOutput = compileSerializableSchema(skill.outputSchema).parse(
+      outputCandidate,
+    );
     const output = readOutputValue(parsedOutput);
 
     const outputGuard = await input.guardrails.checkOutput({
       skillName: skill.metadata.name,
       citationsCount: citations.length,
-      requiresGrounding: Boolean(skill.options?.useRag && ragResult.decision.shouldRetrieve)
+      requiresGrounding: Boolean(
+        skill.options?.useRag && ragResult.decision.shouldRetrieve,
+      ),
     });
     if (!outputGuard.allowed) {
-      throw new Error(outputGuard.violations.map((violation) => violation.message).join("; "));
+      throw new Error(
+        outputGuard.violations.map((violation) => violation.message).join("; "),
+      );
     }
 
     await input.memoryManager.rememberEpisodic({
@@ -98,14 +125,14 @@ export const createSkillRunner = (input: {
       runId: context.runId,
       content: `Skill ${skill.metadata.name} retrieved context with ${citations.length} citations`,
       createdAt: now().toISOString(),
-      tags: [skill.metadata.name, "episodic"]
+      tags: [skill.metadata.name, "episodic"],
     });
 
     const usage = createUsageRecord({
       promptText: question,
       completionText: output.answer,
       latencyMs: Date.now() - startedAt,
-      estimatedCostUsd: 0
+      estimatedCostUsd: 0,
     });
     const evidenceReport: EvidenceReport = {
       traceId: context.traceId,
@@ -113,11 +140,11 @@ export const createSkillRunner = (input: {
       decisions: [skill.promptTemplate, ragResult.decision.reason],
       guardrailsTriggered: [
         ...inputGuard.violations.map((violation) => violation.message),
-        ...outputGuard.violations.map((violation) => violation.message)
+        ...outputGuard.violations.map((violation) => violation.message),
       ],
       retrievedSources: ragResult.citations,
       confidence: ragResult.confidence,
-      usage
+      usage,
     };
 
     return {
@@ -127,25 +154,25 @@ export const createSkillRunner = (input: {
       confidence: ragResult.confidence,
       evidenceReport,
       traceId: context.traceId,
-      usage
+      usage,
     };
   };
 
   return {
-    run
+    run,
   };
 };
 
 const loadSessionMemory = async (
   memoryManager: MemoryManager,
   sessionId: string,
-  query: string
+  query: string,
 ): Promise<ReadonlyArray<string>> => {
   const results = await memoryManager.search({
     sessionId,
     query,
     limit: 2,
-    piiMode: "redact"
+    piiMode: "redact",
   });
 
   return results.map((result) => result.content);
@@ -156,27 +183,27 @@ const maybeRetrieveContext = async (
   ragService: RagService,
   skill: SkillManifest,
   sessionId: string,
-  question: string
+  question: string,
 ): Promise<Awaited<ReturnType<RagService["query"]>>> => {
   if (!skill.options?.useRag) {
     return {
       decision: {
         shouldRetrieve: false,
         reason: "Skill does not require retrieval",
-        confidence: 0.3
+        confidence: 0.3,
       },
       cache: {
-        hit: false
+        hit: false,
       },
       chunks: [],
       citations: [],
       confidence: {
         score: 0.3,
         label: "low",
-        signals: ["no-retrieval"]
+        signals: ["no-retrieval"],
       },
       context: "",
-      credibilityChain: []
+      credibilityChain: [],
     };
   }
 
@@ -185,8 +212,8 @@ const maybeRetrieveContext = async (
     toolId: "retrieve_context",
     sideEffect: "none",
     args: {
-      query: question
-    }
+      query: question,
+    },
   });
   if (!toolGuard.allowed) {
     throw new Error(`Tool retrieve_context is not allowed`);
@@ -195,7 +222,7 @@ const maybeRetrieveContext = async (
   return ragService.query({
     query: question,
     sessionId,
-    topK: skill.options.topK ?? 3
+    topK: skill.options.topK ?? 3,
   });
 };
 
@@ -205,13 +232,19 @@ const createOutputCandidate = (
   hasCitations: boolean,
   memoryContext: ReadonlyArray<string>,
   promptTemplate: string,
-  confidence: number
+  confidence: number,
 ): {
   answer: string;
   confidence: number;
 } => ({
-  answer: composeAnswer(question, ragContext, hasCitations, memoryContext, promptTemplate),
-  confidence
+  answer: composeAnswer(
+    question,
+    ragContext,
+    hasCitations,
+    memoryContext,
+    promptTemplate,
+  ),
+  confidence,
 });
 
 const composeAnswer = (
@@ -219,9 +252,11 @@ const composeAnswer = (
   ragContext: string,
   hasCitations: boolean,
   memoryContext: ReadonlyArray<string>,
-  promptTemplate: string
+  promptTemplate: string,
 ): string => {
-  const lead = hasCitations ? ragContext : `No retrieval required for: ${question}`;
+  const lead = hasCitations
+    ? ragContext
+    : `No retrieval required for: ${question}`;
   const memoryLead = memoryContext[0] ? ` Memory: ${memoryContext[0]}` : "";
   const promptLead = promptTemplate.replace(/\s+/g, " ").trim();
   return `${promptLead} ${lead}${memoryLead}`.trim();
@@ -240,7 +275,9 @@ const readQuestionValue = (value: unknown): string => {
   return record["question"];
 };
 
-const readOutputValue = (value: unknown): {
+const readOutputValue = (
+  value: unknown,
+): {
   answer: string;
   confidence: number;
 } => {
@@ -258,6 +295,6 @@ const readOutputValue = (value: unknown): {
 
   return {
     answer: record["answer"],
-    confidence: record["confidence"]
+    confidence: record["confidence"],
   };
 };

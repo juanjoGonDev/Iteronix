@@ -7,7 +7,7 @@ import { ResultType } from "../../../domain/src/result";
 import {
   GitCommandName,
   GitErrorCode,
-  createGitCliAdapter
+  createGitCliAdapter,
 } from "./git-adapter";
 
 const tempRoots: string[] = [];
@@ -17,9 +17,9 @@ afterEach(async () => {
     tempRoots.splice(0).map(async (path) => {
       await rm(path, {
         recursive: true,
-        force: true
+        force: true,
       });
-    })
+    }),
   );
 });
 
@@ -33,7 +33,7 @@ describe("git cli adapter", () => {
     runGit(repo.path, ["add", "staged.txt"]);
 
     const status = await adapter.getStatus({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(status.type).toBe(ResultType.Ok);
@@ -46,8 +46,12 @@ describe("git cli adapter", () => {
     expect(status.value.stagedCount).toBe(1);
     expect(status.value.unstagedCount).toBe(1);
 
-    const stagedEntry = status.value.entries.find((entry) => entry.path === "staged.txt");
-    const unstagedEntry = status.value.entries.find((entry) => entry.path === "tracked.txt");
+    const stagedEntry = status.value.entries.find(
+      (entry) => entry.path === "staged.txt",
+    );
+    const unstagedEntry = status.value.entries.find(
+      (entry) => entry.path === "tracked.txt",
+    );
 
     expect(stagedEntry?.staged).toBe(true);
     expect(stagedEntry?.unstaged).toBe(false);
@@ -56,7 +60,7 @@ describe("git cli adapter", () => {
 
     const unstagedDiff = await adapter.getDiff({
       rootPath: repo.path,
-      staged: false
+      staged: false,
     });
 
     expect(unstagedDiff.type).toBe(ResultType.Ok);
@@ -67,7 +71,7 @@ describe("git cli adapter", () => {
 
     const stagedDiff = await adapter.getDiff({
       rootPath: repo.path,
-      staged: true
+      staged: true,
     });
 
     expect(stagedDiff.type).toBe(ResultType.Ok);
@@ -86,7 +90,7 @@ describe("git cli adapter", () => {
 
     const commit = await adapter.createCommit({
       rootPath: repo.path,
-      message: "feat(server-api): add git endpoints"
+      message: "feat(server-api): add git endpoints",
     });
 
     expect(commit.type).toBe(ResultType.Ok);
@@ -98,7 +102,10 @@ describe("git cli adapter", () => {
     expect(commit.value.message).toBe("feat(server-api): add git endpoints");
 
     const head = runGit(repo.path, ["rev-parse", "HEAD"]).trim();
-    const message = await readFile(join(repo.path, ".git", "COMMIT_EDITMSG"), "utf8");
+    const message = await readFile(
+      join(repo.path, ".git", "COMMIT_EDITMSG"),
+      "utf8",
+    );
 
     expect(commit.value.hash).toBe(head);
     expect(message).toContain("feat(server-api): add git endpoints");
@@ -110,7 +117,7 @@ describe("git cli adapter", () => {
 
     const adapter = createGitCliAdapter();
     const result = await adapter.getStatus({
-      rootPath: root
+      rootPath: root,
     });
 
     expect(result.type).toBe(ResultType.Err);
@@ -124,12 +131,16 @@ describe("git cli adapter", () => {
     const repo = await createTempGitRepository();
     const adapter = createGitCliAdapter();
 
-    await writeFile(join(repo.path, "tracked.txt"), "updated tracked\n", "utf8");
+    await writeFile(
+      join(repo.path, "tracked.txt"),
+      "updated tracked\n",
+      "utf8",
+    );
     await writeFile(join(repo.path, "new-file.txt"), "new file\n", "utf8");
 
     const staged = await adapter.stagePaths({
       rootPath: repo.path,
-      paths: ["tracked.txt", "new-file.txt"]
+      paths: ["tracked.txt", "new-file.txt"],
     });
 
     expect(staged.type).toBe(ResultType.Ok);
@@ -140,7 +151,7 @@ describe("git cli adapter", () => {
     expect(staged.value.paths).toEqual(["tracked.txt", "new-file.txt"]);
 
     const stagedStatus = await adapter.getStatus({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(stagedStatus.type).toBe(ResultType.Ok);
@@ -149,11 +160,13 @@ describe("git cli adapter", () => {
     }
 
     expect(stagedStatus.value.stagedCount).toBe(2);
-    expect(stagedStatus.value.entries.every((entry) => entry.staged)).toBe(true);
+    expect(stagedStatus.value.entries.every((entry) => entry.staged)).toBe(
+      true,
+    );
 
     const unstaged = await adapter.unstagePaths({
       rootPath: repo.path,
-      paths: ["tracked.txt"]
+      paths: ["tracked.txt"],
     });
 
     expect(unstaged.type).toBe(ResultType.Ok);
@@ -164,7 +177,7 @@ describe("git cli adapter", () => {
     expect(unstaged.value.paths).toEqual(["tracked.txt"]);
 
     const unstagedStatus = await adapter.getStatus({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(unstagedStatus.type).toBe(ResultType.Ok);
@@ -172,8 +185,12 @@ describe("git cli adapter", () => {
       return;
     }
 
-    const trackedEntry = unstagedStatus.value.entries.find((entry) => entry.path === "tracked.txt");
-    const newEntry = unstagedStatus.value.entries.find((entry) => entry.path === "new-file.txt");
+    const trackedEntry = unstagedStatus.value.entries.find(
+      (entry) => entry.path === "tracked.txt",
+    );
+    const newEntry = unstagedStatus.value.entries.find(
+      (entry) => entry.path === "new-file.txt",
+    );
 
     expect(trackedEntry?.staged).toBe(false);
     expect(trackedEntry?.unstaged).toBe(true);
@@ -184,11 +201,15 @@ describe("git cli adapter", () => {
     const repo = await createTempGitRepository();
     const adapter = createGitCliAdapter();
 
-    await writeFile(join(repo.path, "tracked.txt"), "updated tracked\n", "utf8");
+    await writeFile(
+      join(repo.path, "tracked.txt"),
+      "updated tracked\n",
+      "utf8",
+    );
 
     const reverted = await adapter.revertPaths({
       rootPath: repo.path,
-      paths: ["tracked.txt"]
+      paths: ["tracked.txt"],
     });
 
     expect(reverted.type).toBe(ResultType.Ok);
@@ -205,12 +226,12 @@ describe("git cli adapter", () => {
 
   it("lists branches, creates a branch and checks out an existing branch", async () => {
     const repo = await createTempGitRepository({
-      withRemote: true
+      withRemote: true,
     });
     const adapter = createGitCliAdapter();
 
     const initialBranches = await adapter.listBranches({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(initialBranches.type).toBe(ResultType.Ok);
@@ -218,13 +239,25 @@ describe("git cli adapter", () => {
       return;
     }
 
-    expect(initialBranches.value.local.some((branch) => branch.name === repo.defaultBranch && branch.current)).toBe(true);
-    expect(initialBranches.value.local.some((branch) => branch.name === "feature/local-only")).toBe(true);
-    expect(initialBranches.value.remote.some((branch) => branch.name === "origin/feature/remote-only")).toBe(true);
+    expect(
+      initialBranches.value.local.some(
+        (branch) => branch.name === repo.defaultBranch && branch.current,
+      ),
+    ).toBe(true);
+    expect(
+      initialBranches.value.local.some(
+        (branch) => branch.name === "feature/local-only",
+      ),
+    ).toBe(true);
+    expect(
+      initialBranches.value.remote.some(
+        (branch) => branch.name === "origin/feature/remote-only",
+      ),
+    ).toBe(true);
 
     const created = await adapter.createBranch({
       rootPath: repo.path,
-      name: "feature/server-first"
+      name: "feature/server-first",
     });
 
     expect(created.type).toBe(ResultType.Ok);
@@ -236,7 +269,7 @@ describe("git cli adapter", () => {
 
     const checkedOut = await adapter.checkoutBranch({
       rootPath: repo.path,
-      name: "feature/server-first"
+      name: "feature/server-first",
     });
 
     expect(checkedOut.type).toBe(ResultType.Ok);
@@ -245,19 +278,21 @@ describe("git cli adapter", () => {
     }
 
     expect(checkedOut.value.name).toBe("feature/server-first");
-    expect(runGit(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe("feature/server-first");
+    expect(
+      runGit(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
+    ).toBe("feature/server-first");
   });
 
   it("publishes the current local branch and pushes it to the configured upstream", async () => {
     const repo = await createTempGitRepository({
-      withRemote: true
+      withRemote: true,
     });
     const adapter = createGitCliAdapter();
 
     runGit(repo.path, ["checkout", "feature/local-only"]);
 
     const published = await adapter.publishCurrentBranch({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(published.type).toBe(ResultType.Ok);
@@ -268,7 +303,12 @@ describe("git cli adapter", () => {
     expect(published.value.name).toBe("feature/local-only");
     expect(published.value.upstream).toBe("origin/feature/local-only");
     expect(
-      runGit(repo.path, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).trim()
+      runGit(repo.path, [
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+      ]).trim(),
     ).toBe("origin/feature/local-only");
 
     await writeFile(join(repo.path, "tracked.txt"), "publish update\n", "utf8");
@@ -276,7 +316,7 @@ describe("git cli adapter", () => {
     runGit(repo.path, ["commit", "-m", "feat(test): publish branch"]);
 
     const pushed = await adapter.pushCurrentBranch({
-      rootPath: repo.path
+      rootPath: repo.path,
     });
 
     expect(pushed.type).toBe(ResultType.Ok);
@@ -291,7 +331,10 @@ describe("git cli adapter", () => {
     expect(pushed.value.name).toBe("feature/local-only");
     expect(pushed.value.upstream).toBe("origin/feature/local-only");
     expect(runGit(repo.path, ["rev-parse", "HEAD"]).trim()).toBe(
-      runGit(repo.remotePath, ["rev-parse", "refs/heads/feature/local-only"]).trim()
+      runGit(repo.remotePath, [
+        "rev-parse",
+        "refs/heads/feature/local-only",
+      ]).trim(),
     );
   });
 });
@@ -299,14 +342,14 @@ describe("git cli adapter", () => {
 const createTempGitRepository = async (
   input: {
     withRemote?: boolean;
-  } = {}
+  } = {},
 ): Promise<{ path: string; defaultBranch: string; remotePath?: string }> => {
   const root = await mkdtemp(join(tmpdir(), "iteronix-git-adapter-"));
   const repoPath = join(root, "repo");
   tempRoots.push(root);
 
   await mkdir(repoPath, {
-    recursive: true
+    recursive: true,
   });
 
   runGit(repoPath, ["init"]);
@@ -315,7 +358,11 @@ const createTempGitRepository = async (
   await writeFile(join(repoPath, "tracked.txt"), "initial\n", "utf8");
   runGit(repoPath, ["add", "tracked.txt"]);
   runGit(repoPath, ["commit", "-m", "chore(test): seed repository"]);
-  const defaultBranch = runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const defaultBranch = runGit(repoPath, [
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD",
+  ]).trim();
   runGit(repoPath, ["branch", "feature/local-only"]);
 
   let remotePath: string | undefined;
@@ -334,14 +381,14 @@ const createTempGitRepository = async (
   return {
     path: repoPath,
     defaultBranch,
-    ...(remotePath ? { remotePath } : {})
+    ...(remotePath ? { remotePath } : {}),
   };
 };
 
 const runGit = (cwd: string, args: ReadonlyArray<string>): string =>
   execFileSync(GitCommandName, [...args], {
     cwd,
-    encoding: "utf8"
+    encoding: "utf8",
   });
 
 const normalizeLineEndings = (value: string): string =>

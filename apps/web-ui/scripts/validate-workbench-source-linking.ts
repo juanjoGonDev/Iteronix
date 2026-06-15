@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
@@ -11,7 +15,7 @@ import {
   startPreviewServer,
   stopProcess,
   waitForCondition as waitForBrowserValidationCondition,
-  waitForHttpReady
+  waitForHttpReady,
 } from "./browser-validation-runtime.js";
 
 const ValidationConfig = {
@@ -25,12 +29,12 @@ const ValidationConfig = {
   UiPollingIntervalMs: 200,
   ViewportWidth: 1440,
   ViewportHeight: 1400,
-  AuthToken: "dev-token"
+  AuthToken: "dev-token",
 } as const;
 
 const LocalStorageKey = {
   ServerUrl: "iteronix_server_url",
-  AuthToken: "iteronix_auth_token"
+  AuthToken: "iteronix_auth_token",
 } as const;
 
 const ValidationText = {
@@ -43,13 +47,15 @@ const ValidationText = {
   AllEvidenceLine: "3 recorded chunks",
   ReadmeChunkA: "Evidence README chunk 0",
   ReadmeChunkB: "Evidence README chunk 1",
-  ArchitectureChunk: "Evidence Architecture chunk 0"
+  ArchitectureChunk: "Evidence Architecture chunk 0",
 } as const;
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
-const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
+const runtimeOptions = parseBrowserValidationRuntimeOptions(
+  process.argv.slice(2),
+);
 
 const historyFixture: WorkbenchHistoryState = {
   runs: [
@@ -69,12 +75,13 @@ const historyFixture: WorkbenchHistoryState = {
             name: "example-skill",
             version: "1.0.0",
             description: "Example skill browser validation fixture",
-            tags: ["rag", "browser"]
-          }
+            tags: ["rag", "browser"],
+          },
         },
         output: {
-          answer: "Iteronix includes hierarchical memory, skills, RAG, MCP interoperability, evaluations and a shared AI workbench UI.",
-          confidence: 0.92
+          answer:
+            "Iteronix includes hierarchical memory, skills, RAG, MCP interoperability, evaluations and a shared AI workbench UI.",
+          confidence: 0.92,
         },
         citations: [
           {
@@ -85,7 +92,7 @@ const historyFixture: WorkbenchHistoryState = {
             retrievedAt: "2026-04-24T01:00:00.000Z",
             updatedAt: "2026-04-24T01:00:00.000Z",
             score: 0.95,
-            sourceType: "repo_doc"
+            sourceType: "repo_doc",
           },
           {
             chunkId: "docs/AI_WORKBENCH.md#0",
@@ -95,13 +102,13 @@ const historyFixture: WorkbenchHistoryState = {
             retrievedAt: "2026-04-24T01:00:00.000Z",
             updatedAt: "2026-04-24T01:00:00.000Z",
             score: 0.91,
-            sourceType: "repo_doc"
-          }
+            sourceType: "repo_doc",
+          },
         ],
         confidence: {
           score: 0.92,
           label: "high",
-          signals: ["repo_doc", "agreement"]
+          signals: ["repo_doc", "agreement"],
         },
         evidenceReport: {
           traceId: "trace-browser-validation",
@@ -117,7 +124,7 @@ const historyFixture: WorkbenchHistoryState = {
               retrievedAt: "2026-04-24T01:00:00.000Z",
               updatedAt: "2026-04-24T01:00:00.000Z",
               score: 0.94,
-              sourceType: "repo_doc"
+              sourceType: "repo_doc",
             },
             {
               chunkId: "README.md#1",
@@ -127,7 +134,7 @@ const historyFixture: WorkbenchHistoryState = {
               retrievedAt: "2026-04-24T01:00:00.000Z",
               updatedAt: "2026-04-24T01:00:00.000Z",
               score: 0.95,
-              sourceType: "repo_doc"
+              sourceType: "repo_doc",
             },
             {
               chunkId: "docs/AI_WORKBENCH.md#0",
@@ -137,21 +144,21 @@ const historyFixture: WorkbenchHistoryState = {
               retrievedAt: "2026-04-24T01:00:00.000Z",
               updatedAt: "2026-04-24T01:00:00.000Z",
               score: 0.91,
-              sourceType: "repo_doc"
-            }
+              sourceType: "repo_doc",
+            },
           ],
           confidence: {
             score: 0.92,
             label: "high",
-            signals: ["repo_doc", "agreement"]
+            signals: ["repo_doc", "agreement"],
           },
           usage: {
             promptTokens: 120,
             completionTokens: 48,
             totalTokens: 168,
             estimatedCostUsd: 0.0042,
-            latencyMs: 220
-          }
+            latencyMs: 220,
+          },
         },
         traceId: "trace-browser-validation",
         usage: {
@@ -159,12 +166,12 @@ const historyFixture: WorkbenchHistoryState = {
           completionTokens: 48,
           totalTokens: 168,
           estimatedCostUsd: 0.0042,
-          latencyMs: 220
-        }
-      }
-    }
+          latencyMs: 220,
+        },
+      },
+    },
   ],
-  evals: []
+  evals: [],
 };
 
 await validateWorkbenchSourceLinking();
@@ -173,7 +180,7 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
   await assertBrowserValidationBuildOutput(buildOutputPath);
   await prepareBrowserValidationDirectory({
     directory: screenshotDirectory,
-    preserveScreenshots: runtimeOptions.preserveScreenshots
+    preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
   const previewServer = startPreviewServer(projectRoot);
@@ -181,35 +188,44 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    await waitForHttpReady(`${ValidationConfig.BaseUrl}${ValidationConfig.PreviewHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForHttpReady(`${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForHttpReady(
+      `${ValidationConfig.BaseUrl}${ValidationConfig.PreviewHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await waitForHttpReady(
+      `${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
     browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox"]
+      args: ["--no-sandbox"],
     });
 
     const page = await browser.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
+      height: ValidationConfig.ViewportHeight,
     });
     await seedBrowserStorage(page);
-    await page.goto(`${ValidationConfig.BaseUrl}${ValidationConfig.HistoryRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.BaseUrl}${ValidationConfig.HistoryRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
     await waitForPageText(page, ValidationText.ScreenTitle);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "before-focus",
-      artifactName: "workbench-source-linking"
+      artifactName: "workbench-source-linking",
     });
 
     await clickCitationFocusAction(page, ValidationText.ReadmeUri);
@@ -217,15 +233,15 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
       required: [
         ValidationText.ReadmeEvidenceLine,
         ValidationText.ReadmeChunkA,
-        ValidationText.ReadmeChunkB
+        ValidationText.ReadmeChunkB,
       ],
-      forbidden: [ValidationText.ArchitectureChunk]
+      forbidden: [ValidationText.ArchitectureChunk],
     });
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-focus",
-      artifactName: "workbench-source-linking"
+      artifactName: "workbench-source-linking",
     });
 
     await clickNamedButton(page, ValidationText.ClearFilter);
@@ -234,15 +250,15 @@ async function validateWorkbenchSourceLinking(): Promise<void> {
         ValidationText.AllEvidenceLine,
         ValidationText.ReadmeChunkA,
         ValidationText.ReadmeChunkB,
-        ValidationText.ArchitectureChunk
+        ValidationText.ArchitectureChunk,
       ],
-      forbidden: []
+      forbidden: [],
     });
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "after-clear",
-      artifactName: "workbench-source-linking"
+      artifactName: "workbench-source-linking",
     });
 
     console.log("Browser validation passed for linked citation source focus.");
@@ -275,18 +291,21 @@ async function startStubServer(): Promise<{ close: () => Promise<void> }> {
           }
           resolvePromise();
         });
-      })
+      }),
   };
 }
 
 function handleStubRequest(
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
 ): void {
-  const requestUrl = new URL(request.url ?? "/", ValidationConfig.StubApiBaseUrl);
+  const requestUrl = new URL(
+    request.url ?? "/",
+    ValidationConfig.StubApiBaseUrl,
+  );
   if (requestUrl.pathname === ValidationConfig.StubHealthPath) {
     writeJson(response, 200, {
-      ok: true
+      ok: true,
     });
     return;
   }
@@ -312,27 +331,27 @@ function handleStubRequest(
               modelId: "",
               endpointUrl: "",
               command: "codex",
-              promptMode: "stdin"
-            }
+              promptMode: "stdin",
+            },
           ],
           workflowLimits: {
             infiniteLoops: false,
             maxLoops: 50,
-            externalCalls: true
+            externalCalls: true,
           },
           notifications: {
             soundEnabled: true,
-            webhookUrl: ""
-          }
+            webhookUrl: "",
+          },
         },
-        workbenchHistory: historyFixture
-      }
+        workbenchHistory: historyFixture,
+      },
     });
     return;
   }
 
   writeJson(response, 404, {
-    message: "Not found"
+    message: "Not found",
   });
 }
 
@@ -349,19 +368,19 @@ async function seedBrowserStorage(page: Page): Promise<void> {
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: ValidationConfig.AuthToken,
-      keys: LocalStorageKey
-    }
+      keys: LocalStorageKey,
+    },
   );
 }
 
 function writeJson(
   response: ServerResponse,
   statusCode: number,
-  value: Readonly<Record<string, unknown>>
+  value: Readonly<Record<string, unknown>>,
 ): void {
   response.writeHead(statusCode, {
     ...createCorsHeaders(),
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
   });
   response.end(JSON.stringify(value));
 }
@@ -370,17 +389,22 @@ function createCorsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 }
 
-async function clickCitationFocusAction(page: Page, sourceUri: string): Promise<void> {
+async function clickCitationFocusAction(
+  page: Page,
+  sourceUri: string,
+): Promise<void> {
   const clicked = await page.evaluate(
     (input: { sourceUri: string; buttonLabel: string }) => {
       const candidates = Array.from(document.querySelectorAll("div"));
       const card = candidates.find((element) => {
         const text = element.textContent ?? "";
-        return text.includes(input.sourceUri) && text.includes(input.buttonLabel);
+        return (
+          text.includes(input.sourceUri) && text.includes(input.buttonLabel)
+        );
       });
 
       if (!card) {
@@ -388,7 +412,7 @@ async function clickCitationFocusAction(page: Page, sourceUri: string): Promise<
       }
 
       const button = Array.from(card.querySelectorAll("button")).find(
-        (element) => element.textContent?.trim() === input.buttonLabel
+        (element) => element.textContent?.trim() === input.buttonLabel,
       );
 
       if (!(button instanceof HTMLButtonElement)) {
@@ -400,19 +424,21 @@ async function clickCitationFocusAction(page: Page, sourceUri: string): Promise<
     },
     {
       sourceUri,
-      buttonLabel: ValidationText.FocusAction
-    }
+      buttonLabel: ValidationText.FocusAction,
+    },
   );
 
   if (!clicked) {
-    throw new Error(`Could not click "${ValidationText.FocusAction}" for ${sourceUri}`);
+    throw new Error(
+      `Could not click "${ValidationText.FocusAction}" for ${sourceUri}`,
+    );
   }
 }
 
 async function clickNamedButton(page: Page, label: string): Promise<void> {
   const clicked = await page.evaluate((buttonLabel: string) => {
     const button = Array.from(document.querySelectorAll("button")).find(
-      (element) => element.textContent?.trim() === buttonLabel
+      (element) => element.textContent?.trim() === buttonLabel,
     );
 
     if (!(button instanceof HTMLButtonElement)) {
@@ -433,22 +459,25 @@ async function waitForRetrievedChunksState(
   input: {
     required: ReadonlyArray<string>;
     forbidden: ReadonlyArray<string>;
-  }
+  },
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const sectionText = await readRetrievedChunksPanelText(page);
+  await waitForCondition(
+    async () => {
+      const sectionText = await readRetrievedChunksPanelText(page);
 
-    return (
-      input.required.every((value) => sectionText.includes(value)) &&
-      input.forbidden.every((value) => !sectionText.includes(value))
-    );
-  }, `retrieved chunk state: +${input.required.join(", ")} -${input.forbidden.join(", ")}`);
+      return (
+        input.required.every((value) => sectionText.includes(value)) &&
+        input.forbidden.every((value) => !sectionText.includes(value))
+      );
+    },
+    `retrieved chunk state: +${input.required.join(", ")} -${input.forbidden.join(", ")}`,
+  );
 }
 
 async function readRetrievedChunksPanelText(page: Page): Promise<string> {
   return page.evaluate((headingText: string) => {
     const heading = Array.from(document.querySelectorAll("h3")).find(
-      (element) => element.textContent?.trim() === headingText
+      (element) => element.textContent?.trim() === headingText,
     );
 
     const panel = heading?.parentElement?.parentElement?.parentElement;
@@ -465,10 +494,10 @@ async function waitForPageText(page: Page, text: string): Promise<void> {
 
 async function waitForCondition(
   check: () => Promise<boolean>,
-  label: string
+  label: string,
 ): Promise<void> {
   await waitForBrowserValidationCondition(check, label, {
     timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
+    intervalMs: ValidationConfig.UiPollingIntervalMs,
   });
 }

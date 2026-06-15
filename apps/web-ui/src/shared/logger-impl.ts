@@ -2,16 +2,16 @@ import { readServerConnection } from "./server-config.js";
 import {
   installConsoleForwarder,
   type InstalledConsoleForwarder,
-  type SharedLogEntry
+  type SharedLogEntry,
 } from "./logger-core.js";
 
 const EndpointPath = {
   LogsAppend: "/logs/append",
-  LogsReset: "/logs/reset"
+  LogsReset: "/logs/reset",
 } as const;
 
 const AuthorizationHeaderValue = {
-  BearerPrefix: "Bearer "
+  BearerPrefix: "Bearer ",
 } as const;
 
 export const installClientLogForwarder = (): InstalledConsoleForwarder => {
@@ -23,7 +23,7 @@ export const installClientLogForwarder = (): InstalledConsoleForwarder => {
     shouldReset: shouldResetLogsOnLoad,
     send: (entry) => {
       sendRemoteLogEntry(config, entry);
-    }
+    },
   });
 };
 
@@ -32,24 +32,25 @@ const sendRemoteLogEntry = (
     serverUrl: string;
     authToken: string;
   },
-  entry: SharedLogEntry
+  entry: SharedLogEntry,
 ): void => {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
   };
 
-  headers["Authorization"] = `${AuthorizationHeaderValue.BearerPrefix}${config.authToken}`;
+  headers["Authorization"] =
+    `${AuthorizationHeaderValue.BearerPrefix}${config.authToken}`;
 
   void fetch(`${config.serverUrl}${EndpointPath.LogsAppend}`, {
     method: "POST",
     headers,
-    body: JSON.stringify(entry)
+    body: JSON.stringify(entry),
   }).catch(() => undefined);
 };
 
 const DevHostname = {
   Localhost: "localhost",
-  Loopback: "127.0.0.1"
+  Loopback: "127.0.0.1",
 } as const;
 
 const shouldResetLogsOnLoad = (): boolean => {
@@ -64,12 +65,12 @@ const resetRemoteLogs = (config: {
   authToken: string;
 }): void => {
   const headers: Record<string, string> = {
-    "Authorization": `${AuthorizationHeaderValue.BearerPrefix}${config.authToken}`
+    Authorization: `${AuthorizationHeaderValue.BearerPrefix}${config.authToken}`,
   };
 
   void fetch(`${config.serverUrl}${EndpointPath.LogsReset}`, {
     method: "POST",
-    headers
+    headers,
   }).catch(() => undefined);
 };
 

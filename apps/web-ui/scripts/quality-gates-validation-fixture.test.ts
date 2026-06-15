@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createQualityGatesValidationFixture,
-  encodeQualityGateProgressEvent
+  encodeQualityGateProgressEvent,
 } from "./quality-gates-validation-fixture.js";
 
 describe("quality gates browser validation fixture", () => {
@@ -21,10 +21,10 @@ describe("quality gates browser validation fixture", () => {
 
     expect(firstEvent).toBeDefined();
     expect(encodeQualityGateProgressEvent(firstEvent!)).toContain(
-      "event: quality-gates-progress"
+      "event: quality-gates-progress",
     );
     expect(encodeQualityGateProgressEvent(firstEvent!)).toContain(
-      '"text":"Running lint"'
+      '"text":"Running lint"',
     );
     expect(encodeQualityGateProgressEvent(firstEvent!)).toMatch(/\n\n$/u);
   });

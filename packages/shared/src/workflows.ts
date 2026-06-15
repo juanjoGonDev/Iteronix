@@ -15,58 +15,59 @@ export const WorkflowNodeKind = {
   LogicCondition: "logic.condition",
   LogicMerge: "logic.merge",
   HumanReview: "human.review",
-  TerminalResponse: "terminal.response"
+  TerminalResponse: "terminal.response",
 } as const;
 
-export type WorkflowNodeKind = typeof WorkflowNodeKind[keyof typeof WorkflowNodeKind];
+export type WorkflowNodeKind =
+  (typeof WorkflowNodeKind)[keyof typeof WorkflowNodeKind];
 
 export const WorkflowTriggerKind = {
   Manual: "manual",
   Schedule: "schedule",
   Webhook: "webhook",
   Event: "event",
-  Init: "init"
+  Init: "init",
 } as const;
 
 export type WorkflowTriggerKind =
-  typeof WorkflowTriggerKind[keyof typeof WorkflowTriggerKind];
+  (typeof WorkflowTriggerKind)[keyof typeof WorkflowTriggerKind];
 
 export const WorkflowRecordStatus = {
   Draft: "draft",
   Published: "published",
-  Archived: "archived"
+  Archived: "archived",
 } as const;
 
 export type WorkflowRecordStatus =
-  typeof WorkflowRecordStatus[keyof typeof WorkflowRecordStatus];
+  (typeof WorkflowRecordStatus)[keyof typeof WorkflowRecordStatus];
 
 export const WorkflowAssetKind = {
   Prompt: "prompt",
   Instruction: "instruction",
-  Guardrail: "guardrail"
+  Guardrail: "guardrail",
 } as const;
 
 export type WorkflowAssetKind =
-  typeof WorkflowAssetKind[keyof typeof WorkflowAssetKind];
+  (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
   Workspace: "workspace",
-  Project: "project"
+  Project: "project",
 } as const;
 
 export type WorkflowAssetScope =
-  typeof WorkflowAssetScope[keyof typeof WorkflowAssetScope];
+  (typeof WorkflowAssetScope)[keyof typeof WorkflowAssetScope];
 
 export const WorkflowExecutionStatus = {
   Running: "running",
   Completed: "completed",
   Failed: "failed",
   AwaitingReview: "awaiting_review",
-  Canceled: "canceled"
+  Canceled: "canceled",
 } as const;
 
 export type WorkflowExecutionStatus =
-  typeof WorkflowExecutionStatus[keyof typeof WorkflowExecutionStatus];
+  (typeof WorkflowExecutionStatus)[keyof typeof WorkflowExecutionStatus];
 
 export type WorkflowTriggerRecord = {
   kind: WorkflowTriggerKind;
@@ -136,30 +137,30 @@ export const WorkflowNodeRole = {
   Planner: "planner",
   Retriever: "retriever",
   Executor: "executor",
-  Reviewer: "reviewer"
+  Reviewer: "reviewer",
 } as const;
 
 export type WorkflowNodeRole =
-  typeof WorkflowNodeRole[keyof typeof WorkflowNodeRole];
+  (typeof WorkflowNodeRole)[keyof typeof WorkflowNodeRole];
 
 export const WorkflowReasoningLevel = {
   Low: "low",
   Medium: "medium",
   High: "high",
-  Max: "max"
+  Max: "max",
 } as const;
 
 export type WorkflowReasoningLevel =
-  typeof WorkflowReasoningLevel[keyof typeof WorkflowReasoningLevel];
+  (typeof WorkflowReasoningLevel)[keyof typeof WorkflowReasoningLevel];
 
 export const WorkflowVerbosity = {
   Low: "low",
   Medium: "medium",
-  High: "high"
+  High: "high",
 } as const;
 
 export type WorkflowVerbosity =
-  typeof WorkflowVerbosity[keyof typeof WorkflowVerbosity];
+  (typeof WorkflowVerbosity)[keyof typeof WorkflowVerbosity];
 
 export type WorkflowProviderSelectionRecord = {
   providerId: string;
@@ -215,19 +216,19 @@ export type GuardrailValidationRecord = {
 export const WorkflowGuardrailSeverity = {
   Warn: "warn",
   Error: "error",
-  Success: "success"
+  Success: "success",
 } as const;
 
 export type WorkflowGuardrailSeverity =
-  typeof WorkflowGuardrailSeverity[keyof typeof WorkflowGuardrailSeverity];
+  (typeof WorkflowGuardrailSeverity)[keyof typeof WorkflowGuardrailSeverity];
 
 export const WorkflowGuardrailOperator = {
   All: "all",
-  Any: "any"
+  Any: "any",
 } as const;
 
 export type WorkflowGuardrailOperator =
-  typeof WorkflowGuardrailOperator[keyof typeof WorkflowGuardrailOperator];
+  (typeof WorkflowGuardrailOperator)[keyof typeof WorkflowGuardrailOperator];
 
 export type GuardrailDefinitionRecord = {
   id: string;
@@ -342,11 +343,11 @@ export type WorkflowAssetRecord = {
 export const WorkflowAssetUsageRole = {
   Primary: "primary",
   Guardrail: "guardrail",
-  Instruction: "instruction"
+  Instruction: "instruction",
 } as const;
 
 export type WorkflowAssetUsageRole =
-  typeof WorkflowAssetUsageRole[keyof typeof WorkflowAssetUsageRole];
+  (typeof WorkflowAssetUsageRole)[keyof typeof WorkflowAssetUsageRole];
 
 export type WorkflowAssetUsageRecord = {
   assetId: string;
@@ -423,9 +424,9 @@ export const createDefaultWorkflowCatalogState = (): WorkflowCatalogState => ({
   definitions: [],
   assets: [],
   assetUsages: [],
-  executions: []
+  executions: [],
 });
 
 export const isWorkflowTriggerKindSupportedInMvp = (
-  value: WorkflowTriggerKind
+  value: WorkflowTriggerKind,
 ): boolean => value === WorkflowTriggerKind.Manual;

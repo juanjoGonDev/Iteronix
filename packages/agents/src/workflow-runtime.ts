@@ -15,7 +15,7 @@ import {
   type WorkflowNodeExecutionRecord,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
-  type WorkflowUsageTotalsRecord
+  type WorkflowUsageTotalsRecord,
 } from "../../shared/src/workflows";
 
 const DefaultSummaryLength = 240;
@@ -46,7 +46,7 @@ export const WorkflowRuntimeEventType = {
   NodeCompleted: "node_completed",
   NodeFailed: "node_failed",
   WorkflowCompleted: "workflow_completed",
-  WorkflowFailed: "workflow_failed"
+  WorkflowFailed: "workflow_failed",
 } as const;
 
 export type WorkflowRuntimeEvent =
@@ -127,7 +127,7 @@ export type WorkflowRuntime = {
 export const createWorkflowRuntime = (input: {
   now?: () => Date;
   runProviderNode: (
-    request: WorkflowProviderRunRequest
+    request: WorkflowProviderRunRequest,
   ) => Promise<WorkflowProviderRunResult>;
 }): WorkflowRuntime => {
   const now = input.now ?? (() => new Date());
@@ -142,22 +142,25 @@ export const createWorkflowRuntime = (input: {
     const startedAt = now().toISOString();
     const contextSessionId = request.contextSessionId ?? workflowRunId;
     const assetsById = new Map(
-      request.assets.map((asset) => [asset.id, asset] as const)
+      request.assets.map((asset) => [asset.id, asset] as const),
     );
-    const nodes = sortWorkflowNodes(request.definition.nodes, request.definition.edges);
+    const nodes = sortWorkflowNodes(
+      request.definition.nodes,
+      request.definition.edges,
+    );
     const outputs = new Map<string, unknown>();
     const nodeRuns: WorkflowNodeExecutionRecord[] = [];
     let envelope = createInitialEnvelope({
       definition: request.definition,
       workflowRunId,
-      contextSessionId
+      contextSessionId,
     });
     let status: WorkflowExecutionStatus = WorkflowExecutionStatus.Completed;
     request.onEvent?.({
       type: WorkflowRuntimeEventType.WorkflowStarted,
       workflowId: request.definition.id,
       workflowRunId,
-      startedAt
+      startedAt,
     });
 
     for (const node of nodes) {
@@ -169,7 +172,7 @@ export const createWorkflowRuntime = (input: {
         nodeId: node.id,
         nodeKind: node.kind,
         label: node.label,
-        startedAt: nodeStartedAt
+        startedAt: nodeStartedAt,
       });
       if (node.kind === WorkflowNodeKind.HumanReview) {
         const nodeFinishedAt = now().toISOString();
@@ -178,7 +181,12 @@ export const createWorkflowRuntime = (input: {
           startedAt: nodeStartedAt,
           finishedAt: nodeFinishedAt,
           status: "awaiting_review",
-          outputSnapshot: readNodeInput(node.id, request.definition.edges, outputs, envelope)
+          outputSnapshot: readNodeInput(
+            node.id,
+            request.definition.edges,
+            outputs,
+            envelope,
+          ),
         });
         nodeRuns.push(nodeRun);
         request.onEvent?.({
@@ -193,7 +201,7 @@ export const createWorkflowRuntime = (input: {
           finishedAt: nodeFinishedAt,
           outputSnapshot: nodeRun.outputSnapshot,
           alerts: nodeRun.alerts,
-          guardrailFindings: nodeRun.guardrailFindings
+          guardrailFindings: nodeRun.guardrailFindings,
         });
         status = WorkflowExecutionStatus.AwaitingReview;
         break;
@@ -204,7 +212,7 @@ export const createWorkflowRuntime = (input: {
           node.id,
           request.definition.edges,
           outputs,
-          envelope
+          envelope,
         );
         const result = await executeWorkflowNode({
           node,
@@ -215,7 +223,7 @@ export const createWorkflowRuntime = (input: {
           definition: request.definition,
           now,
           runProviderNode: input.runProviderNode,
-          ...(request.onEvent ? { onEvent: request.onEvent } : {})
+          ...(request.onEvent ? { onEvent: request.onEvent } : {}),
         });
         outputs.set(node.id, result.outputSnapshot);
         envelope = result.envelope;
@@ -230,7 +238,7 @@ export const createWorkflowRuntime = (input: {
           guardrailFindings: result.guardrailFindings,
           outputSnapshot: result.outputSnapshot,
           ...(result.provider ? { provider: result.provider } : {}),
-          ...(result.usage ? { usage: result.usage } : {})
+          ...(result.usage ? { usage: result.usage } : {}),
         });
         nodeRuns.push(nodeRun);
         request.onEvent?.({
@@ -247,14 +255,15 @@ export const createWorkflowRuntime = (input: {
           alerts: nodeRun.alerts,
           guardrailFindings: nodeRun.guardrailFindings,
           ...(result.provider ? { provider: result.provider } : {}),
-          ...(result.usage ? { usage: result.usage } : {})
+          ...(result.usage ? { usage: result.usage } : {}),
         });
         if (result.failedByGuardrail) {
           status = WorkflowExecutionStatus.Failed;
           break;
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Workflow node failed";
+        const message =
+          error instanceof Error ? error.message : "Workflow node failed";
         const nodeFinishedAt = now().toISOString();
         const nodeRun = createNodeRunRecord({
           node,
@@ -264,8 +273,8 @@ export const createWorkflowRuntime = (input: {
           alerts: [createRuntimeAlert(message)],
           guardrailFindings: [],
           outputSnapshot: {
-            error: message
-          }
+            error: message,
+          },
         });
         nodeRuns.push(nodeRun);
         request.onEvent?.({
@@ -277,7 +286,7 @@ export const createWorkflowRuntime = (input: {
           label: node.label,
           startedAt: nodeStartedAt,
           finishedAt: nodeFinishedAt,
-          message
+          message,
         });
         status = WorkflowExecutionStatus.Failed;
         break;
@@ -296,13 +305,13 @@ export const createWorkflowRuntime = (input: {
       finishedAt,
       durationMs: Math.max(
         0,
-        new Date(finishedAt).getTime() - new Date(startedAt).getTime()
+        new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
       ),
       warningsCount: countNodeAlerts(nodeRuns, "warn"),
       errorsCount: countNodeAlerts(nodeRuns, "error"),
       totals,
       contextSessionId,
-      nodeRuns
+      nodeRuns,
     };
     request.onEvent?.({
       type:
@@ -312,13 +321,13 @@ export const createWorkflowRuntime = (input: {
       workflowId: execution.workflowId,
       workflowRunId,
       finishedAt,
-      execution
+      execution,
     });
     return execution;
   };
 
   return {
-    runDefinition
+    runDefinition,
   };
 };
 
@@ -331,7 +340,7 @@ const executeWorkflowNode = async (input: {
   definition: WorkflowDefinitionRecord;
   now: () => Date;
   runProviderNode: (
-    request: WorkflowProviderRunRequest
+    request: WorkflowProviderRunRequest,
   ) => Promise<WorkflowProviderRunResult>;
   onEvent?: (event: WorkflowRuntimeEvent) => void;
 }): Promise<{
@@ -355,12 +364,12 @@ const executeWorkflowNode = async (input: {
         outputSnapshot: input.inputValue,
         message: readEnvelopeMessage(input.inputValue),
         citations: [],
-        guardrailFindings: []
+        guardrailFindings: [],
       }),
       outputSnapshot: input.inputValue,
       alerts: [],
       guardrailFindings: [],
-      failedByGuardrail: false
+      failedByGuardrail: false,
     };
   }
 
@@ -374,14 +383,17 @@ const executeWorkflowNode = async (input: {
       envelope: appendEnvelopeOutput(input.envelope, {
         nodeId: input.node.id,
         outputSnapshot: assetOutput,
-        message: typeof assetOutput === "string" ? assetOutput : readEnvelopeMessage(assetOutput),
+        message:
+          typeof assetOutput === "string"
+            ? assetOutput
+            : readEnvelopeMessage(assetOutput),
         citations: [],
-        guardrailFindings: []
+        guardrailFindings: [],
       }),
       outputSnapshot: assetOutput,
       alerts: [],
       guardrailFindings: [],
-      failedByGuardrail: false
+      failedByGuardrail: false,
     };
   }
 
@@ -391,10 +403,16 @@ const executeWorkflowNode = async (input: {
   ) {
     const provider = input.node.config.provider;
     if (!provider) {
-      throw new Error(`Workflow node ${input.node.id} is missing provider configuration`);
+      throw new Error(
+        `Workflow node ${input.node.id} is missing provider configuration`,
+      );
     }
 
-    const prompt = buildProviderPrompt(input.node, input.inputValue, input.envelope);
+    const prompt = buildProviderPrompt(
+      input.node,
+      input.inputValue,
+      input.envelope,
+    );
     const providerResult = await input.runProviderNode({
       workflowId: input.definition.id,
       workflowRunId: input.workflowRunId,
@@ -402,7 +420,7 @@ const executeWorkflowNode = async (input: {
       node: input.node,
       provider,
       envelope: input.envelope,
-      prompt
+      prompt,
     });
     const outputSnapshot =
       providerResult.outputSnapshot ?? providerResult.outputText;
@@ -413,7 +431,7 @@ const executeWorkflowNode = async (input: {
         workflowRunId: input.workflowRunId,
         nodeId: input.node.id,
         delta: providerResult.outputText,
-        emittedAt: input.now().toISOString()
+        emittedAt: input.now().toISOString(),
       });
     }
     const guardrailFindings = evaluateNodeGuardrails({
@@ -421,19 +439,19 @@ const executeWorkflowNode = async (input: {
       inputValue: input.inputValue,
       outputSnapshot,
       envelope: input.envelope,
-      assetsById: input.assetsById
+      assetsById: input.assetsById,
     });
     const nextEnvelope = appendEnvelopeOutput(input.envelope, {
       nodeId: input.node.id,
       outputSnapshot,
       message: providerResult.outputText,
       citations: providerResult.citations ?? [],
-      guardrailFindings
+      guardrailFindings,
     });
     const usage = normalizeUsage(providerResult.usage);
     const guardrailAlerts = createGuardrailAlerts(guardrailFindings, input.now);
     const failedByGuardrail = guardrailFindings.some(
-      (finding) => finding.severity === WorkflowGuardrailSeverity.Error
+      (finding) => finding.severity === WorkflowGuardrailSeverity.Error,
     );
 
     return {
@@ -443,17 +461,19 @@ const executeWorkflowNode = async (input: {
       guardrailFindings,
       failedByGuardrail,
       provider,
-      ...(usage ? { usage } : {})
+      ...(usage ? { usage } : {}),
     };
   }
 
-  throw new Error(`Workflow node kind ${input.node.kind} is not supported in 06.6`);
+  throw new Error(
+    `Workflow node kind ${input.node.kind} is not supported in 06.6`,
+  );
 };
 
 const buildProviderPrompt = (
   node: WorkflowNodeRecord,
   inputValue: unknown,
-  envelope: WorkflowContextEnvelope
+  envelope: WorkflowContextEnvelope,
 ): string => {
   const sections: string[] = [];
   const prompt = node.config.prompt?.trim();
@@ -475,7 +495,7 @@ const buildProviderPrompt = (
 };
 
 const renderEnvelopeForProvider = (
-  envelope: WorkflowContextEnvelope
+  envelope: WorkflowContextEnvelope,
 ): string => {
   const sections: string[] = [];
 
@@ -488,15 +508,22 @@ const renderEnvelopeForProvider = (
   }
 
   if (envelope.messages.length > 0) {
-    sections.push(`Prior workflow messages:\n${envelope.messages
-      .map((message) => `${message.role}: ${message.content}`)
-      .join("\n")}`);
+    sections.push(
+      `Prior workflow messages:\n${envelope.messages
+        .map((message) => `${message.role}: ${message.content}`)
+        .join("\n")}`,
+    );
   }
 
   if (envelope.artifacts.length > 0) {
-    sections.push(`Workflow artifacts:\n${envelope.artifacts
-      .map((artifact) => `${artifact.nodeId}: ${serializeNodeInput(artifact.content)}`)
-      .join("\n")}`);
+    sections.push(
+      `Workflow artifacts:\n${envelope.artifacts
+        .map(
+          (artifact) =>
+            `${artifact.nodeId}: ${serializeNodeInput(artifact.content)}`,
+        )
+        .join("\n")}`,
+    );
   }
 
   return sections.join(PromptSectionSeparator);
@@ -522,7 +549,7 @@ const appendEnvelopeOutput = (
     message: string;
     citations: ReadonlyArray<WorkflowCitationRecord>;
     guardrailFindings: WorkflowContextEnvelope["guardrailFindings"];
-  }
+  },
 ): WorkflowContextEnvelope => {
   const artifactKind: WorkflowContextEnvelope["artifacts"][number]["kind"] =
     typeof input.outputSnapshot === "string" ? "text_output" : "json_output";
@@ -532,36 +559,40 @@ const appendEnvelopeOutput = (
       id: randomUUID(),
       kind: artifactKind,
       nodeId: input.nodeId,
-      content: input.outputSnapshot
-    }
+      content: input.outputSnapshot,
+    },
   ].slice(-Math.max(1, envelope.artifacts.length + 1));
-  const messages = input.message.trim().length === 0
-    ? envelope.messages
-    : [
-        ...envelope.messages,
-        {
-          role: "assistant" as const,
-          content: input.message,
-          sourceNodeId: input.nodeId
-        }
-      ];
+  const messages =
+    input.message.trim().length === 0
+      ? envelope.messages
+      : [
+          ...envelope.messages,
+          {
+            role: "assistant" as const,
+            content: input.message,
+            sourceNodeId: input.nodeId,
+          },
+        ];
   return {
     ...envelope,
     summary: buildEnvelopeSummary(input.message, envelope.summary),
     variables: {
       ...envelope.variables,
-      [input.nodeId]: input.outputSnapshot
+      [input.nodeId]: input.outputSnapshot,
     },
     artifacts,
     citations: [...envelope.citations, ...input.citations],
-    guardrailFindings: [...envelope.guardrailFindings, ...input.guardrailFindings],
-    messages
+    guardrailFindings: [
+      ...envelope.guardrailFindings,
+      ...input.guardrailFindings,
+    ],
+    messages,
   };
 };
 
 const buildEnvelopeSummary = (
   latestMessage: string,
-  previousSummary: string
+  previousSummary: string,
 ): string => {
   const normalized = latestMessage.trim();
   if (normalized.length === 0) {
@@ -577,7 +608,7 @@ const buildEnvelopeSummary = (
 
 const readNodeAssetOutput = (
   node: WorkflowNodeRecord,
-  assetsById: Map<string, WorkflowAssetRecord>
+  assetsById: Map<string, WorkflowAssetRecord>,
 ): string => {
   const assetId = node.config.assetId;
   if (!assetId) {
@@ -607,16 +638,18 @@ const createInitialEnvelope = (input: {
   artifacts: [],
   citations: [],
   guardrailFindings: [],
-  messages: []
+  messages: [],
 });
 
 const readNodeInput = (
   targetNodeId: string,
   edges: ReadonlyArray<WorkflowEdgeRecord>,
   outputs: Map<string, unknown>,
-  envelope: WorkflowContextEnvelope
+  envelope: WorkflowContextEnvelope,
 ): unknown => {
-  const incomingEdges = edges.filter((edge) => edge.targetNodeId === targetNodeId);
+  const incomingEdges = edges.filter(
+    (edge) => edge.targetNodeId === targetNodeId,
+  );
   if (incomingEdges.length === 0) {
     return undefined;
   }
@@ -646,7 +679,7 @@ const readNodeInput = (
       writePathValue(
         mapped,
         normalizeTargetPath(entry.targetPath),
-        readMappingSourceValue(entry.source, outputs, envelope)
+        readMappingSourceValue(entry.source, outputs, envelope),
       );
     }
   }
@@ -657,11 +690,13 @@ const readNodeInput = (
 const renderTemplateMapping = (
   edge: WorkflowEdgeRecord,
   outputs: Map<string, unknown>,
-  envelope: WorkflowContextEnvelope
+  envelope: WorkflowContextEnvelope,
 ): string =>
   edge.mapping.entries
     .map((entry) =>
-      serializeNodeInput(readMappingSourceValue(entry.source, outputs, envelope))
+      serializeNodeInput(
+        readMappingSourceValue(entry.source, outputs, envelope),
+      ),
     )
     .filter((value) => value.length > 0)
     .join("\n");
@@ -669,7 +704,7 @@ const renderTemplateMapping = (
 const readMappingSourceValue = (
   source: WorkflowEdgeRecord["mapping"]["entries"][number]["source"],
   outputs: Map<string, unknown>,
-  envelope: WorkflowContextEnvelope
+  envelope: WorkflowContextEnvelope,
 ): unknown => {
   if (source.kind === "literal") {
     return source.value;
@@ -702,7 +737,7 @@ const normalizeTargetPath = (value?: string): ReadonlyArray<string> => {
 
 const readPathValue = (
   value: unknown,
-  path: ReadonlyArray<string>
+  path: ReadonlyArray<string>,
 ): unknown => {
   let current = value;
   for (const segment of path) {
@@ -719,7 +754,7 @@ const readPathValue = (
 const writePathValue = (
   target: Record<string, unknown>,
   path: ReadonlyArray<string>,
-  value: unknown
+  value: unknown,
 ): void => {
   if (path.length === 0) {
     return;
@@ -743,10 +778,10 @@ const writePathValue = (
 
 const sortWorkflowNodes = (
   nodes: ReadonlyArray<WorkflowNodeRecord>,
-  edges: ReadonlyArray<WorkflowEdgeRecord>
+  edges: ReadonlyArray<WorkflowEdgeRecord>,
 ): ReadonlyArray<WorkflowNodeRecord> => {
   const inDegree = new Map<string, number>(
-    nodes.map((node) => [node.id, 0] as const)
+    nodes.map((node) => [node.id, 0] as const),
   );
   const outgoing = new Map<string, string[]>();
 
@@ -783,7 +818,7 @@ const sortWorkflowNodes = (
 };
 
 const normalizeUsage = (
-  usage?: Partial<WorkflowUsageTotalsRecord>
+  usage?: Partial<WorkflowUsageTotalsRecord>,
 ): WorkflowUsageTotalsRecord | undefined => {
   if (!usage) {
     return undefined;
@@ -803,12 +838,12 @@ const normalizeUsage = (
       : {}),
     ...(usage.exchangeRateEur !== undefined
       ? { exchangeRateEur: usage.exchangeRateEur }
-      : {})
+      : {}),
   };
 };
 
 const sumWorkflowUsage = (
-  nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>
+  nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>,
 ): WorkflowUsageTotalsRecord =>
   nodeRuns.reduce<WorkflowUsageTotalsRecord>(
     (totals, nodeRun) => ({
@@ -818,25 +853,25 @@ const sumWorkflowUsage = (
       totalTokens: totals.totalTokens + (nodeRun.usage?.totalTokens ?? 0),
       estimatedCostEur:
         totals.estimatedCostEur + (nodeRun.usage?.estimatedCostEur ?? 0),
-      latencyMs: totals.latencyMs + (nodeRun.usage?.latencyMs ?? 0)
+      latencyMs: totals.latencyMs + (nodeRun.usage?.latencyMs ?? 0),
     }),
     {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
       estimatedCostEur: 0,
-      latencyMs: 0
-    }
+      latencyMs: 0,
+    },
   );
 
 const countNodeAlerts = (
   nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>,
-  level: WorkflowAlertRecord["level"]
+  level: WorkflowAlertRecord["level"],
 ): number =>
   nodeRuns.reduce<number>(
     (count, nodeRun) =>
       count + nodeRun.alerts.filter((alert) => alert.level === level).length,
-    0
+    0,
   );
 
 const createNodeRunRecord = (input: {
@@ -858,7 +893,7 @@ const createNodeRunRecord = (input: {
   finishedAt: input.finishedAt,
   durationMs: Math.max(
     0,
-    new Date(input.finishedAt).getTime() - new Date(input.startedAt).getTime()
+    new Date(input.finishedAt).getTime() - new Date(input.startedAt).getTime(),
   ),
   ...(input.provider
     ? {
@@ -866,13 +901,13 @@ const createNodeRunRecord = (input: {
         modelId: input.provider.modelId,
         reasoningLevel: input.provider.reasoningLevel,
         temperature: input.provider.temperature,
-        verbosity: input.provider.verbosity
+        verbosity: input.provider.verbosity,
       }
     : {}),
   ...(input.usage ? { usage: input.usage } : {}),
   alerts: input.alerts ?? [],
   guardrailFindings: input.guardrailFindings ?? [],
-  outputSnapshot: input.outputSnapshot
+  outputSnapshot: input.outputSnapshot,
 });
 
 const readEnvelopeMessage = (value: unknown): string => {
@@ -892,7 +927,7 @@ const createRuntimeAlert = (message: string): WorkflowAlertRecord => ({
   level: "error",
   source: "system",
   message,
-  createdAt: new Date().toISOString()
+  createdAt: new Date().toISOString(),
 });
 
 const evaluateNodeGuardrails = (input: {
@@ -917,15 +952,17 @@ const evaluateNodeGuardrails = (input: {
           validation,
           inputValue: input.inputValue,
           outputSnapshot: input.outputSnapshot,
-          envelope: input.envelope
-        })
+          envelope: input.envelope,
+        }),
       );
-      const matched = definition.operator === WorkflowGuardrailOperator.Any
-        ? results.some(Boolean)
-        : results.every(Boolean);
-      const shouldReport = definition.severity === WorkflowGuardrailSeverity.Error
-        ? !matched
-        : matched;
+      const matched =
+        definition.operator === WorkflowGuardrailOperator.Any
+          ? results.some(Boolean)
+          : results.every(Boolean);
+      const shouldReport =
+        definition.severity === WorkflowGuardrailSeverity.Error
+          ? !matched
+          : matched;
 
       return shouldReport
         ? [
@@ -933,14 +970,16 @@ const evaluateNodeGuardrails = (input: {
               guardrailAssetId: attachment.assetId,
               nodeId: input.node.id,
               severity: definition.severity,
-              message: readGuardrailFindingMessage(definition.validations)
-            }
+              message: readGuardrailFindingMessage(definition.validations),
+            },
           ]
         : [];
     });
 
 const evaluateGuardrailValidation = (input: {
-  validation: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"][number];
+  validation: NonNullable<
+    WorkflowAssetRecord["guardrail"]
+  >["validations"][number];
   inputValue: unknown;
   outputSnapshot: unknown;
   envelope: WorkflowContextEnvelope;
@@ -949,11 +988,13 @@ const evaluateGuardrailValidation = (input: {
     target: input.validation.target,
     inputValue: input.inputValue,
     outputSnapshot: input.outputSnapshot,
-    envelope: input.envelope
+    envelope: input.envelope,
   });
-  const resolvedValue = input.validation.kind === "contains" || input.validation.kind === "not_contains"
-    ? targetValue
-    : readPathValue(targetValue, normalizeTargetPath(input.validation.path));
+  const resolvedValue =
+    input.validation.kind === "contains" ||
+    input.validation.kind === "not_contains"
+      ? targetValue
+      : readPathValue(targetValue, normalizeTargetPath(input.validation.path));
 
   if (input.validation.kind === "field_exists") {
     return resolvedValue !== undefined;
@@ -964,19 +1005,26 @@ const evaluateGuardrailValidation = (input: {
   }
 
   if (input.validation.kind === "contains") {
-    return typeof resolvedValue === "string" &&
+    return (
+      typeof resolvedValue === "string" &&
       typeof input.validation.value === "string" &&
-      resolvedValue.includes(input.validation.value);
+      resolvedValue.includes(input.validation.value)
+    );
   }
 
   if (input.validation.kind === "not_contains") {
-    return typeof resolvedValue === "string" &&
+    return (
+      typeof resolvedValue === "string" &&
       typeof input.validation.value === "string" &&
-      !resolvedValue.includes(input.validation.value);
+      !resolvedValue.includes(input.validation.value)
+    );
   }
 
   if (input.validation.kind === "regex") {
-    if (typeof resolvedValue !== "string" || typeof input.validation.value !== "string") {
+    if (
+      typeof resolvedValue !== "string" ||
+      typeof input.validation.value !== "string"
+    ) {
       return false;
     }
 
@@ -988,15 +1036,19 @@ const evaluateGuardrailValidation = (input: {
   }
 
   if (input.validation.kind === "number_gte") {
-    return typeof resolvedValue === "number" &&
+    return (
+      typeof resolvedValue === "number" &&
       typeof input.validation.value === "number" &&
-      resolvedValue >= input.validation.value;
+      resolvedValue >= input.validation.value
+    );
   }
 
   if (input.validation.kind === "number_lte") {
-    return typeof resolvedValue === "number" &&
+    return (
+      typeof resolvedValue === "number" &&
       typeof input.validation.value === "number" &&
-      resolvedValue <= input.validation.value;
+      resolvedValue <= input.validation.value
+    );
   }
 
   if (input.validation.kind === "json_schema") {
@@ -1007,7 +1059,9 @@ const evaluateGuardrailValidation = (input: {
 };
 
 const readGuardrailTargetValue = (input: {
-  target: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"][number]["target"];
+  target: NonNullable<
+    WorkflowAssetRecord["guardrail"]
+  >["validations"][number]["target"];
   inputValue: unknown;
   outputSnapshot: unknown;
   envelope: WorkflowContextEnvelope;
@@ -1025,7 +1079,7 @@ const readGuardrailTargetValue = (input: {
       workflowId: input.envelope.workflowId,
       workflowRunId: input.envelope.workflowRunId,
       sessionId: input.envelope.sessionId,
-      language: input.envelope.language
+      language: input.envelope.language,
     };
   }
 
@@ -1033,12 +1087,12 @@ const readGuardrailTargetValue = (input: {
 };
 
 const readGuardrailFindingMessage = (
-  validations: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"]
+  validations: NonNullable<WorkflowAssetRecord["guardrail"]>["validations"],
 ): string => validations[0]?.message ?? "Guardrail matched.";
 
 const createGuardrailAlerts = (
   findings: ReadonlyArray<WorkflowGuardrailFindingRecord>,
-  nowFactory: () => Date
+  nowFactory: () => Date,
 ): ReadonlyArray<WorkflowAlertRecord> =>
   findings.flatMap((finding) =>
     finding.severity === WorkflowGuardrailSeverity.Success
@@ -1049,9 +1103,9 @@ const createGuardrailAlerts = (
             level: finding.severity,
             source: "guardrail",
             message: finding.message,
-            createdAt: nowFactory().toISOString()
-          }
-        ]
+            createdAt: nowFactory().toISOString(),
+          },
+        ],
   );
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

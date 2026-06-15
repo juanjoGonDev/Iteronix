@@ -6,23 +6,30 @@ import {
   PageTabs,
   showGlobalToast,
   type ToastKind,
-  type PageTabItem
+  type PageTabItem,
 } from "../components/PageScaffold.js";
 import {
   SettingsNumberField,
   SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
-  SettingsToggleField
+  SettingsToggleField,
 } from "../components/SettingsFields.js";
-import { Component, createElement, type ComponentProps } from "../shared/Component.js";
+import {
+  Component,
+  createElement,
+  type ComponentProps,
+} from "../shared/Component.js";
 import { ROUTES } from "../shared/constants.js";
-import { type ProjectSessionState, readProjectSession } from "../shared/project-session.js";
+import {
+  type ProjectSessionState,
+  readProjectSession,
+} from "../shared/project-session.js";
 import {
   DefaultServerConnection,
   readServerConnection,
   writeServerConnection,
-  type ServerConnection
+  type ServerConnection,
 } from "../shared/server-config.js";
 import {
   DefaultSettingsProfileId,
@@ -30,15 +37,15 @@ import {
   hydrateSettingsSnapshot,
   type NotificationsSettings,
   type SettingsSnapshot,
-  type WorkflowLimitsSettings
+  type WorkflowLimitsSettings,
 } from "../shared/settings-storage.js";
 import {
   createSettingsClient,
-  type RuntimeProviderRecord
+  type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
 import {
   createWorkspaceStateClient,
-  hydrateWorkspaceStateClients
+  hydrateWorkspaceStateClients,
 } from "../shared/workspace-state-client.js";
 import { router } from "../shared/Router.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
@@ -48,7 +55,7 @@ import {
   createProviderProfile,
   createProviderSyncRequests,
   updateProviderProfile,
-  type ProviderProfileRecord
+  type ProviderProfileRecord,
 } from "./settings-state.js";
 
 type SettingsTab = "general" | "provider" | "limits" | "notifications" | "api";
@@ -74,7 +81,7 @@ const TabLabel: Record<SettingsTab, string> = {
   provider: "Providers",
   limits: "Workflow Limits",
   notifications: "Notifications",
-  api: "API Access"
+  api: "API Access",
 };
 
 const ProviderKindLabel: Record<ProviderKind, string> = {
@@ -82,30 +89,38 @@ const ProviderKindLabel: Record<ProviderKind, string> = {
   [ProviderKind.OpenAI]: "OpenAI",
   [ProviderKind.Anthropic]: "Anthropic",
   [ProviderKind.Ollama]: "Ollama",
-  [ProviderKind.Custom]: "Custom"
+  [ProviderKind.Custom]: "Custom",
 };
 
 const ProviderKindDescription: Record<ProviderKind, string> = {
-  [ProviderKind.CodexCli]: "CLI provider registered in the current backend runtime.",
-  [ProviderKind.OpenAI]: "API-based profile persisted in the shared server workspace for future workflow selection.",
-  [ProviderKind.Anthropic]: "API-based profile persisted in the shared server workspace for future workflow selection.",
-  [ProviderKind.Ollama]: "Local inference profile persisted in the shared server workspace for future workflow selection.",
-  [ProviderKind.Custom]: "Custom OpenAI-compatible API profile persisted in the shared server workspace for future workflow selection."
+  [ProviderKind.CodexCli]:
+    "CLI provider registered in the current backend runtime.",
+  [ProviderKind.OpenAI]:
+    "API-based profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Anthropic]:
+    "API-based profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Ollama]:
+    "Local inference profile persisted in the shared server workspace for future workflow selection.",
+  [ProviderKind.Custom]:
+    "Custom OpenAI-compatible API profile persisted in the shared server workspace for future workflow selection.",
 };
 
 const TestWebhookPayload = {
   event: "iteronix.settings.test",
-  source: "settings-screen"
+  source: "settings-screen",
 } as const;
 
-export class SettingsScreen extends Component<ComponentProps, SettingsScreenState> {
+export class SettingsScreen extends Component<
+  ComponentProps,
+  SettingsScreenState
+> {
   private readonly settingsClient = createSettingsClient();
   private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
     const snapshot = {
       ...createDefaultSettingsSnapshot(),
-      serverConnection: readServerConnection()
+      serverConnection: readServerConnection(),
     };
     const selectedProviderId = snapshot.providerProfiles[0]?.id ?? null;
 
@@ -122,7 +137,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       runtimeProviders: [],
       isSaving: false,
       isTestingConnection: false,
-      isTestingWebhook: false
+      isTestingWebhook: false,
     });
   }
 
@@ -131,20 +146,25 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
   }
 
   override render(): HTMLElement {
-    return createElement(PageFrame, {
-      className: "max-w-[1380px] gap-7 pb-28 md:pb-10"
-    }, [
-      createElement(PageIntro, {
-        title: "Settings",
-        description: "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench."
-      }),
-      createElement(PageTabs, {
-        sticky: true,
-        items: this.createTabItems()
-      }),
+    return createElement(
+      PageFrame,
+      {
+        className: "max-w-[1380px] gap-7 pb-28 md:pb-10",
+      },
+      [
+        createElement(PageIntro, {
+          title: "Settings",
+          description:
+            "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench.",
+        }),
+        createElement(PageTabs, {
+          sticky: true,
+          items: this.createTabItems(),
+        }),
         this.renderActiveTab(),
-        this.renderSaveBar()
-    ]);
+        this.renderSaveBar(),
+      ],
+    );
   }
 
   private createTabItems(): ReadonlyArray<PageTabItem> {
@@ -153,7 +173,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       this.createTabItem("provider"),
       this.createTabItem("limits"),
       this.createTabItem("notifications"),
-      this.createTabItem("api")
+      this.createTabItem("api"),
     ];
   }
 
@@ -162,7 +182,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       id: tab,
       label: TabLabel[tab],
       active: this.state.activeTab === tab,
-      onClick: () => this.setState({ activeTab: tab })
+      onClick: () => this.setState({ activeTab: tab }),
     };
   }
 
@@ -191,104 +211,213 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     const runtimeProviders = this.state.runtimeProviders;
 
     return createElement("div", { className: "grid gap-6 lg:grid-cols-2" }, [
-      createElement("section", {
-        className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
-      }, [
-        createElement("div", { className: "flex items-start justify-between gap-3" }, [
-          createElement("div", { className: "flex flex-col gap-1" }, [
-            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Workspace context"]),
-            createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Settings read the active project session so provider profiles can later be reused by workflows without hardcoding a single provider."
-            ])
-          ]),
-          createElement(StatusBadge, { status: currentProject ? "success" : "warning" }, [
-            currentProject ? "project ready" : "project missing"
-          ])
-        ]),
-        createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
-          renderReadOnlyCell("Project", currentProject?.name ?? "No project selected"),
-          renderReadOnlyCell(
-            "Root path",
-            currentProject?.rootPath ?? this.state.projectSession.projectRootPath ?? "Workflow-only project"
+      createElement(
+        "section",
+        {
+          className:
+            "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+        },
+        [
+          createElement(
+            "div",
+            { className: "flex items-start justify-between gap-3" },
+            [
+              createElement("div", { className: "flex flex-col gap-1" }, [
+                createElement(
+                  "h2",
+                  { className: "text-lg font-semibold text-white" },
+                  ["Workspace context"],
+                ),
+                createElement(
+                  "p",
+                  { className: "text-sm text-text-secondary" },
+                  [
+                    "Settings read the active project session so provider profiles can later be reused by workflows without hardcoding a single provider.",
+                  ],
+                ),
+              ]),
+              createElement(
+                StatusBadge,
+                { status: currentProject ? "success" : "warning" },
+                [currentProject ? "project ready" : "project missing"],
+              ),
+            ],
           ),
-          renderReadOnlyCell("Recent projects", String(this.state.projectSession.recentProjects.length)),
-          renderReadOnlyCell("Runtime providers", String(runtimeProviders.length))
-        ]),
-        createElement("div", { className: "mt-5 flex flex-wrap gap-3" }, [
-          createElement(Button, {
-            variant: "secondary",
-            size: "sm",
-            onClick: () => router.navigate(ROUTES.PROJECTS),
-            children: currentProject ? "Change project" : "Open project"
-          }),
-          createElement(Button, {
-            variant: "ghost",
-            size: "sm",
-            onClick: () => {
-              void this.hydrateRuntimeContext();
-            },
-            children: "Reload runtime"
-          })
-        ])
-      ]),
-      createElement("section", {
-        className: "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
-      }, [
-        createElement("div", { className: "flex items-start justify-between gap-3" }, [
-          createElement("div", { className: "flex flex-col gap-1" }, [
-            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Persistence policy"]),
-            createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace."
-            ])
+          createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
+            renderReadOnlyCell(
+              "Project",
+              currentProject?.name ?? "No project selected",
+            ),
+            renderReadOnlyCell(
+              "Root path",
+              currentProject?.rootPath ??
+                this.state.projectSession.projectRootPath ??
+                "Workflow-only project",
+            ),
+            renderReadOnlyCell(
+              "Recent projects",
+              String(this.state.projectSession.recentProjects.length),
+            ),
+            renderReadOnlyCell(
+              "Runtime providers",
+              String(runtimeProviders.length),
+            ),
           ]),
-          createElement(StatusBadge, { status: "info" }, ["web mode"])
-        ]),
-        createElement("div", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
-          renderReadOnlyCell("Provider profiles", String(this.state.providerProfiles.length)),
-          renderReadOnlyCell("Current namespace", this.state.profileId || DefaultSettingsProfileId),
-          renderReadOnlyCell("Sound notifications", this.state.notifications.soundEnabled ? "Enabled" : "Disabled"),
-          renderReadOnlyCell("External calls", this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked"),
-          renderReadOnlyCell("Workspace server", this.state.serverConnection.serverUrl)
-        ]),
-      ])
+          createElement("div", { className: "mt-5 flex flex-wrap gap-3" }, [
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              onClick: () => router.navigate(ROUTES.PROJECTS),
+              children: currentProject ? "Change project" : "Open project",
+            }),
+            createElement(Button, {
+              variant: "ghost",
+              size: "sm",
+              onClick: () => {
+                void this.hydrateRuntimeContext();
+              },
+              children: "Reload runtime",
+            }),
+          ]),
+        ],
+      ),
+      createElement(
+        "section",
+        {
+          className:
+            "rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+        },
+        [
+          createElement(
+            "div",
+            { className: "flex items-start justify-between gap-3" },
+            [
+              createElement("div", { className: "flex flex-col gap-1" }, [
+                createElement(
+                  "h2",
+                  { className: "text-lg font-semibold text-white" },
+                  ["Persistence policy"],
+                ),
+                createElement(
+                  "p",
+                  { className: "text-sm text-text-secondary" },
+                  [
+                    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+                  ],
+                ),
+              ]),
+              createElement(StatusBadge, { status: "info" }, ["web mode"]),
+            ],
+          ),
+          createElement(
+            "div",
+            { className: "mt-5 grid gap-4 sm:grid-cols-2" },
+            [
+              renderReadOnlyCell(
+                "Provider profiles",
+                String(this.state.providerProfiles.length),
+              ),
+              renderReadOnlyCell(
+                "Current namespace",
+                this.state.profileId || DefaultSettingsProfileId,
+              ),
+              renderReadOnlyCell(
+                "Sound notifications",
+                this.state.notifications.soundEnabled ? "Enabled" : "Disabled",
+              ),
+              renderReadOnlyCell(
+                "External calls",
+                this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked",
+              ),
+              renderReadOnlyCell(
+                "Workspace server",
+                this.state.serverConnection.serverUrl,
+              ),
+            ],
+          ),
+        ],
+      ),
     ]);
   }
 
   private renderProviderTab(): HTMLElement {
     const selectedProfile = this.readSelectedProviderProfile();
 
-    return createElement("div", { className: "grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" }, [
-      createElement("section", {
-        className: "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
-      }, [
-        createElement("div", { className: "flex items-start justify-between gap-3" }, [
-          createElement("div", { className: "flex flex-col gap-1" }, [
-            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Provider profiles"]),
-            createElement("p", { className: "text-sm text-text-secondary" }, [
-              "Create multiple reusable provider profiles. Workflows will choose among them later instead of activating a single global provider here."
-            ])
-          ]),
-        ]),
-        this.renderAddProfileButtons(),
-        createElement("div", { className: "flex flex-col gap-2" }, [
-          this.state.providerProfiles.length > 0
-            ? this.state.providerProfiles.map((profile) => this.renderProviderProfileListItem(profile))
-            : createElement("div", {
-                className: "rounded-lg border border-dashed border-border-dark px-4 py-6 text-sm text-text-secondary"
-              }, ["No provider profiles yet. Add one from the buttons above."])
-        ])
-      ]),
-      selectedProfile
-        ? this.renderProviderProfileEditor(selectedProfile)
-        : createElement("section", {
-            className: "min-w-0 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
-          }, [
-            createElement("h2", { className: "text-lg font-semibold text-white" }, ["Select a profile"]),
-            createElement("p", { className: "mt-2 text-sm text-text-secondary" }, [
-              "Choose a provider profile from the left column to edit its model, endpoint or CLI parameters."
-            ])
-          ])
-    ]);
+    return createElement(
+      "div",
+      { className: "grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" },
+      [
+        createElement(
+          "section",
+          {
+            className:
+              "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7",
+          },
+          [
+            createElement(
+              "div",
+              { className: "flex items-start justify-between gap-3" },
+              [
+                createElement("div", { className: "flex flex-col gap-1" }, [
+                  createElement(
+                    "h2",
+                    { className: "text-lg font-semibold text-white" },
+                    ["Provider profiles"],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "text-sm text-text-secondary" },
+                    [
+                      "Create multiple reusable provider profiles. Workflows will choose among them later instead of activating a single global provider here.",
+                    ],
+                  ),
+                ]),
+              ],
+            ),
+            this.renderAddProfileButtons(),
+            createElement("div", { className: "flex flex-col gap-2" }, [
+              this.state.providerProfiles.length > 0
+                ? this.state.providerProfiles.map((profile) =>
+                    this.renderProviderProfileListItem(profile),
+                  )
+                : createElement(
+                    "div",
+                    {
+                      className:
+                        "rounded-lg border border-dashed border-border-dark px-4 py-6 text-sm text-text-secondary",
+                    },
+                    [
+                      "No provider profiles yet. Add one from the buttons above.",
+                    ],
+                  ),
+            ]),
+          ],
+        ),
+        selectedProfile
+          ? this.renderProviderProfileEditor(selectedProfile)
+          : createElement(
+              "section",
+              {
+                className:
+                  "min-w-0 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7",
+              },
+              [
+                createElement(
+                  "h2",
+                  { className: "text-lg font-semibold text-white" },
+                  ["Select a profile"],
+                ),
+                createElement(
+                  "p",
+                  { className: "mt-2 text-sm text-text-secondary" },
+                  [
+                    "Choose a provider profile from the left column to edit its model, endpoint or CLI parameters.",
+                  ],
+                ),
+              ],
+            ),
+      ],
+    );
   }
 
   private renderAddProfileButtons(): HTMLElement {
@@ -297,7 +426,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       this.renderAddProfileButton(ProviderKind.OpenAI),
       this.renderAddProfileButton(ProviderKind.Anthropic),
       this.renderAddProfileButton(ProviderKind.Ollama),
-      this.renderAddProfileButton(ProviderKind.Custom)
+      this.renderAddProfileButton(ProviderKind.Custom),
     ]);
   }
 
@@ -307,343 +436,514 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       size: "sm",
       className: "justify-center",
       onClick: () => this.handleAddProviderProfile(kind),
-      children: `Add ${ProviderKindLabel[kind]}`
+      children: `Add ${ProviderKindLabel[kind]}`,
     });
   }
 
-  private renderProviderProfileListItem(profile: ProviderProfileRecord): HTMLElement {
+  private renderProviderProfileListItem(
+    profile: ProviderProfileRecord,
+  ): HTMLElement {
     const isSelected = this.state.selectedProviderId === profile.id;
 
-    return createElement("div", {
-      className: `rounded-xl border px-3 py-3 transition-colors ${
-        isSelected
-          ? "border-primary bg-[#0f243b] shadow-[inset_0_0_0_1px_rgba(19,127,236,0.18)]"
-          : "border-[#2b3644] bg-[#1a2129]"
-      }`
-    }, [
-      createElement("div", { className: "flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start" }, [
-        createElement("button", {
-          type: "button",
-          className: "flex min-w-0 flex-1 flex-col text-left",
-          onClick: () => this.setState({ selectedProviderId: profile.id })
-        }, [
-          createElement("span", { className: "truncate text-sm font-semibold text-white" }, [profile.name]),
-          createElement("span", { className: "mt-1 truncate text-xs text-text-secondary" }, [
-            `${ProviderKindLabel[profile.providerKind]}${profile.modelId ? ` · ${profile.modelId}` : ""}`
-          ])
-        ]),
-        createElement(Button, {
-          variant: "danger",
-          size: "sm",
-          className: "w-full justify-center sm:w-auto sm:self-start",
-          onClick: () => this.handleRemoveProviderProfile(profile.id),
-          children: "Remove"
-        })
-      ])
-    ]);
+    return createElement(
+      "div",
+      {
+        className: `rounded-xl border px-3 py-3 transition-colors ${
+          isSelected
+            ? "border-primary bg-[#0f243b] shadow-[inset_0_0_0_1px_rgba(19,127,236,0.18)]"
+            : "border-[#2b3644] bg-[#1a2129]"
+        }`,
+      },
+      [
+        createElement(
+          "div",
+          {
+            className: "flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start",
+          },
+          [
+            createElement(
+              "button",
+              {
+                type: "button",
+                className: "flex min-w-0 flex-1 flex-col text-left",
+                onClick: () =>
+                  this.setState({ selectedProviderId: profile.id }),
+              },
+              [
+                createElement(
+                  "span",
+                  { className: "truncate text-sm font-semibold text-white" },
+                  [profile.name],
+                ),
+                createElement(
+                  "span",
+                  { className: "mt-1 truncate text-xs text-text-secondary" },
+                  [
+                    `${ProviderKindLabel[profile.providerKind]}${profile.modelId ? ` · ${profile.modelId}` : ""}`,
+                  ],
+                ),
+              ],
+            ),
+            createElement(Button, {
+              variant: "danger",
+              size: "sm",
+              className: "w-full justify-center sm:w-auto sm:self-start",
+              onClick: () => this.handleRemoveProviderProfile(profile.id),
+              children: "Remove",
+            }),
+          ],
+        ),
+      ],
+    );
   }
 
-  private renderProviderProfileEditor(profile: ProviderProfileRecord): HTMLElement {
+  private renderProviderProfileEditor(
+    profile: ProviderProfileRecord,
+  ): HTMLElement {
     const runtimeAvailable = this.state.runtimeProviders.some(
-      (provider) => provider.id === profile.providerKind
+      (provider) => provider.id === profile.providerKind,
     );
 
-    return createElement("section", {
-      className: "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7"
-    }, [
-      createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, [
-        createElement("div", { className: "flex flex-col gap-1" }, [
-          createElement("h2", { className: "text-lg font-semibold text-white" }, [profile.name]),
-          createElement("p", { className: "text-sm text-text-secondary" }, [
-            ProviderKindDescription[profile.providerKind]
-          ])
-        ]),
-        createElement("div", { className: "text-xs font-medium uppercase tracking-[0.16em] text-slate-500" }, [
-          runtimeAvailable ? "Runtime available" : "Server-backed"
-        ])
-      ]),
-      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        createElement(SettingsTextField, {
-          label: "Profile name",
-          value: profile.name,
-          placeholder: "Planner profile",
-          testId: "settings-provider-name",
-          onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "name", value)
-        }),
-        createElement(SettingsSelectField, {
-          label: "Provider",
-          value: profile.providerKind,
-          testId: "settings-provider-kind",
-          options: [
-            { value: ProviderKind.CodexCli, label: ProviderKindLabel[ProviderKind.CodexCli] },
-            { value: ProviderKind.OpenAI, label: ProviderKindLabel[ProviderKind.OpenAI] },
-            { value: ProviderKind.Anthropic, label: ProviderKindLabel[ProviderKind.Anthropic] },
-            { value: ProviderKind.Ollama, label: ProviderKindLabel[ProviderKind.Ollama] },
-            { value: ProviderKind.Custom, label: ProviderKindLabel[ProviderKind.Custom] }
+    return createElement(
+      "section",
+      {
+        className:
+          "min-w-0 flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-5 md:p-7",
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex flex-wrap items-start justify-between gap-3" },
+          [
+            createElement("div", { className: "flex flex-col gap-1" }, [
+              createElement(
+                "h2",
+                { className: "text-lg font-semibold text-white" },
+                [profile.name],
+              ),
+              createElement("p", { className: "text-sm text-text-secondary" }, [
+                ProviderKindDescription[profile.providerKind],
+              ]),
+            ]),
+            createElement(
+              "div",
+              {
+                className:
+                  "text-xs font-medium uppercase tracking-[0.16em] text-slate-500",
+              },
+              [runtimeAvailable ? "Runtime available" : "Server-backed"],
+            ),
           ],
-          onChange: (value: string) => this.handleProviderKindChange(profile.id, value)
-        }),
-        createElement(SettingsTextField, {
-          label: "Model",
-          value: profile.modelId,
-          placeholder: "Enter the model id used by flows",
-          testId: "settings-provider-model",
-          onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "modelId", value)
-        }),
-        profile.providerKind === ProviderKind.CodexCli
-          ? createElement(SettingsTextField, {
-              label: "Command",
-              value: profile.command,
-              placeholder: "codex",
-              testId: "settings-provider-command",
-              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "command", value)
-            })
-          : createElement(SettingsTextField, {
-              label: "Endpoint URL",
-              value: profile.endpointUrl,
-              placeholder: "https://provider.example.com",
-              testId: "settings-provider-endpoint",
-              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "endpointUrl", value)
-            }),
-        profile.providerKind === ProviderKind.CodexCli
-          ? ""
-          : createElement(SettingsTextField, {
-              label: "API key env var",
-              value: profile.apiKeyEnvVar,
-              placeholder: "OPENAI_API_KEY",
-              testId: "settings-provider-api-key-env-var",
-              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "apiKeyEnvVar", value)
-            }),
-        profile.providerKind === ProviderKind.CodexCli
-          ? createElement(SettingsSelectField, {
-              label: "Prompt mode",
-              value: profile.promptMode,
-              testId: "settings-provider-prompt-mode",
-              options: [
-                { value: ProviderPromptMode.Stdin, label: "stdin" },
-                { value: ProviderPromptMode.Arg, label: "arg" }
-              ],
-              onChange: (value: string) => this.handleProviderPromptModeChange(profile.id, value)
-            })
-          : createElement(SettingsSecretField, {
-              label: "API key",
-              value: profile.apiKey,
-              placeholder: "Bearer token",
-              testId: "settings-provider-api-key",
-              onChange: (value: string) => this.handleProviderProfileTextChange(profile.id, "apiKey", value)
-            })
-      ]),
-      createElement("div", {
-        className: "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4 text-sm leading-6 text-text-secondary"
-      }, [
-        profile.providerKind === ProviderKind.CodexCli
-          ? this.state.currentProject
-            ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
-            : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
-          : runtimeAvailable
-            ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
-            : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support."
-      ])
-    ]);
+        ),
+        createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+          createElement(SettingsTextField, {
+            label: "Profile name",
+            value: profile.name,
+            placeholder: "Planner profile",
+            testId: "settings-provider-name",
+            onChange: (value: string) =>
+              this.handleProviderProfileTextChange(profile.id, "name", value),
+          }),
+          createElement(SettingsSelectField, {
+            label: "Provider",
+            value: profile.providerKind,
+            testId: "settings-provider-kind",
+            options: [
+              {
+                value: ProviderKind.CodexCli,
+                label: ProviderKindLabel[ProviderKind.CodexCli],
+              },
+              {
+                value: ProviderKind.OpenAI,
+                label: ProviderKindLabel[ProviderKind.OpenAI],
+              },
+              {
+                value: ProviderKind.Anthropic,
+                label: ProviderKindLabel[ProviderKind.Anthropic],
+              },
+              {
+                value: ProviderKind.Ollama,
+                label: ProviderKindLabel[ProviderKind.Ollama],
+              },
+              {
+                value: ProviderKind.Custom,
+                label: ProviderKindLabel[ProviderKind.Custom],
+              },
+            ],
+            onChange: (value: string) =>
+              this.handleProviderKindChange(profile.id, value),
+          }),
+          createElement(SettingsTextField, {
+            label: "Model",
+            value: profile.modelId,
+            placeholder: "Enter the model id used by flows",
+            testId: "settings-provider-model",
+            onChange: (value: string) =>
+              this.handleProviderProfileTextChange(
+                profile.id,
+                "modelId",
+                value,
+              ),
+          }),
+          profile.providerKind === ProviderKind.CodexCli
+            ? createElement(SettingsTextField, {
+                label: "Command",
+                value: profile.command,
+                placeholder: "codex",
+                testId: "settings-provider-command",
+                onChange: (value: string) =>
+                  this.handleProviderProfileTextChange(
+                    profile.id,
+                    "command",
+                    value,
+                  ),
+              })
+            : createElement(SettingsTextField, {
+                label: "Endpoint URL",
+                value: profile.endpointUrl,
+                placeholder: "https://provider.example.com",
+                testId: "settings-provider-endpoint",
+                onChange: (value: string) =>
+                  this.handleProviderProfileTextChange(
+                    profile.id,
+                    "endpointUrl",
+                    value,
+                  ),
+              }),
+          profile.providerKind === ProviderKind.CodexCli
+            ? ""
+            : createElement(SettingsTextField, {
+                label: "API key env var",
+                value: profile.apiKeyEnvVar,
+                placeholder: "OPENAI_API_KEY",
+                testId: "settings-provider-api-key-env-var",
+                onChange: (value: string) =>
+                  this.handleProviderProfileTextChange(
+                    profile.id,
+                    "apiKeyEnvVar",
+                    value,
+                  ),
+              }),
+          profile.providerKind === ProviderKind.CodexCli
+            ? createElement(SettingsSelectField, {
+                label: "Prompt mode",
+                value: profile.promptMode,
+                testId: "settings-provider-prompt-mode",
+                options: [
+                  { value: ProviderPromptMode.Stdin, label: "stdin" },
+                  { value: ProviderPromptMode.Arg, label: "arg" },
+                ],
+                onChange: (value: string) =>
+                  this.handleProviderPromptModeChange(profile.id, value),
+              })
+            : createElement(SettingsSecretField, {
+                label: "API key",
+                value: profile.apiKey,
+                placeholder: "Bearer token",
+                testId: "settings-provider-api-key",
+                onChange: (value: string) =>
+                  this.handleProviderProfileTextChange(
+                    profile.id,
+                    "apiKey",
+                    value,
+                  ),
+              }),
+        ]),
+        createElement(
+          "div",
+          {
+            className:
+              "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4 text-sm leading-6 text-text-secondary",
+          },
+          [
+            profile.providerKind === ProviderKind.CodexCli
+              ? this.state.currentProject
+                ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
+                : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
+              : runtimeAvailable
+                ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
+                : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
+          ],
+        ),
+      ],
+    );
   }
 
   private renderLimitsTab(): HTMLElement {
-    return createElement("section", {
-      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
-    }, [
-      createElement("div", { className: "flex flex-col gap-1" }, [
-        createElement("h2", { className: "text-lg font-semibold text-white" }, ["Workflow limits"]),
-        createElement("p", { className: "text-sm text-text-secondary" }, [
-          "Guardrails that apply before autonomous runs consume excessive time, loops or external access."
-        ])
-      ]),
-      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        createElement(SettingsNumberField, {
-          label: "Maximum loops",
-          value: this.state.workflowLimits.maxLoops,
-          disabled: this.state.workflowLimits.infiniteLoops,
-          testId: "settings-max-loops",
-          onChange: (value: string) => this.handleMaxLoopsChange(value)
-        }),
-        createElement(SettingsToggleField, {
-          label: "Infinite loops",
-          description: "Allow autonomous execution without a hard loop cap.",
-          checked: this.state.workflowLimits.infiniteLoops,
-          testId: "settings-infinite-loops",
-          onChange: (checked: boolean) =>
-            this.setState({
-              workflowLimits: {
-                ...this.state.workflowLimits,
-                infiniteLoops: checked
-              }
-            })
-        }),
-        createElement(SettingsToggleField, {
-          label: "Allow external API calls",
-          description: "Permit network access from tool executions and workflow steps.",
-          checked: this.state.workflowLimits.externalCalls,
-          testId: "settings-external-calls",
-          onChange: (checked: boolean) =>
-            this.setState({
-              workflowLimits: {
-                ...this.state.workflowLimits,
-                externalCalls: checked
-              }
-            })
-        })
-      ])
-    ]);
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+      },
+      [
+        createElement("div", { className: "flex flex-col gap-1" }, [
+          createElement(
+            "h2",
+            { className: "text-lg font-semibold text-white" },
+            ["Workflow limits"],
+          ),
+          createElement("p", { className: "text-sm text-text-secondary" }, [
+            "Guardrails that apply before autonomous runs consume excessive time, loops or external access.",
+          ]),
+        ]),
+        createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+          createElement(SettingsNumberField, {
+            label: "Maximum loops",
+            value: this.state.workflowLimits.maxLoops,
+            disabled: this.state.workflowLimits.infiniteLoops,
+            testId: "settings-max-loops",
+            onChange: (value: string) => this.handleMaxLoopsChange(value),
+          }),
+          createElement(SettingsToggleField, {
+            label: "Infinite loops",
+            description: "Allow autonomous execution without a hard loop cap.",
+            checked: this.state.workflowLimits.infiniteLoops,
+            testId: "settings-infinite-loops",
+            onChange: (checked: boolean) =>
+              this.setState({
+                workflowLimits: {
+                  ...this.state.workflowLimits,
+                  infiniteLoops: checked,
+                },
+              }),
+          }),
+          createElement(SettingsToggleField, {
+            label: "Allow external API calls",
+            description:
+              "Permit network access from tool executions and workflow steps.",
+            checked: this.state.workflowLimits.externalCalls,
+            testId: "settings-external-calls",
+            onChange: (checked: boolean) =>
+              this.setState({
+                workflowLimits: {
+                  ...this.state.workflowLimits,
+                  externalCalls: checked,
+                },
+              }),
+          }),
+        ]),
+      ],
+    );
   }
 
   private renderNotificationsTab(): HTMLElement {
-    return createElement("section", {
-      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
-    }, [
-      createElement("div", { className: "flex flex-col gap-1" }, [
-        createElement("h2", { className: "text-lg font-semibold text-white" }, ["Notifications"]),
-        createElement("p", { className: "text-sm text-text-secondary" }, [
-          "Keep browser-side alert preferences and webhook routing in sync with the current workstation."
-        ])
-      ]),
-      createElement(SettingsToggleField, {
-        label: "Completion sound",
-        description: "Play a local confirmation tone when a run finishes.",
-        checked: this.state.notifications.soundEnabled,
-        testId: "settings-sound-enabled",
-        onChange: (checked: boolean) =>
-          this.setState({
-            notifications: {
-              ...this.state.notifications,
-              soundEnabled: checked
-            }
-          })
-      }),
-      createElement("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" }, [
-        createElement(SettingsTextField, {
-          label: "Webhook URL",
-          value: this.state.notifications.webhookUrl,
-          placeholder: "https://hooks.example.com/iteronix",
-          testId: "settings-webhook-url",
-          onChange: (value: string) =>
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+      },
+      [
+        createElement("div", { className: "flex flex-col gap-1" }, [
+          createElement(
+            "h2",
+            { className: "text-lg font-semibold text-white" },
+            ["Notifications"],
+          ),
+          createElement("p", { className: "text-sm text-text-secondary" }, [
+            "Keep browser-side alert preferences and webhook routing in sync with the current workstation.",
+          ]),
+        ]),
+        createElement(SettingsToggleField, {
+          label: "Completion sound",
+          description: "Play a local confirmation tone when a run finishes.",
+          checked: this.state.notifications.soundEnabled,
+          testId: "settings-sound-enabled",
+          onChange: (checked: boolean) =>
             this.setState({
               notifications: {
                 ...this.state.notifications,
-                webhookUrl: value
-              }
-            })
+                soundEnabled: checked,
+              },
+            }),
         }),
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
-          disabled:
-            this.state.isTestingWebhook ||
-            this.state.notifications.webhookUrl.trim().length === 0,
-          onClick: () => {
-            void this.handleTestWebhook();
+        createElement(
+          "div",
+          {
+            className:
+              "grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end",
           },
-          children: this.state.isTestingWebhook ? "Testing" : "Test payload"
-        })
-      ]),
-      createElement("p", { className: "text-xs text-text-secondary" }, [
-        "Webhook tests send a JSON POST directly from the browser. If the destination blocks CORS, the test fails locally but the saved URL remains available for future server-side integrations."
-      ])
-    ]);
+          [
+            createElement(SettingsTextField, {
+              label: "Webhook URL",
+              value: this.state.notifications.webhookUrl,
+              placeholder: "https://hooks.example.com/iteronix",
+              testId: "settings-webhook-url",
+              onChange: (value: string) =>
+                this.setState({
+                  notifications: {
+                    ...this.state.notifications,
+                    webhookUrl: value,
+                  },
+                }),
+            }),
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled:
+                this.state.isTestingWebhook ||
+                this.state.notifications.webhookUrl.trim().length === 0,
+              onClick: () => {
+                void this.handleTestWebhook();
+              },
+              children: this.state.isTestingWebhook
+                ? "Testing"
+                : "Test payload",
+            }),
+          ],
+        ),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Webhook tests send a JSON POST directly from the browser. If the destination blocks CORS, the test fails locally but the saved URL remains available for future server-side integrations.",
+        ]),
+      ],
+    );
   }
 
   private renderApiTab(): HTMLElement {
-    return createElement("section", {
-      className: "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7"
-    }, [
-      createElement("div", { className: "flex flex-col gap-1" }, [
-        createElement("h2", { className: "text-lg font-semibold text-white" }, ["API access"]),
-        createElement("p", { className: "text-sm text-text-secondary" }, [
-          "These values are part of the shared workspace snapshot so every client connected to the same server sees the same API target and token."
-        ])
-      ]),
-      createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
-        createElement(SettingsTextField, {
-          label: "Server URL",
-          value: this.state.serverConnection.serverUrl,
-          placeholder: DefaultServerConnection.serverUrl,
-          testId: "settings-server-url",
-          onChange: (value: string) => this.handleServerConnectionChange("serverUrl", value)
-        }),
-        createElement(SettingsTextField, {
-          label: "Auth token",
-          value: this.state.serverConnection.authToken,
-          placeholder: DefaultServerConnection.authToken,
-          testId: "settings-auth-token",
-          onChange: (value: string) => this.handleServerConnectionChange("authToken", value)
-        })
-      ]),
-      createElement("div", { className: "flex flex-wrap items-center gap-3" }, [
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
-          disabled: this.state.isTestingConnection,
-          onClick: () => {
-            void this.handleTestConnection();
-          },
-          children: this.state.isTestingConnection ? "Testing" : "Check connection"
-        }),
-        createElement(StatusBadge, {
-          status: this.state.runtimeProviders.length > 0 ? "success" : "warning"
-        }, [
-          this.state.runtimeProviders.length > 0
-            ? `${this.state.runtimeProviders.length} runtime provider${this.state.runtimeProviders.length === 1 ? "" : "s"}`
-            : "No runtime providers loaded"
-        ])
-      ]),
-      this.state.runtimeProviders.length > 0
-        ? createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
-            this.state.runtimeProviders.map((provider) =>
-              createElement("div", {
-                key: provider.id,
-                className: "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3"
-              }, [
-                createElement("p", { className: "text-sm font-semibold text-white" }, [provider.displayName]),
-                createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-                  `${provider.id} · ${provider.type} · auth ${provider.authType}`
-                ])
-              ])
-            )
-          ])
-        : createElement("div", {
-            className: "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary"
-          }, ["Use Check connection to validate the current server URL and auth token."])
-    ]);
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-5 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+      },
+      [
+        createElement("div", { className: "flex flex-col gap-1" }, [
+          createElement(
+            "h2",
+            { className: "text-lg font-semibold text-white" },
+            ["API access"],
+          ),
+          createElement("p", { className: "text-sm text-text-secondary" }, [
+            "These values are part of the shared workspace snapshot so every client connected to the same server sees the same API target and token.",
+          ]),
+        ]),
+        createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
+          createElement(SettingsTextField, {
+            label: "Server URL",
+            value: this.state.serverConnection.serverUrl,
+            placeholder: DefaultServerConnection.serverUrl,
+            testId: "settings-server-url",
+            onChange: (value: string) =>
+              this.handleServerConnectionChange("serverUrl", value),
+          }),
+          createElement(SettingsTextField, {
+            label: "Auth token",
+            value: this.state.serverConnection.authToken,
+            placeholder: DefaultServerConnection.authToken,
+            testId: "settings-auth-token",
+            onChange: (value: string) =>
+              this.handleServerConnectionChange("authToken", value),
+          }),
+        ]),
+        createElement(
+          "div",
+          { className: "flex flex-wrap items-center gap-3" },
+          [
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled: this.state.isTestingConnection,
+              onClick: () => {
+                void this.handleTestConnection();
+              },
+              children: this.state.isTestingConnection
+                ? "Testing"
+                : "Check connection",
+            }),
+            createElement(
+              StatusBadge,
+              {
+                status:
+                  this.state.runtimeProviders.length > 0
+                    ? "success"
+                    : "warning",
+              },
+              [
+                this.state.runtimeProviders.length > 0
+                  ? `${this.state.runtimeProviders.length} runtime provider${this.state.runtimeProviders.length === 1 ? "" : "s"}`
+                  : "No runtime providers loaded",
+              ],
+            ),
+          ],
+        ),
+        this.state.runtimeProviders.length > 0
+          ? createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
+              this.state.runtimeProviders.map((provider) =>
+                createElement(
+                  "div",
+                  {
+                    key: provider.id,
+                    className:
+                      "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3",
+                  },
+                  [
+                    createElement(
+                      "p",
+                      { className: "text-sm font-semibold text-white" },
+                      [provider.displayName],
+                    ),
+                    createElement(
+                      "p",
+                      { className: "mt-1 text-xs text-text-secondary" },
+                      [
+                        `${provider.id} · ${provider.type} · auth ${provider.authType}`,
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ])
+          : createElement(
+              "div",
+              {
+                className:
+                  "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary",
+              },
+              [
+                "Use Check connection to validate the current server URL and auth token.",
+              ],
+            ),
+      ],
+    );
   }
 
   private renderSaveBar(): HTMLElement {
-    return createElement("div", {
-      className: "sticky bottom-4 z-20 mt-1 flex w-full flex-col gap-3 rounded-xl border border-[#202832] bg-[#171c22] px-4 py-4 shadow-[0_8px_18px_rgba(15,23,32,0.12)] md:w-auto md:flex-row md:items-center md:justify-end md:px-6"
-        + " self-stretch md:self-end md:min-w-[420px]"
-    }, [
-      createElement(Button, {
-        variant: "danger",
-        className: "w-full justify-center md:w-auto",
-        onClick: () => {
-          void this.handleResetDefaults();
-        },
-        children: "Reset defaults"
-      }),
-      createElement(Button, {
-        variant: "primary",
-        icon: "save",
-        disabled: this.state.isSaving,
-        className: "w-full justify-center md:w-auto",
-        onClick: () => {
-          void this.handleSave();
-        },
-        children: this.state.isSaving ? "Saving" : "Save changes"
-      })
-    ]);
+    return createElement(
+      "div",
+      {
+        className:
+          "sticky bottom-4 z-20 mt-1 flex w-full flex-col gap-3 rounded-xl border border-[#202832] bg-[#171c22] px-4 py-4 shadow-[0_8px_18px_rgba(15,23,32,0.12)] md:w-auto md:flex-row md:items-center md:justify-end md:px-6" +
+          " self-stretch md:self-end md:min-w-[420px]",
+      },
+      [
+        createElement(Button, {
+          variant: "danger",
+          className: "w-full justify-center md:w-auto",
+          onClick: () => {
+            void this.handleResetDefaults();
+          },
+          children: "Reset defaults",
+        }),
+        createElement(Button, {
+          variant: "primary",
+          icon: "save",
+          disabled: this.state.isSaving,
+          className: "w-full justify-center md:w-auto",
+          onClick: () => {
+            void this.handleSave();
+          },
+          children: this.state.isSaving ? "Saving" : "Save changes",
+        }),
+      ],
+    );
   }
 
   private async hydrateRuntimeContext(): Promise<void> {
     let projectSession = readProjectSession();
     let currentProject: ProjectRecord | null = null;
-    let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> = this.state.runtimeProviders;
+    let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> =
+      this.state.runtimeProviders;
     let message: string | null = null;
 
     try {
@@ -658,7 +958,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
         workflowLimits: snapshot.workflowLimits,
         notifications: snapshot.notifications,
-        serverConnection: snapshot.serverConnection
+        serverConnection: snapshot.serverConnection,
       });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
@@ -666,14 +966,22 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       message = toErrorMessage(error, "Could not load runtime providers.");
     }
 
-    if (projectSession.projectRootPath !== null || projectSession.projectName.length > 0) {
+    if (
+      projectSession.projectRootPath !== null ||
+      projectSession.projectName.length > 0
+    ) {
       try {
         currentProject = await this.settingsClient.openProject({
           rootPath: projectSession.projectRootPath,
-          ...(projectSession.projectName ? { name: projectSession.projectName } : {})
+          ...(projectSession.projectName
+            ? { name: projectSession.projectName }
+            : {}),
         });
       } catch (error) {
-        message = toErrorMessage(error, "Could not resolve the active project for settings.");
+        message = toErrorMessage(
+          error,
+          "Could not resolve the active project for settings.",
+        );
       }
     }
 
@@ -693,34 +1001,44 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     this.setState({
       activeTab: "provider",
       providerProfiles: [...this.state.providerProfiles, profile],
-      selectedProviderId: profile.id
+      selectedProviderId: profile.id,
     });
   }
 
   private handleRemoveProviderProfile(profileId: string): void {
-    const nextProfiles = this.state.providerProfiles.filter((profile) => profile.id !== profileId);
+    const nextProfiles = this.state.providerProfiles.filter(
+      (profile) => profile.id !== profileId,
+    );
     const selectedProviderId =
       this.state.selectedProviderId === profileId
-        ? nextProfiles[0]?.id ?? null
+        ? (nextProfiles[0]?.id ?? null)
         : this.state.selectedProviderId;
 
     this.setState({
       providerProfiles: nextProfiles,
-      selectedProviderId
+      selectedProviderId,
     });
   }
 
   private handleProviderProfileTextChange(
     profileId: string,
-    key: "name" | "modelId" | "endpointUrl" | "apiKey" | "apiKeyEnvVar" | "command",
-    value: string
+    key:
+      | "name"
+      | "modelId"
+      | "endpointUrl"
+      | "apiKey"
+      | "apiKeyEnvVar"
+      | "command",
+    value: string,
   ): void {
     const nextProfiles = this.state.providerProfiles.map((profile) =>
-      profile.id === profileId ? updateProviderProfile(profile, { [key]: value }) : profile
+      profile.id === profileId
+        ? updateProviderProfile(profile, { [key]: value })
+        : profile,
     );
 
     this.setState({
-      providerProfiles: nextProfiles
+      providerProfiles: nextProfiles,
     });
   }
 
@@ -731,20 +1049,27 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     }
 
     const nextProfiles = this.state.providerProfiles.map((profile) =>
-      profile.id === profileId ? updateProviderProfile(profile, { providerKind: kind, modelId: "" }) : profile
+      profile.id === profileId
+        ? updateProviderProfile(profile, { providerKind: kind, modelId: "" })
+        : profile,
     );
 
     this.setState({ providerProfiles: nextProfiles });
   }
 
-  private handleProviderPromptModeChange(profileId: string, value: string): void {
+  private handleProviderPromptModeChange(
+    profileId: string,
+    value: string,
+  ): void {
     const promptMode = readPromptMode(value);
     if (!promptMode) {
       return;
     }
 
     const nextProfiles = this.state.providerProfiles.map((profile) =>
-      profile.id === profileId ? updateProviderProfile(profile, { promptMode }) : profile
+      profile.id === profileId
+        ? updateProviderProfile(profile, { promptMode })
+        : profile,
     );
 
     this.setState({ providerProfiles: nextProfiles });
@@ -759,62 +1084,62 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     this.setState({
       workflowLimits: {
         ...this.state.workflowLimits,
-        maxLoops: parsed
-      }
+        maxLoops: parsed,
+      },
     });
   }
 
   private handleServerConnectionChange(
     key: keyof ServerConnection,
-    value: string
+    value: string,
   ): void {
     this.setState({
       serverConnection: {
         ...this.state.serverConnection,
-        [key]: value
-      }
+        [key]: value,
+      },
     });
   }
 
   private async handleTestConnection(): Promise<void> {
     this.setState({
-      isTestingConnection: true
+      isTestingConnection: true,
     });
 
     try {
       writeServerConnection(this.state.serverConnection);
       const response = await this.settingsClient.listProviders();
       this.setState({
-        runtimeProviders: response.providers
+        runtimeProviders: response.providers,
       });
       this.pushToast(
         "success",
-        `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`
+        `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`,
       );
     } catch (error) {
       this.pushToast("error", toErrorMessage(error, "Connection test failed."));
     } finally {
       this.setState({
-        isTestingConnection: false
+        isTestingConnection: false,
       });
     }
   }
 
   private async handleTestWebhook(): Promise<void> {
     this.setState({
-      isTestingWebhook: true
+      isTestingWebhook: true,
     });
 
     try {
       const response = await fetch(this.state.notifications.webhookUrl, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           ...TestWebhookPayload,
-          timestamp: new Date().toISOString()
-        })
+          timestamp: new Date().toISOString(),
+        }),
       });
 
       if (!response.ok) {
@@ -826,7 +1151,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       this.pushToast("error", toErrorMessage(error, "Webhook test failed."));
     } finally {
       this.setState({
-        isTestingWebhook: false
+        isTestingWebhook: false,
       });
     }
   }
@@ -837,7 +1162,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
     }
 
     this.setState({
-      isSaving: true
+      isSaving: true,
     });
 
     try {
@@ -846,33 +1171,33 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         providerProfiles: this.state.providerProfiles,
         workflowLimits: this.state.workflowLimits,
         notifications: this.state.notifications,
-        serverConnection: this.state.serverConnection
+        serverConnection: this.state.serverConnection,
       };
 
       const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot
+        settings: snapshot,
       });
       hydrateWorkspaceStateClients(workspaceState);
       const persistedSettings = workspaceState.settings;
       const selectedProviderId = persistedSettings.providerProfiles.some(
-        (profile) => profile.id === this.state.selectedProviderId
+        (profile) => profile.id === this.state.selectedProviderId,
       )
         ? this.state.selectedProviderId
-        : persistedSettings.providerProfiles[0]?.id ?? null;
+        : (persistedSettings.providerProfiles[0]?.id ?? null);
       this.setState({
         profileId: persistedSettings.profileId,
         providerProfiles: persistedSettings.providerProfiles,
         selectedProviderId,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection
+        serverConnection: persistedSettings.serverConnection,
       });
 
       let syncedCount = 0;
       if (this.state.currentProject) {
         const syncRequests = createProviderSyncRequests(
           this.state.providerProfiles,
-          this.state.currentProject.id
+          this.state.currentProject.id,
         );
 
         for (const request of syncRequests) {
@@ -880,7 +1205,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
             projectId: request.projectId,
             profileId: request.profileId,
             providerId: request.providerId,
-            config: request.config
+            config: request.config,
           });
           syncedCount += 1;
         }
@@ -889,19 +1214,24 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;
       this.pushToast(
         "success",
-        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in the workspace state, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`
+        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in the workspace state, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`,
       );
     } catch (error) {
-      this.pushToast("error", toErrorMessage(error, "Could not save settings."));
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not save settings."),
+      );
     } finally {
       this.setState({
-        isSaving: false
+        isSaving: false,
       });
     }
   }
 
   private async handleResetDefaults(): Promise<void> {
-    const confirmed = window.confirm("Reset provider profiles, workflow limits, notifications and API access to their defaults?");
+    const confirmed = window.confirm(
+      "Reset provider profiles, workflow limits, notifications and API access to their defaults?",
+    );
     if (!confirmed) {
       return;
     }
@@ -910,7 +1240,7 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
 
     try {
       const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot
+        settings: snapshot,
       });
       hydrateWorkspaceStateClients(workspaceState);
       const persistedSettings = workspaceState.settings;
@@ -921,11 +1251,14 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
         selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection
+        serverConnection: persistedSettings.serverConnection,
       });
       this.pushToast("success", "Settings restored to defaults.");
     } catch (error) {
-      this.pushToast("error", toErrorMessage(error, "Could not reset settings."));
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not reset settings."),
+      );
     }
   }
 
@@ -939,17 +1272,33 @@ export class SettingsScreen extends Component<ComponentProps, SettingsScreenStat
       return null;
     }
 
-    return this.state.providerProfiles.find((profile) => profile.id === selectedProviderId) ?? null;
+    return (
+      this.state.providerProfiles.find(
+        (profile) => profile.id === selectedProviderId,
+      ) ?? null
+    );
   }
 }
 
 const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
-  createElement("div", {
-    className: "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-3.5"
-  }, [
-    createElement("dt", { className: "text-xs uppercase tracking-wide text-text-secondary" }, [label]),
-    createElement("dd", { className: "mt-2 text-sm font-medium text-white break-all" }, [value])
-  ]);
+  createElement(
+    "div",
+    {
+      className: "rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-3.5",
+    },
+    [
+      createElement(
+        "dt",
+        { className: "text-xs uppercase tracking-wide text-text-secondary" },
+        [label],
+      ),
+      createElement(
+        "dd",
+        { className: "mt-2 text-sm font-medium text-white break-all" },
+        [value],
+      ),
+    ],
+  );
 
 const toErrorMessage = (value: unknown, fallback: string): string => {
   if (value instanceof Error && value.message.trim().length > 0) {

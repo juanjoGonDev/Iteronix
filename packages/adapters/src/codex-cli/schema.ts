@@ -8,46 +8,46 @@ export const codexCliSettingsSchema: ProviderSettingsSchema = {
   properties: {
     command: {
       type: JsonSchemaType.String,
-      default: CodexCliDefaultCommand
+      default: CodexCliDefaultCommand,
     },
     args: {
       type: JsonSchemaType.Array,
       items: {
-        type: JsonSchemaType.String
+        type: JsonSchemaType.String,
       },
-      default: []
+      default: [],
     },
     cwd: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     env: {
       type: JsonSchemaType.Object,
       additionalProperties: {
-        type: JsonSchemaType.String
-      }
+        type: JsonSchemaType.String,
+      },
     },
     promptMode: {
       type: JsonSchemaType.String,
       enum: [CodexCliPromptMode.Stdin, CodexCliPromptMode.Arg],
-      default: CodexCliPromptMode.Stdin
+      default: CodexCliPromptMode.Stdin,
     },
     promptArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     modelArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     systemArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     temperatureArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     maxTokensArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     jsonSchemaArg: {
-      type: JsonSchemaType.String
+      type: JsonSchemaType.String,
     },
     models: {
       type: JsonSchemaType.Array,
@@ -56,17 +56,17 @@ export const codexCliSettingsSchema: ProviderSettingsSchema = {
         additionalProperties: false,
         properties: {
           id: {
-            type: JsonSchemaType.String
+            type: JsonSchemaType.String,
           },
           displayName: {
-            type: JsonSchemaType.String
+            type: JsonSchemaType.String,
           },
           maxContextTokens: {
-            type: JsonSchemaType.Integer
-          }
+            type: JsonSchemaType.Integer,
+          },
         },
-        required: ["id", "displayName"]
-      }
-    }
-  }
+        required: ["id", "displayName"],
+      },
+    },
+  },
 };

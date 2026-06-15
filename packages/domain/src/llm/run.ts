@@ -5,11 +5,10 @@ export const LLMRunStatus = {
   Running: "running",
   Completed: "completed",
   Failed: "failed",
-  Canceled: "canceled"
+  Canceled: "canceled",
 } as const;
 
-export type LLMRunStatus =
-  typeof LLMRunStatus[keyof typeof LLMRunStatus];
+export type LLMRunStatus = (typeof LLMRunStatus)[keyof typeof LLMRunStatus];
 
 export type LLMRunRequest = {
   modelId: string;

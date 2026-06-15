@@ -10,9 +10,9 @@
 
 ## Local run
 
-1) Install dependencies: `pnpm install`
-2) Build runtime output: `pnpm exec tsc -p tsconfig.build.json`
-3) Start server: `node dist/apps/server-api/src/index.js`
+1. Install dependencies: `pnpm install`
+2. Build runtime output: `pnpm exec tsc -p tsconfig.build.json`
+3. Start server: `node dist/apps/server-api/src/index.js`
 
 ## Docker
 

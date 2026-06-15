@@ -1,7 +1,10 @@
 import type { LLMProviderCapabilities } from "../../../domain/src/llm/capabilities";
 import { LLMProviderType } from "../../../domain/src/llm/capabilities";
 import type { LLMModel } from "../../../domain/src/llm/models";
-import type { LLMProviderPort, LLMRunResult } from "../../../domain/src/llm/provider";
+import type {
+  LLMProviderPort,
+  LLMRunResult,
+} from "../../../domain/src/llm/provider";
 import type { LLMRunRequest } from "../../../domain/src/llm/run";
 import type { ProviderDescriptor } from "../../../domain/src/providers/registry";
 import { ProviderAuthType } from "../../../domain/src/providers/registry";
@@ -17,10 +20,12 @@ export type OpenAiCompatibleProviderConfig = {
 type OpenAiCompatibleResponse = {
   choices?: ReadonlyArray<{
     message?: {
-      content?: string | ReadonlyArray<{
-        type?: string;
-        text?: string;
-      }>;
+      content?:
+        | string
+        | ReadonlyArray<{
+            type?: string;
+            text?: string;
+          }>;
     };
   }>;
   usage?: {
@@ -36,7 +41,7 @@ export const openAiCompatibleCapabilities: LLMProviderCapabilities = {
   streaming: false,
   jsonSchemaEnforcement: false,
   tokenUsage: true,
-  toolCalls: false
+  toolCalls: false,
 };
 
 export const openAiCompatibleProviderDescriptor: ProviderDescriptor = {
@@ -46,57 +51,64 @@ export const openAiCompatibleProviderDescriptor: ProviderDescriptor = {
   capabilities: openAiCompatibleCapabilities,
   auth: {
     type: ProviderAuthType.ApiKey,
-    description: "Bearer token"
+    description: "Bearer token",
   },
   settingsSchema: {
     type: JsonSchemaType.Object,
     properties: {
       endpointUrl: {
-        type: JsonSchemaType.String
+        type: JsonSchemaType.String,
       },
       apiKey: {
-        type: JsonSchemaType.String
-      }
+        type: JsonSchemaType.String,
+      },
     },
-    required: ["endpointUrl"]
-  }
+    required: ["endpointUrl"],
+  },
 };
 
 export const customOpenAiCompatibleProviderDescriptor: ProviderDescriptor = {
   ...openAiCompatibleProviderDescriptor,
   id: "custom",
-  displayName: "Custom OpenAI-compatible"
+  displayName: "Custom OpenAI-compatible",
 };
 
 export const createOpenAiCompatibleProvider = (
-  config: OpenAiCompatibleProviderConfig
+  config: OpenAiCompatibleProviderConfig,
 ): LLMProviderPort => ({
   capabilities: openAiCompatibleCapabilities,
   listModels: async () => config.models ?? [],
   run: async (request: LLMRunRequest): Promise<LLMRunResult> =>
-    runOpenAiCompatibleRequest(config, request)
+    runOpenAiCompatibleRequest(config, request),
 });
 
 const runOpenAiCompatibleRequest = async (
   config: OpenAiCompatibleProviderConfig,
-  request: LLMRunRequest
+  request: LLMRunRequest,
 ): Promise<LLMRunResult> => {
   const fetchImplementation = config.fetchImplementation ?? fetch;
-  const response = await fetchImplementation(buildChatCompletionsUrl(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json"
+  const response = await fetchImplementation(
+    buildChatCompletionsUrl(config.baseUrl),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: request.modelId,
+        messages: buildMessages(request),
+        ...(request.temperature !== undefined
+          ? { temperature: request.temperature }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      model: request.modelId,
-      messages: buildMessages(request),
-      ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
-    })
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(`OpenAI-compatible provider request failed with status ${response.status.toString()}.`);
+    throw new Error(
+      `OpenAI-compatible provider request failed with status ${response.status.toString()}.`,
+    );
   }
 
   const payload = (await response.json()) as OpenAiCompatibleResponse;
@@ -107,10 +119,10 @@ const runOpenAiCompatibleRequest = async (
           usage: {
             inputTokens: payload.usage.prompt_tokens ?? 0,
             outputTokens: payload.usage.completion_tokens ?? 0,
-            totalTokens: payload.usage.total_tokens ?? 0
-          }
+            totalTokens: payload.usage.total_tokens ?? 0,
+          },
         }
-      : {})
+      : {}),
   };
 };
 
@@ -121,15 +133,19 @@ const buildChatCompletionsUrl = (baseUrl: string): string => {
     : `${normalized}${DefaultChatCompletionsPath}`;
 };
 
-const buildMessages = (request: LLMRunRequest): ReadonlyArray<{
+const buildMessages = (
+  request: LLMRunRequest,
+): ReadonlyArray<{
   role: "system" | "user";
   content: string;
 }> => [
-  ...(request.system ? [{ role: "system" as const, content: request.system }] : []),
+  ...(request.system
+    ? [{ role: "system" as const, content: request.system }]
+    : []),
   {
     role: "user" as const,
-    content: request.input
-  }
+    content: request.input,
+  },
 ];
 
 const readMessageContent = (payload: OpenAiCompatibleResponse): string => {

@@ -6,11 +6,11 @@ export const HistoryStoreErrorCode = {
   NotFound: "not_found",
   Conflict: "conflict",
   StorageError: "storage_error",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type HistoryStoreErrorCode =
-  typeof HistoryStoreErrorCode[keyof typeof HistoryStoreErrorCode];
+  (typeof HistoryStoreErrorCode)[keyof typeof HistoryStoreErrorCode];
 
 export type HistoryStoreError = {
   code: HistoryStoreErrorCode;
@@ -32,16 +32,16 @@ export type HistoryListInput = {
 export type HistoryStorePort = {
   getRun: (id: string) => Promise<Result<LLMRunRecord, HistoryStoreError>>;
   listRuns: (
-    input: HistoryListInput
+    input: HistoryListInput,
   ) => Promise<Result<ReadonlyArray<LLMRunRecord>, HistoryStoreError>>;
   saveRun: (
-    record: LLMRunRecord
+    record: LLMRunRecord,
   ) => Promise<Result<LLMRunRecord, HistoryStoreError>>;
   appendEvent: (
     runId: string,
-    event: LLMEvent
+    event: LLMEvent,
   ) => Promise<Result<void, HistoryStoreError>>;
   listEvents: (
-    runId: string
+    runId: string,
   ) => Promise<Result<ReadonlyArray<LLMEvent>, HistoryStoreError>>;
 };

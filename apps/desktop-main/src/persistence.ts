@@ -1,11 +1,17 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve as resolvePath } from "node:path";
 import {
   DefaultPaths,
   EnvKey,
   PersistenceErrorCode,
-  PersistenceErrorMessage
+  PersistenceErrorMessage,
 } from "./constants";
 import { err, ok, type Result } from "./result";
 
@@ -28,7 +34,7 @@ export const resolveConfigPath = (env: NodeJS.ProcessEnv): string => {
 };
 
 export const readPersistedConfig = (
-  filePath: string
+  filePath: string,
 ): Result<PersistedConfig, PersistenceError> => {
   if (!existsSync(filePath)) {
     return ok({});
@@ -38,7 +44,7 @@ export const readPersistedConfig = (
     if (raw.trim().length === 0) {
       return err({
         code: PersistenceErrorCode.InvalidData,
-        message: PersistenceErrorMessage.InvalidData
+        message: PersistenceErrorMessage.InvalidData,
       });
     }
     const parsed: unknown = JSON.parse(raw);
@@ -47,19 +53,19 @@ export const readPersistedConfig = (
     if (error instanceof SyntaxError) {
       return err({
         code: PersistenceErrorCode.InvalidData,
-        message: PersistenceErrorMessage.InvalidData
+        message: PersistenceErrorMessage.InvalidData,
       });
     }
     return err({
       code: PersistenceErrorCode.ReadFailed,
-      message: PersistenceErrorMessage.ReadFailed
+      message: PersistenceErrorMessage.ReadFailed,
     });
   }
 };
 
 export const writePersistedConfig = (
   filePath: string,
-  config: PersistedConfig
+  config: PersistedConfig,
 ): Result<void, PersistenceError> => {
   try {
     const dir = dirname(filePath);
@@ -69,13 +75,13 @@ export const writePersistedConfig = (
   } catch {
     return err({
       code: PersistenceErrorCode.WriteFailed,
-      message: PersistenceErrorMessage.WriteFailed
+      message: PersistenceErrorMessage.WriteFailed,
     });
   }
 };
 
 export const clearPersistedConfig = (
-  filePath: string
+  filePath: string,
 ): Result<void, PersistenceError> => {
   if (!existsSync(filePath)) {
     return ok(undefined);
@@ -86,7 +92,7 @@ export const clearPersistedConfig = (
   } catch {
     return err({
       code: PersistenceErrorCode.DeleteFailed,
-      message: PersistenceErrorMessage.DeleteFailed
+      message: PersistenceErrorMessage.DeleteFailed,
     });
   }
 };
@@ -107,7 +113,7 @@ const resolveDefaultConfigDir = (env: NodeJS.ProcessEnv): string => {
       homedir(),
       "Library",
       "Application Support",
-      DefaultPaths.ConfigDirName
+      DefaultPaths.ConfigDirName,
     );
   }
 
@@ -116,12 +122,12 @@ const resolveDefaultConfigDir = (env: NodeJS.ProcessEnv): string => {
 };
 
 const parsePersistedConfig = (
-  value: unknown
+  value: unknown,
 ): Result<PersistedConfig, PersistenceError> => {
   if (!isRecord(value)) {
     return err({
       code: PersistenceErrorCode.InvalidData,
-      message: PersistenceErrorMessage.InvalidData
+      message: PersistenceErrorMessage.InvalidData,
     });
   }
 
@@ -132,7 +138,7 @@ const parsePersistedConfig = (
   if (typeof remoteValue !== "string") {
     return err({
       code: PersistenceErrorCode.InvalidData,
-      message: PersistenceErrorMessage.InvalidData
+      message: PersistenceErrorMessage.InvalidData,
     });
   }
   const trimmed = remoteValue.trim();
@@ -140,7 +146,7 @@ const parsePersistedConfig = (
     return ok({});
   }
   return ok({
-    remoteUrl: trimmed
+    remoteUrl: trimmed,
   });
 };
 

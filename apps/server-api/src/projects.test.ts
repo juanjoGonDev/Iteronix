@@ -9,7 +9,7 @@ describe("project store", () => {
 
     const opened = store.open({
       name: "Workflow Lab",
-      rootPath: ""
+      rootPath: "",
     });
 
     expect(opened.type).toBe(ResultType.Ok);
@@ -26,7 +26,7 @@ describe("project store", () => {
 
     const created = store.create({
       name: "Workflow Lab",
-      rootPath: ""
+      rootPath: "",
     });
 
     expect(created.type).toBe(ResultType.Ok);
@@ -42,15 +42,15 @@ describe("project store", () => {
     const store = createProjectStore();
 
     const opened = store.open({
-      rootPath: ""
+      rootPath: "",
     });
 
     expect(opened).toEqual({
       type: ResultType.Err,
       error: {
         code: ProjectStoreErrorCode.InvalidInput,
-        message: ErrorMessage.MissingName
-      }
+        message: ErrorMessage.MissingName,
+      },
     });
   });
 });

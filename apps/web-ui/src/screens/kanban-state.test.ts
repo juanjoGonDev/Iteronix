@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createKanbanBoardView,
   defaultKanbanColumnDefinitions,
-  readKanbanStatusFromColumnName
+  readKanbanStatusFromColumnName,
 } from "./kanban-state.js";
 
 describe("kanban-state", () => {
@@ -11,16 +11,16 @@ describe("kanban-state", () => {
       [
         createColumnRecord("column-todo", "TODO", 1),
         createColumnRecord("column-ideas", "IDEAS", 0),
-        createColumnRecord("column-done", "DONE", 4)
+        createColumnRecord("column-done", "DONE", 4),
       ],
       [
         createTaskRecord("task-1", "column-todo", "Persist create"),
-        createTaskRecord("task-2", "column-ideas", "Persist load")
-      ]
+        createTaskRecord("task-2", "column-ideas", "Persist load"),
+      ],
     );
 
     expect(view.columns.map((column) => column.id)).toEqual(
-      defaultKanbanColumnDefinitions.map((definition) => definition.id)
+      defaultKanbanColumnDefinitions.map((definition) => definition.id),
     );
     expect(view.columnIdsByStatus.todo).toBe("column-todo");
     expect(view.tasks).toEqual([
@@ -30,7 +30,7 @@ describe("kanban-state", () => {
         description: "",
         priority: "medium",
         status: "ideas",
-        column: "ideas"
+        column: "ideas",
       },
       {
         id: "task-1",
@@ -38,15 +38,15 @@ describe("kanban-state", () => {
         description: "",
         priority: "medium",
         status: "todo",
-        column: "todo"
-      }
+        column: "todo",
+      },
     ]);
   });
 
   it("ignores server tasks from unknown columns", () => {
     const view = createKanbanBoardView(
       [createColumnRecord("column-todo", "TODO", 1)],
-      [createTaskRecord("task-1", "missing-column", "Orphan")]
+      [createTaskRecord("task-1", "missing-column", "Orphan")],
     );
 
     expect(view.tasks).toEqual([]);
@@ -65,7 +65,7 @@ const createColumnRecord = (id: string, name: string, position: number) => ({
   name,
   position,
   createdAt: "2026-04-29T07:00:00.000Z",
-  updatedAt: "2026-04-29T07:00:00.000Z"
+  updatedAt: "2026-04-29T07:00:00.000Z",
 });
 
 const createTaskRecord = (id: string, columnId: string, title: string) => ({
@@ -75,5 +75,5 @@ const createTaskRecord = (id: string, columnId: string, title: string) => ({
   title,
   position: 0,
   createdAt: "2026-04-29T07:00:00.000Z",
-  updatedAt: "2026-04-29T07:00:00.000Z"
+  updatedAt: "2026-04-29T07:00:00.000Z",
 });

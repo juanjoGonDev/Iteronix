@@ -2,11 +2,11 @@ import type { Result } from "../result";
 
 export const FileSystemEntryKind = {
   File: "file",
-  Directory: "directory"
+  Directory: "directory",
 } as const;
 
 export type FileSystemEntryKind =
-  typeof FileSystemEntryKind[keyof typeof FileSystemEntryKind];
+  (typeof FileSystemEntryKind)[keyof typeof FileSystemEntryKind];
 
 export type FileSystemEntry = {
   path: string;
@@ -27,11 +27,11 @@ export const FileSystemErrorCode = {
   Forbidden: "forbidden",
   InvalidPath: "invalid_path",
   Conflict: "conflict",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type FileSystemErrorCode =
-  typeof FileSystemErrorCode[keyof typeof FileSystemErrorCode];
+  (typeof FileSystemErrorCode)[keyof typeof FileSystemErrorCode];
 
 export type FileSystemError = {
   code: FileSystemErrorCode;
@@ -43,10 +43,10 @@ export type FileSystemPort = {
   readFile: (path: string) => Promise<Result<Uint8Array, FileSystemError>>;
   writeFile: (
     path: string,
-    data: Uint8Array
+    data: Uint8Array,
   ) => Promise<Result<void, FileSystemError>>;
   listDirectory: (
-    path: string
+    path: string,
   ) => Promise<Result<ReadonlyArray<FileSystemEntry>, FileSystemError>>;
   stat: (path: string) => Promise<Result<FileSystemStat, FileSystemError>>;
 };

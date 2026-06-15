@@ -5,7 +5,7 @@ import {
   WorkflowExecutionStatus,
   WorkflowNodeKind,
   WorkflowRecordStatus,
-  WorkflowTriggerKind
+  WorkflowTriggerKind,
 } from "../../shared/src/workflows";
 import { createWorkflowCatalogStore } from "./workflow-catalog";
 
@@ -14,7 +14,7 @@ const BaseTime = "2026-05-06T18:00:00.000Z";
 describe("workflow catalog store", () => {
   it("derives asset usage records from workflow definitions", () => {
     const store = createWorkflowCatalogStore({
-      now: () => new Date(BaseTime)
+      now: () => new Date(BaseTime),
     });
 
     const promptAsset = store.upsertAsset({
@@ -26,7 +26,7 @@ describe("workflow catalog store", () => {
       description: "Prompt",
       body: "Plan the task",
       language: "en",
-      tags: []
+      tags: [],
     });
 
     const guardrailAsset = store.upsertAsset({
@@ -49,10 +49,10 @@ describe("workflow catalog store", () => {
             kind: "field_exists",
             target: "output",
             path: "$.answer",
-            message: "answer is required"
-          }
-        ]
-      }
+            message: "answer is required",
+          },
+        ],
+      },
     });
 
     if (!promptAsset || !guardrailAsset) {
@@ -68,21 +68,21 @@ describe("workflow catalog store", () => {
       trigger: {
         kind: WorkflowTriggerKind.Manual,
         enabled: true,
-        config: {}
+        config: {},
       },
       viewport: {
         x: 0,
         y: 0,
-        zoom: 1
+        zoom: 1,
       },
       executionPolicy: {
         maxNodeRetries: 1,
-        allowManualCheckpointResume: true
+        allowManualCheckpointResume: true,
       },
       defaultContextPolicy: {
         language: "en",
         carryMessagesLimit: 8,
-        carryArtifactLimit: 8
+        carryArtifactLimit: 8,
       },
       tags: [],
       nodes: [
@@ -94,26 +94,26 @@ describe("workflow catalog store", () => {
           width: 320,
           collapsed: false,
           config: {
-            assetId: promptAsset.id
+            assetId: promptAsset.id,
           },
           inputPorts: [],
           outputPorts: [
             {
               id: "output",
               name: "output",
-              acceptsMany: true
-            }
+              acceptsMany: true,
+            },
           ],
           attachedGuardrails: [
             {
               assetId: guardrailAsset.id,
               order: 0,
-              enabled: true
-            }
-          ]
-        }
+              enabled: true,
+            },
+          ],
+        },
       ],
-      edges: []
+      edges: [],
     });
 
     if (!workflow) {
@@ -124,13 +124,13 @@ describe("workflow catalog store", () => {
 
     expect(usages).toHaveLength(2);
     expect(usages.map((usage) => usage.assetId).sort()).toEqual(
-      [guardrailAsset.id, promptAsset.id].sort()
+      [guardrailAsset.id, promptAsset.id].sort(),
     );
   });
 
   it("prevents deleting an asset while it is still referenced", () => {
     const store = createWorkflowCatalogStore({
-      now: () => new Date(BaseTime)
+      now: () => new Date(BaseTime),
     });
 
     const asset = store.upsertAsset({
@@ -142,7 +142,7 @@ describe("workflow catalog store", () => {
       description: "Prompt",
       body: "Plan the task",
       language: "en",
-      tags: []
+      tags: [],
     });
 
     if (!asset) {
@@ -158,21 +158,21 @@ describe("workflow catalog store", () => {
       trigger: {
         kind: WorkflowTriggerKind.Manual,
         enabled: true,
-        config: {}
+        config: {},
       },
       viewport: {
         x: 0,
         y: 0,
-        zoom: 1
+        zoom: 1,
       },
       executionPolicy: {
         maxNodeRetries: 1,
-        allowManualCheckpointResume: true
+        allowManualCheckpointResume: true,
       },
       defaultContextPolicy: {
         language: "en",
         carryMessagesLimit: 8,
-        carryArtifactLimit: 8
+        carryArtifactLimit: 8,
       },
       tags: [],
       nodes: [
@@ -184,14 +184,14 @@ describe("workflow catalog store", () => {
           width: 320,
           collapsed: false,
           config: {
-            assetId: asset.id
+            assetId: asset.id,
           },
           inputPorts: [],
           outputPorts: [],
-          attachedGuardrails: []
-        }
+          attachedGuardrails: [],
+        },
       ],
-      edges: []
+      edges: [],
     });
 
     expect(() => store.deleteAsset(asset.id)).toThrowError(/referenced/i);
@@ -199,7 +199,7 @@ describe("workflow catalog store", () => {
 
   it("filters project assets while keeping workspace-scoped assets available", () => {
     const store = createWorkflowCatalogStore({
-      now: () => new Date(BaseTime)
+      now: () => new Date(BaseTime),
     });
 
     store.upsertAsset({
@@ -211,7 +211,7 @@ describe("workflow catalog store", () => {
       description: "Prompt",
       body: "Shared",
       language: "en",
-      tags: []
+      tags: [],
     });
     store.upsertAsset({
       workspaceId: "workspace-1",
@@ -223,7 +223,7 @@ describe("workflow catalog store", () => {
       description: "Instruction",
       body: "Project",
       language: "en",
-      tags: []
+      tags: [],
     });
     store.upsertAsset({
       workspaceId: "workspace-1",
@@ -235,23 +235,23 @@ describe("workflow catalog store", () => {
       description: "Instruction",
       body: "Other",
       language: "en",
-      tags: []
+      tags: [],
     });
 
     const assets = store.listAssets({
       workspaceId: "workspace-1",
-      projectId: "project-1"
+      projectId: "project-1",
     });
 
     expect(assets.map((asset) => asset.name).sort()).toEqual([
       "Project instruction",
-      "Shared prompt"
+      "Shared prompt",
     ]);
   });
 
   it("stores and manages workflow execution history", () => {
     const store = createWorkflowCatalogStore({
-      now: () => new Date(BaseTime)
+      now: () => new Date(BaseTime),
     });
 
     const execution = store.upsertExecution({
@@ -269,22 +269,26 @@ describe("workflow catalog store", () => {
         completionTokens: 20,
         totalTokens: 30,
         estimatedCostEur: 0.12,
-        latencyMs: 1000
+        latencyMs: 1000,
       },
       contextSessionId: "context-1",
-      nodeRuns: []
+      nodeRuns: [],
     });
 
-    expect(store.listExecutions({
-      projectId: "project-1"
-    })).toHaveLength(1);
+    expect(
+      store.listExecutions({
+        projectId: "project-1",
+      }),
+    ).toHaveLength(1);
     expect(store.getExecution(execution.id)?.id).toBe(execution.id);
 
     const removed = store.deleteExecution(execution.id);
 
     expect(removed?.id).toBe(execution.id);
-    expect(store.listExecutions({
-      projectId: "project-1"
-    })).toHaveLength(0);
+    expect(
+      store.listExecutions({
+        projectId: "project-1",
+      }),
+    ).toHaveLength(0);
   });
 });

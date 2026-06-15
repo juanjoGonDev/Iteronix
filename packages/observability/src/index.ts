@@ -27,8 +27,8 @@ export const createObservabilityRuntime = async (input: {
   const sdk = input.otlpEndpoint
     ? new NodeSDK({
         traceExporter: new OTLPTraceExporter({
-          url: input.otlpEndpoint
-        })
+          url: input.otlpEndpoint,
+        }),
       })
     : undefined;
 
@@ -60,7 +60,7 @@ export const createObservabilityRuntime = async (input: {
         } catch (error) {
           span.setStatus({
             code: SpanStatusCode.ERROR,
-            message: error instanceof Error ? error.message : "unknown"
+            message: error instanceof Error ? error.message : "unknown",
           });
           span.end();
           reject(error);
@@ -77,12 +77,12 @@ export const createObservabilityRuntime = async (input: {
   return {
     withSpan,
     evidenceStore,
-    shutdown
+    shutdown,
   };
 };
 
 export const createEvidenceStore = async (
-  evidenceDir: string
+  evidenceDir: string,
 ): Promise<EvidenceStore> => {
   await mkdir(evidenceDir, { recursive: true });
 
@@ -93,11 +93,13 @@ export const createEvidenceStore = async (
   };
 
   return {
-    write
+    write,
   };
 };
 
-export const readEvidenceReport = async (filePath: string): Promise<EvidenceReport> => {
+export const readEvidenceReport = async (
+  filePath: string,
+): Promise<EvidenceReport> => {
   const content = await readFile(filePath, "utf8");
   return JSON.parse(content) as EvidenceReport;
 };

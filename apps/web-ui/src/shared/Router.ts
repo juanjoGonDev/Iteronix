@@ -13,7 +13,7 @@ export interface RouteMatch {
 }
 
 const Separator = {
-  Slash: "/"
+  Slash: "/",
 } as const;
 
 export const normalizeRoutePath = (path: string): string => {
@@ -33,7 +33,7 @@ export const normalizeRoutePath = (path: string): string => {
 
 export const matchRoutePath = (
   pathname: string,
-  routes: ReadonlyArray<string>
+  routes: ReadonlyArray<string>,
 ): RouteMatch | undefined => {
   const normalizedPath = normalizeRoutePath(pathname);
   const pathSegments = splitRoute(normalizedPath);
@@ -71,7 +71,7 @@ export const matchRoutePath = (
     if (matches) {
       return {
         route: normalizedRoute,
-        params
+        params,
       };
     }
   }
@@ -166,7 +166,7 @@ export class Router {
   getCurrentRoute(): RouteInfo {
     return {
       path: this.currentRoute,
-      params: this.params
+      params: this.params,
     };
   }
 }
@@ -180,7 +180,9 @@ const splitRoute = (path: string): ReadonlyArray<string> => {
 };
 
 function canUseBrowserRouter(): boolean {
-  return typeof window !== "undefined" && typeof window.location !== "undefined";
+  return (
+    typeof window !== "undefined" && typeof window.location !== "undefined"
+  );
 }
 
 export const router = new Router({ autoInit: false });

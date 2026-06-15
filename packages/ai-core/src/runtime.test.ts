@@ -12,7 +12,7 @@ describe("runtime citation collapsing", () => {
         retrievedAt: "2026-04-24T08:00:00.000Z",
         updatedAt: "2026-04-23T08:00:00.000Z",
         score: 0.91,
-        sourceType: "repo_doc"
+        sourceType: "repo_doc",
       },
       {
         chunkId: "docs/AI_WORKBENCH.md#0",
@@ -22,7 +22,7 @@ describe("runtime citation collapsing", () => {
         retrievedAt: "2026-04-24T08:00:00.000Z",
         updatedAt: "2026-04-22T08:00:00.000Z",
         score: 0.88,
-        sourceType: "repo_doc"
+        sourceType: "repo_doc",
       },
       {
         chunkId: "README.md#1",
@@ -32,8 +32,8 @@ describe("runtime citation collapsing", () => {
         retrievedAt: "2026-04-24T08:00:00.000Z",
         updatedAt: "2026-04-24T08:00:00.000Z",
         score: 0.91,
-        sourceType: "repo_doc"
-      }
+        sourceType: "repo_doc",
+      },
     ] as const;
 
     const result = collapseCitationsBySource(citations);
@@ -47,7 +47,7 @@ describe("runtime citation collapsing", () => {
         retrievedAt: "2026-04-24T08:00:00.000Z",
         updatedAt: "2026-04-24T08:00:00.000Z",
         score: 0.91,
-        sourceType: "repo_doc"
+        sourceType: "repo_doc",
       },
       {
         chunkId: "docs/AI_WORKBENCH.md#0",
@@ -57,8 +57,8 @@ describe("runtime citation collapsing", () => {
         retrievedAt: "2026-04-24T08:00:00.000Z",
         updatedAt: "2026-04-22T08:00:00.000Z",
         score: 0.88,
-        sourceType: "repo_doc"
-      }
+        sourceType: "repo_doc",
+      },
     ]);
   });
 });

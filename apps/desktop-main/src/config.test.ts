@@ -8,7 +8,7 @@ import {
   DefaultUi,
   DesktopMode,
   EnvKey,
-  UiMode
+  UiMode,
 } from "./constants";
 import { ResultType } from "./result";
 
@@ -17,21 +17,33 @@ describe("resolveDesktopConfig", () => {
     const cwd = process.cwd();
     const env: NodeJS.ProcessEnv = {
       [EnvKey.AuthToken]: "token",
-      [EnvKey.WorkspaceRoots]: "C:\\repo;D:\\work"
+      [EnvKey.WorkspaceRoots]: "C:\\repo;D:\\work",
     };
 
     const result = resolveDesktopConfig(env, cwd);
 
     expect(result.type).toBe(ResultType.Ok);
-    if (result.type === ResultType.Ok && result.value.mode === DesktopMode.Local) {
-      expect(result.value.serverUrl).toBe(`http://${DefaultServer.Host}:${DefaultServer.Port}`);
-      expect(result.value.server.entryPath).toBe(
-        resolvePath(cwd, DefaultPaths.ServerEntry)
+    if (
+      result.type === ResultType.Ok &&
+      result.value.mode === DesktopMode.Local
+    ) {
+      expect(result.value.serverUrl).toBe(
+        `http://${DefaultServer.Host}:${DefaultServer.Port}`,
       );
-      expect(result.value.server.workspaceRoots).toEqual(["C:\\repo", "D:\\work"]);
+      expect(result.value.server.entryPath).toBe(
+        resolvePath(cwd, DefaultPaths.ServerEntry),
+      );
+      expect(result.value.server.workspaceRoots).toEqual([
+        "C:\\repo",
+        "D:\\work",
+      ]);
       if (result.value.ui.mode === UiMode.Prod) {
-        expect(result.value.ui.entryPath).toBe(resolvePath(cwd, DefaultUi.ProdIndex));
-        expect(result.value.ui.assetsPath).toBe(resolvePath(cwd, DefaultUi.ProdAssets));
+        expect(result.value.ui.entryPath).toBe(
+          resolvePath(cwd, DefaultUi.ProdIndex),
+        );
+        expect(result.value.ui.assetsPath).toBe(
+          resolvePath(cwd, DefaultUi.ProdAssets),
+        );
       }
     }
   });
@@ -39,7 +51,7 @@ describe("resolveDesktopConfig", () => {
   it("rejects unknown mode", () => {
     const cwd = process.cwd();
     const env: NodeJS.ProcessEnv = {
-      [EnvKey.Mode]: "invalid"
+      [EnvKey.Mode]: "invalid",
     };
 
     const result = resolveDesktopConfig(env, cwd);
@@ -54,13 +66,16 @@ describe("resolveDesktopConfig", () => {
     const cwd = process.cwd();
     const env: NodeJS.ProcessEnv = {
       [EnvKey.Mode]: DesktopMode.Remote,
-      [EnvKey.RemoteUrl]: "https://api.example.com/"
+      [EnvKey.RemoteUrl]: "https://api.example.com/",
     };
 
     const result = resolveDesktopConfig(env, cwd);
 
     expect(result.type).toBe(ResultType.Ok);
-    if (result.type === ResultType.Ok && result.value.mode === DesktopMode.Remote) {
+    if (
+      result.type === ResultType.Ok &&
+      result.value.mode === DesktopMode.Remote
+    ) {
       expect(result.value.serverUrl).toBe("https://api.example.com");
     }
   });
@@ -68,13 +83,16 @@ describe("resolveDesktopConfig", () => {
   it("accepts remote mode without url", () => {
     const cwd = process.cwd();
     const env: NodeJS.ProcessEnv = {
-      [EnvKey.Mode]: DesktopMode.Remote
+      [EnvKey.Mode]: DesktopMode.Remote,
     };
 
     const result = resolveDesktopConfig(env, cwd);
 
     expect(result.type).toBe(ResultType.Ok);
-    if (result.type === ResultType.Ok && result.value.mode === DesktopMode.Remote) {
+    if (
+      result.type === ResultType.Ok &&
+      result.value.mode === DesktopMode.Remote
+    ) {
       expect(result.value.serverUrl).toBeUndefined();
     }
   });
@@ -85,7 +103,7 @@ describe("resolveDesktopConfig", () => {
       [EnvKey.Mode]: DesktopMode.Remote,
       [EnvKey.RemoteUrl]: "http://localhost:4000",
       [EnvKey.UiMode]: UiMode.Dev,
-      [EnvKey.UiDevUrl]: "http://localhost:5173/"
+      [EnvKey.UiDevUrl]: "http://localhost:5173/",
     };
 
     const result = resolveDesktopConfig(env, cwd);

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ResultType } from "../../../domain/src/result";
 import {
   CommandOutputSource,
-  createCommandRunnerAdapter
+  createCommandRunnerAdapter,
 } from "./command-runner";
 
 describe("command runner adapter", () => {
@@ -18,14 +18,14 @@ describe("command runner adapter", () => {
       cwd,
       args: [
         "-e",
-        "process.stdout.write('alpha\\n'); process.stderr.write('beta\\n');"
+        "process.stdout.write('alpha\\n'); process.stderr.write('beta\\n');",
       ],
       onOutput: (event) => {
         outputs.push({
           source: event.source,
-          text: event.text
+          text: event.text,
         });
-      }
+      },
     });
 
     expect(result.type).toBe(ResultType.Ok);
@@ -37,12 +37,12 @@ describe("command runner adapter", () => {
     expect(result.value.exitCode).toBe(0);
     expect(result.value.stdout).toContain("alpha");
     expect(result.value.stderr).toContain("beta");
-    expect(outputs.some((event) => event.source === CommandOutputSource.Stdout)).toBe(
-      true
-    );
-    expect(outputs.some((event) => event.source === CommandOutputSource.Stderr)).toBe(
-      true
-    );
+    expect(
+      outputs.some((event) => event.source === CommandOutputSource.Stdout),
+    ).toBe(true);
+    expect(
+      outputs.some((event) => event.source === CommandOutputSource.Stderr),
+    ).toBe(true);
   });
 
   it("returns non-zero exit codes without treating them as adapter errors", async () => {
@@ -53,10 +53,7 @@ describe("command runner adapter", () => {
       command: process.execPath,
       rootPath: cwd,
       cwd,
-      args: [
-        "-e",
-        "process.stderr.write('boom\\n'); process.exit(2);"
-      ]
+      args: ["-e", "process.stderr.write('boom\\n'); process.exit(2);"],
     });
 
     expect(result.type).toBe(ResultType.Ok);

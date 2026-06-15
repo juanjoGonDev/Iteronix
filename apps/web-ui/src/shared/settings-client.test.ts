@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseProviderListResponse,
-  parseProviderSettingsResponse
+  parseProviderSettingsResponse,
 } from "./settings-client.js";
 
 describe("settings client codecs", () => {
@@ -13,19 +13,19 @@ describe("settings client codecs", () => {
           displayName: "Codex CLI",
           type: "cli",
           auth: {
-            type: "none"
+            type: "none",
           },
           settingsSchema: {
-            type: "object"
-          }
-        }
+            type: "object",
+          },
+        },
       ],
       selection: {
         projectId: "project-1",
         profileId: "coding",
         providerId: "codex-cli",
-        updatedAt: "2026-04-28T10:00:00.000Z"
-      }
+        updatedAt: "2026-04-28T10:00:00.000Z",
+      },
     });
 
     expect(parsed.providers[0]?.id).toBe("codex-cli");
@@ -39,10 +39,10 @@ describe("settings client codecs", () => {
         profileId: "coding",
         providerId: "codex-cli",
         config: {
-          command: "codex"
+          command: "codex",
         },
-        updatedAt: "2026-04-28T11:00:00.000Z"
-      }
+        updatedAt: "2026-04-28T11:00:00.000Z",
+      },
     });
 
     expect(parsed.providerId).toBe("codex-cli");

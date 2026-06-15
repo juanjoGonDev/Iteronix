@@ -26,7 +26,7 @@ describe("ServerLogsStore", () => {
         id: "1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Test message"
+        message: "Test message",
       });
 
       const result = logsStore.query({});
@@ -42,13 +42,13 @@ describe("ServerLogsStore", () => {
         id: "1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Info message"
+        message: "Info message",
       });
       await logsStore.append({
         id: "2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Error,
-        message: "Error message"
+        message: "Error message",
       });
 
       const result = logsStore.query({ level: LogLevel.Error });
@@ -65,19 +65,19 @@ describe("ServerLogsStore", () => {
         id: "1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Message 1"
+        message: "Message 1",
       });
       await logsStore.append({
         id: "2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Info,
-        message: "Message 2"
+        message: "Message 2",
       });
       await logsStore.append({
         id: "3",
         timestamp: "2024-01-01 12:00:02.000",
         level: LogLevel.Info,
-        message: "Message 3"
+        message: "Message 3",
       });
 
       const result = logsStore.query({ limit: 2 });
@@ -104,7 +104,7 @@ describe("ServerLogsStore", () => {
         id: "1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Test message"
+        message: "Test message",
       });
 
       const fileContent = await fs.readFile(testLogPath, "utf-8");
@@ -118,7 +118,7 @@ describe("ServerLogsStore", () => {
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "First message"
+        message: "First message",
       });
 
       const fileContent1 = await fs.readFile(testLogPath, "utf-8");
@@ -130,7 +130,7 @@ describe("ServerLogsStore", () => {
         id: "test-id-2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Info,
-        message: "Second message"
+        message: "Second message",
       });
 
       const fileContent2 = await fs.readFile(testLogPath, "utf-8");

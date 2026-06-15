@@ -4,7 +4,7 @@ const ProjectSessionStorageKey = "iteronix_project_session";
 const RecentProjectsLimit = 6;
 
 export const ProjectSessionEventName = {
-  Changed: "iteronix:project-session-changed"
+  Changed: "iteronix:project-session-changed",
 } as const;
 
 export type RecentProjectEntry = {
@@ -26,7 +26,7 @@ export type ProjectSessionStorage = {
 let projectSessionCache = createEmptyProjectSession();
 
 export const createProjectSessionStorage = (
-  storage?: StorageLike
+  storage?: StorageLike,
 ): ProjectSessionStorage => ({
   load: () => {
     void storage;
@@ -41,18 +41,20 @@ export const createProjectSessionStorage = (
       recentProjects: [
         normalizedProject,
         ...current.recentProjects.filter(
-          (entry) => readRecentProjectKey(entry) !== readRecentProjectKey(normalizedProject)
-        )
-      ].slice(0, RecentProjectsLimit)
+          (entry) =>
+            readRecentProjectKey(entry) !==
+            readRecentProjectKey(normalizedProject),
+        ),
+      ].slice(0, RecentProjectsLimit),
     };
 
     writeProjectSession(nextState, storage);
     return nextState;
-  }
+  },
 });
 
 export const readProjectSession = (
-  storage?: StorageLike
+  storage?: StorageLike,
 ): ProjectSessionState => {
   if (storage) {
     const raw = storage.getItem(ProjectSessionStorageKey);
@@ -72,7 +74,7 @@ export const readProjectSession = (
 
 export const writeProjectSession = (
   input: Partial<ProjectSessionState>,
-  storage?: StorageLike
+  storage?: StorageLike,
 ): ProjectSessionState => {
   const current = readProjectSession(storage);
   const nextState = {
@@ -81,8 +83,8 @@ export const writeProjectSession = (
       : current.projectRootPath,
     projectName: normalizeText(input.projectName ?? current.projectName),
     recentProjects: normalizeRecentProjects(
-      input.recentProjects ?? current.recentProjects
-    )
+      input.recentProjects ?? current.recentProjects,
+    ),
   };
 
   if (storage) {
@@ -95,22 +97,23 @@ export const writeProjectSession = (
 };
 
 export const clearProjectSession = (
-  storage?: StorageLike
+  storage?: StorageLike,
 ): ProjectSessionState =>
   writeProjectSession(
     {
       projectRootPath: null,
       projectName: "",
-      recentProjects: readProjectSession(storage).recentProjects
+      recentProjects: readProjectSession(storage).recentProjects,
     },
-    storage
+    storage,
   );
 
-export const hydrateProjectSession = (input: ProjectSessionState): ProjectSessionState =>
-  writeProjectSession(input);
+export const hydrateProjectSession = (
+  input: ProjectSessionState,
+): ProjectSessionState => writeProjectSession(input);
 
 export const readActiveProjectSessionLabel = (
-  session: ProjectSessionState
+  session: ProjectSessionState,
 ): string => {
   const explicitName = normalizeText(session.projectName);
   if (explicitName.length > 0) {
@@ -121,7 +124,7 @@ export const readActiveProjectSessionLabel = (
 };
 
 const normalizeRecentProjects = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<RecentProjectEntry> => {
   if (!Array.isArray(value)) {
     return [];
@@ -137,14 +140,18 @@ const normalizeRecentProjects = (
     const record = entry as Record<string, unknown>;
     const project = normalizeRecentProject({
       rootPath: record["rootPath"],
-      name: record["name"]
+      name: record["name"],
     });
 
     if (project.rootPath === null && project.name.length === 0) {
       continue;
     }
 
-    if (!normalized.some((item) => readRecentProjectKey(item) === readRecentProjectKey(project))) {
+    if (
+      !normalized.some(
+        (item) => readRecentProjectKey(item) === readRecentProjectKey(project),
+      )
+    ) {
       normalized.push(project);
     }
   }
@@ -161,7 +168,7 @@ const parseProjectSession = (value: unknown): ProjectSessionState => {
   return {
     projectRootPath: normalizeNullableText(record["projectRootPath"]),
     projectName: normalizeText(record["projectName"]),
-    recentProjects: normalizeRecentProjects(record["recentProjects"])
+    recentProjects: normalizeRecentProjects(record["recentProjects"]),
   };
 };
 
@@ -170,7 +177,7 @@ const normalizeRecentProject = (value: {
   name: unknown;
 }): RecentProjectEntry => ({
   rootPath: normalizeNullableText(value.rootPath),
-  name: normalizeText(value.name)
+  name: normalizeText(value.name),
 });
 
 const readRecentProjectKey = (project: RecentProjectEntry): string =>
@@ -190,7 +197,7 @@ function createEmptyProjectSession(): ProjectSessionState {
   return {
     projectRootPath: null,
     projectName: "",
-    recentProjects: []
+    recentProjects: [],
   };
 }
 
@@ -200,12 +207,17 @@ const readProjectRootName = (value: string): string => {
     return "";
   }
 
-  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+  const segments = normalized
+    .split("/")
+    .filter((segment) => segment.length > 0);
   return segments.at(-1) ?? normalized;
 };
 
 const notifyProjectSessionChanged = (): void => {
-  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+  if (
+    typeof window === "undefined" ||
+    typeof window.dispatchEvent !== "function"
+  ) {
     return;
   }
 

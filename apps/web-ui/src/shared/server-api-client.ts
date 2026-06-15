@@ -2,12 +2,12 @@ import { readServerConnection } from "./server-config.js";
 
 const HeaderName = {
   Authorization: "Authorization",
-  ContentType: "Content-Type"
+  ContentType: "Content-Type",
 } as const;
 
 const HeaderValue = {
   Json: "application/json",
-  BearerPrefix: "Bearer "
+  BearerPrefix: "Bearer ",
 } as const;
 
 export const requestJson = async <TResult>(input: {
@@ -20,7 +20,7 @@ export const requestJson = async <TResult>(input: {
   const response = await fetch(`${connection.serverUrl}${input.path}`, {
     method: input.method ?? "POST",
     headers: createHeaders(connection.authToken, input.body !== undefined),
-    ...(input.body ? { body: JSON.stringify(input.body) } : {})
+    ...(input.body ? { body: JSON.stringify(input.body) } : {}),
   });
   const payload = await readJson(response);
 
@@ -40,7 +40,7 @@ export const streamText = async (input: {
   const response = await fetch(`${connection.serverUrl}${input.path}`, {
     method: "GET",
     headers: createHeaders(connection.authToken, false),
-    ...(input.signal ? { signal: input.signal } : {})
+    ...(input.signal ? { signal: input.signal } : {}),
   });
 
   if (!response.ok) {
@@ -62,7 +62,7 @@ export const streamText = async (input: {
     }
 
     const chunk = decoder.decode(result.value, {
-      stream: true
+      stream: true,
     });
     if (chunk.length > 0) {
       input.onChunk(chunk);
@@ -77,12 +77,12 @@ export const streamText = async (input: {
 
 const createHeaders = (
   authToken: string,
-  includeJsonContentType: boolean
+  includeJsonContentType: boolean,
 ): Record<string, string> => ({
   [HeaderName.Authorization]: `${HeaderValue.BearerPrefix}${authToken}`,
   ...(includeJsonContentType
     ? { [HeaderName.ContentType]: HeaderValue.Json }
-    : {})
+    : {}),
 });
 
 const readJson = async (response: Response): Promise<unknown> => {

@@ -1,20 +1,33 @@
 import { isAbsolute, join } from "node:path";
-import { createWorkflowOrchestrator, type WorkflowOrchestrator } from "../../../packages/agents/src/index";
+import {
+  createWorkflowOrchestrator,
+  type WorkflowOrchestrator,
+} from "../../../packages/agents/src/index";
 import { parseWorkbenchEnvironment } from "../../../packages/ai-core/src/index";
-import { createGuardrailsEngine, createSecurityPolicy } from "../../../packages/guardrails/src/index";
-import { createEvaluationRunner, type EvaluationRunner } from "../../../packages/eval/src/index";
-import { createFileMemoryStore, createMemoryManager, type MemoryManager } from "../../../packages/memory/src/index";
+import {
+  createGuardrailsEngine,
+  createSecurityPolicy,
+} from "../../../packages/guardrails/src/index";
+import {
+  createEvaluationRunner,
+  type EvaluationRunner,
+} from "../../../packages/eval/src/index";
+import {
+  createFileMemoryStore,
+  createMemoryManager,
+  type MemoryManager,
+} from "../../../packages/memory/src/index";
 import { createObservabilityRuntime } from "../../../packages/observability/src/index";
 import {
   createFileVectorStore,
   createRagService,
-  loadWorkspaceDocuments
+  loadWorkspaceDocuments,
 } from "../../../packages/rag/src/index";
 import {
   createSkillRegistry,
   createSkillRunner,
   type SkillManifest,
-  type SkillRunner
+  type SkillRunner,
 } from "../../../packages/skills/src/index";
 
 export type AiWorkbenchService = {
@@ -48,7 +61,10 @@ export const createAiWorkbenchService = async (input: {
   vectorDir?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<AiWorkbenchService> => {
-  const envConfig = parseWorkbenchEnvironment(input.env ?? process.env, input.workspaceRoot);
+  const envConfig = parseWorkbenchEnvironment(
+    input.env ?? process.env,
+    input.workspaceRoot,
+  );
   const skillsDir = input.skillsDir ?? envConfig.skillsDir;
   const memoryDir = input.memoryDir ?? envConfig.memoryDir;
   const evidenceDir = input.evidenceDir ?? envConfig.evidenceDir;
@@ -56,28 +72,31 @@ export const createAiWorkbenchService = async (input: {
   const memoryStore = await createFileMemoryStore(memoryDir);
   const vectorStore = await createFileVectorStore(vectorDir);
   const registry = await createSkillRegistry({
-    skillsDir
+    skillsDir,
   });
   const observability = await createObservabilityRuntime(
     envConfig.otlpEndpoint === undefined
       ? {
           serviceName: "iteronix-server-api",
-          evidenceDir
+          evidenceDir,
         }
       : {
           serviceName: "iteronix-server-api",
           evidenceDir,
-          otlpEndpoint: envConfig.otlpEndpoint
-        }
+          otlpEndpoint: envConfig.otlpEndpoint,
+        },
   );
   const memoryManager = createMemoryManager({
-    store: memoryStore
+    store: memoryStore,
   });
   const ragService = createRagService({
     vectorStore,
-    cacheTtlSeconds: envConfig.retrievalCacheTtlSeconds
+    cacheTtlSeconds: envConfig.retrievalCacheTtlSeconds,
   });
-  const documents = await loadWorkspaceDocuments(input.workspaceRoot, envConfig.maxIndexedFiles);
+  const documents = await loadWorkspaceDocuments(
+    input.workspaceRoot,
+    envConfig.maxIndexedFiles,
+  );
   await ragService.ingestDocuments(documents);
 
   const toolAllowlistBySkill = buildToolAllowlist(registry.list());
@@ -87,17 +106,17 @@ export const createAiWorkbenchService = async (input: {
     ragService,
     guardrails: createGuardrailsEngine({
       policy: createSecurityPolicy({
-        toolAllowlistBySkill
-      })
-    })
+        toolAllowlistBySkill,
+      }),
+    }),
   });
   const workflowOrchestrator = createWorkflowOrchestrator({
     skillRunner,
-    ragService
+    ragService,
   });
   const evaluationRunner = createEvaluationRunner({
     skillRunner,
-    workflowOrchestrator
+    workflowOrchestrator,
   });
 
   const runSkill = async (request: {
@@ -109,18 +128,18 @@ export const createAiWorkbenchService = async (input: {
       name: "ai.skill.run",
       attributes: {
         skill: request.skillName,
-        session: request.sessionId
+        session: request.sessionId,
       },
       run: async () => {
         const result = await skillRunner.run({
           skillName: request.skillName,
           sessionId: request.sessionId,
           projectRoot: input.workspaceRoot,
-          input: request.input
+          input: request.input,
         });
         await observability.evidenceStore.write(result.evidenceReport);
         return result;
-      }
+      },
     });
 
   const runWorkflow = async (request: {
@@ -133,7 +152,7 @@ export const createAiWorkbenchService = async (input: {
       name: "ai.workflow.run",
       attributes: {
         skill: request.skillName,
-        session: request.sessionId
+        session: request.sessionId,
       },
       run: async () => {
         const result = await workflowOrchestrator.run({
@@ -141,11 +160,11 @@ export const createAiWorkbenchService = async (input: {
           sessionId: request.sessionId,
           projectRoot: input.workspaceRoot,
           question: request.question,
-          autoApprove: request.autoApprove
+          autoApprove: request.autoApprove,
         });
         await observability.evidenceStore.write(result.final.evidenceReport);
         return result;
-      }
+      },
     });
 
   const runEvaluation = async (request: {
@@ -154,11 +173,15 @@ export const createAiWorkbenchService = async (input: {
     observability.withSpan({
       name: "ai.eval.run",
       attributes: {
-        dataset: request.datasetPath
+        dataset: request.datasetPath,
       },
-      run: () => evaluationRunner.runDataset({
-        datasetPath: resolveDatasetPath(input.workspaceRoot, request.datasetPath)
-      })
+      run: () =>
+        evaluationRunner.runDataset({
+          datasetPath: resolveDatasetPath(
+            input.workspaceRoot,
+            request.datasetPath,
+          ),
+        }),
     });
 
   const searchMemory = (request: {
@@ -170,7 +193,7 @@ export const createAiWorkbenchService = async (input: {
       sessionId: request.sessionId,
       query: request.query,
       limit: request.limit,
-      piiMode: "redact"
+      piiMode: "redact",
     });
 
   const shutdown = (): Promise<void> => observability.shutdown();
@@ -180,17 +203,18 @@ export const createAiWorkbenchService = async (input: {
     runWorkflow,
     runEvaluation,
     searchMemory,
-    shutdown
+    shutdown,
   };
 };
 
 const resolveDatasetPath = (
   workspaceRoot: string,
-  datasetPath: string
-): string => (isAbsolute(datasetPath) ? datasetPath : join(workspaceRoot, datasetPath));
+  datasetPath: string,
+): string =>
+  isAbsolute(datasetPath) ? datasetPath : join(workspaceRoot, datasetPath);
 
 const buildToolAllowlist = (
-  skills: ReadonlyArray<SkillManifest>
+  skills: ReadonlyArray<SkillManifest>,
 ): Readonly<Record<string, ReadonlyArray<string>>> => {
   const allowlist: Record<string, ReadonlyArray<string>> = {};
 

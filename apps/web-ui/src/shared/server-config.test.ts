@@ -5,7 +5,7 @@ describe("server config", () => {
   it("routes the local web UI dev origin to the backend dev port by default", () => {
     const connection = readServerConnection(
       createMemoryStorage(),
-      createLocation("http://localhost:4000")
+      createLocation("http://localhost:4000"),
     );
 
     expect(connection.serverUrl).toBe("http://localhost:4001");
@@ -15,12 +15,12 @@ describe("server config", () => {
   it("migrates a stored local web UI dev origin to the backend dev port", () => {
     const storage = createMemoryStorage({
       iteronix_server_url: "http://localhost:4000/",
-      iteronix_auth_token: "custom-token"
+      iteronix_auth_token: "custom-token",
     });
 
     const connection = readServerConnection(
       storage,
-      createLocation("http://localhost:4000")
+      createLocation("http://localhost:4000"),
     );
 
     expect(connection.serverUrl).toBe("http://localhost:4001");
@@ -30,12 +30,12 @@ describe("server config", () => {
   it("keeps explicit remote values untouched", () => {
     const storage = createMemoryStorage({
       iteronix_server_url: "https://api.example.com/",
-      iteronix_auth_token: "remote-token"
+      iteronix_auth_token: "remote-token",
     });
 
     const connection = readServerConnection(
       storage,
-      createLocation("https://app.example.com")
+      createLocation("https://app.example.com"),
     );
 
     expect(connection.serverUrl).toBe("https://api.example.com");
@@ -44,7 +44,7 @@ describe("server config", () => {
 });
 
 const createMemoryStorage = (
-  initialValues: Record<string, string> = {}
+  initialValues: Record<string, string> = {},
 ): Storage => {
   const values = new Map<string, string>(Object.entries(initialValues));
 
@@ -62,10 +62,10 @@ const createMemoryStorage = (
     },
     setItem: (key: string, value: string) => {
       values.set(key, value);
-    }
+    },
   };
 };
 
 const createLocation = (origin: string): Pick<Location, "origin"> => ({
-  origin
+  origin,
 });

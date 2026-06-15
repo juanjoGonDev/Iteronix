@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   parseSerializableSchema,
-  type SerializableSchema
+  type SerializableSchema,
 } from "../../ai-core/src/index";
 
 export type SkillManifest = {
@@ -18,14 +18,18 @@ export type SkillManifest = {
   toolAllowlist: ReadonlyArray<string>;
   promptTemplate: string;
   evaluationRubric: ReadonlyArray<string>;
-  fixtures?: ReadonlyArray<{
-    name: string;
-    input: Record<string, unknown>;
-  }> | undefined;
-  options?: {
-    useRag?: boolean | undefined;
-    topK?: number | undefined;
-  } | undefined;
+  fixtures?:
+    | ReadonlyArray<{
+        name: string;
+        input: Record<string, unknown>;
+      }>
+    | undefined;
+  options?:
+    | {
+        useRag?: boolean | undefined;
+        topK?: number | undefined;
+      }
+    | undefined;
 };
 
 export type SkillRegistry = {
@@ -43,19 +47,21 @@ export const createSkillRegistry = async (input: {
     manifestsByName.set(manifest.metadata.name, manifest);
   }
 
-  const list = (): ReadonlyArray<SkillManifest> => [...manifestsByName.values()];
+  const list = (): ReadonlyArray<SkillManifest> => [
+    ...manifestsByName.values(),
+  ];
 
   const get = (skillName: string): SkillManifest | undefined =>
     manifestsByName.get(skillName);
 
   return {
     list,
-    get
+    get,
   };
 };
 
 const loadSkillManifests = async (
-  skillsDir: string
+  skillsDir: string,
 ): Promise<ReadonlyArray<SkillManifest>> => {
   const entries = await readdir(skillsDir, { withFileTypes: true });
   const manifests: SkillManifest[] = [];
@@ -84,7 +90,7 @@ const parseSkillManifest = (value: unknown): SkillManifest => {
     promptTemplate: parsed.promptTemplate,
     evaluationRubric: parsed.evaluationRubric,
     fixtures: parsed.fixtures,
-    options: parsed.options
+    options: parsed.options,
   };
 };
 
@@ -93,10 +99,12 @@ const skillManifestSchema = z.object({
     name: z.string().min(1),
     version: z.string().min(1),
     description: z.string().min(1),
-    tags: z.array(z.string())
+    tags: z.array(z.string()),
   }),
   inputSchema: z.unknown().transform((value) => parseSerializableSchema(value)),
-  outputSchema: z.unknown().transform((value) => parseSerializableSchema(value)),
+  outputSchema: z
+    .unknown()
+    .transform((value) => parseSerializableSchema(value)),
   toolAllowlist: z.array(z.string()),
   promptTemplate: z.string().min(1),
   evaluationRubric: z.array(z.string()),
@@ -104,14 +112,14 @@ const skillManifestSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        input: z.record(z.string(), z.unknown())
-      })
+        input: z.record(z.string(), z.unknown()),
+      }),
     )
     .optional(),
   options: z
     .object({
       useRag: z.boolean().optional(),
-      topK: z.number().int().positive().optional()
+      topK: z.number().int().positive().optional(),
     })
-    .optional()
+    .optional(),
 });

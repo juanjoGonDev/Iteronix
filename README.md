@@ -64,11 +64,11 @@ pnpm eval:min
 
 ### Browser validation
 
-| Command | Use case |
-| --- | --- |
-| `pnpm -C apps/web-ui validate:source-linking` | Deterministic browser validation for normal verification |
-| `pnpm -C apps/web-ui validate:quality-gates` | Deterministic browser validation for the `Projects` quality-gates flow |
-| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs |
+| Command                                                | Use case                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `pnpm -C apps/web-ui validate:source-linking`          | Deterministic browser validation for normal verification               |
+| `pnpm -C apps/web-ui validate:quality-gates`           | Deterministic browser validation for the `Projects` quality-gates flow |
+| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs                     |
 
 GitHub Actions runs `pnpm -C apps/web-ui validate:source-linking` and `pnpm -C apps/web-ui validate:quality-gates` after `pnpm build`. The canonical operational reference, including screenshot-retention behavior, lives in [`docs/RUNNING.md`](docs/RUNNING.md#browser-validation).
 

@@ -3,7 +3,7 @@ import {
   QualityGateId,
   type ProjectRecord,
   type QualityGateEventRecord,
-  type QualityGateRunRecord
+  type QualityGateRunRecord,
 } from "../src/shared/workbench-types.js";
 
 const FixtureTimestamp = {
@@ -12,17 +12,17 @@ const FixtureTimestamp = {
   RunningUpdatedAt: "2026-04-24T13:05:05.000Z",
   CompletedUpdatedAt: "2026-04-24T13:05:09.000Z",
   EventLint: "2026-04-24T13:05:06.000Z",
-  EventTypecheck: "2026-04-24T13:05:07.000Z"
+  EventTypecheck: "2026-04-24T13:05:07.000Z",
 } as const;
 
 const FixtureIdentity = {
   ProjectId: "project-quality-gates-browser",
-  RunId: "run-quality-gates-browser"
+  RunId: "run-quality-gates-browser",
 } as const;
 
 const FixturePath = {
   RootPath: "D:/projects/Iteronix",
-  Name: "Iteronix"
+  Name: "Iteronix",
 } as const;
 
 export type QualityGatesValidationFixture = {
@@ -33,31 +33,32 @@ export type QualityGatesValidationFixture = {
   readRunsForPoll: (pollCount: number) => ReadonlyArray<QualityGateRunRecord>;
 };
 
-export const createQualityGatesValidationFixture = (): QualityGatesValidationFixture => {
-  const project = createProjectRecord();
-  const runningRun = createRunningRun();
-  const completedRun = createCompletedRun();
-  const streamEvents = createStreamEvents();
+export const createQualityGatesValidationFixture =
+  (): QualityGatesValidationFixture => {
+    const project = createProjectRecord();
+    const runningRun = createRunningRun();
+    const completedRun = createCompletedRun();
+    const streamEvents = createStreamEvents();
 
-  return {
-    project,
-    runningRun,
-    completedRun,
-    streamEvents,
-    readRunsForPoll: (pollCount) =>
-      pollCount >= 2 ? [completedRun] : [runningRun]
+    return {
+      project,
+      runningRun,
+      completedRun,
+      streamEvents,
+      readRunsForPoll: (pollCount) =>
+        pollCount >= 2 ? [completedRun] : [runningRun],
+    };
   };
-};
 
 export const encodeQualityGateProgressEvent = (
-  event: QualityGateEventRecord
+  event: QualityGateEventRecord,
 ): string =>
   [
     `id: ${event.id}`,
     `event: ${QualityGateEventName.Progress}`,
     `data: ${JSON.stringify(event)}`,
     "",
-    ""
+    "",
   ].join("\n");
 
 const createProjectRecord = (): ProjectRecord => ({
@@ -65,7 +66,7 @@ const createProjectRecord = (): ProjectRecord => ({
   name: FixturePath.Name,
   rootPath: FixturePath.RootPath,
   createdAt: FixtureTimestamp.ProjectCreatedAt,
-  updatedAt: FixtureTimestamp.ProjectCreatedAt
+  updatedAt: FixtureTimestamp.ProjectCreatedAt,
 });
 
 const createRunningRun = (): QualityGateRunRecord => ({
@@ -78,10 +79,10 @@ const createRunningRun = (): QualityGateRunRecord => ({
     QualityGateId.Lint,
     QualityGateId.Typecheck,
     QualityGateId.Test,
-    QualityGateId.Build
+    QualityGateId.Build,
   ],
   passedCount: 1,
-  currentGate: QualityGateId.Typecheck
+  currentGate: QualityGateId.Typecheck,
 });
 
 const createCompletedRun = (): QualityGateRunRecord => ({
@@ -94,9 +95,9 @@ const createCompletedRun = (): QualityGateRunRecord => ({
     QualityGateId.Lint,
     QualityGateId.Typecheck,
     QualityGateId.Test,
-    QualityGateId.Build
+    QualityGateId.Build,
   ],
-  passedCount: 4
+  passedCount: 4,
 });
 
 const createStreamEvents = (): ReadonlyArray<QualityGateEventRecord> => [
@@ -107,8 +108,8 @@ const createStreamEvents = (): ReadonlyArray<QualityGateEventRecord> => [
     timestamp: FixtureTimestamp.EventLint,
     data: {
       gate: QualityGateId.Lint,
-      text: "Running lint"
-    }
+      text: "Running lint",
+    },
   },
   {
     id: "event-quality-gates-typecheck",
@@ -117,7 +118,7 @@ const createStreamEvents = (): ReadonlyArray<QualityGateEventRecord> => [
     timestamp: FixtureTimestamp.EventTypecheck,
     data: {
       gate: QualityGateId.Typecheck,
-      text: "Typecheck passed"
-    }
-  }
+      text: "Typecheck passed",
+    },
+  },
 ];

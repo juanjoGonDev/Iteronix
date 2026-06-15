@@ -6,7 +6,7 @@ import {
   parseWorkflowExecutionListResponse,
   parseWorkflowNodeProviderTestResponse,
   parseWorkflowRunStreamEvent,
-  WorkflowRunStreamEventType
+  WorkflowRunStreamEventType,
 } from "./workflow-client.js";
 
 describe("workflow client parsers", () => {
@@ -26,27 +26,27 @@ describe("workflow client parsers", () => {
           trigger: {
             kind: "manual",
             enabled: true,
-            config: {}
+            config: {},
           },
           viewport: {
             x: 12,
             y: 18,
-            zoom: 1
+            zoom: 1,
           },
           nodes: [],
           edges: [],
           executionPolicy: {
             maxNodeRetries: 1,
-            allowManualCheckpointResume: true
+            allowManualCheckpointResume: true,
           },
           defaultContextPolicy: {
             language: "en",
             carryMessagesLimit: 8,
-            carryArtifactLimit: 8
+            carryArtifactLimit: 8,
           },
-          tags: ["mvp"]
-        }
-      ]
+          tags: ["mvp"],
+        },
+      ],
     });
 
     expect(definitions).toHaveLength(1);
@@ -79,13 +79,13 @@ describe("workflow client parsers", () => {
               type: "object",
               properties: {
                 result: {
-                  type: "string"
-                }
-              }
-            }
+                  type: "string",
+                },
+              },
+            },
           },
           createdAt: "2026-05-06T18:00:00.000Z",
-          updatedAt: "2026-05-06T18:10:00.000Z"
+          updatedAt: "2026-05-06T18:10:00.000Z",
         },
         {
           id: "asset-2",
@@ -109,14 +109,14 @@ describe("workflow client parsers", () => {
                 id: "validation-1",
                 kind: "field_exists",
                 target: "output",
-                message: "Need output"
-              }
-            ]
+                message: "Need output",
+              },
+            ],
           },
           createdAt: "2026-05-06T18:00:00.000Z",
-          updatedAt: "2026-05-06T18:10:00.000Z"
-        }
-      ]
+          updatedAt: "2026-05-06T18:10:00.000Z",
+        },
+      ],
     });
 
     expect(assets).toHaveLength(2);
@@ -143,7 +143,7 @@ describe("workflow client parsers", () => {
             completionTokens: 20,
             totalTokens: 30,
             estimatedCostEur: 0.12,
-            latencyMs: 1200
+            latencyMs: 1200,
           },
           contextSessionId: "ctx-1",
           nodeRuns: [
@@ -160,19 +160,21 @@ describe("workflow client parsers", () => {
                   guardrailAssetId: "asset-guardrail-1",
                   nodeId: "node-1",
                   severity: "warn",
-                  message: "Summary present."
-                }
-              ]
-            }
-          ]
-        }
-      ]
+                  message: "Summary present.",
+                },
+              ],
+            },
+          ],
+        },
+      ],
     });
 
     expect(executions).toHaveLength(1);
     expect(executions[0]?.totals.totalTokens).toBe(30);
     expect(executions[0]?.warningsCount).toBe(1);
-    expect(executions[0]?.nodeRuns[0]?.guardrailFindings[0]?.message).toBe("Summary present.");
+    expect(executions[0]?.nodeRuns[0]?.guardrailFindings[0]?.message).toBe(
+      "Summary present.",
+    );
   });
 
   it("parses provider test results with updated workflow metadata", () => {
@@ -190,30 +192,30 @@ describe("workflow client parsers", () => {
         trigger: {
           kind: "manual",
           enabled: true,
-          config: {}
+          config: {},
         },
         viewport: {
           x: 0,
           y: 0,
-          zoom: 1
+          zoom: 1,
         },
         nodes: [],
         edges: [],
         executionPolicy: {
           maxNodeRetries: 1,
-          allowManualCheckpointResume: true
+          allowManualCheckpointResume: true,
         },
         defaultContextPolicy: {
           language: "en",
           carryMessagesLimit: 8,
-          carryArtifactLimit: 8
+          carryArtifactLimit: 8,
         },
-        tags: []
+        tags: [],
       },
       nodeId: "node-1",
       status: "passed",
       testedAt: "2026-05-06T18:11:00.000Z",
-      message: "Provider runtime responded to the workflow smoke test."
+      message: "Provider runtime responded to the workflow smoke test.",
     });
 
     expect(result.nodeId).toBe("node-1");
@@ -223,7 +225,7 @@ describe("workflow client parsers", () => {
 
   it("decodes workflow stream SSE blocks", () => {
     const decoded = decodeServerSentEvents(
-      "event: node_delta\ndata: {\"type\":\"node_delta\",\"workflowId\":\"workflow-1\",\"workflowRunId\":\"run-1\",\"nodeId\":\"node-1\",\"delta\":\"hello\",\"emittedAt\":\"2026-05-06T18:00:00.000Z\"}\n\n"
+      'event: node_delta\ndata: {"type":"node_delta","workflowId":"workflow-1","workflowRunId":"run-1","nodeId":"node-1","delta":"hello","emittedAt":"2026-05-06T18:00:00.000Z"}\n\n',
     );
 
     expect(decoded).toHaveLength(1);
@@ -231,33 +233,36 @@ describe("workflow client parsers", () => {
   });
 
   it("parses workflow stream completion events", () => {
-    const event = parseWorkflowRunStreamEvent(WorkflowRunStreamEventType.WorkflowCompleted, {
-      type: "workflow_completed",
-      workflowId: "workflow-1",
-      workflowRunId: "run-1",
-      finishedAt: "2026-05-06T18:01:00.000Z",
-      execution: {
-        id: "execution-1",
+    const event = parseWorkflowRunStreamEvent(
+      WorkflowRunStreamEventType.WorkflowCompleted,
+      {
+        type: "workflow_completed",
         workflowId: "workflow-1",
-        projectId: "project-1",
-        triggerKind: "manual",
-        status: "completed",
-        startedAt: "2026-05-06T18:00:00.000Z",
+        workflowRunId: "run-1",
         finishedAt: "2026-05-06T18:01:00.000Z",
-        durationMs: 60000,
-        warningsCount: 0,
-        errorsCount: 0,
-        totals: {
-          promptTokens: 10,
-          completionTokens: 20,
-          totalTokens: 30,
-          estimatedCostEur: 0.12,
-          latencyMs: 1200
+        execution: {
+          id: "execution-1",
+          workflowId: "workflow-1",
+          projectId: "project-1",
+          triggerKind: "manual",
+          status: "completed",
+          startedAt: "2026-05-06T18:00:00.000Z",
+          finishedAt: "2026-05-06T18:01:00.000Z",
+          durationMs: 60000,
+          warningsCount: 0,
+          errorsCount: 0,
+          totals: {
+            promptTokens: 10,
+            completionTokens: 20,
+            totalTokens: 30,
+            estimatedCostEur: 0.12,
+            latencyMs: 1200,
+          },
+          contextSessionId: "ctx-1",
+          nodeRuns: [],
         },
-        contextSessionId: "ctx-1",
-        nodeRuns: []
-      }
-    });
+      },
+    );
 
     expect(event.type).toBe("workflow_completed");
     if (event.type === "workflow_completed") {

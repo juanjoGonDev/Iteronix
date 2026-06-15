@@ -1,11 +1,15 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
 import {
   DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey
+  LocalStorageKey as ServerStorageKey,
 } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
@@ -15,7 +19,7 @@ import {
   startPreviewServer,
   stopProcess,
   waitForCondition,
-  waitForHttpReady
+  waitForHttpReady,
 } from "./browser-validation-runtime.js";
 
 const ValidationConfig = {
@@ -30,7 +34,7 @@ const ValidationConfig = {
   ViewportWidth: 1600,
   ViewportHeight: 1080,
   MobileViewportWidth: 390,
-  MobileViewportHeight: 844
+  MobileViewportHeight: 844,
 } as const;
 
 const RequestPath = {
@@ -47,14 +51,14 @@ const RequestPath = {
   AssetsUsage: "/workflows/assets/usage",
   ExecutionsList: "/workflows/executions/list",
   ExecutionsGet: "/workflows/executions/get",
-  ExecutionsDelete: "/workflows/executions/delete"
+  ExecutionsDelete: "/workflows/executions/delete",
 } as const;
 
 const ResponseHeader = {
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
-  ContentType: "Content-Type"
+  ContentType: "Content-Type",
 } as const;
 
 const WorkflowSelector = {
@@ -88,10 +92,13 @@ const WorkflowSelector = {
   OutputContractAddField: "workflows-output-contract-add-field",
   OutputContractPropertyNamePrefix: "workflows-output-contract-property-name-",
   OutputContractPropertyTypePrefix: "workflows-output-contract-property-type-",
-  OutputContractPropertyAddChildPrefix: "workflows-output-contract-property-add-child-",
-  OutputContractPropertyFormatPrefix: "workflows-output-contract-property-format-",
+  OutputContractPropertyAddChildPrefix:
+    "workflows-output-contract-property-add-child-",
+  OutputContractPropertyFormatPrefix:
+    "workflows-output-contract-property-format-",
   OutputContractPropertyMinPrefix: "workflows-output-contract-property-min-",
-  OutputContractPropertyPatternPrefix: "workflows-output-contract-property-pattern-",
+  OutputContractPropertyPatternPrefix:
+    "workflows-output-contract-property-pattern-",
   OutputContractStatus: "workflows-output-contract-status",
   MappingTargetPathInput: "workflows-mapping-target-path-input",
   MappingSourcePathInput: "workflows-mapping-source-path-input",
@@ -100,15 +107,18 @@ const WorkflowSelector = {
   GuardrailAttachmentEditPrefix: "workflows-guardrail-attachment-edit-",
   GuardrailSeveritySelect: "workflows-guardrail-severity-select",
   GuardrailValidationKindSelect: "workflows-guardrail-validation-kind-select",
-  GuardrailValidationTargetSelect: "workflows-guardrail-validation-target-select",
+  GuardrailValidationTargetSelect:
+    "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
-  GuardrailValidationMessageInput: "workflows-guardrail-validation-message-input",
+  GuardrailValidationMessageInput:
+    "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
   SectionHistory: "workflows-section-history",
   ExecutionSummary: "workflows-execution-summary",
   ExecutionSummaryLatestRun: "workflows-execution-summary-latest-run",
   ExecutionSummaryLatestStatus: "workflows-execution-summary-latest-status",
-  ExecutionSummaryStatusDistribution: "workflows-execution-summary-status-distribution",
+  ExecutionSummaryStatusDistribution:
+    "workflows-execution-summary-status-distribution",
   ExecutionSummaryRuns: "workflows-execution-summary-runs",
   ExecutionSummaryCost: "workflows-execution-summary-cost",
   ExecutionSummaryTokens: "workflows-execution-summary-tokens",
@@ -116,8 +126,10 @@ const WorkflowSelector = {
   ExecutionSummaryErrors: "workflows-execution-summary-errors",
   ExecutionSummaryAttention: "workflows-execution-summary-attention",
   ExecutionSummaryAttentionRuns: "workflows-execution-summary-attention-runs",
-  ExecutionSummaryAttentionFailedRuns: "workflows-execution-summary-attention-failed-runs",
-  ExecutionSummaryAttentionAlertedRuns: "workflows-execution-summary-attention-alerted-runs",
+  ExecutionSummaryAttentionFailedRuns:
+    "workflows-execution-summary-attention-failed-runs",
+  ExecutionSummaryAttentionAlertedRuns:
+    "workflows-execution-summary-attention-alerted-runs",
   ExecutionFilterAll: "workflows-execution-filter-all",
   ExecutionFilterFailed: "workflows-execution-filter-failed",
   ExecutionFilterAttention: "workflows-execution-filter-attention",
@@ -130,7 +142,7 @@ const WorkflowSelector = {
   SectionAssets: "workflows-section-assets",
   CompactCanvas: "workflows-compact-canvas",
   NodeCardPrefix: "workflows-node-card-",
-  NodePalettePrefix: "workflows-node-palette-"
+  NodePalettePrefix: "workflows-node-palette-",
 } as const;
 
 const WorkflowNodeKind = {
@@ -143,10 +155,11 @@ const WorkflowNodeKind = {
   LogicCondition: "logic.condition",
   LogicMerge: "logic.merge",
   HumanReview: "human.review",
-  TerminalResponse: "terminal.response"
+  TerminalResponse: "terminal.response",
 } as const;
 
-type WorkflowNodeKind = typeof WorkflowNodeKind[keyof typeof WorkflowNodeKind];
+type WorkflowNodeKind =
+  (typeof WorkflowNodeKind)[keyof typeof WorkflowNodeKind];
 
 type StubProjectRecord = {
   id: string;
@@ -193,8 +206,16 @@ type StubWorkflowNodeRecord = {
     };
   };
   inputPorts: ReadonlyArray<{ id: string; name: string; acceptsMany: boolean }>;
-  outputPorts: ReadonlyArray<{ id: string; name: string; acceptsMany: boolean }>;
-  attachedGuardrails: ReadonlyArray<{ assetId: string; order: number; enabled: boolean }>;
+  outputPorts: ReadonlyArray<{
+    id: string;
+    name: string;
+    acceptsMany: boolean;
+  }>;
+  attachedGuardrails: ReadonlyArray<{
+    assetId: string;
+    order: number;
+    enabled: boolean;
+  }>;
   outputContract?: Record<string, unknown>;
 };
 
@@ -318,7 +339,7 @@ const fixtureProject: StubProjectRecord = {
   name: "Iteronix",
   rootPath: "D:\\projects\\Iteronix",
   createdAt: "2026-05-06T08:00:00.000Z",
-  updatedAt: "2026-05-06T08:00:00.000Z"
+  updatedAt: "2026-05-06T08:00:00.000Z",
 };
 
 const ValidationText = {
@@ -328,8 +349,10 @@ const ValidationText = {
   WorkflowDescription: "Server-backed workflow for the integrated editor.",
   PromptNodeLabel: "Primary prompt",
   ProviderNodeLabel: "Codex run",
-  ProviderPrompt: "Summarize the connected context and return a concise answer.",
-  ProviderPromptWithVariable: "Summarize the connected context and return a concise answer.{{var|workflow_context||$.workflow.name}}",
+  ProviderPrompt:
+    "Summarize the connected context and return a concise answer.",
+  ProviderPromptWithVariable:
+    "Summarize the connected context and return a concise answer.{{var|workflow_context||$.workflow.name}}",
   OutputContractField: "summary",
   OutputContractNestedField: "meta",
   OutputContractNestedEmailField: "email",
@@ -357,7 +380,7 @@ const ValidationText = {
   ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
   ConnectionHintTitle: "Connect nodes",
-  ConnectionModeTitle: "Connection mode"
+  ConnectionModeTitle: "Connection mode",
 } as const;
 
 const ExecutionOverviewExpectation = {
@@ -372,7 +395,7 @@ const ExecutionOverviewExpectation = {
     errors: "1",
     attentionRuns: "2",
     failedRuns: "1",
-    alertedRuns: "2"
+    alertedRuns: "2",
   },
   AfterDelete: {
     latestRunStartedAt: ValidationText.ExecutionSecondaryStartedAt,
@@ -385,11 +408,13 @@ const ExecutionOverviewExpectation = {
     errors: "1",
     attentionRuns: "1",
     failedRuns: "1",
-    alertedRuns: "1"
-  }
+    alertedRuns: "1",
+  },
 } as const;
 
-const runtimeOptions = parseBrowserValidationRuntimeOptions(process.argv.slice(2));
+const runtimeOptions = parseBrowserValidationRuntimeOptions(
+  process.argv.slice(2),
+);
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(projectRoot, "screenshots");
 const buildOutputPath = join(projectRoot, "dist", "index.js");
@@ -400,7 +425,7 @@ async function validateWorkflowsScreen(): Promise<void> {
   await assertBrowserValidationBuildOutput(buildOutputPath);
   await prepareBrowserValidationDirectory({
     directory: screenshotDirectory,
-    preserveScreenshots: runtimeOptions.preserveScreenshots
+    preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
   const previewServer = startPreviewServer(projectRoot);
@@ -408,37 +433,49 @@ async function validateWorkflowsScreen(): Promise<void> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    await waitForHttpReady(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
-    await waitForHttpReady(`${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`, {
-      timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForHttpReady(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.PreviewHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await waitForHttpReady(
+      `${ValidationConfig.StubApiBaseUrl}${ValidationConfig.StubHealthPath}`,
+      {
+        timeoutMs: ValidationConfig.PreviewStartupTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
     browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox"]
+      args: ["--no-sandbox"],
     });
 
     const page = await browser.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
-      height: ValidationConfig.ViewportHeight
+      height: ValidationConfig.ViewportHeight,
     });
     await seedBrowserStorage(page);
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
 
     await waitForTestId(page, WorkflowSelector.Root);
-    await waitForPageTexts(page, [ValidationText.ScreenTitle, ValidationText.CurrentProject]);
+    await waitForPageTexts(page, [
+      ValidationText.ScreenTitle,
+      ValidationText.CurrentProject,
+    ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "workflows-initial",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
 
     await clickByTestId(page, WorkflowSelector.WorkflowCreate);
@@ -453,163 +490,231 @@ async function validateWorkflowsScreen(): Promise<void> {
 
     await clickByTestId(page, WorkflowSelector.SectionNodes);
     await waitForNodePalette(page);
-    await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AssetPrompt}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AssetPrompt}`,
+    );
     await waitForPageText(page, "Prompt asset created.");
-    await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.PromptNodeLabel);
-    await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}contract`);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.NodeLabelInput,
+      ValidationText.PromptNodeLabel,
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.DeepEditorOpenPrefix}contract`,
+    );
     await waitForTestId(page, WorkflowSelector.DeepEditorModal);
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["result"])}`,
-      ValidationText.OutputContractField
+      ValidationText.OutputContractField,
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`
+      `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`,
     );
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`,
-      "["
+      "[",
     );
     await waitForPageText(page, "invalid pattern");
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyPatternPrefix}${toContractPathToken([ValidationText.OutputContractField])}`,
-      ""
+      "",
     );
     await waitForPageText(page, "Output contract is valid.");
     await clickByTestId(page, WorkflowSelector.OutputContractAddField);
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
     );
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
-      ValidationText.OutputContractNestedField
+      ValidationText.OutputContractNestedField,
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`,
     );
     await setSelectValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`,
-      "object"
+      "object",
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`,
     );
     await clickByTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`
+      `${WorkflowSelector.OutputContractPropertyAddChildPrefix}${toContractPathToken([ValidationText.OutputContractNestedField])}`,
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken([ValidationText.OutputContractNestedField, "field"])}`
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken([ValidationText.OutputContractNestedField, "field"])}`,
     );
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken([ValidationText.OutputContractNestedField, "field"])}`,
-      ValidationText.OutputContractNestedEmailField
+      ValidationText.OutputContractNestedEmailField,
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyFormatPrefix}${toContractPathToken([ValidationText.OutputContractNestedField, ValidationText.OutputContractNestedEmailField])}`
+      `${WorkflowSelector.OutputContractPropertyFormatPrefix}${toContractPathToken([ValidationText.OutputContractNestedField, ValidationText.OutputContractNestedEmailField])}`,
     );
     await setSelectValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyFormatPrefix}${toContractPathToken([ValidationText.OutputContractNestedField, ValidationText.OutputContractNestedEmailField])}`,
-      "email"
+      "email",
     );
     await clickByTestId(page, WorkflowSelector.OutputContractAddField);
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`
+      `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
     );
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyNamePrefix}${toContractPathToken(["field"])}`,
-      ValidationText.OutputContractArrayField
+      ValidationText.OutputContractArrayField,
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractArrayField])}`
+      `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractArrayField])}`,
     );
     await setSelectValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyTypePrefix}${toContractPathToken([ValidationText.OutputContractArrayField])}`,
-      "array"
+      "array",
     );
     await waitForTestId(
       page,
-      `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`
+      `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`,
     );
     await setInputValueByTestId(
       page,
       `${WorkflowSelector.OutputContractPropertyMinPrefix}${toContractPathToken([ValidationText.OutputContractArrayField, "items"])}`,
-      "2"
+      "2",
     );
     await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabJson);
     await waitForTestId(page, WorkflowSelector.DeepEditorRawJsonInput);
-    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorRawJsonInput, "{");
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.DeepEditorRawJsonInput,
+      "{",
+    );
     await clickByTestId(page, WorkflowSelector.DeepEditorApplyRawJson);
     await waitForPageText(page, "Raw JSON is not valid JSON.");
-    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorRawJsonInput, buildPromptContractJsonDocument());
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.DeepEditorRawJsonInput,
+      buildPromptContractJsonDocument(),
+    );
     await clickByTestId(page, WorkflowSelector.DeepEditorApplyRawJson);
     await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabVisual);
     await waitForPageText(page, "Output contract is valid.");
     await clickByTestId(page, WorkflowSelector.DeepEditorClose);
     await waitForNodeCardText(page, ValidationText.PromptNodeLabel);
 
-    await clickByTestId(page, `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AiProviderRun}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.NodePalettePrefix}${WorkflowNodeKind.AiProviderRun}`,
+    );
     await waitForNodeCardCount(page, 4);
     const nodeCardTestIds = await readNodeCardTestIds(page);
     const triggerCardTestId = nodeCardTestIds[0];
     const promptCardTestId = nodeCardTestIds[2];
     const providerCardTestId = nodeCardTestIds[3];
     if (!triggerCardTestId || !promptCardTestId || !providerCardTestId) {
-      throw new Error("Expected trigger, prompt and provider node cards to exist.");
+      throw new Error(
+        "Expected trigger, prompt and provider node cards to exist.",
+      );
     }
     await clickEditButtonWithinNodeCard(page, providerCardTestId);
-    await setInputValueByTestId(page, WorkflowSelector.NodeLabelInput, ValidationText.ProviderNodeLabel);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.NodeLabelInput,
+      ValidationText.ProviderNodeLabel,
+    );
     await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
     await waitForTestId(page, WorkflowSelector.DeepEditorPromptInput);
-    await setTextAreaValueByTestId(page, WorkflowSelector.DeepEditorPromptInput, ValidationText.ProviderPrompt);
-    await clickByTestId(page, `${WorkflowSelector.VariableTokenPrefix}context-workflow-name`);
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.DeepEditorPromptInput,
+      ValidationText.ProviderPrompt,
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}context-workflow-name`,
+    );
     await clickByTestId(page, WorkflowSelector.DeepEditorClose);
-    await setSelectValueByTestId(page, WorkflowSelector.NodeReasoningSelect, "high");
-    await setSelectValueByTestId(page, WorkflowSelector.NodeVerbositySelect, "low");
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.NodeReasoningSelect,
+      "high",
+    );
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.NodeVerbositySelect,
+      "low",
+    );
     await waitForNodeCardText(page, ValidationText.ProviderNodeLabel);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "workflows-provider-config",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
     const beforePosition = await readNodeCardPosition(page, providerCardTestId);
     await dragNodeCard(page, providerCardTestId, 140, 96);
-    await waitForCondition(async () => {
-      const afterPosition = await readNodeCardPosition(page, providerCardTestId);
-      return afterPosition.left !== beforePosition.left || afterPosition.top !== beforePosition.top;
-    }, "provider node drag movement", {
-      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-      intervalMs: ValidationConfig.UiPollingIntervalMs
-    });
+    await waitForCondition(
+      async () => {
+        const afterPosition = await readNodeCardPosition(
+          page,
+          providerCardTestId,
+        );
+        return (
+          afterPosition.left !== beforePosition.left ||
+          afterPosition.top !== beforePosition.top
+        );
+      },
+      "provider node drag movement",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
 
-    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await startConnectionDragFromNodePort(
+      page,
+      triggerCardTestId,
+      "output · Run",
+    );
     await waitForPageText(page, ValidationText.ConnectionModeTitle);
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
     await waitForConnectionPreviewArrow(page);
-    await finishConnectionDragOnNodePort(page, promptCardTestId, "input · Context");
+    await finishConnectionDragOnNodePort(
+      page,
+      promptCardTestId,
+      "input · Context",
+    );
     await waitForEdgeCount(page, 1);
     await waitForRenderedEdgeGeometry(page, 1);
-    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await startConnectionDragFromNodePort(
+      page,
+      triggerCardTestId,
+      "output · Run",
+    );
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
     await waitForConnectionPreviewArrow(page);
-    await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
+    await finishConnectionDragOnNodePort(
+      page,
+      providerCardTestId,
+      "input · Input",
+    );
     await waitForEdgeCount(page, 2);
     await waitForRenderedEdgeGeometry(page, 2);
     await waitForEdgeArrowSize(page);
@@ -620,32 +725,86 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForEdgeCount(page, 1);
     await waitForDeletedEdgeRemoved(page, deletedEdgeId);
     await waitForRenderedEdgeGeometry(page, 1);
-    await startConnectionDragFromNodePort(page, triggerCardTestId, "output · Run");
+    await startConnectionDragFromNodePort(
+      page,
+      triggerCardTestId,
+      "output · Run",
+    );
     await waitForTestId(page, WorkflowSelector.ConnectionPreview);
-    await finishConnectionDragOnNodePort(page, providerCardTestId, "input · Input");
+    await finishConnectionDragOnNodePort(
+      page,
+      providerCardTestId,
+      "input · Input",
+    );
     await clickEditButtonWithinNodeCard(page, providerCardTestId);
-    await setInputValueByTestId(page, WorkflowSelector.MappingTargetPathInput, ValidationText.MappingTargetPath);
-    await setSelectValueByTestId(page, WorkflowSelector.MappingSourcePathInput, ValidationText.MappingSourcePath);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.MappingTargetPathInput,
+      ValidationText.MappingTargetPath,
+    );
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.MappingSourcePathInput,
+      ValidationText.MappingSourcePath,
+    );
     await clickByTestId(page, WorkflowSelector.MappingAddEntry);
     await waitForPageText(page, ValidationText.MappingTargetPath);
     await clickByTestId(page, WorkflowSelector.GuardrailNewForNode);
     await waitForPageText(page, "Guardrail asset created.");
-    await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
-    await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await waitForFirstByTestIdPrefix(
+      page,
+      WorkflowSelector.GuardrailAttachmentEditPrefix,
+    );
+    await clickFirstByTestIdPrefix(
+      page,
+      WorkflowSelector.GuardrailAttachmentEditPrefix,
+    );
     await waitForTestId(page, WorkflowSelector.GuardrailSeveritySelect);
-    await setSelectValueByTestId(page, WorkflowSelector.GuardrailSeveritySelect, "warn");
-    await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationKindSelect, "field_exists");
-    await setSelectValueByTestId(page, WorkflowSelector.GuardrailValidationTargetSelect, "output");
-    await setInputValueByTestId(page, WorkflowSelector.GuardrailValidationPathInput, ValidationText.GuardrailValidationPath);
-    await setInputValueByTestId(page, WorkflowSelector.GuardrailValidationMessageInput, ValidationText.GuardrailValidationMessage);
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.GuardrailSeveritySelect,
+      "warn",
+    );
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.GuardrailValidationKindSelect,
+      "field_exists",
+    );
+    await setSelectValueByTestId(
+      page,
+      WorkflowSelector.GuardrailValidationTargetSelect,
+      "output",
+    );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.GuardrailValidationPathInput,
+      ValidationText.GuardrailValidationPath,
+    );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.GuardrailValidationMessageInput,
+      ValidationText.GuardrailValidationMessage,
+    );
     await clickByTestId(page, WorkflowSelector.GuardrailAddValidation);
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
 
     await clickCanvasBackground(page);
     await waitForTestId(page, WorkflowSelector.WorkflowNameInput);
-    await setInputValueByTestId(page, WorkflowSelector.WorkflowNameInput, ValidationText.WorkflowName);
-    await waitForInputValue(page, WorkflowSelector.WorkflowNameInput, ValidationText.WorkflowName);
-    await setTextAreaValueByTestId(page, WorkflowSelector.WorkflowDescriptionInput, ValidationText.WorkflowDescription);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowNameInput,
+      ValidationText.WorkflowName,
+    );
+    await waitForInputValue(
+      page,
+      WorkflowSelector.WorkflowNameInput,
+      ValidationText.WorkflowName,
+    );
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.WorkflowDescriptionInput,
+      ValidationText.WorkflowDescription,
+    );
 
     await clickByTestId(page, WorkflowSelector.WorkflowSave);
     await waitForPageText(page, ValidationText.WorkflowSavedNotice);
@@ -654,63 +813,106 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "workflows-saved",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
 
     await page.reload({
-      waitUntil: "networkidle0"
+      waitUntil: "networkidle0",
     });
     await waitForPageTexts(page, [
       ValidationText.WorkflowName,
       ValidationText.PromptNodeLabel,
-      ValidationText.ProviderNodeLabel
+      ValidationText.ProviderNodeLabel,
     ]);
-    await waitForInputValue(page, WorkflowSelector.WorkflowNameInput, ValidationText.WorkflowName);
+    await waitForInputValue(
+      page,
+      WorkflowSelector.WorkflowNameInput,
+      ValidationText.WorkflowName,
+    );
     await clickEditButtonWithinNodeCard(page, providerCardTestId);
     await waitForPageText(page, ValidationText.MappingTargetPath);
-    await waitForFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
-    await clickFirstByTestIdPrefix(page, WorkflowSelector.GuardrailAttachmentEditPrefix);
+    await waitForFirstByTestIdPrefix(
+      page,
+      WorkflowSelector.GuardrailAttachmentEditPrefix,
+    );
+    await clickFirstByTestIdPrefix(
+      page,
+      WorkflowSelector.GuardrailAttachmentEditPrefix,
+    );
     await waitForPageText(page, ValidationText.GuardrailValidationMessage);
     await clickByTestId(page, WorkflowSelector.SectionHistory);
     await waitForExecutionCardCount(page, 3);
-    await waitForExecutionOverview(page, ExecutionOverviewExpectation.BeforeDelete);
+    await waitForExecutionOverview(
+      page,
+      ExecutionOverviewExpectation.BeforeDelete,
+    );
     await waitForExecutionAttentionItemCount(page, 2);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionAttentionRunPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionAttentionRunPrefix}${ValidationText.ExecutionPrimaryId}`,
+    );
     await waitForTestId(page, WorkflowSelector.ExecutionInspector);
     await waitForPageTexts(page, [
       ValidationText.ExecutionPrimaryAlert,
       ValidationText.ExecutionPrimaryFinding,
-      ValidationText.ExecutionSecondaryNodeLabel
+      ValidationText.ExecutionSecondaryNodeLabel,
     ]);
     await waitForNodeRunCards(page, 2);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`,
+    );
     await waitForPageText(page, ValidationText.ExecutionCleanSessionId);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
     await waitForExecutionCardCount(page, 1);
     await waitForMissingTestId(page, WorkflowSelector.ExecutionInspector);
-    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
-    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
+    await waitForMissingTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`,
+    );
+    await waitForMissingTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`,
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`,
+    );
     await waitForPageTexts(page, [
       ValidationText.ExecutionSecondaryAlert,
       ValidationText.ExecutionSecondaryFinding,
-      ValidationText.ExecutionSecondarySessionId
+      ValidationText.ExecutionSecondarySessionId,
     ]);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
     await waitForExecutionCardCount(page, 2);
-    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`);
+    await waitForMissingTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionCleanId}`,
+    );
     await waitForExecutionAttentionItemCount(page, 2);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`,
+    );
     await waitForPageTexts(page, [
       ValidationText.ExecutionPrimaryAlert,
-      ValidationText.ExecutionPrimaryFinding
+      ValidationText.ExecutionPrimaryFinding,
     ]);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionDeletePrefix}${ValidationText.ExecutionPrimaryId}`,
+    );
     await waitForPageText(page, ValidationText.ExecutionDeletedNotice);
     await waitForExecutionCardCount(page, 1);
-    await waitForExecutionOverview(page, ExecutionOverviewExpectation.AfterDelete);
+    await waitForExecutionOverview(
+      page,
+      ExecutionOverviewExpectation.AfterDelete,
+    );
     await waitForExecutionAttentionItemCount(page, 1);
-    assertExecutionDeletion(stubServer.state, ValidationText.ExecutionPrimaryId);
+    assertExecutionDeletion(
+      stubServer.state,
+      ValidationText.ExecutionPrimaryId,
+    );
     await clickByTestId(page, WorkflowSelector.ExecutionFilterAll);
     await waitForExecutionCardCount(page, 2);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
@@ -721,49 +923,61 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       directory: screenshotDirectory,
       suffix: "workflows-execution-history",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
 
     await page.reload({
-      waitUntil: "networkidle0"
+      waitUntil: "networkidle0",
     });
     await clickByTestId(page, WorkflowSelector.SectionHistory);
     await waitForExecutionCardCount(page, 2);
-    await waitForExecutionOverview(page, ExecutionOverviewExpectation.AfterDelete);
+    await waitForExecutionOverview(
+      page,
+      ExecutionOverviewExpectation.AfterDelete,
+    );
     await waitForExecutionAttentionItemCount(page, 1);
-    await waitForMissingTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`);
+    await waitForMissingTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPrimaryId}`,
+    );
     await clickByTestId(page, WorkflowSelector.ExecutionFilterFailed);
     await waitForExecutionCardCount(page, 1);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterAttention);
     await waitForExecutionCardCount(page, 1);
     await clickByTestId(page, WorkflowSelector.ExecutionFilterAll);
     await waitForExecutionCardCount(page, 2);
-    await clickByTestId(page, `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionSecondaryId}`,
+    );
     await waitForPageTexts(page, [
       ValidationText.ExecutionSecondaryAlert,
       ValidationText.ExecutionSecondaryFinding,
-      ValidationText.ExecutionSecondarySessionId
+      ValidationText.ExecutionSecondarySessionId,
     ]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "workflows-reloaded",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
 
     await page.setViewport({
       width: ValidationConfig.MobileViewportWidth,
-      height: ValidationConfig.MobileViewportHeight
+      height: ValidationConfig.MobileViewportHeight,
     });
-    await page.goto(`${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`, {
-      waitUntil: "networkidle0"
-    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
     await waitForTestId(page, WorkflowSelector.CompactCanvas);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
       suffix: "workflows-mobile",
-      artifactName: "workflows"
+      artifactName: "workflows",
     });
 
     await page.close();
@@ -787,7 +1001,7 @@ async function startWorkflowStubServer(): Promise<{
     assets: [],
     executions: [],
     nextWorkflowId: 1,
-    nextAssetId: 1
+    nextAssetId: 1,
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -809,20 +1023,23 @@ async function startWorkflowStubServer(): Promise<{
           }
           resolve();
         });
-      })
+      }),
   };
 }
 
 async function handleStubRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  state: StubServerState
+  state: StubServerState,
 ): Promise<void> {
-  const requestUrl = new URL(request.url ?? "/", ValidationConfig.StubApiBaseUrl);
+  const requestUrl = new URL(
+    request.url ?? "/",
+    ValidationConfig.StubApiBaseUrl,
+  );
 
   if (requestUrl.pathname === ValidationConfig.StubHealthPath) {
     writeJson(response, 200, {
-      ok: true
+      ok: true,
     });
     return;
   }
@@ -835,14 +1052,14 @@ async function handleStubRequest(
 
   if (!isAuthorized(request)) {
     writeJson(response, 401, {
-      message: "Unauthorized"
+      message: "Unauthorized",
     });
     return;
   }
 
   if (request.method !== "POST") {
     writeJson(response, 405, {
-      message: "Method not allowed"
+      message: "Method not allowed",
     });
     return;
   }
@@ -851,7 +1068,7 @@ async function handleStubRequest(
 
   if (requestUrl.pathname === RequestPath.WorkspaceStateGet) {
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings)
+      state: createWorkspaceState(state.settings),
     });
     return;
   }
@@ -861,7 +1078,7 @@ async function handleStubRequest(
       state.settings = body["settings"];
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings)
+      state: createWorkspaceState(state.settings),
     });
     return;
   }
@@ -869,14 +1086,18 @@ async function handleStubRequest(
   if (requestUrl.pathname === RequestPath.DefinitionsList) {
     const projectId = readRequiredString(body, "projectId");
     writeJson(response, 200, {
-      definitions: state.definitions.filter((definition) => definition.projectId === projectId)
+      definitions: state.definitions.filter(
+        (definition) => definition.projectId === projectId,
+      ),
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsGet) {
     const workflowId = readRequiredString(body, "workflowId");
-    const definition = state.definitions.find((entry) => entry.id === workflowId);
+    const definition = state.definitions.find(
+      (entry) => entry.id === workflowId,
+    );
     if (!definition) {
       writeJson(response, 404, { message: "Not found" });
       return;
@@ -899,10 +1120,12 @@ async function handleStubRequest(
       ...(existingIndex >= 0 && state.definitions[existingIndex]
         ? { existing: state.definitions[existingIndex] }
         : {}),
-      workflowId: existingIndex >= 0
-        ? state.definitions[existingIndex]?.id ?? `workflow-${state.nextWorkflowId}`
-        : `workflow-${state.nextWorkflowId}`,
-      updatedAt: now
+      workflowId:
+        existingIndex >= 0
+          ? (state.definitions[existingIndex]?.id ??
+            `workflow-${state.nextWorkflowId}`)
+          : `workflow-${state.nextWorkflowId}`,
+      updatedAt: now,
     });
     if (existingIndex >= 0) {
       state.definitions[existingIndex] = nextDefinition;
@@ -911,18 +1134,22 @@ async function handleStubRequest(
       state.definitions.push(nextDefinition);
     }
     state.executions = [
-      ...state.executions.filter((execution) => execution.workflowId !== nextDefinition.id),
-      ...createExecutionFixtures(nextDefinition)
+      ...state.executions.filter(
+        (execution) => execution.workflowId !== nextDefinition.id,
+      ),
+      ...createExecutionFixtures(nextDefinition),
     ];
     writeJson(response, 200, {
-      definition: nextDefinition
+      definition: nextDefinition,
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsDelete) {
     const workflowId = readRequiredString(body, "workflowId");
-    const existingIndex = state.definitions.findIndex((entry) => entry.id === workflowId);
+    const existingIndex = state.definitions.findIndex(
+      (entry) => entry.id === workflowId,
+    );
     if (existingIndex < 0) {
       writeJson(response, 404, { message: "Not found" });
       return;
@@ -936,10 +1163,11 @@ async function handleStubRequest(
     const projectId = readRequiredString(body, "projectId");
     const workspaceId = readRequiredString(body, "workspaceId");
     writeJson(response, 200, {
-      assets: state.assets.filter((asset) =>
-        asset.workspaceId === workspaceId &&
-        (asset.projectId === undefined || asset.projectId === projectId)
-      )
+      assets: state.assets.filter(
+        (asset) =>
+          asset.workspaceId === workspaceId &&
+          (asset.projectId === undefined || asset.projectId === projectId),
+      ),
     });
     return;
   }
@@ -969,10 +1197,11 @@ async function handleStubRequest(
       ...(existingIndex >= 0 && state.assets[existingIndex]
         ? { existing: state.assets[existingIndex] }
         : {}),
-      assetId: existingIndex >= 0
-        ? state.assets[existingIndex]?.id ?? `asset-${state.nextAssetId}`
-        : `asset-${state.nextAssetId}`,
-      updatedAt: now
+      assetId:
+        existingIndex >= 0
+          ? (state.assets[existingIndex]?.id ?? `asset-${state.nextAssetId}`)
+          : `asset-${state.nextAssetId}`,
+      updatedAt: now,
     });
     if (existingIndex >= 0) {
       state.assets[existingIndex] = nextAsset;
@@ -981,14 +1210,16 @@ async function handleStubRequest(
       state.assets.push(nextAsset);
     }
     writeJson(response, 200, {
-      asset: nextAsset
+      asset: nextAsset,
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.AssetsDelete) {
     const assetId = readRequiredString(body, "assetId");
-    const existingIndex = state.assets.findIndex((entry) => entry.id === assetId);
+    const existingIndex = state.assets.findIndex(
+      (entry) => entry.id === assetId,
+    );
     if (existingIndex < 0) {
       writeJson(response, 404, { message: "Not found" });
       return;
@@ -1003,11 +1234,12 @@ async function handleStubRequest(
     const workflowId = readOptionalString(body, "workflowId");
     const projectId = readOptionalString(body, "projectId");
     writeJson(response, 200, {
-      usages: readAssetUsages(state).filter((usage) =>
-        (assetId === undefined || usage.assetId === assetId) &&
-        (workflowId === undefined || usage.workflowId === workflowId) &&
-        (projectId === undefined || usage.projectId === projectId)
-      )
+      usages: readAssetUsages(state).filter(
+        (usage) =>
+          (assetId === undefined || usage.assetId === assetId) &&
+          (workflowId === undefined || usage.workflowId === workflowId) &&
+          (projectId === undefined || usage.projectId === projectId),
+      ),
     });
     return;
   }
@@ -1016,17 +1248,20 @@ async function handleStubRequest(
     const projectId = readRequiredString(body, "projectId");
     const workflowId = readOptionalString(body, "workflowId");
     writeJson(response, 200, {
-      executions: state.executions.filter((execution) =>
-        execution.projectId === projectId &&
-        (workflowId === undefined || execution.workflowId === workflowId)
-      )
+      executions: state.executions.filter(
+        (execution) =>
+          execution.projectId === projectId &&
+          (workflowId === undefined || execution.workflowId === workflowId),
+      ),
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.ExecutionsGet) {
     const executionId = readRequiredString(body, "executionId");
-    const execution = state.executions.find((entry) => entry.id === executionId);
+    const execution = state.executions.find(
+      (entry) => entry.id === executionId,
+    );
     if (!execution) {
       writeJson(response, 404, { message: "Not found" });
       return;
@@ -1037,7 +1272,9 @@ async function handleStubRequest(
 
   if (requestUrl.pathname === RequestPath.ExecutionsDelete) {
     const executionId = readRequiredString(body, "executionId");
-    const existingIndex = state.executions.findIndex((entry) => entry.id === executionId);
+    const existingIndex = state.executions.findIndex(
+      (entry) => entry.id === executionId,
+    );
     if (existingIndex < 0) {
       writeJson(response, 404, { message: "Not found" });
       return;
@@ -1048,19 +1285,21 @@ async function handleStubRequest(
   }
 
   writeJson(response, 404, {
-    message: "Not found"
+    message: "Not found",
   });
 }
 
-function createWorkspaceState(settings: Record<string, unknown>): Record<string, unknown> {
+function createWorkspaceState(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
   return {
     activeProjectId: fixtureProject.id,
     projects: [fixtureProject],
     settings,
     workbenchHistory: {
       runs: [],
-      evals: []
-    }
+      evals: [],
+    },
   };
 }
 
@@ -1075,22 +1314,22 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
         modelId: "",
         endpointUrl: "",
         command: "codex",
-        promptMode: "stdin"
-      }
+        promptMode: "stdin",
+      },
     ],
     workflowLimits: {
       infiniteLoops: false,
       maxLoops: 50,
-      externalCalls: true
+      externalCalls: true,
     },
     notifications: {
       soundEnabled: true,
-      webhookUrl: ""
+      webhookUrl: "",
     },
     serverConnection: {
       serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken
-    }
+      authToken: DefaultServerConnection.authToken,
+    },
   };
 }
 
@@ -1117,9 +1356,15 @@ function createDefinitionRecord(input: {
     viewport: readViewportRecord(input.definitionInput, "viewport"),
     nodes: readNodeArray(input.definitionInput, "nodes"),
     edges: readEdgeArray(input.definitionInput, "edges"),
-    executionPolicy: readExecutionPolicyRecord(input.definitionInput, "executionPolicy"),
-    defaultContextPolicy: readContextPolicyRecord(input.definitionInput, "defaultContextPolicy"),
-    tags: readStringArray(input.definitionInput, "tags")
+    executionPolicy: readExecutionPolicyRecord(
+      input.definitionInput,
+      "executionPolicy",
+    ),
+    defaultContextPolicy: readContextPolicyRecord(
+      input.definitionInput,
+      "defaultContextPolicy",
+    ),
+    tags: readStringArray(input.definitionInput, "tags"),
   };
 }
 
@@ -1155,25 +1400,30 @@ function createAssetRecord(input: {
     ...(guardrail ? { guardrail } : {}),
     createdAt,
     updatedAt: input.updatedAt,
-    ...(archivedAt ? { archivedAt } : {})
+    ...(archivedAt ? { archivedAt } : {}),
   };
 }
 
 function readAssetUsages(
-  state: StubServerState
+  state: StubServerState,
 ): ReadonlyArray<StubAssetUsageRecord> {
   return state.definitions.flatMap((definition) =>
     definition.nodes.flatMap((node) => {
       const primaryUsage = node.config.assetId
-        ? [{
-            assetId: node.config.assetId,
-            workflowId: definition.id,
-            projectId: definition.projectId,
-            nodeId: node.id,
-            nodeKind: node.kind,
-            role: node.kind === WorkflowNodeKind.AssetInstruction ? "instruction" as const : "primary" as const,
-            createdAt: definition.updatedAt
-          }]
+        ? [
+            {
+              assetId: node.config.assetId,
+              workflowId: definition.id,
+              projectId: definition.projectId,
+              nodeId: node.id,
+              nodeKind: node.kind,
+              role:
+                node.kind === WorkflowNodeKind.AssetInstruction
+                  ? ("instruction" as const)
+                  : ("primary" as const),
+              createdAt: definition.updatedAt,
+            },
+          ]
         : [];
       const guardrailUsages = node.attachedGuardrails.map((guardrail) => ({
         assetId: guardrail.assetId,
@@ -1182,11 +1432,11 @@ function readAssetUsages(
         nodeId: node.id,
         nodeKind: node.kind,
         role: "guardrail" as const,
-        createdAt: definition.updatedAt
+        createdAt: definition.updatedAt,
       }));
 
       return [...primaryUsage, ...guardrailUsages];
-    })
+    }),
   );
 }
 
@@ -1197,14 +1447,20 @@ async function seedBrowserStorage(page: Page): Promise<void> {
       authToken: string;
       serverKeys: typeof ServerStorageKey;
     }) => {
-      window.localStorage.setItem(payload.serverKeys.ServerUrl, payload.serverUrl);
-      window.localStorage.setItem(payload.serverKeys.AuthToken, payload.authToken);
+      window.localStorage.setItem(
+        payload.serverKeys.ServerUrl,
+        payload.serverUrl,
+      );
+      window.localStorage.setItem(
+        payload.serverKeys.AuthToken,
+        payload.authToken,
+      );
     },
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
       authToken: DefaultServerConnection.authToken,
-      serverKeys: ServerStorageKey
-    }
+      serverKeys: ServerStorageKey,
+    },
   );
 }
 
@@ -1219,7 +1475,7 @@ async function waitForNodePalette(page: Page): Promise<void> {
     WorkflowNodeKind.LogicCondition,
     WorkflowNodeKind.LogicMerge,
     WorkflowNodeKind.HumanReview,
-    WorkflowNodeKind.TerminalResponse
+    WorkflowNodeKind.TerminalResponse,
   ];
 
   for (const kind of requiredKinds) {
@@ -1242,10 +1498,14 @@ async function clickByTestId(page: Page, testId: string): Promise<void> {
   }
 }
 
-async function clickFirstByTestIdPrefix(page: Page, prefix: string): Promise<void> {
+async function clickFirstByTestIdPrefix(
+  page: Page,
+  prefix: string,
+): Promise<void> {
   const clicked = await page.evaluate((selectorPrefix: string) => {
-    const element = Array.from(document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`))
-      .find((entry) => entry instanceof HTMLElement);
+    const element = Array.from(
+      document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`),
+    ).find((entry) => entry instanceof HTMLElement);
     if (!(element instanceof HTMLElement)) {
       return false;
     }
@@ -1258,24 +1518,37 @@ async function clickFirstByTestIdPrefix(page: Page, prefix: string): Promise<voi
   }
 }
 
-async function waitForFirstByTestIdPrefix(page: Page, prefix: string): Promise<void> {
-  await waitForCondition(async () => page.evaluate((selectorPrefix: string) => (
-    Array.from(document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`))
-      .some((entry) => entry instanceof HTMLElement)
-  ), prefix), `first test id prefix ${prefix}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForFirstByTestIdPrefix(
+  page: Page,
+  prefix: string,
+): Promise<void> {
+  await waitForCondition(
+    async () =>
+      page.evaluate(
+        (selectorPrefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`),
+          ).some((entry) => entry instanceof HTMLElement),
+        prefix,
+      ),
+    `first test id prefix ${prefix}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function setInputValueByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const updated = await page.evaluate(
     (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(`[data-testid="${payload.testId}"]`);
+      const element = document.querySelector(
+        `[data-testid="${payload.testId}"]`,
+      );
       if (!(element instanceof HTMLInputElement)) {
         return false;
       }
@@ -1286,8 +1559,8 @@ async function setInputValueByTestId(
     },
     {
       testId,
-      value
-    }
+      value,
+    },
   );
 
   if (!updated) {
@@ -1298,11 +1571,13 @@ async function setInputValueByTestId(
 async function setTextAreaValueByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const updated = await page.evaluate(
     (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(`[data-testid="${payload.testId}"]`);
+      const element = document.querySelector(
+        `[data-testid="${payload.testId}"]`,
+      );
       if (!(element instanceof HTMLTextAreaElement)) {
         return false;
       }
@@ -1314,8 +1589,8 @@ async function setTextAreaValueByTestId(
     },
     {
       testId,
-      value
-    }
+      value,
+    },
   );
 
   if (!updated) {
@@ -1326,11 +1601,13 @@ async function setTextAreaValueByTestId(
 async function setSelectValueByTestId(
   page: Page,
   testId: string,
-  value: string
+  value: string,
 ): Promise<void> {
   const updated = await page.evaluate(
     (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(`[data-testid="${payload.testId}"]`);
+      const element = document.querySelector(
+        `[data-testid="${payload.testId}"]`,
+      );
       if (!(element instanceof HTMLSelectElement)) {
         return false;
       }
@@ -1340,8 +1617,8 @@ async function setSelectValueByTestId(
     },
     {
       testId,
-      value
-    }
+      value,
+    },
   );
 
   if (!updated) {
@@ -1356,20 +1633,24 @@ async function clickCanvasBackground(page: Page): Promise<void> {
       return false;
     }
     const rect = element.getBoundingClientRect();
-    element.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX: rect.left + 40,
-      clientY: rect.top + 40
-    }));
-    window.dispatchEvent(new PointerEvent("pointerup", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX: rect.left + 40,
-      clientY: rect.top + 40
-    }));
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: rect.left + 40,
+        clientY: rect.top + 40,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: rect.left + 40,
+        clientY: rect.top + 40,
+      }),
+    );
     return true;
   }, WorkflowSelector.CanvasViewport);
 
@@ -1380,15 +1661,20 @@ async function clickCanvasBackground(page: Page): Promise<void> {
 
 async function readNodeCardTestIds(page: Page): Promise<ReadonlyArray<string>> {
   return page.evaluate(() =>
-    Array.from(document.querySelectorAll("[data-testid^='workflows-node-card-']"))
+    Array.from(
+      document.querySelectorAll("[data-testid^='workflows-node-card-']"),
+    )
       .map((element) => element.getAttribute("data-testid"))
-      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.length > 0,
+      ),
   );
 }
 
 async function readNodeCardPosition(
   page: Page,
-  testId: string
+  testId: string,
 ): Promise<{ left: number; top: number }> {
   const position = await page.evaluate((selector: string) => {
     const element = document.querySelector(`[data-testid="${selector}"]`);
@@ -1399,7 +1685,7 @@ async function readNodeCardPosition(
     const top = Number.parseFloat(element.style.top);
     return {
       left: Number.isFinite(left) ? Math.round(left) : 0,
-      top: Number.isFinite(top) ? Math.round(top) : 0
+      top: Number.isFinite(top) ? Math.round(top) : 0,
     };
   }, testId);
 
@@ -1414,44 +1700,55 @@ async function dragNodeCard(
   page: Page,
   testId: string,
   deltaX: number,
-  deltaY: number
+  deltaY: number,
 ): Promise<void> {
-  const moved = await page.evaluate((payload: { testId: string; deltaX: number; deltaY: number }) => {
-    const handle = document.querySelector(`[data-testid="${payload.testId}"] [data-drag-handle]`);
-    if (!(handle instanceof HTMLElement)) {
-      return false;
-    }
+  const moved = await page.evaluate(
+    (payload: { testId: string; deltaX: number; deltaY: number }) => {
+      const handle = document.querySelector(
+        `[data-testid="${payload.testId}"] [data-drag-handle]`,
+      );
+      if (!(handle instanceof HTMLElement)) {
+        return false;
+      }
 
-    const rect = handle.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top + Math.min(rect.height / 2, 24);
-    handle.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX: startX,
-      clientY: startY
-    }));
-    window.dispatchEvent(new PointerEvent("pointermove", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX: startX + payload.deltaX,
-      clientY: startY + payload.deltaY
-    }));
-    window.dispatchEvent(new PointerEvent("pointerup", {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: "mouse",
-      clientX: startX + payload.deltaX,
-      clientY: startY + payload.deltaY
-    }));
-    return true;
-  }, {
-    testId,
-    deltaX,
-    deltaY
-  });
+      const rect = handle.getBoundingClientRect();
+      const startX = rect.left + rect.width / 2;
+      const startY = rect.top + Math.min(rect.height / 2, 24);
+      handle.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          clientX: startX,
+          clientY: startY,
+        }),
+      );
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          clientX: startX + payload.deltaX,
+          clientY: startY + payload.deltaY,
+        }),
+      );
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          clientX: startX + payload.deltaX,
+          clientY: startY + payload.deltaY,
+        }),
+      );
+      return true;
+    },
+    {
+      testId,
+      deltaX,
+      deltaY,
+    },
+  );
 
   if (!moved) {
     throw new Error(`Could not drag ${testId}.`);
@@ -1461,7 +1758,7 @@ async function dragNodeCard(
 async function startConnectionDragFromNodePort(
   page: Page,
   testId: string,
-  title: string
+  title: string,
 ): Promise<void> {
   const source = await readPortInteractionPoint(page, testId, title);
   await assertPortHandleAtPoint(page, source, title);
@@ -1473,7 +1770,7 @@ async function startConnectionDragFromNodePort(
 async function finishConnectionDragOnNodePort(
   page: Page,
   testId: string,
-  title: string
+  title: string,
 ): Promise<void> {
   const target = await readPortInteractionPoint(page, testId, title);
   await page.mouse.move(target.x, target.y, { steps: 12 });
@@ -1483,35 +1780,43 @@ async function finishConnectionDragOnNodePort(
 async function readPortInteractionPoint(
   page: Page,
   testId: string,
-  title: string
+  title: string,
 ): Promise<{ x: number; y: number }> {
-  const point = await page.evaluate((payload: { testId: string; title: string }) => {
-    const card = document.querySelector(`[data-testid="${payload.testId}"]`);
-    if (!(card instanceof HTMLElement)) {
-      return null;
-    }
+  const point = await page.evaluate(
+    (payload: { testId: string; title: string }) => {
+      const card = document.querySelector(`[data-testid="${payload.testId}"]`);
+      if (!(card instanceof HTMLElement)) {
+        return null;
+      }
 
-    const port = Array.from(card.querySelectorAll("button")).find(
-      (button) => button.getAttribute("title") === payload.title
-    );
-    if (!(port instanceof HTMLButtonElement)) {
-      return null;
-    }
+      const port = Array.from(card.querySelectorAll("button")).find(
+        (button) => button.getAttribute("title") === payload.title,
+      );
+      if (!(port instanceof HTMLButtonElement)) {
+        return null;
+      }
 
-    const rect = port.getBoundingClientRect();
-    const side = payload.title.startsWith("input") ? "input" : "output";
-    const horizontalInset = Math.min(18, rect.width * 0.14);
-    return {
-      x: side === "input" ? rect.left + horizontalInset : rect.right - horizontalInset,
-      y: rect.top + rect.height / 2
-    };
-  }, {
-    testId,
-    title
-  });
+      const rect = port.getBoundingClientRect();
+      const side = payload.title.startsWith("input") ? "input" : "output";
+      const horizontalInset = Math.min(18, rect.width * 0.14);
+      return {
+        x:
+          side === "input"
+            ? rect.left + horizontalInset
+            : rect.right - horizontalInset,
+        y: rect.top + rect.height / 2,
+      };
+    },
+    {
+      testId,
+      title,
+    },
+  );
 
   if (!point) {
-    throw new Error(`Could not read interaction point for ${title} in ${testId}.`);
+    throw new Error(
+      `Could not read interaction point for ${title} in ${testId}.`,
+    );
   }
 
   return point;
@@ -1520,37 +1825,40 @@ async function readPortInteractionPoint(
 async function assertPortHandleAtPoint(
   page: Page,
   point: { x: number; y: number },
-  title: string
+  title: string,
 ): Promise<void> {
   const actual = await page.evaluate((payload: { x: number; y: number }) => {
     const element = document.elementFromPoint(payload.x, payload.y);
     const port = element?.closest("[data-port-handle='true']");
     return {
-      element: element instanceof HTMLElement ? element.outerHTML.slice(0, 140) : String(element?.nodeName ?? "none"),
-      portTitle: port?.getAttribute("title") ?? null
+      element:
+        element instanceof HTMLElement
+          ? element.outerHTML.slice(0, 140)
+          : String(element?.nodeName ?? "none"),
+      portTitle: port?.getAttribute("title") ?? null,
     };
   }, point);
 
   if (actual.portTitle !== title) {
-    throw new Error(`Expected ${title} port at drag point, got ${actual.portTitle ?? actual.element}.`);
+    throw new Error(
+      `Expected ${title} port at drag point, got ${actual.portTitle ?? actual.element}.`,
+    );
   }
 }
 
 async function clickEditButtonWithinNodeCard(
   page: Page,
-  testId: string
+  testId: string,
 ): Promise<void> {
   const clicked = await page.evaluate((selector: string) => {
     const card = document.querySelector(`[data-testid="${selector}"]`);
     if (!(card instanceof HTMLElement)) {
       return false;
     }
-    const button = Array.from(card.querySelectorAll("button")).find(
-      (entry) => {
-        const label = entry.textContent?.trim();
-        return label === "Edit" || label === "Selected";
-      }
-    );
+    const button = Array.from(card.querySelectorAll("button")).find((entry) => {
+      const label = entry.textContent?.trim();
+      return label === "Edit" || label === "Selected";
+    });
     if (!(button instanceof HTMLButtonElement)) {
       return false;
     }
@@ -1566,124 +1874,160 @@ async function clickEditButtonWithinNodeCard(
 async function waitForInputValue(
   page: Page,
   testId: string,
-  expectedValue: string
+  expectedValue: string,
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const value = await page.evaluate((selector: string) => {
-      const element = document.querySelector(`[data-testid="${selector}"]`);
-      if (!(element instanceof HTMLInputElement)) {
-        return null;
-      }
-      return element.value;
-    }, testId);
+  await waitForCondition(
+    async () => {
+      const value = await page.evaluate((selector: string) => {
+        const element = document.querySelector(`[data-testid="${selector}"]`);
+        if (!(element instanceof HTMLInputElement)) {
+          return null;
+        }
+        return element.value;
+      }, testId);
 
-    return value === expectedValue;
-  }, `input ${testId} value ${expectedValue}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return value === expectedValue;
+    },
+    `input ${testId} value ${expectedValue}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForPageText(page: Page, text: string): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return bodyText.includes(text);
-  }, `page text "${text}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return bodyText.includes(text);
+    },
+    `page text "${text}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForPageTexts(page: Page, texts: ReadonlyArray<string>): Promise<void> {
-  await waitForCondition(async () => {
-    const bodyText = await page.evaluate(() => document.body.innerText);
-    return texts.every((text) => bodyText.includes(text));
-  }, `page texts "${texts.join(", ")}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForPageTexts(
+  page: Page,
+  texts: ReadonlyArray<string>,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      return texts.every((text) => bodyText.includes(text));
+    },
+    `page texts "${texts.join(", ")}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 function toContractPathToken(path: ReadonlyArray<string>): string {
   return path.length === 0
     ? "root"
     : path
-      .map((segment) => segment === "items" ? "items" : segment)
-      .join("__")
-      .replace(/[^a-zA-Z0-9_-]+/gu, "-");
+        .map((segment) => (segment === "items" ? "items" : segment))
+        .join("__")
+        .replace(/[^a-zA-Z0-9_-]+/gu, "-");
 }
 
 function buildPromptContractJsonDocument(): string {
-  return JSON.stringify({
-    name: "Prompt asset output",
-    schemaVersion: 1,
-    rootType: "object",
-    schema: {
-      type: "object",
-      required: ["summary"],
-      properties: {
-        summary: {
-          type: "string"
-        },
-        meta: {
-          type: "object",
-          properties: {
-            email: {
-              type: "string",
-              format: "email"
-            }
-          }
-        },
-        tags: {
-          type: "array",
-          items: {
+  return JSON.stringify(
+    {
+      name: "Prompt asset output",
+      schemaVersion: 1,
+      rootType: "object",
+      schema: {
+        type: "object",
+        required: ["summary"],
+        properties: {
+          summary: {
             type: "string",
-            minLength: 2
-          }
-        }
-      }
-    }
-  }, null, 2);
+          },
+          meta: {
+            type: "object",
+            properties: {
+              email: {
+                type: "string",
+                format: "email",
+              },
+            },
+          },
+          tags: {
+            type: "array",
+            items: {
+              type: "string",
+              minLength: 2,
+            },
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
 }
 
 async function waitForTestId(page: Page, testId: string): Promise<void> {
-  await waitForCondition(async () => {
-    const exists = await page.evaluate((selector: string) => {
-      const element = document.querySelector(`[data-testid="${selector}"]`);
-      return element instanceof Element;
-    }, testId);
-    return exists;
-  }, `test id "${testId}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const exists = await page.evaluate((selector: string) => {
+        const element = document.querySelector(`[data-testid="${selector}"]`);
+        return element instanceof Element;
+      }, testId);
+      return exists;
+    },
+    `test id "${testId}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForMissingTestId(page: Page, testId: string): Promise<void> {
-  await waitForCondition(async () => {
-    const missing = await page.evaluate((selector: string) => {
-      const element = document.querySelector(`[data-testid="${selector}"]`);
-      return !(element instanceof Element);
-    }, testId);
-    return missing;
-  }, `missing test id ${testId}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const missing = await page.evaluate((selector: string) => {
+        const element = document.querySelector(`[data-testid="${selector}"]`);
+        return !(element instanceof Element);
+      }, testId);
+      return missing;
+    },
+    `missing test id ${testId}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForExecutionCardCount(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const count = await page.evaluate((prefix: string) =>
-      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
-        .filter((entry) => entry instanceof HTMLElement)
-        .length,
-    WorkflowSelector.ExecutionCardPrefix);
-    return count === expectedCount;
-  }, `execution card count ${expectedCount.toString()}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForExecutionCardCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).filter((entry) => entry instanceof HTMLElement).length,
+        WorkflowSelector.ExecutionCardPrefix,
+      );
+      return count === expectedCount;
+    },
+    `execution card count ${expectedCount.toString()}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForExecutionOverview(
@@ -1700,102 +2044,167 @@ async function waitForExecutionOverview(
     attentionRuns: string;
     failedRuns: string;
     alertedRuns: string;
-  }
+  },
 ): Promise<void> {
-  await waitForCondition(async () => {
-    const matches = await page.evaluate((payload: {
-      selectors: Record<string, string>;
-      expected: {
-        latestRun: string;
-        latestStatus: string;
-        statusDistribution: string;
-        runs: string;
-        cost: string;
-        tokens: string;
-        warnings: string;
-        errors: string;
-        attentionRuns: string;
-        failedRuns: string;
-        alertedRuns: string;
-      };
-    }) => {
-      const checks = [
-        { selector: payload.selectors["latestRun"], expected: payload.expected.latestRun, mode: "text" },
-        { selector: payload.selectors["latestStatus"], expected: payload.expected.latestStatus, mode: "text" },
-        { selector: payload.selectors["statusDistribution"], expected: payload.expected.statusDistribution, mode: "text" },
-        { selector: payload.selectors["runs"], expected: payload.expected.runs, mode: "digits" },
-        { selector: payload.selectors["cost"], expected: payload.expected.cost, mode: "text" },
-        { selector: payload.selectors["tokens"], expected: payload.expected.tokens, mode: "digits" },
-        { selector: payload.selectors["warnings"], expected: payload.expected.warnings, mode: "digits" },
-        { selector: payload.selectors["errors"], expected: payload.expected.errors, mode: "digits" },
-        { selector: payload.selectors["attentionRuns"], expected: payload.expected.attentionRuns, mode: "digits" },
-        { selector: payload.selectors["failedRuns"], expected: payload.expected.failedRuns, mode: "digits" },
-        { selector: payload.selectors["alertedRuns"], expected: payload.expected.alertedRuns, mode: "digits" }
-      ] as const;
-      for (const check of checks) {
-        const element = document.querySelector(`[data-testid="${check.selector}"]`);
-        if (!(element instanceof HTMLElement)) {
-          return false;
-        }
-        const text = (element.textContent ?? "").replace(/\s+/gu, " ").trim();
-        if (check.mode === "digits") {
-          if (text.replace(/[^\d]/gu, "") !== check.expected) {
-            return false;
+  await waitForCondition(
+    async () => {
+      const matches = await page.evaluate(
+        (payload: {
+          selectors: Record<string, string>;
+          expected: {
+            latestRun: string;
+            latestStatus: string;
+            statusDistribution: string;
+            runs: string;
+            cost: string;
+            tokens: string;
+            warnings: string;
+            errors: string;
+            attentionRuns: string;
+            failedRuns: string;
+            alertedRuns: string;
+          };
+        }) => {
+          const checks = [
+            {
+              selector: payload.selectors["latestRun"],
+              expected: payload.expected.latestRun,
+              mode: "text",
+            },
+            {
+              selector: payload.selectors["latestStatus"],
+              expected: payload.expected.latestStatus,
+              mode: "text",
+            },
+            {
+              selector: payload.selectors["statusDistribution"],
+              expected: payload.expected.statusDistribution,
+              mode: "text",
+            },
+            {
+              selector: payload.selectors["runs"],
+              expected: payload.expected.runs,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["cost"],
+              expected: payload.expected.cost,
+              mode: "text",
+            },
+            {
+              selector: payload.selectors["tokens"],
+              expected: payload.expected.tokens,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["warnings"],
+              expected: payload.expected.warnings,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["errors"],
+              expected: payload.expected.errors,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["attentionRuns"],
+              expected: payload.expected.attentionRuns,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["failedRuns"],
+              expected: payload.expected.failedRuns,
+              mode: "digits",
+            },
+            {
+              selector: payload.selectors["alertedRuns"],
+              expected: payload.expected.alertedRuns,
+              mode: "digits",
+            },
+          ] as const;
+          for (const check of checks) {
+            const element = document.querySelector(
+              `[data-testid="${check.selector}"]`,
+            );
+            if (!(element instanceof HTMLElement)) {
+              return false;
+            }
+            const text = (element.textContent ?? "")
+              .replace(/\s+/gu, " ")
+              .trim();
+            if (check.mode === "digits") {
+              if (text.replace(/[^\d]/gu, "") !== check.expected) {
+                return false;
+              }
+              continue;
+            }
+            if (!text.includes(check.expected)) {
+              return false;
+            }
           }
-          continue;
-        }
-        if (!text.includes(check.expected)) {
-          return false;
-        }
-      }
-      return true;
-    }, {
-      selectors: {
-        latestRun: WorkflowSelector.ExecutionSummaryLatestRun,
-        latestStatus: WorkflowSelector.ExecutionSummaryLatestStatus,
-        statusDistribution: WorkflowSelector.ExecutionSummaryStatusDistribution,
-        runs: WorkflowSelector.ExecutionSummaryRuns,
-        cost: WorkflowSelector.ExecutionSummaryCost,
-        tokens: WorkflowSelector.ExecutionSummaryTokens,
-        warnings: WorkflowSelector.ExecutionSummaryWarnings,
-        errors: WorkflowSelector.ExecutionSummaryErrors,
-        attentionRuns: WorkflowSelector.ExecutionSummaryAttentionRuns,
-        failedRuns: WorkflowSelector.ExecutionSummaryAttentionFailedRuns,
-        alertedRuns: WorkflowSelector.ExecutionSummaryAttentionAlertedRuns
-      },
-      expected: {
-        latestRun: formatValidationTimestamp(expected.latestRunStartedAt),
-        latestStatus: expected.latestStatus,
-        statusDistribution: expected.statusDistribution,
-        runs: expected.runs,
-        cost: expected.cost,
-        tokens: expected.tokens,
-        warnings: expected.warnings,
-        errors: expected.errors,
-        attentionRuns: expected.attentionRuns,
-        failedRuns: expected.failedRuns,
-        alertedRuns: expected.alertedRuns
-      }
-    });
-    return matches;
-  }, "execution overview", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+          return true;
+        },
+        {
+          selectors: {
+            latestRun: WorkflowSelector.ExecutionSummaryLatestRun,
+            latestStatus: WorkflowSelector.ExecutionSummaryLatestStatus,
+            statusDistribution:
+              WorkflowSelector.ExecutionSummaryStatusDistribution,
+            runs: WorkflowSelector.ExecutionSummaryRuns,
+            cost: WorkflowSelector.ExecutionSummaryCost,
+            tokens: WorkflowSelector.ExecutionSummaryTokens,
+            warnings: WorkflowSelector.ExecutionSummaryWarnings,
+            errors: WorkflowSelector.ExecutionSummaryErrors,
+            attentionRuns: WorkflowSelector.ExecutionSummaryAttentionRuns,
+            failedRuns: WorkflowSelector.ExecutionSummaryAttentionFailedRuns,
+            alertedRuns: WorkflowSelector.ExecutionSummaryAttentionAlertedRuns,
+          },
+          expected: {
+            latestRun: formatValidationTimestamp(expected.latestRunStartedAt),
+            latestStatus: expected.latestStatus,
+            statusDistribution: expected.statusDistribution,
+            runs: expected.runs,
+            cost: expected.cost,
+            tokens: expected.tokens,
+            warnings: expected.warnings,
+            errors: expected.errors,
+            attentionRuns: expected.attentionRuns,
+            failedRuns: expected.failedRuns,
+            alertedRuns: expected.alertedRuns,
+          },
+        },
+      );
+      return matches;
+    },
+    "execution overview",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForExecutionAttentionItemCount(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const count = await page.evaluate((prefix: string) =>
-      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
-        .filter((entry) => entry instanceof HTMLElement)
-        .length,
-    WorkflowSelector.ExecutionAttentionRunPrefix);
-    return count === expectedCount;
-  }, `execution attention item count ${expectedCount.toString()}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForExecutionAttentionItemCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).filter((entry) => entry instanceof HTMLElement).length,
+        WorkflowSelector.ExecutionAttentionRunPrefix,
+      );
+      return count === expectedCount;
+    },
+    `execution attention item count ${expectedCount.toString()}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 function formatValidationTimestamp(value: string): string {
@@ -1803,144 +2212,217 @@ function formatValidationTimestamp(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
-async function waitForNodeRunCards(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const count = await page.evaluate((prefix: string) =>
-      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`))
-        .filter((entry) => entry instanceof HTMLElement)
-        .length,
-    WorkflowSelector.ExecutionNodeRunPrefix);
-    return count === expectedCount;
-  }, `node run card count ${expectedCount.toString()}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForNodeRunCards(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).filter((entry) => entry instanceof HTMLElement).length,
+        WorkflowSelector.ExecutionNodeRunPrefix,
+      );
+      return count === expectedCount;
+    },
+    `node run card count ${expectedCount.toString()}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForNodeCardText(page: Page, text: string): Promise<void> {
-  await waitForCondition(async () => {
-    const exists = await page.evaluate((label: string) =>
-      Array.from(document.querySelectorAll("[data-testid^='workflows-node-card-']"))
-        .some((element) => element.textContent?.includes(label) ?? false)
-    , text);
-    return exists;
-  }, `node card text "${text}"`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const exists = await page.evaluate(
+        (label: string) =>
+          Array.from(
+            document.querySelectorAll("[data-testid^='workflows-node-card-']"),
+          ).some((element) => element.textContent?.includes(label) ?? false),
+        text,
+      );
+      return exists;
+    },
+    `node card text "${text}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForNodeCardCount(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const count = await page.evaluate(() =>
-      document.querySelectorAll("[data-testid^='workflows-node-card-']").length
-    );
-    return count === expectedCount;
-  }, `node card count ${String(expectedCount)}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForNodeCardCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        () =>
+          document.querySelectorAll("[data-testid^='workflows-node-card-']")
+            .length,
+      );
+      return count === expectedCount;
+    },
+    `node card count ${String(expectedCount)}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForEdgeCount(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const count = await page.evaluate(() =>
-      document.querySelectorAll("[data-testid='workflows-edge']").length
-    );
-    return count === expectedCount;
-  }, `workflow edge count ${String(expectedCount)}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForEdgeCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        () =>
+          document.querySelectorAll("[data-testid='workflows-edge']").length,
+      );
+      return count === expectedCount;
+    },
+    `workflow edge count ${String(expectedCount)}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForConnectionPreviewArrow(page: Page): Promise<void> {
-  await waitForCondition(async () => {
-    const markerEnd = await page.evaluate((selector: string) => {
-      const preview = document.querySelector(`[data-testid="${selector}"]`);
-      const path = preview?.querySelector("path");
-      return path?.getAttribute("marker-end") ?? "";
-    }, WorkflowSelector.ConnectionPreview);
-    return markerEnd.includes("workflows-preview-arrow");
-  }, "workflow connection preview arrow", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const markerEnd = await page.evaluate((selector: string) => {
+        const preview = document.querySelector(`[data-testid="${selector}"]`);
+        const path = preview?.querySelector("path");
+        return path?.getAttribute("marker-end") ?? "";
+      }, WorkflowSelector.ConnectionPreview);
+      return markerEnd.includes("workflows-preview-arrow");
+    },
+    "workflow connection preview arrow",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function waitForEdgeArrowSize(page: Page): Promise<void> {
-  await waitForCondition(async () => {
-    const markerWidth = await page.evaluate(() => {
-      const marker = document.querySelector("#workflows-edge-arrow");
-      return marker?.getAttribute("markerWidth") ?? "";
-    });
-    return markerWidth === "8";
-  }, "workflow edge arrow size", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const markerWidth = await page.evaluate(() => {
+        const marker = document.querySelector("#workflows-edge-arrow");
+        return marker?.getAttribute("markerWidth") ?? "";
+      });
+      return markerWidth === "8";
+    },
+    "workflow edge arrow size",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForRenderedEdgeGeometry(page: Page, expectedCount: number): Promise<void> {
-  await waitForCondition(async () => {
-    const visibleEdges = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("[data-testid='workflows-edge']")).filter((edge) => {
-        const markerEnd = edge.getAttribute("marker-end") ?? "";
-        if (!(edge instanceof SVGPathElement)) {
-          return false;
-        }
-        return markerEnd.includes("workflows-edge-arrow") && edge.getTotalLength() >= 48;
-      }).length
-    );
-    return visibleEdges === expectedCount;
-  }, `workflow rendered edge geometry ${String(expectedCount)}`, {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForRenderedEdgeGeometry(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const visibleEdges = await page.evaluate(
+        () =>
+          Array.from(
+            document.querySelectorAll("[data-testid='workflows-edge']"),
+          ).filter((edge) => {
+            const markerEnd = edge.getAttribute("marker-end") ?? "";
+            if (!(edge instanceof SVGPathElement)) {
+              return false;
+            }
+            return (
+              markerEnd.includes("workflows-edge-arrow") &&
+              edge.getTotalLength() >= 48
+            );
+          }).length,
+      );
+      return visibleEdges === expectedCount;
+    },
+    `workflow rendered edge geometry ${String(expectedCount)}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
-  const point = await page.evaluate((payload: { edgePrefix: string; nodePrefix: string }) => {
-    const edges = Array.from(document.querySelectorAll(`[data-testid^="${payload.edgePrefix}"]`));
-    const nodeRects = Array.from(document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`))
-      .filter((entry): entry is HTMLElement => entry instanceof HTMLElement)
-      .map((entry) => entry.getBoundingClientRect());
-    for (const edge of edges) {
-      if (!(edge instanceof SVGPathElement)) {
-        continue;
-      }
+  const point = await page.evaluate(
+    (payload: { edgePrefix: string; nodePrefix: string }) => {
+      const edges = Array.from(
+        document.querySelectorAll(`[data-testid^="${payload.edgePrefix}"]`),
+      );
+      const nodeRects = Array.from(
+        document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`),
+      )
+        .filter((entry): entry is HTMLElement => entry instanceof HTMLElement)
+        .map((entry) => entry.getBoundingClientRect());
+      for (const edge of edges) {
+        if (!(edge instanceof SVGPathElement)) {
+          continue;
+        }
 
-      const boundingBox = edge.getBBox();
-      const screenRect = edge.getBoundingClientRect();
-      if (boundingBox.width <= 0 || boundingBox.height <= 0 || screenRect.width <= 0 || screenRect.height <= 0) {
-        continue;
-      }
+        const boundingBox = edge.getBBox();
+        const screenRect = edge.getBoundingClientRect();
+        if (
+          boundingBox.width <= 0 ||
+          boundingBox.height <= 0 ||
+          screenRect.width <= 0 ||
+          screenRect.height <= 0
+        ) {
+          continue;
+        }
 
-      const samples = [0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88];
-      const totalLength = edge.getTotalLength();
-      for (const sample of samples) {
-        const svgPoint = edge.getPointAtLength(totalLength * sample);
-        const point = {
-          x: screenRect.left + ((svgPoint.x - boundingBox.x) / boundingBox.width) * screenRect.width,
-          y: screenRect.top + ((svgPoint.y - boundingBox.y) / boundingBox.height) * screenRect.height
-        };
-        const insideNode = nodeRects.some((nodeRect) =>
-          point.x >= nodeRect.left &&
-          point.x <= nodeRect.right &&
-          point.y >= nodeRect.top &&
-          point.y <= nodeRect.bottom
-        );
-        if (!insideNode) {
-          return point;
+        const samples = [0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88];
+        const totalLength = edge.getTotalLength();
+        for (const sample of samples) {
+          const svgPoint = edge.getPointAtLength(totalLength * sample);
+          const point = {
+            x:
+              screenRect.left +
+              ((svgPoint.x - boundingBox.x) / boundingBox.width) *
+                screenRect.width,
+            y:
+              screenRect.top +
+              ((svgPoint.y - boundingBox.y) / boundingBox.height) *
+                screenRect.height,
+          };
+          const insideNode = nodeRects.some(
+            (nodeRect) =>
+              point.x >= nodeRect.left &&
+              point.x <= nodeRect.right &&
+              point.y >= nodeRect.top &&
+              point.y <= nodeRect.bottom,
+          );
+          if (!insideNode) {
+            return point;
+          }
         }
       }
-    }
 
-    return null;
-  }, {
-    edgePrefix: WorkflowSelector.EdgeHitPrefix,
-    nodePrefix: WorkflowSelector.NodeCardPrefix
-  });
+      return null;
+    },
+    {
+      edgePrefix: WorkflowSelector.EdgeHitPrefix,
+      nodePrefix: WorkflowSelector.NodeCardPrefix,
+    },
+  );
 
   if (!point) {
     throw new Error("Could not find a hoverable workflow edge point.");
@@ -1950,57 +2432,89 @@ async function hoverFirstWorkflowEdge(page: Page): Promise<void> {
 }
 
 async function waitForNoVisibleEdgeDeleteControl(page: Page): Promise<void> {
-  await waitForCondition(async () => {
-    const visible = await page.evaluate((prefix: string) =>
-      Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`)).some((entry) => {
-        if (!(entry instanceof HTMLElement)) {
-          return false;
-        }
-        return Number(getComputedStyle(entry).opacity) > 0.5;
-      }),
-    WorkflowSelector.EdgeDeletePrefix);
-    return !visible;
-  }, "hidden workflow edge delete affordances", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+  await waitForCondition(
+    async () => {
+      const visible = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).some((entry) => {
+            if (!(entry instanceof HTMLElement)) {
+              return false;
+            }
+            return Number(getComputedStyle(entry).opacity) > 0.5;
+          }),
+        WorkflowSelector.EdgeDeletePrefix,
+      );
+      return !visible;
+    },
+    "hidden workflow edge delete affordances",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
-async function waitForVisibleEdgeDeleteControlOutsideNodes(page: Page): Promise<void> {
-  await waitForCondition(async () => {
-    const valid = await page.evaluate((payload: { deletePrefix: string; nodePrefix: string }) => {
-      const deleteControl = Array.from(document.querySelectorAll(`[data-testid^="${payload.deletePrefix}"]`)).find((entry) =>
-        entry instanceof HTMLElement && Number(getComputedStyle(entry).opacity) > 0.5
-      );
-      if (!(deleteControl instanceof HTMLElement)) {
-        return false;
-      }
+async function waitForVisibleEdgeDeleteControlOutsideNodes(
+  page: Page,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const valid = await page.evaluate(
+        (payload: { deletePrefix: string; nodePrefix: string }) => {
+          const deleteControl = Array.from(
+            document.querySelectorAll(
+              `[data-testid^="${payload.deletePrefix}"]`,
+            ),
+          ).find(
+            (entry) =>
+              entry instanceof HTMLElement &&
+              Number(getComputedStyle(entry).opacity) > 0.5,
+          );
+          if (!(deleteControl instanceof HTMLElement)) {
+            return false;
+          }
 
-      const deleteRect = deleteControl.getBoundingClientRect();
-      const nodeRects = Array.from(document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`))
-        .filter((entry): entry is HTMLElement => entry instanceof HTMLElement)
-        .map((entry) => entry.getBoundingClientRect());
-      return nodeRects.every((nodeRect) =>
-        deleteRect.right <= nodeRect.left ||
-        deleteRect.left >= nodeRect.right ||
-        deleteRect.bottom <= nodeRect.top ||
-        deleteRect.top >= nodeRect.bottom
+          const deleteRect = deleteControl.getBoundingClientRect();
+          const nodeRects = Array.from(
+            document.querySelectorAll(`[data-testid^="${payload.nodePrefix}"]`),
+          )
+            .filter(
+              (entry): entry is HTMLElement => entry instanceof HTMLElement,
+            )
+            .map((entry) => entry.getBoundingClientRect());
+          return nodeRects.every(
+            (nodeRect) =>
+              deleteRect.right <= nodeRect.left ||
+              deleteRect.left >= nodeRect.right ||
+              deleteRect.bottom <= nodeRect.top ||
+              deleteRect.top >= nodeRect.bottom,
+          );
+        },
+        {
+          deletePrefix: WorkflowSelector.EdgeDeletePrefix,
+          nodePrefix: WorkflowSelector.NodeCardPrefix,
+        },
       );
-    }, {
-      deletePrefix: WorkflowSelector.EdgeDeletePrefix,
-      nodePrefix: WorkflowSelector.NodeCardPrefix
-    });
-    return valid;
-  }, "visible workflow edge delete affordance outside nodes", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+      return valid;
+    },
+    "visible workflow edge delete affordance outside nodes",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 async function clickFirstWorkflowEdgeDelete(page: Page): Promise<string> {
   const result = await page.evaluate((prefix: string) => {
-    const deleteControl = Array.from(document.querySelectorAll(`[data-testid^="${prefix}"]`)).find((entry) =>
-      entry instanceof HTMLElement && Number(getComputedStyle(entry).opacity) > 0.5
+    const deleteControl = Array.from(
+      document.querySelectorAll(`[data-testid^="${prefix}"]`),
+    ).find(
+      (entry) =>
+        entry instanceof HTMLElement &&
+        Number(getComputedStyle(entry).opacity) > 0.5,
     );
     if (!(deleteControl instanceof HTMLElement)) {
       return null;
@@ -2012,9 +2526,10 @@ async function clickFirstWorkflowEdgeDelete(page: Page): Promise<string> {
 
     const rect = deleteControl.getBoundingClientRect();
     return {
-      edgeId: deleteControl.getAttribute("data-testid")?.slice(prefix.length) ?? "",
+      edgeId:
+        deleteControl.getAttribute("data-testid")?.slice(prefix.length) ?? "",
       x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
+      y: rect.top + rect.height / 2,
     };
   }, WorkflowSelector.EdgeDeletePrefix);
 
@@ -2026,27 +2541,47 @@ async function clickFirstWorkflowEdgeDelete(page: Page): Promise<string> {
   return result.edgeId;
 }
 
-async function waitForDeletedEdgeRemoved(page: Page, edgeId: string): Promise<void> {
-  await waitForCondition(async () => {
-    const removed = await page.evaluate((payload: { hitPrefix: string; deletePrefix: string; edgeId: string }) => {
-      const hit = document.querySelector(`[data-testid="${payload.hitPrefix}${payload.edgeId}"]`);
-      const deleteControl = document.querySelector(`[data-testid="${payload.deletePrefix}${payload.edgeId}"]`);
-      return hit === null && deleteControl === null;
-    }, {
-      hitPrefix: WorkflowSelector.EdgeHitPrefix,
-      deletePrefix: WorkflowSelector.EdgeDeletePrefix,
-      edgeId
-    });
-    return removed;
-  }, "deleted workflow edge removed from canvas", {
-    timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-    intervalMs: ValidationConfig.UiPollingIntervalMs
-  });
+async function waitForDeletedEdgeRemoved(
+  page: Page,
+  edgeId: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const removed = await page.evaluate(
+        (payload: {
+          hitPrefix: string;
+          deletePrefix: string;
+          edgeId: string;
+        }) => {
+          const hit = document.querySelector(
+            `[data-testid="${payload.hitPrefix}${payload.edgeId}"]`,
+          );
+          const deleteControl = document.querySelector(
+            `[data-testid="${payload.deletePrefix}${payload.edgeId}"]`,
+          );
+          return hit === null && deleteControl === null;
+        },
+        {
+          hitPrefix: WorkflowSelector.EdgeHitPrefix,
+          deletePrefix: WorkflowSelector.EdgeDeletePrefix,
+          edgeId,
+        },
+      );
+      return removed;
+    },
+    "deleted workflow edge removed from canvas",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
 }
 
 function assertPersistedWorkflow(state: StubServerState): void {
   if (state.definitions.length !== 1) {
-    throw new Error(`Expected one persisted workflow, received ${state.definitions.length}.`);
+    throw new Error(
+      `Expected one persisted workflow, received ${state.definitions.length}.`,
+    );
   }
 
   const definition = state.definitions[0];
@@ -2059,53 +2594,88 @@ function assertPersistedWorkflow(state: StubServerState): void {
   }
 
   if (definition.description !== ValidationText.WorkflowDescription) {
-    throw new Error(`Unexpected persisted workflow description: ${definition.description}`);
+    throw new Error(
+      `Unexpected persisted workflow description: ${definition.description}`,
+    );
   }
 
   if (definition.nodes.length !== 4) {
-    throw new Error(`Expected four workflow nodes after authoring, received ${definition.nodes.length}.`);
+    throw new Error(
+      `Expected four workflow nodes after authoring, received ${definition.nodes.length}.`,
+    );
   }
 
-  if (!definition.nodes.some((node) => node.label === ValidationText.PromptNodeLabel)) {
-    throw new Error(`Expected prompt node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`);
+  if (
+    !definition.nodes.some(
+      (node) => node.label === ValidationText.PromptNodeLabel,
+    )
+  ) {
+    throw new Error(
+      `Expected prompt node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`,
+    );
   }
 
-  if (!definition.nodes.some((node) => node.label === ValidationText.ProviderNodeLabel)) {
-    throw new Error(`Expected provider node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`);
+  if (
+    !definition.nodes.some(
+      (node) => node.label === ValidationText.ProviderNodeLabel,
+    )
+  ) {
+    throw new Error(
+      `Expected provider node label to persist. Received: ${definition.nodes.map((node) => node.label).join(", ")}`,
+    );
   }
 
-  const providerNode = definition.nodes.find((node) => node.label === ValidationText.ProviderNodeLabel);
+  const providerNode = definition.nodes.find(
+    (node) => node.label === ValidationText.ProviderNodeLabel,
+  );
   if (!providerNode) {
     throw new Error("Expected provider node to persist.");
   }
 
-  if (providerNode.config.prompt !== ValidationText.ProviderPromptWithVariable) {
-    throw new Error(`Expected provider prompt to persist. Received: ${String(providerNode.config.prompt)}`);
+  if (
+    providerNode.config.prompt !== ValidationText.ProviderPromptWithVariable
+  ) {
+    throw new Error(
+      `Expected provider prompt to persist. Received: ${String(providerNode.config.prompt)}`,
+    );
   }
 
   if (providerNode.config.provider?.["reasoningLevel"] !== "high") {
-    throw new Error(`Expected provider reasoning to persist. Received: ${String(providerNode.config.provider?.["reasoningLevel"])}`);
+    throw new Error(
+      `Expected provider reasoning to persist. Received: ${String(providerNode.config.provider?.["reasoningLevel"])}`,
+    );
   }
 
   if (providerNode.config.provider?.["verbosity"] !== "low") {
-    throw new Error(`Expected provider verbosity to persist. Received: ${String(providerNode.config.provider?.["verbosity"])}`);
+    throw new Error(
+      `Expected provider verbosity to persist. Received: ${String(providerNode.config.provider?.["verbosity"])}`,
+    );
   }
 
   if (definition.edges.length < 1) {
-    throw new Error(`Expected saved edges after deletion and remapping, received ${definition.edges.length}.`);
+    throw new Error(
+      `Expected saved edges after deletion and remapping, received ${definition.edges.length}.`,
+    );
   }
 
-  const savedEdge = definition.edges.find((edge) => edge.mapping.entries.length > 0);
+  const savedEdge = definition.edges.find(
+    (edge) => edge.mapping.entries.length > 0,
+  );
   if (!savedEdge || savedEdge.mapping.entries.length !== 1) {
     throw new Error("Expected one saved edge mapping entry.");
   }
 
   const mappingEntry = savedEdge.mapping.entries[0];
-  if (!isRecord(mappingEntry) || mappingEntry["targetPath"] !== ValidationText.MappingTargetPath) {
+  if (
+    !isRecord(mappingEntry) ||
+    mappingEntry["targetPath"] !== ValidationText.MappingTargetPath
+  ) {
     throw new Error("Expected explicit target mapping path to persist.");
   }
 
-  const promptNode = definition.nodes.find((node) => node.label === ValidationText.PromptNodeLabel);
+  const promptNode = definition.nodes.find(
+    (node) => node.label === ValidationText.PromptNodeLabel,
+  );
   if (!promptNode) {
     throw new Error("Expected prompt node to persist.");
   }
@@ -2113,41 +2683,72 @@ function assertPersistedWorkflow(state: StubServerState): void {
   const outputContract = promptNode.outputContract;
   if (
     !isRecord(outputContract) ||
-    !JSON.stringify(outputContract).includes(ValidationText.OutputContractField) ||
-    !JSON.stringify(outputContract).includes(ValidationText.OutputContractNestedField) ||
-    !JSON.stringify(outputContract).includes(ValidationText.OutputContractArrayField)
+    !JSON.stringify(outputContract).includes(
+      ValidationText.OutputContractField,
+    ) ||
+    !JSON.stringify(outputContract).includes(
+      ValidationText.OutputContractNestedField,
+    ) ||
+    !JSON.stringify(outputContract).includes(
+      ValidationText.OutputContractArrayField,
+    )
   ) {
     throw new Error("Expected prompt output contract shape to persist.");
   }
 
-  const guardrailAsset = state.assets.find((asset) => asset.kind === "guardrail");
+  const guardrailAsset = state.assets.find(
+    (asset) => asset.kind === "guardrail",
+  );
   if (!guardrailAsset || !isRecord(guardrailAsset.guardrail)) {
     throw new Error("Expected one persisted guardrail asset.");
   }
 
   if (guardrailAsset.guardrail["severity"] !== "warn") {
-    throw new Error(`Expected warn guardrail severity, received ${String(guardrailAsset.guardrail["severity"])}.`);
+    throw new Error(
+      `Expected warn guardrail severity, received ${String(guardrailAsset.guardrail["severity"])}.`,
+    );
   }
 
-  if (!JSON.stringify(guardrailAsset.guardrail).includes(ValidationText.GuardrailValidationMessage)) {
+  if (
+    !JSON.stringify(guardrailAsset.guardrail).includes(
+      ValidationText.GuardrailValidationMessage,
+    )
+  ) {
     throw new Error("Expected added guardrail validation to persist.");
   }
 
-  if (!providerNode.attachedGuardrails.some((guardrail) => guardrail.assetId === guardrailAsset.id)) {
+  if (
+    !providerNode.attachedGuardrails.some(
+      (guardrail) => guardrail.assetId === guardrailAsset.id,
+    )
+  ) {
     throw new Error("Expected provider node to keep the guardrail attachment.");
   }
 }
 
-function assertExecutionDeletion(state: StubServerState, executionId: string): void {
+function assertExecutionDeletion(
+  state: StubServerState,
+  executionId: string,
+): void {
   if (state.executions.some((execution) => execution.id === executionId)) {
-    throw new Error(`Expected execution ${executionId} to be deleted from persisted state.`);
+    throw new Error(
+      `Expected execution ${executionId} to be deleted from persisted state.`,
+    );
   }
 }
 
-function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): ReadonlyArray<StubExecutionRecord> {
-  const triggerNode = definition.nodes.find((node) => node.kind === WorkflowNodeKind.TriggerManual);
-  const promptNode = definition.nodes.find((node) => node.label === ValidationText.PromptNodeLabel);
-  const providerNode = definition.nodes.find((node) => node.label === ValidationText.ProviderNodeLabel);
+function createExecutionFixtures(
+  definition: StubWorkflowDefinitionRecord,
+): ReadonlyArray<StubExecutionRecord> {
+  const triggerNode = definition.nodes.find(
+    (node) => node.kind === WorkflowNodeKind.TriggerManual,
+  );
+  const promptNode = definition.nodes.find(
+    (node) => node.label === ValidationText.PromptNodeLabel,
+  );
+  const providerNode = definition.nodes.find(
+    (node) => node.label === ValidationText.ProviderNodeLabel,
+  );
 
   if (!triggerNode || !promptNode || !providerNode) {
     return [];
@@ -2170,7 +2771,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
         completionTokens: 100,
         totalTokens: 280,
         estimatedCostEur: 0.013,
-        latencyMs: 3400
+        latencyMs: 3400,
       },
       contextSessionId: ValidationText.ExecutionCleanSessionId,
       nodeRuns: [
@@ -2183,7 +2784,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           finishedAt: "2026-05-06T08:12:00.250Z",
           durationMs: 250,
           alerts: [],
-          guardrailFindings: []
+          guardrailFindings: [],
         },
         {
           id: "node-run-provider-clean",
@@ -2200,12 +2801,12 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
             completionTokens: 100,
             totalTokens: 280,
             estimatedCostEur: 0.013,
-            latencyMs: 3200
+            latencyMs: 3200,
           },
           alerts: [],
-          guardrailFindings: []
-        }
-      ]
+          guardrailFindings: [],
+        },
+      ],
     },
     {
       id: ValidationText.ExecutionPrimaryId,
@@ -2223,7 +2824,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
         completionTokens: 210,
         totalTokens: 630,
         estimatedCostEur: 0.0342,
-        latencyMs: 6900
+        latencyMs: 6900,
       },
       contextSessionId: ValidationText.ExecutionPrimarySessionId,
       nodeRuns: [
@@ -2236,7 +2837,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           finishedAt: "2026-05-06T08:16:00.300Z",
           durationMs: 300,
           alerts: [],
-          guardrailFindings: []
+          guardrailFindings: [],
         },
         {
           id: "node-run-provider-completed",
@@ -2253,7 +2854,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
             completionTokens: 210,
             totalTokens: 630,
             estimatedCostEur: 0.0342,
-            latencyMs: 6600
+            latencyMs: 6600,
           },
           alerts: [
             {
@@ -2261,19 +2862,19 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
               level: "warn",
               source: "guardrail",
               message: ValidationText.ExecutionPrimaryAlert,
-              createdAt: "2026-05-06T08:16:06.200Z"
-            }
+              createdAt: "2026-05-06T08:16:06.200Z",
+            },
           ],
           guardrailFindings: [
             {
               guardrailAssetId: "asset-guardrail-warn",
               nodeId: providerNode.id,
               severity: "warn",
-              message: ValidationText.ExecutionPrimaryFinding
-            }
-          ]
-        }
-      ]
+              message: ValidationText.ExecutionPrimaryFinding,
+            },
+          ],
+        },
+      ],
     },
     {
       id: ValidationText.ExecutionSecondaryId,
@@ -2291,7 +2892,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
         completionTokens: 0,
         totalTokens: 390,
         estimatedCostEur: 0.0213,
-        latencyMs: 5400
+        latencyMs: 5400,
       },
       contextSessionId: ValidationText.ExecutionSecondarySessionId,
       nodeRuns: [
@@ -2304,7 +2905,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
           finishedAt: "2026-05-06T08:20:00.900Z",
           durationMs: 900,
           alerts: [],
-          guardrailFindings: []
+          guardrailFindings: [],
         },
         {
           id: "node-run-provider-failed",
@@ -2321,7 +2922,7 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
             completionTokens: 0,
             totalTokens: 390,
             estimatedCostEur: 0.0213,
-            latencyMs: 4500
+            latencyMs: 4500,
           },
           alerts: [
             {
@@ -2329,20 +2930,20 @@ function createExecutionFixtures(definition: StubWorkflowDefinitionRecord): Read
               level: "error",
               source: "provider",
               message: ValidationText.ExecutionSecondaryAlert,
-              createdAt: "2026-05-06T08:20:05.100Z"
-            }
+              createdAt: "2026-05-06T08:20:05.100Z",
+            },
           ],
           guardrailFindings: [
             {
               guardrailAssetId: "asset-guardrail-error",
               nodeId: providerNode.id,
               severity: "error",
-              message: ValidationText.ExecutionSecondaryFinding
-            }
-          ]
-        }
-      ]
-    }
+              message: ValidationText.ExecutionSecondaryFinding,
+            },
+          ],
+        },
+      ],
+    },
   ];
 }
 
@@ -2380,14 +2981,20 @@ function normalizeRequestChunk(chunk: unknown): Buffer | null {
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
-  return request.headers.authorization === `Bearer ${DefaultServerConnection.authToken}`;
+  return (
+    request.headers.authorization ===
+    `Bearer ${DefaultServerConnection.authToken}`
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function readRequiredRecord(value: unknown, key: string): Record<string, unknown> {
+function readRequiredRecord(
+  value: unknown,
+  key: string,
+): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new Error(`Invalid ${key}`);
   }
@@ -2402,7 +3009,7 @@ function readRequiredRecord(value: unknown, key: string): Record<string, unknown
 
 function readOptionalRecord(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): Record<string, unknown> | undefined {
   const nested = value[key];
   return isRecord(nested) ? nested : undefined;
@@ -2434,10 +3041,7 @@ function readStringValue(value: unknown, key: string): string {
   return nested;
 }
 
-function readOptionalString(
-  value: unknown,
-  key: string
-): string | undefined {
+function readOptionalString(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -2453,10 +3057,13 @@ function readOptionalString(
 
 function readStringArray(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<string> {
   const nested = value[key];
-  if (!Array.isArray(nested) || nested.some((entry) => typeof entry !== "string")) {
+  if (
+    !Array.isArray(nested) ||
+    nested.some((entry) => typeof entry !== "string")
+  ) {
     throw new Error(`Invalid ${key}`);
   }
 
@@ -2470,31 +3077,31 @@ function readStringArray(
 
 function readTriggerRecord(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowDefinitionRecord["trigger"] {
   const nested = readRequiredRecord(value, key);
   return {
     kind: "manual",
     enabled: readBooleanValue(nested, "enabled"),
-    config: readRequiredObjectValue(nested, "config")
+    config: readRequiredObjectValue(nested, "config"),
   };
 }
 
 function readViewportRecord(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowDefinitionRecord["viewport"] {
   const nested = readRequiredRecord(value, key);
   return {
     x: readNumberValue(nested, "x"),
     y: readNumberValue(nested, "y"),
-    zoom: readNumberValue(nested, "zoom")
+    zoom: readNumberValue(nested, "zoom"),
   };
 }
 
 function readNodeArray(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<StubWorkflowNodeRecord> {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -2517,7 +3124,7 @@ function readNodeRecord(value: unknown): StubWorkflowNodeRecord {
     label: readRequiredString(value, "label"),
     position: {
       x: readNumberValue(readRequiredRecord(value, "position"), "x"),
-      y: readNumberValue(readRequiredRecord(value, "position"), "y")
+      y: readNumberValue(readRequiredRecord(value, "position"), "y"),
     },
     width: readNumberValue(value, "width"),
     collapsed: readBooleanValue(value, "collapsed"),
@@ -2525,12 +3132,12 @@ function readNodeRecord(value: unknown): StubWorkflowNodeRecord {
     inputPorts: readPortArray(value, "inputPorts"),
     outputPorts: readPortArray(value, "outputPorts"),
     attachedGuardrails: readAttachedGuardrails(value, "attachedGuardrails"),
-    ...(outputContract ? { outputContract } : {})
+    ...(outputContract ? { outputContract } : {}),
   };
 }
 
 function readNodeConfigRecord(
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): StubWorkflowNodeRecord["config"] {
   const assetId = readOptionalString(value, "assetId");
   const role = readOptionalString(value, "role");
@@ -2539,7 +3146,10 @@ function readNodeConfigRecord(
   const reviewPolicyValue = readOptionalRecord(value, "reviewPolicy");
   const reviewPolicy = reviewPolicyValue
     ? {
-        requireHumanDecision: readBooleanValue(reviewPolicyValue, "requireHumanDecision")
+        requireHumanDecision: readBooleanValue(
+          reviewPolicyValue,
+          "requireHumanDecision",
+        ),
       }
     : undefined;
 
@@ -2548,13 +3158,13 @@ function readNodeConfigRecord(
     ...(role ? { role } : {}),
     ...(prompt ? { prompt } : {}),
     ...(provider ? { provider } : {}),
-    ...(reviewPolicy ? { reviewPolicy } : {})
+    ...(reviewPolicy ? { reviewPolicy } : {}),
   };
 }
 
 function readPortArray(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<{ id: string; name: string; acceptsMany: boolean }> {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -2568,14 +3178,14 @@ function readPortArray(
     return {
       id: readRequiredString(entry, "id"),
       name: readRequiredString(entry, "name"),
-      acceptsMany: readBooleanValue(entry, "acceptsMany")
+      acceptsMany: readBooleanValue(entry, "acceptsMany"),
     };
   });
 }
 
 function readAttachedGuardrails(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<{ assetId: string; order: number; enabled: boolean }> {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -2590,14 +3200,14 @@ function readAttachedGuardrails(
     return {
       assetId: readRequiredString(entry, "assetId"),
       order: readNumberValue(entry, "order"),
-      enabled: readBooleanValue(entry, "enabled")
+      enabled: readBooleanValue(entry, "enabled"),
     };
   });
 }
 
 function readEdgeArray(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<StubWorkflowDefinitionRecord["edges"][number]> {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -2616,38 +3226,44 @@ function readEdgeArray(
       targetPortId: readRequiredString(entry, "targetPortId"),
       mapping: {
         mode: readRequiredString(readRequiredRecord(entry, "mapping"), "mode"),
-        entries: readArrayValue(readRequiredRecord(entry, "mapping"), "entries")
-      }
+        entries: readArrayValue(
+          readRequiredRecord(entry, "mapping"),
+          "entries",
+        ),
+      },
     };
   });
 }
 
 function readExecutionPolicyRecord(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowDefinitionRecord["executionPolicy"] {
   const nested = readRequiredRecord(value, key);
   return {
     maxNodeRetries: readNumberValue(nested, "maxNodeRetries"),
-    allowManualCheckpointResume: readBooleanValue(nested, "allowManualCheckpointResume")
+    allowManualCheckpointResume: readBooleanValue(
+      nested,
+      "allowManualCheckpointResume",
+    ),
   };
 }
 
 function readContextPolicyRecord(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowDefinitionRecord["defaultContextPolicy"] {
   const nested = readRequiredRecord(value, key);
   return {
     language: readRequiredString(nested, "language"),
     carryMessagesLimit: readNumberValue(nested, "carryMessagesLimit"),
-    carryArtifactLimit: readNumberValue(nested, "carryArtifactLimit")
+    carryArtifactLimit: readNumberValue(nested, "carryArtifactLimit"),
   };
 }
 
 function readArrayValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -2659,7 +3275,7 @@ function readArrayValue(
 
 function readRequiredObjectValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): Record<string, unknown> {
   const nested = value[key];
   if (!isRecord(nested)) {
@@ -2677,7 +3293,10 @@ function readNumberValue(value: Record<string, unknown>, key: string): number {
   return nested;
 }
 
-function readBooleanValue(value: Record<string, unknown>, key: string): boolean {
+function readBooleanValue(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
   const nested = value[key];
   if (typeof nested !== "boolean") {
     throw new Error(`Invalid ${key}`);
@@ -2687,7 +3306,7 @@ function readBooleanValue(value: Record<string, unknown>, key: string): boolean 
 
 function readStatusValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowDefinitionRecord["status"] {
   const nested = readRequiredString(value, key);
   if (nested === "draft" || nested === "published" || nested === "archived") {
@@ -2698,7 +3317,7 @@ function readStatusValue(
 
 function readNodeKindValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): WorkflowNodeKind {
   const nested = readRequiredString(value, key);
   if (Object.values(WorkflowNodeKind).includes(nested as WorkflowNodeKind)) {
@@ -2709,10 +3328,14 @@ function readNodeKindValue(
 
 function readAssetKindValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowAssetRecord["kind"] {
   const nested = readRequiredString(value, key);
-  if (nested === "prompt" || nested === "instruction" || nested === "guardrail") {
+  if (
+    nested === "prompt" ||
+    nested === "instruction" ||
+    nested === "guardrail"
+  ) {
     return nested;
   }
   throw new Error(`Invalid ${key}`);
@@ -2720,7 +3343,7 @@ function readAssetKindValue(
 
 function readAssetScopeValue(
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): StubWorkflowAssetRecord["scope"] {
   const nested = readRequiredString(value, key);
   if (nested === "workspace" || nested === "project") {
@@ -2732,11 +3355,11 @@ function readAssetScopeValue(
 function writeJson(
   response: ServerResponse,
   statusCode: number,
-  value: Readonly<Record<string, unknown>>
+  value: Readonly<Record<string, unknown>>,
 ): void {
   response.writeHead(statusCode, {
     ...createCorsHeaders(),
-    [ResponseHeader.ContentType]: "application/json"
+    [ResponseHeader.ContentType]: "application/json",
   });
   response.end(JSON.stringify(value));
 }
@@ -2745,6 +3368,6 @@ function createCorsHeaders(): Record<string, string> {
   return {
     [ResponseHeader.AllowOrigin]: "*",
     [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
-    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS"
+    [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

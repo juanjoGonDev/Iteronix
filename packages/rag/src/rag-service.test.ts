@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   createInMemoryVectorStore,
   createRagService,
-  loadWorkspaceDocuments
+  loadWorkspaceDocuments,
 } from "./index";
 
 const CurrentTime = "2026-03-12T10:00:00.000Z";
@@ -14,7 +14,7 @@ describe("rag service", () => {
   it("retrieves chunks with citations, confidence and cache metadata", async () => {
     const service = createRagService({
       vectorStore: createInMemoryVectorStore(),
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     await service.ingestDocuments([
@@ -24,7 +24,7 @@ describe("rag service", () => {
         sourceType: "repo_doc",
         updatedAt: "2026-03-11T10:00:00.000Z",
         content:
-          "Iteronix is an AI Engineering Workbench for orchestrating coding agents with auditability."
+          "Iteronix is an AI Engineering Workbench for orchestrating coding agents with auditability.",
       },
       {
         id: "doc-2",
@@ -32,19 +32,19 @@ describe("rag service", () => {
         sourceType: "repo_doc",
         updatedAt: "2026-03-10T10:00:00.000Z",
         content:
-          "The platform uses security guardrails, evidence reports and explicit tool policies."
-      }
+          "The platform uses security guardrails, evidence reports and explicit tool policies.",
+      },
     ]);
 
     const first = await service.query({
       query: "What is the Iteronix AI Engineering Workbench?",
       sessionId: "session-rag",
-      topK: 3
+      topK: 3,
     });
     const second = await service.query({
       query: "What is the Iteronix AI Engineering Workbench?",
       sessionId: "session-rag",
-      topK: 3
+      topK: 3,
     });
 
     expect(first.decision.shouldRetrieve).toBe(true);
@@ -56,13 +56,13 @@ describe("rag service", () => {
   it("skips retrieval when the context-aware gate rejects the query", async () => {
     const service = createRagService({
       vectorStore: createInMemoryVectorStore(),
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     const result = await service.query({
       query: "hi",
       sessionId: "session-gate",
-      topK: 3
+      topK: 3,
     });
 
     expect(result.decision.shouldRetrieve).toBe(false);
@@ -74,11 +74,15 @@ describe("rag service", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "iteronix-rag-"));
     await mkdir(join(workspaceRoot, "docs"), { recursive: true });
     await mkdir(join(workspaceRoot, ".iteronix"), { recursive: true });
-    await writeFile(join(workspaceRoot, "docs", "guide.md"), "# Guide\n\nWorkbench docs", "utf8");
+    await writeFile(
+      join(workspaceRoot, "docs", "guide.md"),
+      "# Guide\n\nWorkbench docs",
+      "utf8",
+    );
     await writeFile(
       join(workspaceRoot, ".iteronix", "vector-store.json"),
       JSON.stringify([{ content: "generated artifact" }]),
-      "utf8"
+      "utf8",
     );
 
     try {

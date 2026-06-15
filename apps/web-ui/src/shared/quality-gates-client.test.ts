@@ -4,7 +4,7 @@ import {
   parseProjectOpenResponse,
   parseQualityGateEventsResponse,
   parseQualityGateRunResponse,
-  parseQualityGateRunsResponse
+  parseQualityGateRunsResponse,
 } from "./quality-gates-client.js";
 
 describe("quality gates client codecs", () => {
@@ -15,8 +15,8 @@ describe("quality gates client codecs", () => {
         name: "Iteronix",
         rootPath: "D:/projects/Iteronix",
         createdAt: "2026-04-24T10:00:00.000Z",
-        updatedAt: "2026-04-24T10:00:00.000Z"
-      }
+        updatedAt: "2026-04-24T10:00:00.000Z",
+      },
     });
     const started = parseQualityGateRunResponse({
       run: {
@@ -27,8 +27,8 @@ describe("quality gates client codecs", () => {
         updatedAt: "2026-04-24T10:00:00.000Z",
         gates: ["lint", "typecheck", "test", "build"],
         passedCount: 1,
-        currentGate: "typecheck"
-      }
+        currentGate: "typecheck",
+      },
     });
     const runs = parseQualityGateRunsResponse({
       runs: [
@@ -40,7 +40,7 @@ describe("quality gates client codecs", () => {
           updatedAt: "2026-04-24T10:00:00.000Z",
           gates: ["lint", "typecheck"],
           passedCount: 1,
-          currentGate: "typecheck"
+          currentGate: "typecheck",
         },
         {
           id: "run-2",
@@ -49,9 +49,9 @@ describe("quality gates client codecs", () => {
           createdAt: "2026-04-24T09:50:00.000Z",
           updatedAt: "2026-04-24T09:55:00.000Z",
           gates: ["lint", "typecheck", "test", "build"],
-          passedCount: 4
-        }
-      ]
+          passedCount: 4,
+        },
+      ],
     });
     const events = parseQualityGateEventsResponse({
       events: [
@@ -62,10 +62,10 @@ describe("quality gates client codecs", () => {
           timestamp: "2026-04-24T10:00:01.000Z",
           data: {
             gate: "lint",
-            text: "Running lint"
-          }
-        }
-      ]
+            text: "Running lint",
+          },
+        },
+      ],
     });
 
     expect(project.id).toBe("project-1");
@@ -79,8 +79,8 @@ describe("quality gates client codecs", () => {
     const decoded = decodeServerSentEvents(
       [
         'id: evt-1\nevent: quality-gates-progress\ndata: {"id":"event-1","runId":"run-1","type":"message","timestamp":"2026-04-24T10:00:01.000Z","data":{"text":"Running lint","gate":"lint"}}\n\n',
-        'id: evt-2\nevent: quality-gates-progress\ndata: {"id":"event-2","runId":"run-1","type":"done","timestamp":"2026-04-24T10:00:03.000Z","data":{"status":"completed"}}\n\n'
-      ].join("")
+        'id: evt-2\nevent: quality-gates-progress\ndata: {"id":"event-2","runId":"run-1","type":"done","timestamp":"2026-04-24T10:00:03.000Z","data":{"status":"completed"}}\n\n',
+      ].join(""),
     );
 
     expect(decoded).toEqual([
@@ -94,9 +94,9 @@ describe("quality gates client codecs", () => {
           timestamp: "2026-04-24T10:00:01.000Z",
           data: {
             text: "Running lint",
-            gate: "lint"
-          }
-        }
+            gate: "lint",
+          },
+        },
       },
       {
         id: "evt-2",
@@ -107,10 +107,10 @@ describe("quality gates client codecs", () => {
           type: "done",
           timestamp: "2026-04-24T10:00:03.000Z",
           data: {
-            status: "completed"
-          }
-        }
-      }
+            status: "completed",
+          },
+        },
+      },
     ]);
   });
 });

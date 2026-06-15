@@ -2,7 +2,7 @@ import type { ExplorerOpenFile } from "../screens/explorer-state.js";
 import type { StorageLike } from "./server-config.js";
 
 const LocalStorageKey = {
-  ExplorerWorkspace: "iteronix_explorer_workspace"
+  ExplorerWorkspace: "iteronix_explorer_workspace",
 } as const;
 
 type PersistedExplorerWorkspaceState = {
@@ -18,7 +18,7 @@ export type ExplorerWorkspaceState = {
 
 export const readExplorerWorkspaceState = (
   rootPath: string,
-  storage: StorageLike = window.localStorage
+  storage: StorageLike = window.localStorage,
 ): ExplorerWorkspaceState => {
   const normalizedRootPath = normalizeText(rootPath);
   if (normalizedRootPath.length === 0) {
@@ -26,7 +26,7 @@ export const readExplorerWorkspaceState = (
   }
 
   const persistedState = readPersistedExplorerWorkspaceStates(storage).find(
-    (entry) => entry.rootPath === normalizedRootPath
+    (entry) => entry.rootPath === normalizedRootPath,
   );
 
   if (!persistedState) {
@@ -35,14 +35,14 @@ export const readExplorerWorkspaceState = (
 
   return {
     openFiles: persistedState.openFiles,
-    activeFilePath: persistedState.activeFilePath
+    activeFilePath: persistedState.activeFilePath,
   };
 };
 
 export const writeExplorerWorkspaceState = (
   rootPath: string,
   state: ExplorerWorkspaceState,
-  storage: StorageLike = window.localStorage
+  storage: StorageLike = window.localStorage,
 ): ExplorerWorkspaceState => {
   const normalizedRootPath = normalizeText(rootPath);
   if (normalizedRootPath.length === 0) {
@@ -51,7 +51,7 @@ export const writeExplorerWorkspaceState = (
 
   const nextState = normalizeExplorerWorkspaceState(state);
   const currentStates = readPersistedExplorerWorkspaceStates(storage).filter(
-    (entry) => entry.rootPath !== normalizedRootPath
+    (entry) => entry.rootPath !== normalizedRootPath,
   );
 
   storage.setItem(
@@ -60,16 +60,16 @@ export const writeExplorerWorkspaceState = (
       ...currentStates,
       {
         rootPath: normalizedRootPath,
-        ...nextState
-      }
-    ])
+        ...nextState,
+      },
+    ]),
   );
 
   return nextState;
 };
 
 const readPersistedExplorerWorkspaceStates = (
-  storage: StorageLike
+  storage: StorageLike,
 ): ReadonlyArray<PersistedExplorerWorkspaceState> => {
   const raw = storage.getItem(LocalStorageKey.ExplorerWorkspace);
   if (!raw) {
@@ -84,7 +84,7 @@ const readPersistedExplorerWorkspaceStates = (
 };
 
 const parsePersistedExplorerWorkspaceStates = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<PersistedExplorerWorkspaceState> => {
   if (!Array.isArray(value)) {
     return [];
@@ -111,20 +111,18 @@ const parsePersistedExplorerWorkspaceStates = (
       rootPath,
       ...normalizeExplorerWorkspaceState({
         openFiles: record["openFiles"],
-        activeFilePath: record["activeFilePath"]
-      })
+        activeFilePath: record["activeFilePath"],
+      }),
     });
   }
 
   return normalizedStates;
 };
 
-const normalizeExplorerWorkspaceState = (
-  value: {
-    openFiles: unknown;
-    activeFilePath: unknown;
-  }
-): ExplorerWorkspaceState => {
+const normalizeExplorerWorkspaceState = (value: {
+  openFiles: unknown;
+  activeFilePath: unknown;
+}): ExplorerWorkspaceState => {
   const openFiles = normalizeExplorerOpenFiles(value.openFiles);
   const activeFilePath = normalizeText(value.activeFilePath);
 
@@ -132,12 +130,12 @@ const normalizeExplorerWorkspaceState = (
     openFiles,
     activeFilePath: openFiles.some((entry) => entry.path === activeFilePath)
       ? activeFilePath
-      : null
+      : null,
   };
 };
 
 const normalizeExplorerOpenFiles = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<ExplorerOpenFile> => {
   if (!Array.isArray(value)) {
     return [];
@@ -152,13 +150,16 @@ const normalizeExplorerOpenFiles = (
 
     const record = entry as Record<string, unknown>;
     const path = normalizeText(record["path"]);
-    if (path.length === 0 || normalizedOpenFiles.some((item) => item.path === path)) {
+    if (
+      path.length === 0 ||
+      normalizedOpenFiles.some((item) => item.path === path)
+    ) {
       continue;
     }
 
     normalizedOpenFiles.push({
       path,
-      pinned: Boolean(record["pinned"])
+      pinned: Boolean(record["pinned"]),
     });
   }
 
@@ -167,7 +168,7 @@ const normalizeExplorerOpenFiles = (
 
 const createEmptyExplorerWorkspaceState = (): ExplorerWorkspaceState => ({
   openFiles: [],
-  activeFilePath: null
+  activeFilePath: null,
 });
 
 const normalizeText = (value: unknown): string =>

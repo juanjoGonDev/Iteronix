@@ -42,14 +42,14 @@ describe("resolveSandboxPath", () => {
         query: "explorer",
         isRegex: false,
         matchCase: false,
-        wholeWord: false
+        wholeWord: false,
       });
 
       expect(result.type).toBe(ResultType.Ok);
       if (result.type === ResultType.Ok) {
         expect(result.value.map((entry) => entry.path)).toEqual([
           "src/screens/Explorer.ts",
-          "README.md"
+          "README.md",
         ]);
         expect(result.value[0]?.matches[0]?.lineNumber).toBe(1);
         expect(result.value[0]?.matches[0]?.lineText).toContain("Explorer");
@@ -67,13 +67,13 @@ describe("resolveSandboxPath", () => {
         query: "render\\(\\)",
         isRegex: true,
         matchCase: false,
-        wholeWord: false
+        wholeWord: false,
       });
 
       expect(valid.type).toBe(ResultType.Ok);
       if (valid.type === ResultType.Ok) {
         expect(valid.value.map((entry) => entry.path)).toEqual([
-          "src/screens/Explorer.ts"
+          "src/screens/Explorer.ts",
         ]);
       }
 
@@ -81,7 +81,7 @@ describe("resolveSandboxPath", () => {
         query: "[unterminated",
         isRegex: true,
         matchCase: false,
-        wholeWord: false
+        wholeWord: false,
       });
 
       expect(invalid.type).toBe(ResultType.Err);
@@ -98,14 +98,14 @@ describe("resolveSandboxPath", () => {
         query: "Explorer",
         isRegex: false,
         matchCase: true,
-        wholeWord: true
+        wholeWord: true,
       });
 
       expect(exactWord.type).toBe(ResultType.Ok);
       if (exactWord.type === ResultType.Ok) {
         expect(exactWord.value.map((entry) => entry.path)).toEqual([
           "src/screens/Explorer.ts",
-          "README.md"
+          "README.md",
         ]);
       }
 
@@ -113,7 +113,7 @@ describe("resolveSandboxPath", () => {
         query: "explorer",
         isRegex: false,
         matchCase: true,
-        wholeWord: true
+        wholeWord: true,
       });
 
       expect(wrongCase.type).toBe(ResultType.Ok);
@@ -133,7 +133,7 @@ describe("resolveSandboxPath", () => {
         query: "HiddenExplorer",
         isRegex: false,
         matchCase: false,
-        wholeWord: false
+        wholeWord: false,
       });
 
       expect(result.type).toBe(ResultType.Ok);
@@ -151,7 +151,7 @@ describe("resolveSandboxPath", () => {
     try {
       const result = await readFileContent(root, "src/large.ts", {
         startLine: 3,
-        lineCount: 2
+        lineCount: 2,
       });
 
       expect(result.type).toBe(ResultType.Ok);
@@ -159,12 +159,12 @@ describe("resolveSandboxPath", () => {
         expect(result.value).toEqual({
           content: [
             "export const line03 = 3;",
-            "export const line04 = 4;"
+            "export const line04 = 4;",
           ].join("\n"),
           startLine: 3,
           endLine: 4,
           totalLines: 8,
-          truncated: true
+          truncated: true,
         });
       }
     } finally {
@@ -181,38 +181,42 @@ const createSearchFixture = async (): Promise<string> => {
     [
       "export class Explorer {",
       "  render() {",
-      "    return \"Explorer\";",
+      '    return "Explorer";',
       "  }",
-      "}"
+      "}",
     ].join("\n"),
-    "utf8"
+    "utf8",
   );
   await writeFile(
     resolve(root, "README.md"),
     "Explorer documentation and usage.\n",
-    "utf8"
+    "utf8",
   );
   await writeFile(
     resolve(root, "src", "ignore.ts"),
-    "export const label = \"settings\";\n",
-    "utf8"
+    'export const label = "settings";\n',
+    "utf8",
   );
   await writeFile(
     resolve(root, "src", "large.ts"),
-    Array.from({ length: 8 }, (_, index) => `export const line${String(index + 1).padStart(2, "0")} = ${index + 1};`).join("\n"),
-    "utf8"
+    Array.from(
+      { length: 8 },
+      (_, index) =>
+        `export const line${String(index + 1).padStart(2, "0")} = ${index + 1};`,
+    ).join("\n"),
+    "utf8",
   );
   await mkdir(resolve(root, "node_modules", "demo"), { recursive: true });
   await writeFile(
     resolve(root, "node_modules", "demo", "hidden.ts"),
-    "export const value = \"HiddenExplorer\";\n",
-    "utf8"
+    'export const value = "HiddenExplorer";\n',
+    "utf8",
   );
   await mkdir(resolve(root, ".git"), { recursive: true });
   await writeFile(
     resolve(root, ".git", "HEAD"),
     "ref: refs/heads/main HiddenExplorer\n",
-    "utf8"
+    "utf8",
   );
 
   return root;

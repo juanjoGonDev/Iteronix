@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   readExplorerWorkspaceState,
-  writeExplorerWorkspaceState
+  writeExplorerWorkspaceState,
 } from "./explorer-workspace-session.js";
 
 describe("explorer workspace session", () => {
@@ -14,16 +14,16 @@ describe("explorer workspace session", () => {
         openFiles: [
           {
             path: "README.md",
-            pinned: true
+            pinned: true,
           },
           {
             path: "src/screens/Explorer.ts",
-            pinned: false
-          }
+            pinned: false,
+          },
         ],
-        activeFilePath: "src/screens/Explorer.ts"
+        activeFilePath: "src/screens/Explorer.ts",
       },
-      storage
+      storage,
     );
     writeExplorerWorkspaceState(
       "D:/projects/Another",
@@ -31,76 +31,77 @@ describe("explorer workspace session", () => {
         openFiles: [
           {
             path: "index.ts",
-            pinned: false
-          }
+            pinned: false,
+          },
         ],
-        activeFilePath: "index.ts"
+        activeFilePath: "index.ts",
       },
-      storage
+      storage,
     );
 
-    expect(
-      readExplorerWorkspaceState("D:/projects/Iteronix", storage)
-    ).toEqual({
-      openFiles: [
-        {
-          path: "README.md",
-          pinned: true
-        },
-        {
-          path: "src/screens/Explorer.ts",
-          pinned: false
-        }
-      ],
-      activeFilePath: "src/screens/Explorer.ts"
-    });
-    expect(
-      readExplorerWorkspaceState("D:/projects/Another", storage)
-    ).toEqual({
+    expect(readExplorerWorkspaceState("D:/projects/Iteronix", storage)).toEqual(
+      {
+        openFiles: [
+          {
+            path: "README.md",
+            pinned: true,
+          },
+          {
+            path: "src/screens/Explorer.ts",
+            pinned: false,
+          },
+        ],
+        activeFilePath: "src/screens/Explorer.ts",
+      },
+    );
+    expect(readExplorerWorkspaceState("D:/projects/Another", storage)).toEqual({
       openFiles: [
         {
           path: "index.ts",
-          pinned: false
-        }
+          pinned: false,
+        },
       ],
-      activeFilePath: "index.ts"
+      activeFilePath: "index.ts",
     });
   });
 
   it("normalizes invalid persisted explorer workspace payloads", () => {
     const storage = createMemoryStorage();
-    storage.setItem("iteronix_explorer_workspace", JSON.stringify([
+    storage.setItem(
+      "iteronix_explorer_workspace",
+      JSON.stringify([
+        {
+          rootPath: "D:/projects/Iteronix",
+          openFiles: [
+            {
+              path: "README.md",
+              pinned: true,
+            },
+            {
+              path: "",
+              pinned: true,
+            },
+            {
+              path: "README.md",
+              pinned: false,
+            },
+          ],
+          activeFilePath: 42,
+        },
+      ]),
+    );
+
+    expect(readExplorerWorkspaceState("D:/projects/Iteronix", storage)).toEqual(
       {
-        rootPath: "D:/projects/Iteronix",
         openFiles: [
           {
             path: "README.md",
-            pinned: true
+            pinned: true,
           },
-          {
-            path: "",
-            pinned: true
-          },
-          {
-            path: "README.md",
-            pinned: false
-          }
         ],
-        activeFilePath: 42
-      }
-    ]));
-
-    expect(
-      readExplorerWorkspaceState("D:/projects/Iteronix", storage)
-    ).toEqual({
-      openFiles: [
-        {
-          path: "README.md",
-          pinned: true
-        }
-      ],
-      activeFilePath: null
-    });
+        activeFilePath: null,
+      },
+    );
   });
 });
 
@@ -121,6 +122,6 @@ const createMemoryStorage = (): Storage => {
     },
     setItem: (key: string, value: string) => {
       values.set(key, value);
-    }
+    },
   };
 };

@@ -4,18 +4,18 @@ import { ResultType, type Result } from "../../../domain/src/result";
 
 export const CommandOutputSource = {
   Stdout: "stdout",
-  Stderr: "stderr"
+  Stderr: "stderr",
 } as const;
 
 export type CommandOutputSource =
-  typeof CommandOutputSource[keyof typeof CommandOutputSource];
+  (typeof CommandOutputSource)[keyof typeof CommandOutputSource];
 
 export const CommandRunnerErrorCode = {
-  SpawnFailed: "spawn_failed"
+  SpawnFailed: "spawn_failed",
 } as const;
 
 export type CommandRunnerErrorCode =
-  typeof CommandRunnerErrorCode[keyof typeof CommandRunnerErrorCode];
+  (typeof CommandRunnerErrorCode)[keyof typeof CommandRunnerErrorCode];
 
 export type CommandRunnerError = {
   code: CommandRunnerErrorCode;
@@ -50,29 +50,29 @@ export type CommandRunInput = {
 
 export type CommandRunner = {
   run: (
-    input: CommandRunInput
+    input: CommandRunInput,
   ) => Promise<Result<CommandRunResult, CommandRunnerError>>;
 };
 
 export const createCommandRunnerAdapter = (): CommandRunner => {
   const run = async (
-    input: CommandRunInput
+    input: CommandRunInput,
   ): Promise<Result<CommandRunResult, CommandRunnerError>> =>
     spawnCommand(input);
 
   return {
-    run
+    run,
   };
 };
 
 const spawnCommand = (
-  input: CommandRunInput
+  input: CommandRunInput,
 ): Promise<Result<CommandRunResult, CommandRunnerError>> =>
   new Promise((resolve) => {
     const startedAt = new Date().toISOString();
     const child = spawn(input.command, [...input.args], {
       cwd: input.cwd,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -84,7 +84,7 @@ const spawnCommand = (
         input.onOutput?.({
           source: CommandOutputSource.Stdout,
           text,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
     });
@@ -96,7 +96,7 @@ const spawnCommand = (
         input.onOutput?.({
           source: CommandOutputSource.Stderr,
           text,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
     });
@@ -107,8 +107,8 @@ const spawnCommand = (
         error: {
           code: CommandRunnerErrorCode.SpawnFailed,
           command: basename(input.command),
-          message: error.message
-        }
+          message: error.message,
+        },
       });
     });
 
@@ -123,8 +123,8 @@ const spawnCommand = (
           stdout,
           stderr,
           startedAt,
-          finishedAt: new Date().toISOString()
-        }
+          finishedAt: new Date().toISOString(),
+        },
       });
     });
   });

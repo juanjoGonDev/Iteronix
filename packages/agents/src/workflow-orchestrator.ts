@@ -48,19 +48,19 @@ export const createWorkflowOrchestrator = (input: {
       stage: "planner",
       status: "completed",
       summary: `Plan generated for ${request.question}`,
-      timestamp: now().toISOString()
+      timestamp: now().toISOString(),
     });
 
     const retrieval = await input.ragService.query({
       query: request.question,
       sessionId: request.sessionId,
-      topK: 3
+      topK: 3,
     });
     steps.push({
       stage: "retriever",
       status: "completed",
       summary: retrieval.decision.reason,
-      timestamp: now().toISOString()
+      timestamp: now().toISOString(),
     });
 
     const execution = await input.skillRunner.run({
@@ -68,14 +68,14 @@ export const createWorkflowOrchestrator = (input: {
       sessionId: request.sessionId,
       projectRoot: request.projectRoot,
       input: {
-        question: request.question
-      }
+        question: request.question,
+      },
     });
     steps.push({
       stage: "executor",
       status: "completed",
       summary: execution.output.answer,
-      timestamp: now().toISOString()
+      timestamp: now().toISOString(),
     });
 
     const reviewerSummary = createReviewerSummary(execution);
@@ -84,16 +84,16 @@ export const createWorkflowOrchestrator = (input: {
         stage: "reviewer",
         status: "awaiting_approval",
         summary: reviewerSummary,
-        timestamp: now().toISOString()
+        timestamp: now().toISOString(),
       });
       return {
         status: "awaiting_approval",
         steps,
         checkpoint: {
           stage: "reviewer",
-          summary: reviewerSummary
+          summary: reviewerSummary,
         },
-        final: execution
+        final: execution,
       };
     }
 
@@ -101,23 +101,23 @@ export const createWorkflowOrchestrator = (input: {
       stage: "reviewer",
       status: "completed",
       summary: reviewerSummary,
-      timestamp: now().toISOString()
+      timestamp: now().toISOString(),
     });
 
     return {
       status: "completed",
       steps,
-      final: execution
+      final: execution,
     };
   };
 
   return {
-    run
+    run,
   };
 };
 
 const createReviewerSummary = (
-  result: Awaited<ReturnType<SkillRunner["run"]>>
+  result: Awaited<ReturnType<SkillRunner["run"]>>,
 ): string =>
   result.citations.length > 0
     ? `Reviewer accepted grounded answer with ${result.citations.length} citations`

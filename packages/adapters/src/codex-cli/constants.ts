@@ -4,8 +4,8 @@ export const CodexCliDefaultCommand = "codex";
 
 export const CodexCliPromptMode = {
   Stdin: "stdin",
-  Arg: "arg"
+  Arg: "arg",
 } as const;
 
 export type CodexCliPromptMode =
-  typeof CodexCliPromptMode[keyof typeof CodexCliPromptMode];
+  (typeof CodexCliPromptMode)[keyof typeof CodexCliPromptMode];

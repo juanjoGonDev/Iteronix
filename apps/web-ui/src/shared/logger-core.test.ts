@@ -4,7 +4,7 @@ import {
   createSharedLogEntry,
   formatLogError,
   installConsoleForwarder,
-  serializeLogValue
+  serializeLogValue,
 } from "./logger-core";
 
 describe("logger core", () => {
@@ -16,15 +16,13 @@ describe("logger core", () => {
       },
       shouldReset: () => false,
       createId: () => "log-id",
-      now: () => "2026-06-05T00:00:00.000Z"
+      now: () => "2026-06-05T00:00:00.000Z",
     });
 
     console.warn("settings failed", { status: 400 });
     forwarder.uninstall();
 
-    expect(sent).toEqual([
-      "warn:settings failed {\"status\":400}"
-    ]);
+    expect(sent).toEqual(['warn:settings failed {"status":400}']);
   });
 
   it("creates shared log entries from arbitrary args", () => {
@@ -32,14 +30,14 @@ describe("logger core", () => {
       level: SharedLogLevel.Info,
       args: ["hello", { ok: true }],
       createId: () => "entry-id",
-      now: () => "2026-06-05T00:00:00.000Z"
+      now: () => "2026-06-05T00:00:00.000Z",
     });
 
     expect(entry).toEqual({
       id: "entry-id",
       timestamp: "2026-06-05T00:00:00.000Z",
       level: SharedLogLevel.Info,
-      message: "hello {\"ok\":true}"
+      message: 'hello {"ok":true}',
     });
   });
 

@@ -3,10 +3,7 @@ import { codexCliProviderDescriptor } from "../../../packages/adapters/src/codex
 import { customOpenAiCompatibleProviderDescriptor } from "../../../packages/adapters/src/openai-compatible/provider";
 import { openAiCompatibleProviderDescriptor } from "../../../packages/adapters/src/openai-compatible/provider";
 import { ResultType } from "./result";
-import {
-  ProviderStoreErrorCode,
-  createProviderStore
-} from "./providers";
+import { ProviderStoreErrorCode, createProviderStore } from "./providers";
 
 const ProjectId = "project-1";
 const ProfileId = "default";
@@ -30,7 +27,7 @@ describe("provider store", () => {
     const selected = store.selectProvider({
       projectId: ProjectId,
       profileId: ProfileId,
-      providerId: codexCliProviderDescriptor.id
+      providerId: codexCliProviderDescriptor.id,
     });
 
     expect(selected.type).toBe(ResultType.Ok);
@@ -40,7 +37,7 @@ describe("provider store", () => {
 
     const selection = store.getSelection({
       projectId: ProjectId,
-      profileId: ProfileId
+      profileId: ProfileId,
     });
 
     expect(selection.type).toBe(ResultType.Ok);
@@ -54,7 +51,7 @@ describe("provider store", () => {
     const result = store.selectProvider({
       projectId: ProjectId,
       profileId: ProfileId,
-      providerId: UnknownProviderId
+      providerId: UnknownProviderId,
     });
 
     expect(result.type).toBe(ResultType.Err);
@@ -70,8 +67,8 @@ describe("provider store", () => {
       profileId: ProfileId,
       providerId: codexCliProviderDescriptor.id,
       config: {
-        [ConfigKey]: ConfigValue
-      }
+        [ConfigKey]: ConfigValue,
+      },
     });
 
     expect(result.type).toBe(ResultType.Ok);

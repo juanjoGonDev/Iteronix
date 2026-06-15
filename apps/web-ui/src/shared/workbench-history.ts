@@ -3,7 +3,7 @@ import {
   parseEvaluationRunResponse,
   parseSkillRunResponse,
   parseWorkbenchHistoryState,
-  parseWorkflowRunResponse
+  parseWorkflowRunResponse,
 } from "./workbench-codec.js";
 import {
   ReviewerDecision,
@@ -14,14 +14,14 @@ import {
   type SkillRunResponse,
   type WorkbenchEvalHistoryRecord,
   type WorkbenchHistoryState,
-  type WorkflowRunResponse
+  type WorkflowRunResponse,
 } from "./workbench-types.js";
 
 const HistoryLimit = 24;
 const WorkbenchHistoryStorageKey = "iteronix_workbench_history";
 let workbenchHistoryCache: WorkbenchHistoryState = {
   runs: [],
-  evals: []
+  evals: [],
 };
 
 export type WorkbenchHistoryStore = {
@@ -54,7 +54,7 @@ export type WorkbenchHistoryStore = {
 
 export const createWorkbenchHistoryStore = (
   storage?: StorageLike,
-  now: () => string = () => new Date().toISOString()
+  now: () => string = () => new Date().toISOString(),
 ): WorkbenchHistoryStore => {
   const load = (): WorkbenchHistoryState => {
     if (storage) {
@@ -62,7 +62,7 @@ export const createWorkbenchHistoryStore = (
       if (!raw) {
         return {
           runs: [],
-          evals: []
+          evals: [],
         };
       }
 
@@ -71,7 +71,7 @@ export const createWorkbenchHistoryStore = (
       } catch {
         return {
           runs: [],
-          evals: []
+          evals: [],
         };
       }
     }
@@ -98,12 +98,12 @@ export const createWorkbenchHistoryStore = (
       updatedAt: createdAt,
       status: WorkbenchRecordStatus.Completed,
       result: parseSkillRunResponse(input.result),
-      memory: input.memory ?? []
+      memory: input.memory ?? [],
     };
 
     persist(storage, {
       runs: [record, ...state.runs].slice(0, HistoryLimit),
-      evals: state.evals
+      evals: state.evals,
     });
 
     return record;
@@ -119,25 +119,26 @@ export const createWorkbenchHistoryStore = (
     const state = load();
     const createdAt = now();
     const parsedResult = parseWorkflowRunResponse(input.result);
-    const record: import("./workbench-types.js").WorkbenchWorkflowHistoryRecord = {
-      id: createId(),
-      kind: WorkbenchRunRecordKind.Workflow,
-      skillName: input.skillName,
-      sessionId: input.sessionId,
-      question: input.question,
-      createdAt,
-      updatedAt: createdAt,
-      status:
-        parsedResult.status === "awaiting_approval"
-          ? WorkbenchRecordStatus.AwaitingApproval
-          : WorkbenchRecordStatus.Completed,
-      result: parsedResult,
-      memory: input.memory ?? []
-    };
+    const record: import("./workbench-types.js").WorkbenchWorkflowHistoryRecord =
+      {
+        id: createId(),
+        kind: WorkbenchRunRecordKind.Workflow,
+        skillName: input.skillName,
+        sessionId: input.sessionId,
+        question: input.question,
+        createdAt,
+        updatedAt: createdAt,
+        status:
+          parsedResult.status === "awaiting_approval"
+            ? WorkbenchRecordStatus.AwaitingApproval
+            : WorkbenchRecordStatus.Completed,
+        result: parsedResult,
+        memory: input.memory ?? [],
+      };
 
     persist(storage, {
       runs: [record, ...state.runs].slice(0, HistoryLimit),
-      evals: state.evals
+      evals: state.evals,
     });
 
     return record;
@@ -154,12 +155,12 @@ export const createWorkbenchHistoryStore = (
       datasetPath: input.datasetPath,
       createdAt,
       updatedAt: createdAt,
-      result: parseEvaluationRunResponse(input.result)
+      result: parseEvaluationRunResponse(input.result),
     };
 
     persist(storage, {
       runs: state.runs,
-      evals: [record, ...state.evals].slice(0, HistoryLimit)
+      evals: [record, ...state.evals].slice(0, HistoryLimit),
     });
 
     return record;
@@ -174,7 +175,10 @@ export const createWorkbenchHistoryStore = (
     const state = load();
     const decidedAt = now();
     const updatedRuns = state.runs.map((record) => {
-      if (record.id !== input.runId || record.kind !== WorkbenchRunRecordKind.Workflow) {
+      if (
+        record.id !== input.runId ||
+        record.kind !== WorkbenchRunRecordKind.Workflow
+      ) {
         return record;
       }
 
@@ -194,14 +198,17 @@ export const createWorkbenchHistoryStore = (
         review: {
           decision: input.decision,
           reason: input.reason,
-          decidedAt
-        }
+          decidedAt,
+        },
       };
     });
 
     const updatedRecord = updatedRuns.find(
-      (record): record is import("./workbench-types.js").WorkbenchWorkflowHistoryRecord =>
-        record.id === input.runId && record.kind === WorkbenchRunRecordKind.Workflow
+      (
+        record,
+      ): record is import("./workbench-types.js").WorkbenchWorkflowHistoryRecord =>
+        record.id === input.runId &&
+        record.kind === WorkbenchRunRecordKind.Workflow,
     );
     if (!updatedRecord) {
       throw new Error(`Workflow run ${input.runId} not found`);
@@ -209,7 +216,7 @@ export const createWorkbenchHistoryStore = (
 
     persist(storage, {
       runs: updatedRuns,
-      evals: state.evals
+      evals: state.evals,
     });
 
     return updatedRecord;
@@ -220,12 +227,12 @@ export const createWorkbenchHistoryStore = (
     saveSkillRun,
     saveWorkflowRun,
     saveEvalRun,
-    applyWorkflowReviewDecision
+    applyWorkflowReviewDecision,
   };
 };
 
 export const hydrateWorkbenchHistory = (
-  state: WorkbenchHistoryState
+  state: WorkbenchHistoryState,
 ): WorkbenchHistoryState => {
   workbenchHistoryCache = parseWorkbenchHistoryState(state);
   return workbenchHistoryCache;
@@ -233,7 +240,7 @@ export const hydrateWorkbenchHistory = (
 
 const persist = (
   storage: StorageLike | undefined,
-  state: WorkbenchHistoryState
+  state: WorkbenchHistoryState,
 ): void => {
   const normalized = parseWorkbenchHistoryState(state);
   if (storage) {

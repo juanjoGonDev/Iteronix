@@ -14,16 +14,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("input", {
         onInput: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -31,7 +31,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -50,15 +50,15 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("button", {
         title: undefined,
-        onClick: undefined
+        onClick: undefined,
       });
     } finally {
       if (originalDocument === undefined) {
@@ -66,7 +66,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -86,17 +86,17 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("select", {
-        value: "planner"
+        value: "planner",
       });
       createElement("input", {
-        checked: true
+        checked: true,
       });
     } finally {
       if (originalDocument === undefined) {
@@ -104,7 +104,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -126,16 +126,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("input", {
         onBlur: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -143,7 +143,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -162,16 +162,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("input", {
         onKeyDown: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -179,7 +179,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -198,16 +198,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("button", {
         onContextMenu: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -215,7 +215,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -234,16 +234,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("div", {
         onScroll: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -251,7 +251,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -270,16 +270,16 @@ describe("createElement", () => {
         createElement: () => fakeElement,
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("button", {
         onPointerDown: () => {
           recorded.push("handled");
-        }
+        },
       });
     } finally {
       if (originalDocument === undefined) {
@@ -287,7 +287,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -302,18 +302,20 @@ describe("createElement", () => {
     Object.defineProperty(globalThis, "document", {
       configurable: true,
       value: {
-        createElement: (tagName: string) => createFakeElement(recorded, `html:${tagName}`),
-        createElementNS: (namespace: string, tagName: string) => createFakeElement(recorded, `${namespace}:${tagName}`),
+        createElement: (tagName: string) =>
+          createFakeElement(recorded, `html:${tagName}`),
+        createElementNS: (namespace: string, tagName: string) =>
+          createFakeElement(recorded, `${namespace}:${tagName}`),
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
       createElement("path", {
-        d: "M 0 0 L 10 10"
+        d: "M 0 0 L 10 10",
       });
     } finally {
       if (originalDocument === undefined) {
@@ -321,7 +323,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -339,9 +341,9 @@ describe("createElement", () => {
         createElement: () => createFakeElement(recorded),
         createTextNode: (value: string) => ({
           nodeType: 3,
-          textContent: value
-        })
-      }
+          textContent: value,
+        }),
+      },
     });
 
     try {
@@ -352,7 +354,7 @@ describe("createElement", () => {
       } else {
         Object.defineProperty(globalThis, "document", {
           configurable: true,
-          value: originalDocument
+          value: originalDocument,
         });
       }
     }
@@ -367,30 +369,33 @@ class TestChildComponent extends Component<{ children?: unknown }> {
   }
 }
 
-const createFakeElement = (recorded: string[], elementName = "html:element") => {
+const createFakeElement = (
+  recorded: string[],
+  elementName = "html:element",
+) => {
   recorded.push(`element:${elementName}`);
   return {
-  set value(value: string) {
-    recorded.push(`property:value=${value}`);
-  },
-  set checked(value: boolean) {
-    recorded.push(`property:checked=${String(value)}`);
-  },
-  dataset: {} as Record<string, string>,
-  appendChild: (child: unknown) => {
-    const textContent = readNodeTextContent(child);
-    if (textContent !== null) {
-      recorded.push(`text:${textContent}`);
-    }
-    return undefined;
-  },
-  addEventListener: (eventName: string, _listener: EventListener) => {
-    recorded.push(`listener:${eventName}`);
-  },
-  setAttribute: (key: string, value: string) => {
-    recorded.push(`attr:${key}=${value}`);
-  },
-  style: {} as CSSStyleDeclaration
+    set value(value: string) {
+      recorded.push(`property:value=${value}`);
+    },
+    set checked(value: boolean) {
+      recorded.push(`property:checked=${String(value)}`);
+    },
+    dataset: {} as Record<string, string>,
+    appendChild: (child: unknown) => {
+      const textContent = readNodeTextContent(child);
+      if (textContent !== null) {
+        recorded.push(`text:${textContent}`);
+      }
+      return undefined;
+    },
+    addEventListener: (eventName: string, _listener: EventListener) => {
+      recorded.push(`listener:${eventName}`);
+    },
+    setAttribute: (key: string, value: string) => {
+      recorded.push(`attr:${key}=${value}`);
+    },
+    style: {} as CSSStyleDeclaration,
   };
 };
 

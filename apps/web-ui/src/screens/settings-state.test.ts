@@ -3,14 +3,23 @@ import {
   ProviderKind,
   createProviderProfile,
   createProviderSyncRequests,
-  updateProviderProfile
+  updateProviderProfile,
 } from "./settings-state.js";
 
 describe("settings state", () => {
   it("creates provider profiles with kind-specific defaults", () => {
-    const codex = createProviderProfile(ProviderKind.CodexCli, "2026-04-28T10:00:00.000Z");
-    const anthropic = createProviderProfile(ProviderKind.Anthropic, "2026-04-28T10:00:00.000Z");
-    const custom = createProviderProfile(ProviderKind.Custom, "2026-04-28T10:00:00.000Z");
+    const codex = createProviderProfile(
+      ProviderKind.CodexCli,
+      "2026-04-28T10:00:00.000Z",
+    );
+    const anthropic = createProviderProfile(
+      ProviderKind.Anthropic,
+      "2026-04-28T10:00:00.000Z",
+    );
+    const custom = createProviderProfile(
+      ProviderKind.Custom,
+      "2026-04-28T10:00:00.000Z",
+    );
 
     expect(codex.command).toBe("codex");
     expect(codex.promptMode).toBe("stdin");
@@ -31,9 +40,9 @@ describe("settings state", () => {
         modelId: "gpt-5",
         endpointUrl: "https://example.com/openai",
         apiKey: "secret",
-        apiKeyEnvVar: "LOCAL_AI_API_KEY"
+        apiKeyEnvVar: "LOCAL_AI_API_KEY",
       },
-      updatedAt
+      updatedAt,
     );
 
     expect(updated.name).toBe("Planner");
@@ -51,16 +60,16 @@ describe("settings state", () => {
         name: "Codex coding",
         modelId: "gpt-5-codex",
         command: "codex",
-        promptMode: "arg"
+        promptMode: "arg",
       },
-      "2026-04-28T11:00:00.000Z"
+      "2026-04-28T11:00:00.000Z",
     );
     const openai = updateProviderProfile(
       createProviderProfile(ProviderKind.OpenAI, createdAt),
       {
-        modelId: "gpt-5"
+        modelId: "gpt-5",
       },
-      "2026-04-28T11:00:00.000Z"
+      "2026-04-28T11:00:00.000Z",
     );
     const custom = updateProviderProfile(
       createProviderProfile(ProviderKind.Custom, createdAt),
@@ -68,12 +77,15 @@ describe("settings state", () => {
         name: "Local gateway",
         modelId: "llama-3.1",
         endpointUrl: "http://192.168.1.223:3001",
-        apiKey: "secret"
+        apiKey: "secret",
       },
-      "2026-04-28T11:00:00.000Z"
+      "2026-04-28T11:00:00.000Z",
     );
 
-    const requests = createProviderSyncRequests([codex, openai, custom], "project-1");
+    const requests = createProviderSyncRequests(
+      [codex, openai, custom],
+      "project-1",
+    );
 
     expect(requests).toEqual([
       {
@@ -86,10 +98,10 @@ describe("settings state", () => {
           models: [
             {
               id: "gpt-5-codex",
-              displayName: "gpt-5-codex"
-            }
-          ]
-        }
+              displayName: "gpt-5-codex",
+            },
+          ],
+        },
       },
       {
         profileId: openai.id,
@@ -101,10 +113,10 @@ describe("settings state", () => {
           models: [
             {
               id: "gpt-5",
-              displayName: "gpt-5"
-            }
-          ]
-        }
+              displayName: "gpt-5",
+            },
+          ],
+        },
       },
       {
         profileId: custom.id,
@@ -116,11 +128,11 @@ describe("settings state", () => {
           models: [
             {
               id: "llama-3.1",
-              displayName: "llama-3.1"
-            }
-          ]
-        }
-      }
+              displayName: "llama-3.1",
+            },
+          ],
+        },
+      },
     ]);
   });
 });

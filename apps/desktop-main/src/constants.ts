@@ -1,16 +1,16 @@
 export const DesktopMode = {
   Local: "local",
-  Remote: "remote"
+  Remote: "remote",
 } as const;
 
-export type DesktopMode = typeof DesktopMode[keyof typeof DesktopMode];
+export type DesktopMode = (typeof DesktopMode)[keyof typeof DesktopMode];
 
 export const UiMode = {
   Dev: "dev",
-  Prod: "prod"
+  Prod: "prod",
 } as const;
 
-export type UiMode = typeof UiMode[keyof typeof UiMode];
+export type UiMode = (typeof UiMode)[keyof typeof UiMode];
 
 export const EnvKey = {
   Mode: "ITERONIX_DESKTOP_MODE",
@@ -26,7 +26,7 @@ export const EnvKey = {
   UiDevUrl: "ITERONIX_DESKTOP_UI_DEV_URL",
   UiProdIndex: "ITERONIX_DESKTOP_UI_INDEX",
   UiProdAssets: "ITERONIX_DESKTOP_UI_DIST",
-  ConfigPath: "ITERONIX_DESKTOP_CONFIG_PATH"
+  ConfigPath: "ITERONIX_DESKTOP_CONFIG_PATH",
 } as const;
 
 export const ServerEnvKey = {
@@ -34,42 +34,42 @@ export const ServerEnvKey = {
   Host: "HOST",
   AuthToken: "AUTH_TOKEN",
   WorkspaceRoots: "WORKSPACE_ROOTS",
-  CommandAllowlist: "COMMAND_ALLOWLIST"
+  CommandAllowlist: "COMMAND_ALLOWLIST",
 } as const;
 
 export const DefaultServer = {
   Host: "127.0.0.1",
-  Port: 4000
+  Port: 4000,
 } as const;
 
 export const DefaultPaths = {
   ServerEntry: "dist/apps/server-api/src/index.js",
   ConfigDirName: ".iteronix",
-  ConfigFileName: "desktop.json"
+  ConfigFileName: "desktop.json",
 } as const;
 
 export const DefaultUi = {
   Mode: UiMode.Prod,
   DevUrl: "http://localhost:5173",
   ProdIndex: "apps/web-ui/index.html",
-  ProdAssets: "apps/web-ui/dist"
+  ProdAssets: "apps/web-ui/dist",
 } as const;
 
 export const SecretService = "iteronix.desktop";
 
 export const SecretKey = {
-  AuthToken: "auth_token"
+  AuthToken: "auth_token",
 } as const;
 
-export type SecretKey = typeof SecretKey[keyof typeof SecretKey];
+export type SecretKey = (typeof SecretKey)[keyof typeof SecretKey];
 
 export const SecretProviderType = {
   Keychain: "keychain",
-  Memory: "memory"
+  Memory: "memory",
 } as const;
 
 export type SecretProviderType =
-  typeof SecretProviderType[keyof typeof SecretProviderType];
+  (typeof SecretProviderType)[keyof typeof SecretProviderType];
 
 export const ConfigErrorCode = {
   InvalidMode: "invalid_mode",
@@ -79,10 +79,11 @@ export const ConfigErrorCode = {
   MissingWorkspaceRoots: "missing_workspace_roots",
   InvalidServerPort: "invalid_server_port",
   InvalidUiMode: "invalid_ui_mode",
-  InvalidUiDevUrl: "invalid_ui_dev_url"
+  InvalidUiDevUrl: "invalid_ui_dev_url",
 } as const;
 
-export type ConfigErrorCode = typeof ConfigErrorCode[keyof typeof ConfigErrorCode];
+export type ConfigErrorCode =
+  (typeof ConfigErrorCode)[keyof typeof ConfigErrorCode];
 
 export const ConfigErrorMessage = {
   InvalidMode: "Invalid desktop mode",
@@ -92,44 +93,44 @@ export const ConfigErrorMessage = {
   MissingWorkspaceRoots: "Workspace roots are required for local server mode",
   InvalidServerPort: "Invalid desktop server port",
   InvalidUiMode: "Invalid UI mode",
-  InvalidUiDevUrl: "Invalid UI dev server URL"
+  InvalidUiDevUrl: "Invalid UI dev server URL",
 } as const;
 
 export const SecretErrorCode = {
   Unavailable: "secret_unavailable",
   OperationFailed: "secret_operation_failed",
-  InvalidToken: "invalid_token"
+  InvalidToken: "invalid_token",
 } as const;
 
 export type SecretErrorCode =
-  typeof SecretErrorCode[keyof typeof SecretErrorCode];
+  (typeof SecretErrorCode)[keyof typeof SecretErrorCode];
 
 export const SecretErrorMessage = {
   Unavailable: "Secret provider unavailable",
   OperationFailed: "Secret operation failed",
-  InvalidToken: "Invalid token"
+  InvalidToken: "Invalid token",
 } as const;
 
 export const PersistenceErrorCode = {
   ReadFailed: "persistence_read_failed",
   WriteFailed: "persistence_write_failed",
   DeleteFailed: "persistence_delete_failed",
-  InvalidData: "persistence_invalid_data"
+  InvalidData: "persistence_invalid_data",
 } as const;
 
 export type PersistenceErrorCode =
-  typeof PersistenceErrorCode[keyof typeof PersistenceErrorCode];
+  (typeof PersistenceErrorCode)[keyof typeof PersistenceErrorCode];
 
 export const PersistenceErrorMessage = {
   ReadFailed: "Failed to read desktop config",
   WriteFailed: "Failed to write desktop config",
   DeleteFailed: "Failed to delete desktop config",
-  InvalidData: "Invalid desktop config data"
+  InvalidData: "Invalid desktop config data",
 } as const;
 
 export const ServerStartErrorCode = {
-  EntryMissing: "server_entry_missing"
+  EntryMissing: "server_entry_missing",
 } as const;
 
 export type ServerStartErrorCode =
-  typeof ServerStartErrorCode[keyof typeof ServerStartErrorCode];
+  (typeof ServerStartErrorCode)[keyof typeof ServerStartErrorCode];

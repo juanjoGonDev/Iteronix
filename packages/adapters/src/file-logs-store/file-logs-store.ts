@@ -1,14 +1,20 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { LOG_FILE_NAME, LOG_LINE_SEPARATOR } from "../../../shared/src/logger/constants";
+import {
+  LOG_FILE_NAME,
+  LOG_LINE_SEPARATOR,
+} from "../../../shared/src/logger/constants";
 import { LogEntry, LogLevel } from "../../../domain/src/ports/logs-store";
 import { LogsStorePort } from "../../../domain/src/ports/logs-store";
 import type { Result } from "../../../domain/src/result";
-import { LogsStoreErrorCode, LogsStoreError } from "../../../domain/src/ports/logs-store";
+import {
+  LogsStoreErrorCode,
+  LogsStoreError,
+} from "../../../domain/src/ports/logs-store";
 
 const resetLogFile = async (
   logFilePath: string,
-  logDir: string
+  logDir: string,
 ): Promise<void> => {
   try {
     await fs.writeFile(logFilePath, "", "utf-8");
@@ -22,7 +28,7 @@ export const createFileLogsStore = async (
   logDir: string,
   options: {
     maxEntries?: number;
-  } = {}
+  } = {},
 ): Promise<LogsStorePort & { reset: () => Promise<void> }> => {
   const logFilePath = join(logDir, LOG_FILE_NAME);
   let entries: LogEntry[] = [];
@@ -62,15 +68,13 @@ export const createFileLogsStore = async (
     }
   };
 
-  const queryFromMemory = (
-    filters: {
-      since?: string;
-      until?: string;
-      level?: LogLevel;
-      limit?: number;
-      runId?: string;
-    }
-  ): LogEntry[] => {
+  const queryFromMemory = (filters: {
+    since?: string;
+    until?: string;
+    level?: LogLevel;
+    limit?: number;
+    runId?: string;
+  }): LogEntry[] => {
     let filtered = entries;
 
     if (filters.since) {
@@ -88,18 +92,16 @@ export const createFileLogsStore = async (
         LogLevel.Info,
         LogLevel.Warn,
         LogLevel.Error,
-        LogLevel.Fatal
+        LogLevel.Fatal,
       ];
       const levelIndex = levelOrder.indexOf(filters.level);
       filtered = filtered.filter(
-        (e) => levelOrder.indexOf(e.level) >= levelIndex
+        (e) => levelOrder.indexOf(e.level) >= levelIndex,
       );
     }
 
     if (filters.runId) {
-      filtered = filtered.filter(
-        (e) => e.context?.["runId"] === filters.runId
-      );
+      filtered = filtered.filter((e) => e.context?.["runId"] === filters.runId);
     }
 
     if (filters.limit) {
@@ -110,7 +112,7 @@ export const createFileLogsStore = async (
   };
 
   const append = async (
-    entry: LogEntry
+    entry: LogEntry,
   ): Promise<Result<void, LogsStoreError>> => {
     try {
       const trimmed = appendToMemory(entry);
@@ -128,21 +130,19 @@ export const createFileLogsStore = async (
         error: {
           code: LogsStoreErrorCode.StorageError,
           message: `Failed to append log entry: ${errorMessage}`,
-          retryable: true
-        }
+          retryable: true,
+        },
       };
     }
   };
 
-  const query = async (
-    input: {
-      since?: string;
-      until?: string;
-      level?: LogLevel;
-      limit?: number;
-      runId?: string;
-    }
-  ): Promise<Result<ReadonlyArray<LogEntry>, LogsStoreError>> => {
+  const query = async (input: {
+    since?: string;
+    until?: string;
+    level?: LogLevel;
+    limit?: number;
+    runId?: string;
+  }): Promise<Result<ReadonlyArray<LogEntry>, LogsStoreError>> => {
     try {
       const results = queryFromMemory(input);
       return { type: "ok", value: Object.freeze(results) };
@@ -154,8 +154,8 @@ export const createFileLogsStore = async (
         error: {
           code: LogsStoreErrorCode.InvalidQuery,
           message: `Failed to query logs: ${errorMessage}`,
-          retryable: false
-        }
+          retryable: false,
+        },
       };
     }
   };
@@ -165,16 +165,12 @@ export const createFileLogsStore = async (
   return {
     append,
     query,
-    reset
+    reset,
   };
 };
 
 const readMaxEntries = (value: number | undefined): number => {
-  if (
-    value === undefined ||
-    !Number.isInteger(value) ||
-    value < 1
-  ) {
+  if (value === undefined || !Number.isInteger(value) || value < 1) {
     return Number.MAX_SAFE_INTEGER;
   }
 
@@ -185,7 +181,7 @@ const formatLogEntry = (entry: LogEntry): string => {
   const parts: string[] = [
     entry.timestamp,
     `[${entry.level.toUpperCase()}]`,
-    entry.message
+    entry.message,
   ];
 
   if (entry.context && Object.keys(entry.context).length > 0) {

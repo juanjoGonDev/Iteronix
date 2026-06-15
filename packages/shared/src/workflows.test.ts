@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   WorkflowTriggerKind,
   createDefaultWorkflowCatalogState,
-  isWorkflowTriggerKindSupportedInMvp
+  isWorkflowTriggerKindSupportedInMvp,
 } from "./workflows";
 
 describe("workflow shared contracts", () => {
@@ -11,15 +11,25 @@ describe("workflow shared contracts", () => {
       definitions: [],
       assets: [],
       assetUsages: [],
-      executions: []
+      executions: [],
     });
   });
 
   it("supports only manual triggers in the MVP runtime", () => {
-    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Manual)).toBe(true);
-    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Schedule)).toBe(false);
-    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Webhook)).toBe(false);
-    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Event)).toBe(false);
-    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Init)).toBe(false);
+    expect(
+      isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Manual),
+    ).toBe(true);
+    expect(
+      isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Schedule),
+    ).toBe(false);
+    expect(
+      isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Webhook),
+    ).toBe(false);
+    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Event)).toBe(
+      false,
+    );
+    expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Init)).toBe(
+      false,
+    );
   });
 });

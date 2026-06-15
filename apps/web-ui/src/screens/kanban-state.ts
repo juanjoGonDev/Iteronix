@@ -1,11 +1,11 @@
 import type {
   KanbanColumnSummary,
   KanbanTask,
-  KanbanTaskStatus
+  KanbanTaskStatus,
 } from "../components/KanbanPrimitives.js";
 import type {
   KanbanColumnRecord,
-  KanbanTaskRecord
+  KanbanTaskRecord,
 } from "../shared/kanban-client.js";
 
 export type KanbanColumnDefinition = {
@@ -24,17 +24,18 @@ const DefaultPriority = "medium";
 
 export const defaultKanbanBoardName = "Iteronix Workbench";
 
-export const defaultKanbanColumnDefinitions: ReadonlyArray<KanbanColumnDefinition> = [
-  { id: "ideas", title: "IDEAS", position: 0 },
-  { id: "todo", title: "TODO", position: 1 },
-  { id: "in_progress", title: "IN_PROGRESS", position: 2 },
-  { id: "qa", title: "QA", position: 3 },
-  { id: "done", title: "DONE", position: 4 }
-];
+export const defaultKanbanColumnDefinitions: ReadonlyArray<KanbanColumnDefinition> =
+  [
+    { id: "ideas", title: "IDEAS", position: 0 },
+    { id: "todo", title: "TODO", position: 1 },
+    { id: "in_progress", title: "IN_PROGRESS", position: 2 },
+    { id: "qa", title: "QA", position: 3 },
+    { id: "done", title: "DONE", position: 4 },
+  ];
 
 export const createKanbanBoardView = (
   columns: ReadonlyArray<KanbanColumnRecord>,
-  tasks: ReadonlyArray<KanbanTaskRecord>
+  tasks: ReadonlyArray<KanbanTaskRecord>,
 ): KanbanBoardView => {
   const columnIdsByStatus = createColumnIdsByStatus(columns);
   const statusesByColumnId = createStatusesByColumnId(columnIdsByStatus);
@@ -42,31 +43,31 @@ export const createKanbanBoardView = (
   return {
     columns: defaultKanbanColumnDefinitions.map((definition) => ({
       id: definition.id,
-      title: definition.title
+      title: definition.title,
     })),
     tasks: tasks
       .filter((task) => statusesByColumnId[task.columnId] !== undefined)
       .sort((first, second) =>
-        compareKanbanTaskRecords(first, second, statusesByColumnId)
+        compareKanbanTaskRecords(first, second, statusesByColumnId),
       )
       .map((task) => createKanbanTask(task, statusesByColumnId[task.columnId])),
-    columnIdsByStatus
+    columnIdsByStatus,
   };
 };
 
 export const readKanbanStatusFromColumnName = (
-  columnName: string
+  columnName: string,
 ): KanbanTaskStatus | null => {
   const normalized = columnName.trim().toLowerCase();
   const definition = defaultKanbanColumnDefinitions.find(
-    (item) => item.id === normalized || item.title.toLowerCase() === normalized
+    (item) => item.id === normalized || item.title.toLowerCase() === normalized,
   );
 
   return definition?.id ?? null;
 };
 
 const createColumnIdsByStatus = (
-  columns: ReadonlyArray<KanbanColumnRecord>
+  columns: ReadonlyArray<KanbanColumnRecord>,
 ): Partial<Record<KanbanTaskStatus, string>> => {
   const columnIdsByStatus: Partial<Record<KanbanTaskStatus, string>> = {};
 
@@ -81,7 +82,7 @@ const createColumnIdsByStatus = (
 };
 
 const createStatusesByColumnId = (
-  columnIdsByStatus: Partial<Record<KanbanTaskStatus, string>>
+  columnIdsByStatus: Partial<Record<KanbanTaskStatus, string>>,
 ): Record<string, KanbanTaskStatus> => {
   const statusesByColumnId: Record<string, KanbanTaskStatus> = {};
 
@@ -97,7 +98,7 @@ const createStatusesByColumnId = (
 
 const createKanbanTask = (
   task: KanbanTaskRecord,
-  status: KanbanTaskStatus | undefined
+  status: KanbanTaskStatus | undefined,
 ): KanbanTask => {
   const taskStatus = status ?? "ideas";
 
@@ -107,19 +108,20 @@ const createKanbanTask = (
     description: task.description ?? "",
     priority: DefaultPriority,
     status: taskStatus,
-    column: taskStatus
+    column: taskStatus,
   };
 };
 
 const compareKanbanTaskRecords = (
   first: KanbanTaskRecord,
   second: KanbanTaskRecord,
-  statusesByColumnId: Record<string, KanbanTaskStatus>
+  statusesByColumnId: Record<string, KanbanTaskStatus>,
 ): number => {
   const firstStatus = statusesByColumnId[first.columnId] ?? "ideas";
   const secondStatus = statusesByColumnId[second.columnId] ?? "ideas";
   const statusDifference =
-    readKanbanStatusPosition(firstStatus) - readKanbanStatusPosition(secondStatus);
+    readKanbanStatusPosition(firstStatus) -
+    readKanbanStatusPosition(secondStatus);
 
   return statusDifference === 0
     ? first.position - second.position

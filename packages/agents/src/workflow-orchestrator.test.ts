@@ -3,9 +3,18 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { createGuardrailsEngine, createSecurityPolicy } from "../../guardrails/src/index";
-import { createInMemoryMemoryStore, createMemoryManager } from "../../memory/src/index";
-import { createInMemoryVectorStore, createRagService } from "../../rag/src/index";
+import {
+  createGuardrailsEngine,
+  createSecurityPolicy,
+} from "../../guardrails/src/index";
+import {
+  createInMemoryMemoryStore,
+  createMemoryManager,
+} from "../../memory/src/index";
+import {
+  createInMemoryVectorStore,
+  createRagService,
+} from "../../rag/src/index";
 import { createSkillRegistry, createSkillRunner } from "../../skills/src/index";
 import { createWorkflowOrchestrator } from "./index";
 
@@ -23,42 +32,42 @@ const prepareRunner = async () => {
         name: "example-skill",
         version: "1.0.0",
         description: "Answers with citations",
-        tags: ["workflow"]
+        tags: ["workflow"],
       },
       inputSchema: {
         type: "object",
         properties: {
           question: {
-            type: "string"
-          }
+            type: "string",
+          },
         },
-        required: ["question"]
+        required: ["question"],
       },
       outputSchema: {
         type: "object",
         properties: {
           answer: {
-            type: "string"
+            type: "string",
           },
           confidence: {
-            type: "number"
-          }
+            type: "number",
+          },
         },
-        required: ["answer", "confidence"]
+        required: ["answer", "confidence"],
       },
       toolAllowlist: ["retrieve_context", "session_memory"],
       promptTemplate: "Answer using retrieved evidence.",
       evaluationRubric: ["Reviewer requires citations."],
       options: {
-        useRag: true
-      }
+        useRag: true,
+      },
     }),
-    "utf8"
+    "utf8",
   );
 
   const ragService = createRagService({
     vectorStore: createInMemoryVectorStore(),
-    now: () => new Date(CurrentTime)
+    now: () => new Date(CurrentTime),
   });
   await ragService.ingestDocuments([
     {
@@ -67,33 +76,33 @@ const prepareRunner = async () => {
       sourceType: "repo_doc",
       updatedAt: CurrentTime,
       content:
-        "Iteronix coordinates planners, retrievers, executors and reviewers with shared evidence."
-    }
+        "Iteronix coordinates planners, retrievers, executors and reviewers with shared evidence.",
+    },
   ]);
 
   const runner = createSkillRunner({
     registry: await createSkillRegistry({
-      skillsDir
+      skillsDir,
     }),
     memoryManager: createMemoryManager({
       store: createInMemoryMemoryStore(),
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     }),
     ragService,
     guardrails: createGuardrailsEngine({
       policy: createSecurityPolicy({
         toolAllowlistBySkill: {
-          "example-skill": ["retrieve_context", "session_memory"]
-        }
-      })
+          "example-skill": ["retrieve_context", "session_memory"],
+        },
+      }),
     }),
-    now: () => new Date(CurrentTime)
+    now: () => new Date(CurrentTime),
   });
 
   return {
     workspace,
     ragService,
-    runner
+    runner,
   };
 };
 
@@ -103,7 +112,7 @@ describe("workflow orchestrator", () => {
     const orchestrator = createWorkflowOrchestrator({
       skillRunner: fixture.runner,
       ragService: fixture.ragService,
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     const result = await orchestrator.run({
@@ -111,7 +120,7 @@ describe("workflow orchestrator", () => {
       sessionId: "session-1",
       projectRoot: fixture.workspace,
       question: "How does Iteronix coordinate agents?",
-      autoApprove: true
+      autoApprove: true,
     });
 
     expect(result.status).toBe("completed");
@@ -119,7 +128,7 @@ describe("workflow orchestrator", () => {
       "planner",
       "retriever",
       "executor",
-      "reviewer"
+      "reviewer",
     ]);
     expect(result.final.citations.length).toBeGreaterThan(0);
   });
@@ -129,7 +138,7 @@ describe("workflow orchestrator", () => {
     const orchestrator = createWorkflowOrchestrator({
       skillRunner: fixture.runner,
       ragService: fixture.ragService,
-      now: () => new Date(CurrentTime)
+      now: () => new Date(CurrentTime),
     });
 
     const result = await orchestrator.run({
@@ -137,7 +146,7 @@ describe("workflow orchestrator", () => {
       sessionId: "session-2",
       projectRoot: fixture.workspace,
       question: "How does Iteronix coordinate agents?",
-      autoApprove: false
+      autoApprove: false,
     });
 
     expect(result.status).toBe("awaiting_approval");

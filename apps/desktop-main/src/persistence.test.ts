@@ -6,7 +6,7 @@ import {
   clearPersistedConfig,
   readPersistedConfig,
   resolveConfigPath,
-  writePersistedConfig
+  writePersistedConfig,
 } from "./persistence";
 import { EnvKey, PersistenceErrorCode } from "./constants";
 import { ResultType } from "./result";
@@ -31,7 +31,7 @@ describe("resolveConfigPath", () => {
     const dir = createTempDir();
     const path = join(dir, "custom.json");
     const env: NodeJS.ProcessEnv = {
-      [EnvKey.ConfigPath]: path
+      [EnvKey.ConfigPath]: path,
     };
 
     const result = resolveConfigPath(env);
@@ -72,7 +72,9 @@ describe("writePersistedConfig", () => {
     const dir = createTempDir();
     const path = join(dir, "config.json");
 
-    const saved = writePersistedConfig(path, { remoteUrl: "https://api.example.com" });
+    const saved = writePersistedConfig(path, {
+      remoteUrl: "https://api.example.com",
+    });
     expect(saved.type).toBe(ResultType.Ok);
 
     const loaded = readPersistedConfig(path);
@@ -88,7 +90,9 @@ describe("clearPersistedConfig", () => {
     const dir = createTempDir();
     const path = join(dir, "config.json");
 
-    const saved = writePersistedConfig(path, { remoteUrl: "https://api.example.com" });
+    const saved = writePersistedConfig(path, {
+      remoteUrl: "https://api.example.com",
+    });
     expect(saved.type).toBe(ResultType.Ok);
 
     const cleared = clearPersistedConfig(path);

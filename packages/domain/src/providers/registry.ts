@@ -1,4 +1,7 @@
-import type { LLMProviderCapabilities, LLMProviderType } from "../llm/capabilities";
+import type {
+  LLMProviderCapabilities,
+  LLMProviderType,
+} from "../llm/capabilities";
 import type { Result } from "../result";
 import { ResultType } from "../result";
 import type { ProviderSettingsSchema } from "./settings";
@@ -7,11 +10,11 @@ export const ProviderAuthType = {
   None: "none",
   ApiKey: "api_key",
   OAuth: "oauth",
-  Custom: "custom"
+  Custom: "custom",
 } as const;
 
 export type ProviderAuthType =
-  typeof ProviderAuthType[keyof typeof ProviderAuthType];
+  (typeof ProviderAuthType)[keyof typeof ProviderAuthType];
 
 export type ProviderAuthRequirement = {
   type: ProviderAuthType;
@@ -31,11 +34,11 @@ export const ProviderRegistryErrorCode = {
   DuplicateId: "duplicate_id",
   NotFound: "not_found",
   InvalidProvider: "invalid_provider",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type ProviderRegistryErrorCode =
-  typeof ProviderRegistryErrorCode[keyof typeof ProviderRegistryErrorCode];
+  (typeof ProviderRegistryErrorCode)[keyof typeof ProviderRegistryErrorCode];
 
 export type ProviderRegistryError = {
   code: ProviderRegistryErrorCode;
@@ -47,12 +50,12 @@ export type ProviderRegistry = {
   list: () => ReadonlyArray<ProviderDescriptor>;
   get: (id: string) => Result<ProviderDescriptor, ProviderRegistryError>;
   register: (
-    provider: ProviderDescriptor
+    provider: ProviderDescriptor,
   ) => Result<ProviderRegistry, ProviderRegistryError>;
 };
 
 export const createProviderRegistry = (
-  initialProviders: ReadonlyArray<ProviderDescriptor> = []
+  initialProviders: ReadonlyArray<ProviderDescriptor> = [],
 ): ProviderRegistry => {
   const providers = new Map<string, ProviderDescriptor>();
 
@@ -63,7 +66,9 @@ export const createProviderRegistry = (
   const list = (): ReadonlyArray<ProviderDescriptor> =>
     Array.from(providers.values());
 
-  const get = (id: string): Result<ProviderDescriptor, ProviderRegistryError> => {
+  const get = (
+    id: string,
+  ): Result<ProviderDescriptor, ProviderRegistryError> => {
     const provider = providers.get(id);
     if (!provider) {
       return {
@@ -71,19 +76,19 @@ export const createProviderRegistry = (
         error: {
           code: ProviderRegistryErrorCode.NotFound,
           message: `Provider ${id} not found`,
-          retryable: false
-        }
+          retryable: false,
+        },
       };
     }
 
     return {
       type: ResultType.Ok,
-      value: provider
+      value: provider,
     };
   };
 
   const register = (
-    provider: ProviderDescriptor
+    provider: ProviderDescriptor,
   ): Result<ProviderRegistry, ProviderRegistryError> => {
     if (providers.has(provider.id)) {
       return {
@@ -91,8 +96,8 @@ export const createProviderRegistry = (
         error: {
           code: ProviderRegistryErrorCode.DuplicateId,
           message: `Provider ${provider.id} already exists`,
-          retryable: false
-        }
+          retryable: false,
+        },
       };
     }
 
@@ -100,13 +105,13 @@ export const createProviderRegistry = (
 
     return {
       type: ResultType.Ok,
-      value: createProviderRegistry(nextProviders)
+      value: createProviderRegistry(nextProviders),
     };
   };
 
   return {
     list,
     get,
-    register
+    register,
   };
 };

@@ -5,11 +5,11 @@ export const SerializableSchemaType = {
   String: "string",
   Number: "number",
   Boolean: "boolean",
-  Array: "array"
+  Array: "array",
 } as const;
 
 export type SerializableSchemaType =
-  typeof SerializableSchemaType[keyof typeof SerializableSchemaType];
+  (typeof SerializableSchemaType)[keyof typeof SerializableSchemaType];
 
 export type SerializableSchema =
   | {
@@ -38,7 +38,7 @@ export const parseSerializableSchema = (value: unknown): SerializableSchema =>
   serializableSchemaSchema.parse(value);
 
 export const compileSerializableSchema = (
-  schema: SerializableSchema
+  schema: SerializableSchema,
 ): ZodType<unknown> => compileNode(schema);
 
 const compileNode = (schema: SerializableSchema): ZodType<unknown> => {
@@ -62,7 +62,7 @@ const compileNode = (schema: SerializableSchema): ZodType<unknown> => {
 };
 
 const compileObject = (
-  schema: Extract<SerializableSchema, { type: "object" }>
+  schema: Extract<SerializableSchema, { type: "object" }>,
 ): ZodType<unknown> => {
   const shape: Record<string, ZodType<unknown>> = {};
 
@@ -76,7 +76,7 @@ const compileObject = (
 
 const applyStringRules = (
   base: z.ZodString,
-  schema: Extract<SerializableSchema, { type: "string" }>
+  schema: Extract<SerializableSchema, { type: "string" }>,
 ): ZodType<unknown> => {
   if (schema.minLength !== undefined) {
     return base.min(schema.minLength);
@@ -87,7 +87,7 @@ const applyStringRules = (
 
 const applyNumberRules = (
   base: z.ZodNumber,
-  schema: Extract<SerializableSchema, { type: "number" }>
+  schema: Extract<SerializableSchema, { type: "number" }>,
 ): ZodType<unknown> => {
   if (schema.minimum !== undefined) {
     return base.min(schema.minimum);
@@ -98,7 +98,7 @@ const applyNumberRules = (
 
 const applyArrayRules = (
   base: z.ZodArray<ZodType<unknown>>,
-  schema: Extract<SerializableSchema, { type: "array" }>
+  schema: Extract<SerializableSchema, { type: "array" }>,
 ): ZodType<unknown> => {
   if (schema.minItems !== undefined) {
     return base.min(schema.minItems);
@@ -111,24 +111,24 @@ const serializableSchemaSchema: z.ZodType<SerializableSchema> = z.lazy(() =>
   z.union([
     z.object({
       type: z.literal(SerializableSchemaType.String),
-      minLength: z.number().int().nonnegative().optional()
+      minLength: z.number().int().nonnegative().optional(),
     }),
     z.object({
       type: z.literal(SerializableSchemaType.Number),
-      minimum: z.number().optional()
+      minimum: z.number().optional(),
     }),
     z.object({
-      type: z.literal(SerializableSchemaType.Boolean)
+      type: z.literal(SerializableSchemaType.Boolean),
     }),
     z.object({
       type: z.literal(SerializableSchemaType.Array),
       items: serializableSchemaSchema,
-      minItems: z.number().int().nonnegative().optional()
+      minItems: z.number().int().nonnegative().optional(),
     }),
     z.object({
       type: z.literal(SerializableSchemaType.Object),
       properties: z.record(z.string(), serializableSchemaSchema),
-      required: z.array(z.string()).optional()
-    })
-  ])
+      required: z.array(z.string()).optional(),
+    }),
+  ]),
 );

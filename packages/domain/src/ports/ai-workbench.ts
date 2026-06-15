@@ -31,17 +31,17 @@ export type AiMemoryPort = {
     sessionId: string;
     query: string;
     limit: number;
-  }) => Promise<ReadonlyArray<{
-    id: string;
-    content: string;
-    score: number;
-  }>>;
+  }) => Promise<
+    ReadonlyArray<{
+      id: string;
+      content: string;
+      score: number;
+    }>
+  >;
 };
 
 export type AiEvaluationPort = {
-  runEvaluation: (input: {
-    datasetPath: string;
-  }) => Promise<{
+  runEvaluation: (input: { datasetPath: string }) => Promise<{
     total: number;
     passed: number;
     failed: number;

@@ -5,7 +5,7 @@ import {
   parseGitCommitResponse,
   parseGitDiffResponse,
   parseGitPathOperationResponse,
-  parseGitStatusResponse
+  parseGitStatusResponse,
 } from "./git-client.js";
 
 describe("git client codecs", () => {
@@ -27,7 +27,7 @@ describe("git client codecs", () => {
             workingTreeStatus: " ",
             staged: true,
             unstaged: false,
-            untracked: false
+            untracked: false,
           },
           {
             path: "apps/web-ui/src/shared/git-client.ts",
@@ -35,7 +35,7 @@ describe("git client codecs", () => {
             workingTreeStatus: "M",
             staged: false,
             unstaged: true,
-            untracked: false
+            untracked: false,
           },
           {
             path: "apps/web-ui/src/screens/Git.ts",
@@ -43,20 +43,20 @@ describe("git client codecs", () => {
             workingTreeStatus: "?",
             staged: false,
             unstaged: false,
-            untracked: true
-          }
-        ]
-      }
+            untracked: true,
+          },
+        ],
+      },
     });
     const stagedDiff = parseGitDiffResponse({
       staged: true,
-      diff: "diff --git a/file.ts b/file.ts"
+      diff: "diff --git a/file.ts b/file.ts",
     });
     const pathOperation = parseGitPathOperationResponse({
       paths: [
         "apps/web-ui/src/shared/git-client.ts",
-        "apps/web-ui/src/screens/Projects.ts"
-      ]
+        "apps/web-ui/src/screens/Projects.ts",
+      ],
     });
     const branches = parseGitBranchListResponse({
       branches: {
@@ -65,34 +65,34 @@ describe("git client codecs", () => {
             name: "feature/git-ui",
             current: true,
             remote: false,
-            upstream: "origin/feature/git-ui"
+            upstream: "origin/feature/git-ui",
           },
           {
             name: "develop",
             current: false,
-            remote: false
-          }
+            remote: false,
+          },
         ],
         remote: [
           {
             name: "origin/release/next",
             current: false,
-            remote: true
-          }
-        ]
-      }
+            remote: true,
+          },
+        ],
+      },
     });
     const branchOperation = parseGitBranchOperationResponse({
       branch: {
         name: "feature/git-ui",
-        upstream: "origin/feature/git-ui"
-      }
+        upstream: "origin/feature/git-ui",
+      },
     });
     const commit = parseGitCommitResponse({
       commit: {
         hash: "9f3c2ad1",
-        message: "feat(projects): add git workspace"
-      }
+        message: "feat(projects): add git workspace",
+      },
     });
 
     expect(repository.branch).toBe("feature/git-ui");
@@ -102,7 +102,7 @@ describe("git client codecs", () => {
     expect(stagedDiff.diff).toContain("diff --git");
     expect(pathOperation.paths).toEqual([
       "apps/web-ui/src/shared/git-client.ts",
-      "apps/web-ui/src/screens/Projects.ts"
+      "apps/web-ui/src/screens/Projects.ts",
     ]);
     expect(branches.local[0]?.current).toBe(true);
     expect(branches.remote[0]?.name).toBe("origin/release/next");

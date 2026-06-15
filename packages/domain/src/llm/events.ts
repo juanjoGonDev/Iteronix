@@ -2,11 +2,10 @@ export const LLMErrorCode = {
   ProviderError: "provider_error",
   RateLimited: "rate_limited",
   InvalidRequest: "invalid_request",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
-export type LLMErrorCode =
-  typeof LLMErrorCode[keyof typeof LLMErrorCode];
+export type LLMErrorCode = (typeof LLMErrorCode)[keyof typeof LLMErrorCode];
 
 export type LLMError = {
   code: LLMErrorCode;
@@ -25,11 +24,10 @@ export const LLMEventType = {
   Message: "message",
   Usage: "usage",
   Error: "error",
-  Done: "done"
+  Done: "done",
 } as const;
 
-export type LLMEventType =
-  typeof LLMEventType[keyof typeof LLMEventType];
+export type LLMEventType = (typeof LLMEventType)[keyof typeof LLMEventType];
 
 export type LLMDeltaEvent = {
   type: typeof LLMEventType.Delta;

@@ -13,12 +13,18 @@ describe("minimal evaluation suite", () => {
       skillsDir: join(workspaceRoot, "skills"),
       memoryDir: join(runtimeRoot, "memory"),
       evidenceDir: join(runtimeRoot, "evidence"),
-      vectorDir: join(runtimeRoot, "vector")
+      vectorDir: join(runtimeRoot, "vector"),
     });
 
     try {
       const result = await service.runEvaluation({
-        datasetPath: join(workspaceRoot, "packages", "eval", "fixtures", "minimal-suite.jsonl")
+        datasetPath: join(
+          workspaceRoot,
+          "packages",
+          "eval",
+          "fixtures",
+          "minimal-suite.jsonl",
+        ),
       });
 
       expect(result.summary.total).toBeGreaterThanOrEqual(5);

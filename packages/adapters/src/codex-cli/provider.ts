@@ -1,5 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { CodexCliPromptMode, CodexCliProviderDisplayName, CodexCliProviderId, CodexCliDefaultCommand } from "./constants";
+import {
+  CodexCliPromptMode,
+  CodexCliProviderDisplayName,
+  CodexCliProviderId,
+  CodexCliDefaultCommand,
+} from "./constants";
 import { codexCliSettingsSchema } from "./schema";
 import type { LLMEvent } from "../../../domain/src/llm/events";
 import { LLMErrorCode, LLMEventType } from "../../../domain/src/llm/events";
@@ -56,7 +61,7 @@ export const codexCliCapabilities: LLMProviderCapabilities = {
   streaming: true,
   jsonSchemaEnforcement: false,
   tokenUsage: false,
-  toolCalls: false
+  toolCalls: false,
 };
 
 export const codexCliProviderDescriptor: ProviderDescriptor = {
@@ -65,26 +70,27 @@ export const codexCliProviderDescriptor: ProviderDescriptor = {
   type: LLMProviderType.Cli,
   capabilities: codexCliCapabilities,
   auth: {
-    type: ProviderAuthType.None
+    type: ProviderAuthType.None,
   },
-  settingsSchema: codexCliSettingsSchema
+  settingsSchema: codexCliSettingsSchema,
 };
 
 export const createCodexCliProvider = (
-  config: CodexCliProviderConfig
+  config: CodexCliProviderConfig,
 ): LLMProviderPort => {
   const resolvedConfig = normalizeConfig(config);
 
   return {
     capabilities: codexCliCapabilities,
     listModels: async () => resolvedConfig.models,
-    run: async (request: LLMRunRequest) => streamCodexCli(resolvedConfig, request)
+    run: async (request: LLMRunRequest) =>
+      streamCodexCli(resolvedConfig, request),
   };
 };
 
 const streamCodexCli = (
   config: CodexCliProviderConfigResolved,
-  request: LLMRunRequest
+  request: LLMRunRequest,
 ): AsyncIterable<LLMEvent> => {
   const queue = createAsyncQueue<LLMEvent>();
   void runCodexCli(config, request, queue);
@@ -94,7 +100,7 @@ const streamCodexCli = (
 const runCodexCli = async (
   config: CodexCliProviderConfigResolved,
   request: LLMRunRequest,
-  queue: AsyncQueue<LLMEvent>
+  queue: AsyncQueue<LLMEvent>,
 ): Promise<void> => {
   const args = buildArgs(config, request);
   const child = spawnProcess(config, args);
@@ -109,7 +115,7 @@ const runCodexCli = async (
     if (text.length > 0) {
       queue.push({
         type: LLMEventType.Delta,
-        delta: text
+        delta: text,
       });
     }
   });
@@ -132,8 +138,8 @@ const runCodexCli = async (
   if (outcome.code !== 0) {
     queue.push(
       createProviderError(
-        formatExitMessage(outcome.code, outcome.signal, stderrOutput)
-      )
+        formatExitMessage(outcome.code, outcome.signal, stderrOutput),
+      ),
     );
   }
 
@@ -143,7 +149,7 @@ const runCodexCli = async (
 
 const buildArgs = (
   config: CodexCliProviderConfigResolved,
-  request: LLMRunRequest
+  request: LLMRunRequest,
 ): string[] => {
   const args = [...config.args];
 
@@ -165,7 +171,7 @@ const buildArgs = (
     appendFlagArg(
       args,
       config.jsonSchemaArg,
-      JSON.stringify(request.jsonSchema)
+      JSON.stringify(request.jsonSchema),
     );
   }
 
@@ -179,7 +185,7 @@ const buildArgs = (
 const appendFlagArg = (
   args: string[],
   flag: string | undefined,
-  value: string
+  value: string,
 ): void => {
   if (hasArg(flag)) {
     args.push(flag, value);
@@ -189,7 +195,7 @@ const appendFlagArg = (
 const appendPromptArg = (
   args: string[],
   flag: string | undefined,
-  value: string
+  value: string,
 ): void => {
   if (hasArg(flag)) {
     args.push(flag, value);
@@ -201,7 +207,7 @@ const appendPromptArg = (
 
 const spawnProcess = (
   config: CodexCliProviderConfigResolved,
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
 ): ChildProcessWithoutNullStreams => {
   const env: NodeJS.ProcessEnv = config.env
     ? { ...process.env, ...config.env }
@@ -210,12 +216,12 @@ const spawnProcess = (
   return spawn(config.command, [...args], {
     cwd: config.cwd,
     env,
-    stdio: ["pipe", "pipe", "pipe"]
+    stdio: ["pipe", "pipe", "pipe"],
   });
 };
 
 const normalizeConfig = (
-  config: CodexCliProviderConfig
+  config: CodexCliProviderConfig,
 ): CodexCliProviderConfigResolved => ({
   command: config.command ?? CodexCliDefaultCommand,
   args: config.args ?? [],
@@ -228,19 +234,22 @@ const normalizeConfig = (
   temperatureArg: config.temperatureArg,
   maxTokensArg: config.maxTokensArg,
   jsonSchemaArg: config.jsonSchemaArg,
-  models: config.models ?? []
+  models: config.models ?? [],
 });
 
 const hasArg = (flag: string | undefined): flag is string =>
   typeof flag === "string" && flag.length > 0;
 
 const waitForProcess = (
-  child: ChildProcessWithoutNullStreams
+  child: ChildProcessWithoutNullStreams,
 ): Promise<ProcessOutcome> =>
   new Promise((resolve) => {
-    child.once("close", (code: number | null, signal: NodeJS.Signals | null) => {
-      resolve({ type: "close", code, signal });
-    });
+    child.once(
+      "close",
+      (code: number | null, signal: NodeJS.Signals | null) => {
+        resolve({ type: "close", code, signal });
+      },
+    );
 
     child.once("error", (error: Error) => {
       resolve({ type: "error", error });
@@ -250,7 +259,7 @@ const waitForProcess = (
 const formatExitMessage = (
   code: number | null,
   signal: NodeJS.Signals | null,
-  stderrOutput: string
+  stderrOutput: string,
 ): string => {
   const codeInfo = code === null ? "null" : code.toString();
   const signalInfo = signal ?? "none";
@@ -263,8 +272,8 @@ const createProviderError = (message: string): LLMEvent => ({
   error: {
     code: LLMErrorCode.ProviderError,
     message,
-    retryable: false
-  }
+    retryable: false,
+  },
 });
 
 const toText = (chunk: unknown): string => {
@@ -338,9 +347,9 @@ const createAsyncQueue = <T>(): AsyncQueue<T> => {
           return new Promise<IteratorResult<T, void>>((resolve) => {
             resolvers.push(resolve);
           });
-        }
+        },
       };
-    }
+    },
   };
 
   return { push, close, iterable };

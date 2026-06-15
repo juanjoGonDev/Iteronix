@@ -2,7 +2,7 @@ import {
   LogLevel,
   type LogEntry,
   LogsStoreErrorCode,
-  type LogsStoreError
+  type LogsStoreError,
 } from "../../../packages/domain/src/ports/logs-store";
 import { createFileLogsStore } from "../../../packages/adapters/src/file-logs-store";
 import type { Result } from "../../../packages/domain/src/result";
@@ -28,20 +28,20 @@ export type ServerLogsStore = {
 };
 
 const ContextKey = {
-  RunId: "runId"
+  RunId: "runId",
 } as const;
 
 const LogsErrorMessage = {
-  InvalidLimit: "Invalid limit value"
+  InvalidLimit: "Invalid limit value",
 } as const;
 
 export const createServerLogsStore = async (
   logDir: string,
-  maxEntries?: number
+  maxEntries?: number,
 ): Promise<ServerLogsStore> => {
   const fileLogsStore = await createFileLogsStore(
     logDir,
-    maxEntries === undefined ? {} : { maxEntries }
+    maxEntries === undefined ? {} : { maxEntries },
   );
   let entries: ServerLogEntry[] = [];
 
@@ -51,7 +51,7 @@ export const createServerLogsStore = async (
   };
 
   const append = async (
-    entry: ServerLogEntry
+    entry: ServerLogEntry,
   ): Promise<Result<void, LogsStoreError>> => {
     entries.push(entry);
     return fileLogsStore.append(toDomainLogEntry(entry));
@@ -89,7 +89,7 @@ export const createServerLogsStore = async (
   return {
     query,
     append,
-    reset
+    reset,
   };
 };
 
@@ -104,7 +104,7 @@ const toDomainLogEntry = (entry: ServerLogEntry): LogEntry => {
     id: entry.id,
     timestamp: entry.timestamp,
     level: entry.level,
-    message: entry.message
+    message: entry.message,
   };
 
   const mergedContext = mergeContext(entry.context, entry.runId);
@@ -117,10 +117,10 @@ const toDomainLogEntry = (entry: ServerLogEntry): LogEntry => {
 
 const mergeContext = (
   context: Record<string, string> | undefined,
-  runId: string | undefined
+  runId: string | undefined,
 ): Record<string, string> | undefined => {
   const result: Record<string, string> = {
-    ...(context ?? {})
+    ...(context ?? {}),
   };
 
   if (runId) {
@@ -131,7 +131,7 @@ const mergeContext = (
 };
 
 const validateLimit = (
-  limit: number | undefined
+  limit: number | undefined,
 ): Result<number | undefined, LogsStoreError> => {
   if (limit === undefined) {
     return ok(undefined);
@@ -141,7 +141,7 @@ const validateLimit = (
     return err({
       code: LogsStoreErrorCode.InvalidQuery,
       message: LogsErrorMessage.InvalidLimit,
-      retryable: false
+      retryable: false,
     });
   }
 

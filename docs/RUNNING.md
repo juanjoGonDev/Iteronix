@@ -30,11 +30,11 @@ Notes:
 
 ## Browser validation
 
-| Command | Use case | Screenshot behavior |
-| --- | --- | --- |
-| `pnpm -C apps/web-ui validate:source-linking` | Deterministic browser validation for normal verification | Deletes older `apps/web-ui/screenshots/*.png` files before capturing the latest run |
-| `pnpm -C apps/web-ui validate:quality-gates` | Deterministic browser validation for the `Projects` quality-gates flow | Deletes older `apps/web-ui/screenshots/*.png` files before capturing the latest run |
-| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs | Keeps existing screenshots and appends the new captures from the latest run |
+| Command                                                | Use case                                                               | Screenshot behavior                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `pnpm -C apps/web-ui validate:source-linking`          | Deterministic browser validation for normal verification               | Deletes older `apps/web-ui/screenshots/*.png` files before capturing the latest run |
+| `pnpm -C apps/web-ui validate:quality-gates`           | Deterministic browser validation for the `Projects` quality-gates flow | Deletes older `apps/web-ui/screenshots/*.png` files before capturing the latest run |
+| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs                     | Keeps existing screenshots and appends the new captures from the latest run         |
 
 CI coverage:
 

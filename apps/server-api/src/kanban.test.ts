@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ResultType } from "./result";
-import {
-  KanbanStoreErrorCode,
-  createKanbanStore
-} from "./kanban";
+import { KanbanStoreErrorCode, createKanbanStore } from "./kanban";
 
 const ProjectId = "project-1";
 const BoardName = "Board A";
@@ -16,7 +13,7 @@ describe("kanban store", () => {
     const store = createKanbanStore();
     const created = store.createBoard({
       projectId: ProjectId,
-      name: BoardName
+      name: BoardName,
     });
 
     expect(created.type).toBe(ResultType.Ok);
@@ -33,7 +30,7 @@ describe("kanban store", () => {
     const updated = store.updateBoard({
       projectId: ProjectId,
       boardId: created.value.id,
-      name: BoardUpdatedName
+      name: BoardUpdatedName,
     });
 
     expect(updated.type).toBe(ResultType.Ok);
@@ -43,7 +40,7 @@ describe("kanban store", () => {
 
     const deleted = store.deleteBoard({
       projectId: ProjectId,
-      boardId: created.value.id
+      boardId: created.value.id,
     });
 
     expect(deleted.type).toBe(ResultType.Ok);
@@ -62,7 +59,7 @@ describe("kanban store", () => {
     const store = createKanbanStore();
     const board = store.createBoard({
       projectId: ProjectId,
-      name: BoardName
+      name: BoardName,
     });
 
     if (board.type !== ResultType.Ok) {
@@ -72,7 +69,7 @@ describe("kanban store", () => {
     const column = store.createColumn({
       projectId: ProjectId,
       boardId: board.value.id,
-      name: ColumnName
+      name: ColumnName,
     });
 
     if (column.type !== ResultType.Ok) {
@@ -83,7 +80,7 @@ describe("kanban store", () => {
       projectId: ProjectId,
       boardId: board.value.id,
       columnId: column.value.id,
-      title: TaskTitle
+      title: TaskTitle,
     });
 
     expect(task.type).toBe(ResultType.Ok);
@@ -91,7 +88,7 @@ describe("kanban store", () => {
     const listed = store.listTasks({
       projectId: ProjectId,
       boardId: board.value.id,
-      columnId: column.value.id
+      columnId: column.value.id,
     });
 
     expect(listed.type).toBe(ResultType.Ok);
@@ -102,14 +99,14 @@ describe("kanban store", () => {
     const deleted = store.deleteColumn({
       projectId: ProjectId,
       boardId: board.value.id,
-      columnId: column.value.id
+      columnId: column.value.id,
     });
 
     expect(deleted.type).toBe(ResultType.Ok);
 
     const afterDelete = store.listTasks({
       projectId: ProjectId,
-      boardId: board.value.id
+      boardId: board.value.id,
     });
 
     expect(afterDelete.type).toBe(ResultType.Ok);
@@ -123,7 +120,7 @@ describe("kanban store", () => {
     const column = store.createColumn({
       projectId: ProjectId,
       boardId: "missing",
-      name: ColumnName
+      name: ColumnName,
     });
 
     expect(column.type).toBe(ResultType.Err);
@@ -133,7 +130,7 @@ describe("kanban store", () => {
 
     const board = store.createBoard({
       projectId: ProjectId,
-      name: BoardName
+      name: BoardName,
     });
 
     if (board.type !== ResultType.Ok) {
@@ -144,7 +141,7 @@ describe("kanban store", () => {
       projectId: ProjectId,
       boardId: board.value.id,
       columnId: "missing-column",
-      title: TaskTitle
+      title: TaskTitle,
     });
 
     expect(task.type).toBe(ResultType.Err);

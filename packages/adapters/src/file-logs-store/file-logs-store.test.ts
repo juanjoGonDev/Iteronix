@@ -26,7 +26,7 @@ describe("FileLogsStore", () => {
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Test message"
+        message: "Test message",
       };
 
       const result = await store.append(entry);
@@ -42,13 +42,13 @@ describe("FileLogsStore", () => {
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "First message"
+        message: "First message",
       };
       const entry2: LogEntry = {
         id: "test-id-2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Debug,
-        message: "Second message"
+        message: "Second message",
       };
 
       await store.append(entry1);
@@ -66,7 +66,7 @@ describe("FileLogsStore", () => {
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "Test message"
+        message: "Test message",
       };
 
       const result = await store2.append(entry);
@@ -82,7 +82,7 @@ describe("FileLogsStore", () => {
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Warn,
         message: "Warning message",
-        context: { key1: "value1", key2: "value2" }
+        context: { key1: "value1", key2: "value2" },
       };
 
       const result = await store.append(entry);
@@ -101,7 +101,7 @@ describe("FileLogsStore", () => {
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Error,
         message: "Error message",
-        data: { error: "Something went wrong", code: 500 }
+        data: { error: "Something went wrong", code: 500 },
       };
 
       const result = await store.append(entry);
@@ -116,26 +116,26 @@ describe("FileLogsStore", () => {
 
     it("should drop the oldest entries when the max entry limit is exceeded", async () => {
       const limitedStore = await createFileLogsStore(testLogDir, {
-        maxEntries: 2
+        maxEntries: 2,
       });
 
       await limitedStore.append({
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "First message"
+        message: "First message",
       });
       await limitedStore.append({
         id: "test-id-2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Info,
-        message: "Second message"
+        message: "Second message",
       });
       await limitedStore.append({
         id: "test-id-3",
         timestamp: "2024-01-01 12:00:02.000",
         level: LogLevel.Info,
-        message: "Third message"
+        message: "Third message",
       });
 
       const queryResult = await limitedStore.query({});
@@ -161,37 +161,37 @@ describe("FileLogsStore", () => {
         id: "1",
         timestamp: baseTime,
         level: LogLevel.Trace,
-        message: "Trace message"
+        message: "Trace message",
       });
       await store.append({
         id: "2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Debug,
-        message: "Debug message"
+        message: "Debug message",
       });
       await store.append({
         id: "3",
         timestamp: "2024-01-01 12:00:02.000",
         level: LogLevel.Info,
-        message: "Info message"
+        message: "Info message",
       });
       await store.append({
         id: "4",
         timestamp: "2024-01-01 12:00:03.000",
         level: LogLevel.Warn,
-        message: "Warn message"
+        message: "Warn message",
       });
       await store.append({
         id: "5",
         timestamp: "2024-01-01 12:00:04.000",
         level: LogLevel.Error,
-        message: "Error message"
+        message: "Error message",
       });
       await store.append({
         id: "6",
         timestamp: "2024-01-01 12:00:05.000",
         level: LogLevel.Fatal,
-        message: "Fatal message"
+        message: "Fatal message",
       });
     });
 
@@ -226,7 +226,7 @@ describe("FileLogsStore", () => {
 
     it("should return empty array if no logs match query", async () => {
       const result = await store.query({
-        since: "2025-01-01 00:00:00.000"
+        since: "2025-01-01 00:00:00.000",
       });
 
       expect(result.type).toBe("ok");
@@ -242,7 +242,7 @@ describe("FileLogsStore", () => {
         id: "test-id-1",
         timestamp: "2024-01-01 12:00:00.000",
         level: LogLevel.Info,
-        message: "First store message"
+        message: "First store message",
       });
 
       const fileContent1 = await fs.readFile(testLogPath, "utf-8");
@@ -254,7 +254,7 @@ describe("FileLogsStore", () => {
         id: "test-id-2",
         timestamp: "2024-01-01 12:00:01.000",
         level: LogLevel.Info,
-        message: "Second store message"
+        message: "Second store message",
       });
 
       const fileContent2 = await fs.readFile(testLogPath, "utf-8");

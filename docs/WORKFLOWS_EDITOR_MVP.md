@@ -42,18 +42,18 @@ Explicitly deferred after the MVP:
 
 The first node set is intentionally small but complete enough to build a real workflow:
 
-| Kind | Purpose | Reusable | Multi-input | Multi-output |
-| --- | --- | --- | --- | --- |
-| `trigger.manual` | Explicit user-started entrypoint | No | No | Yes |
-| `asset.prompt` | Reusable prompt body + output contract | Yes | Yes | Yes |
-| `asset.instruction` | Reusable instruction body + output contract | Yes | Yes | Yes |
-| `asset.guardrail` | Reusable validation pack attached to nodes | Yes | Yes | Yes |
-| `ai.agent` | Role-driven AI step (`planner`, `retriever`, `executor`, `reviewer`) | No | Yes | Yes |
-| `ai.provider-run` | Direct model call with explicit provider/model params | No | Yes | Yes |
-| `logic.condition` | Route by boolean or contract field | No | Yes | Yes |
-| `logic.merge` | Merge multiple upstream payloads into one envelope | No | Yes | Yes |
-| `human.review` | Approval/deny checkpoint | No | Yes | Yes |
-| `terminal.response` | Final workflow output for history/API consumers | No | Yes | No |
+| Kind                | Purpose                                                              | Reusable | Multi-input | Multi-output |
+| ------------------- | -------------------------------------------------------------------- | -------- | ----------- | ------------ |
+| `trigger.manual`    | Explicit user-started entrypoint                                     | No       | No          | Yes          |
+| `asset.prompt`      | Reusable prompt body + output contract                               | Yes      | Yes         | Yes          |
+| `asset.instruction` | Reusable instruction body + output contract                          | Yes      | Yes         | Yes          |
+| `asset.guardrail`   | Reusable validation pack attached to nodes                           | Yes      | Yes         | Yes          |
+| `ai.agent`          | Role-driven AI step (`planner`, `retriever`, `executor`, `reviewer`) | No       | Yes         | Yes          |
+| `ai.provider-run`   | Direct model call with explicit provider/model params                | No       | Yes         | Yes          |
+| `logic.condition`   | Route by boolean or contract field                                   | No       | Yes         | Yes          |
+| `logic.merge`       | Merge multiple upstream payloads into one envelope                   | No       | Yes         | Yes          |
+| `human.review`      | Approval/deny checkpoint                                             | No       | Yes         | Yes          |
+| `terminal.response` | Final workflow output for history/API consumers                      | No       | Yes         | No           |
 
 The first runnable reference flow is:
 
@@ -225,7 +225,7 @@ export type GuardrailDefinitionRecord = {
   operator: "all" | "any";
   validations: readonly [
     GuardrailValidationRecord,
-    ...GuardrailValidationRecord[]
+    ...GuardrailValidationRecord[],
   ];
 };
 

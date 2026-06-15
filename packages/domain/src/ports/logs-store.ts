@@ -6,10 +6,10 @@ export const LogLevel = {
   Info: "info",
   Warn: "warn",
   Error: "error",
-  Fatal: "fatal"
+  Fatal: "fatal",
 } as const;
 
-export type LogLevel = typeof LogLevel[keyof typeof LogLevel];
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 export type LogEntry = {
   id: string;
@@ -31,11 +31,11 @@ export type LogsQuery = {
 export const LogsStoreErrorCode = {
   StorageError: "storage_error",
   InvalidQuery: "invalid_query",
-  Unknown: "unknown"
+  Unknown: "unknown",
 } as const;
 
 export type LogsStoreErrorCode =
-  typeof LogsStoreErrorCode[keyof typeof LogsStoreErrorCode];
+  (typeof LogsStoreErrorCode)[keyof typeof LogsStoreErrorCode];
 
 export type LogsStoreError = {
   code: LogsStoreErrorCode;
@@ -46,6 +46,6 @@ export type LogsStoreError = {
 export type LogsStorePort = {
   append: (entry: LogEntry) => Promise<Result<void, LogsStoreError>>;
   query: (
-    input: LogsQuery
+    input: LogsQuery,
   ) => Promise<Result<ReadonlyArray<LogEntry>, LogsStoreError>>;
 };

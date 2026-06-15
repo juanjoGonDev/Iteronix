@@ -6,7 +6,7 @@ import {
   ProviderAuthType,
   ProviderRegistryErrorCode,
   createProviderRegistry,
-  type ProviderDescriptor
+  type ProviderDescriptor,
 } from "./registry";
 
 const SuiteName = "provider registry";
@@ -25,38 +25,38 @@ const baseCapabilities = {
   streaming: true,
   jsonSchemaEnforcement: false,
   tokenUsage: true,
-  toolCalls: false
+  toolCalls: false,
 };
 
 const baseSchema = {
   type: JsonSchemaType.Object,
   properties: {
     [SchemaFieldApiKey]: {
-      type: JsonSchemaType.String
-    }
+      type: JsonSchemaType.String,
+    },
   },
-  required: [SchemaFieldApiKey]
+  required: [SchemaFieldApiKey],
 };
 
 const createDescriptor = (
   id: string,
-  displayName: string
+  displayName: string,
 ): ProviderDescriptor => ({
   id,
   displayName,
   type: LLMProviderType.Cli,
   capabilities: baseCapabilities,
   auth: {
-    type: ProviderAuthType.None
+    type: ProviderAuthType.None,
   },
-  settingsSchema: baseSchema
+  settingsSchema: baseSchema,
 });
 
 describe(SuiteName, () => {
   it(CaseList, () => {
     const registry = createProviderRegistry([
       createDescriptor(ProviderIdOne, ProviderNameOne),
-      createDescriptor(ProviderIdTwo, ProviderNameTwo)
+      createDescriptor(ProviderIdTwo, ProviderNameTwo),
     ]);
 
     const list = registry.list();
@@ -66,7 +66,7 @@ describe(SuiteName, () => {
 
   it(CaseGet, () => {
     const registry = createProviderRegistry([
-      createDescriptor(ProviderIdOne, ProviderNameOne)
+      createDescriptor(ProviderIdOne, ProviderNameOne),
     ]);
 
     const result = registry.get(ProviderIdOne);
@@ -88,10 +88,10 @@ describe(SuiteName, () => {
 
   it(CaseRegister, () => {
     const registry = createProviderRegistry([
-      createDescriptor(ProviderIdOne, ProviderNameOne)
+      createDescriptor(ProviderIdOne, ProviderNameOne),
     ]);
     const result = registry.register(
-      createDescriptor(ProviderIdTwo, ProviderNameTwo)
+      createDescriptor(ProviderIdTwo, ProviderNameTwo),
     );
 
     expect(result.type).toBe(ResultType.Ok);
@@ -103,10 +103,10 @@ describe(SuiteName, () => {
 
   it(CaseDuplicate, () => {
     const registry = createProviderRegistry([
-      createDescriptor(ProviderIdOne, ProviderNameOne)
+      createDescriptor(ProviderIdOne, ProviderNameOne),
     ]);
     const result = registry.register(
-      createDescriptor(ProviderIdOne, ProviderNameOne)
+      createDescriptor(ProviderIdOne, ProviderNameOne),
     );
 
     expect(result.type).toBe(ResultType.Err);

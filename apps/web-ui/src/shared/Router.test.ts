@@ -11,7 +11,7 @@ afterEach(() => {
 
   Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: originalWindow
+    value: originalWindow,
   });
 });
 
@@ -24,18 +24,23 @@ describe("router path helpers", () => {
   });
 
   it("matches static and dynamic routes", () => {
-    const staticMatch = matchRoutePath("/workflows", ["/overview", "/workflows"]);
+    const staticMatch = matchRoutePath("/workflows", [
+      "/overview",
+      "/workflows",
+    ]);
     expect(staticMatch).toEqual({
       route: "/workflows",
-      params: {}
+      params: {},
     });
 
-    const dynamicMatch = matchRoutePath("/history/run-42", ["/history/:entryId"]);
+    const dynamicMatch = matchRoutePath("/history/run-42", [
+      "/history/:entryId",
+    ]);
     expect(dynamicMatch).toEqual({
       route: "/history/:entryId",
       params: {
-        entryId: "run-42"
-      }
+        entryId: "run-42",
+      },
     });
   });
 
@@ -48,19 +53,19 @@ describe("router path helpers", () => {
       configurable: true,
       value: {
         location: {
-          pathname: currentPath
+          pathname: currentPath,
         },
         history: {
           pushState: (_state: object, _title: string, path: string) => {
             currentPath = path;
-          }
+          },
         },
         addEventListener: (eventName: string, listener: () => void) => {
           if (eventName === "popstate") {
             popstateHandler = listener;
           }
-        }
-      }
+        },
+      },
     });
 
     const router = new Router({ autoInit: false });
@@ -77,7 +82,7 @@ describe("router path helpers", () => {
     expect(activeRoute).toBe("workflows");
     expect(router.getCurrentRoute()).toEqual({
       path: "/workflows",
-      params: {}
+      params: {},
     });
   });
 });

@@ -1,11 +1,11 @@
 export const LLMProviderType = {
   Cli: "cli",
   Api: "api",
-  Local: "local"
+  Local: "local",
 } as const;
 
 export type LLMProviderType =
-  typeof LLMProviderType[keyof typeof LLMProviderType];
+  (typeof LLMProviderType)[keyof typeof LLMProviderType];
 
 export type LLMProviderCapabilities = {
   streaming: boolean;

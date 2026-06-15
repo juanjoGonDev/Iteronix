@@ -1,9 +1,9 @@
 export const ResultType = {
   Ok: "ok",
-  Err: "err"
+  Err: "err",
 } as const;
 
-export type ResultType = typeof ResultType[keyof typeof ResultType];
+export type ResultType = (typeof ResultType)[keyof typeof ResultType];
 
 export type Ok<T> = {
   type: typeof ResultType.Ok;

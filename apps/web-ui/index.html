@@ -1,109 +1,124 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Iteronix - Autonomous Coding Platform</title>
-  
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-  
-  <!-- App Bundle -->
-  <script type="module" src="./dist/index.js"></script>
-  
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            primary: "#137fec",
-            "background-light": "#f6f7f8",
-            "background-dark": "#101922",
-            "surface-dark": "#1c2127", 
-            "surface-dark-hover": "#1c2631",
-            "border-dark": "#2b3644",
-            "text-secondary": "#9dabb9",
-            "card-dark": "#242e38",
-            "node-bg": "#23262b",
-          },
-          fontFamily: {
-            display: ["Inter", "sans-serif"],
-            mono: ["JetBrains Mono", "monospace"],
-          },
-          borderRadius: {
-            DEFAULT: "0.25rem",
-            lg: "0.5rem", 
-            xl: "0.75rem",
-            full: "9999px",
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Iteronix - Autonomous Coding Platform</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- App Bundle -->
+    <script type="module" src="./dist/index.js"></script>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922",
+              "surface-dark": "#1c2127",
+              "surface-dark-hover": "#1c2631",
+              "border-dark": "#2b3644",
+              "text-secondary": "#9dabb9",
+              "card-dark": "#242e38",
+              "node-bg": "#23262b",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
           },
         },
-      },
-    };
-  </script>
-  
-  <!-- Custom Styles -->
-  <style>
-    body {
-      font-family: "Inter", sans-serif;
-    }
-    
-    .font-mono {
-      font-family: "JetBrains Mono", monospace;
-    }
-    
-    /* Scrollbar styles */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-      background: #101922;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-      background: #2b3644;
-      border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-      background: #374151;
-    }
-    
-    /* Hide scrollbars */
-    .scrollbar-hide::-webkit-scrollbar {
-      display: none;
-    }
-    
-    .scrollbar-hide {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-  </style>
-</head>
-<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
-  <!-- Loading Screen -->
-  <div id="loading-screen" class="fixed inset-0 bg-background-dark flex items-center justify-center z-50">
-    <div class="flex flex-col items-center gap-4">
-      <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center">
-        <span class="material-symbols-outlined text-white text-2xl">terminal</span>
-      </div>
-      <div class="flex flex-col items-center">
-        <h1 class="text-white font-bold text-xl">Iteronix</h1>
-        <p class="text-text-secondary text-sm">Loading platform...</p>
+      };
+    </script>
+
+    <!-- Custom Styles -->
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+      }
+
+      .font-mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* Scrollbar styles */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #101922;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #2b3644;
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #374151;
+      }
+
+      /* Hide scrollbars */
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden"
+  >
+    <!-- Loading Screen -->
+    <div
+      id="loading-screen"
+      class="fixed inset-0 bg-background-dark flex items-center justify-center z-50"
+    >
+      <div class="flex flex-col items-center gap-4">
+        <div
+          class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center"
+        >
+          <span class="material-symbols-outlined text-white text-2xl"
+            >terminal</span
+          >
+        </div>
+        <div class="flex flex-col items-center">
+          <h1 class="text-white font-bold text-xl">Iteronix</h1>
+          <p class="text-text-secondary text-sm">Loading platform...</p>
+        </div>
       </div>
     </div>
-  </div>
-  
-  <!-- Main App Container -->
-  <div id="app-root" class="w-full h-full hidden">
-    <!-- App will be rendered here by JS -->
-  </div>
-</body>
+
+    <!-- Main App Container -->
+    <div id="app-root" class="w-full h-full hidden">
+      <!-- App will be rendered here by JS -->
+    </div>
+  </body>
 </html>

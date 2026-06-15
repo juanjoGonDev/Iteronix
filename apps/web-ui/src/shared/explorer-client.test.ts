@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseExplorerFileSearchResponse,
   parseExplorerFileReadResponse,
-  parseExplorerFileTreeResponse
+  parseExplorerFileTreeResponse,
 } from "./explorer-client.js";
 
 describe("explorer client codecs", () => {
@@ -12,21 +12,21 @@ describe("explorer client codecs", () => {
         {
           path: "src",
           name: "src",
-          kind: "directory"
+          kind: "directory",
         },
         {
           path: "README.md",
           name: "README.md",
-          kind: "file"
-        }
-      ]
+          kind: "file",
+        },
+      ],
     });
     const file = parseExplorerFileReadResponse({
       content: "# Iteronix",
       startLine: 1,
       endLine: 1,
       totalLines: 12,
-      truncated: true
+      truncated: true,
     });
     const search = parseExplorerFileSearchResponse({
       results: [
@@ -40,33 +40,33 @@ describe("explorer client codecs", () => {
               ranges: [
                 {
                   start: 2,
-                  end: 8
-                }
-              ]
-            }
-          ]
-        }
-      ]
+                  end: 8,
+                },
+              ],
+            },
+          ],
+        },
+      ],
     });
 
     expect(entries).toEqual([
       {
         path: "src",
         name: "src",
-        kind: "directory"
+        kind: "directory",
       },
       {
         path: "README.md",
         name: "README.md",
-        kind: "file"
-      }
+        kind: "file",
+      },
     ]);
     expect(file).toEqual({
       content: "# Iteronix",
       startLine: 1,
       endLine: 1,
       totalLines: 12,
-      truncated: true
+      truncated: true,
     });
     expect(search).toEqual([
       {
@@ -79,24 +79,26 @@ describe("explorer client codecs", () => {
             ranges: [
               {
                 start: 2,
-                end: 8
-              }
-            ]
-          }
-        ]
-      }
+                end: 8,
+              },
+            ],
+          },
+        ],
+      },
     ]);
   });
 
   it("defaults file read metadata when the server returns the legacy shape", () => {
-    expect(parseExplorerFileReadResponse({
-      content: "line 1\nline 2"
-    })).toEqual({
+    expect(
+      parseExplorerFileReadResponse({
+        content: "line 1\nline 2",
+      }),
+    ).toEqual({
       content: "line 1\nline 2",
       startLine: 1,
       endLine: 2,
       totalLines: 2,
-      truncated: false
+      truncated: false,
     });
   });
 });

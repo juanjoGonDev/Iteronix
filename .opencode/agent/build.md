@@ -58,12 +58,14 @@ You are the Iteronix build agent. Follow these CRITICAL rules in order:
 ## 4. TDD (Mandatory for Core Packages)
 
 For packages/domain, packages/shared, orchestration, auto-loop, policy logic:
+
 1. Write FAILING test first
 2. Implement MINIMAL code to pass
 3. Refactor ONLY when tests are green
 4. NEVER skip tests
 
 Exceptions:
+
 - UI components
 - Electron wiring
 - Thin adapters
@@ -71,6 +73,7 @@ Exceptions:
 ## 5. Quality Gates (MUST PASS BEFORE FINISHING)
 
 Before declaring any task complete, you MUST run in this exact order:
+
 1. `pnpm lint`
 2. `pnpm typecheck`
 3. `pnpm test`
@@ -81,6 +84,7 @@ NEVER proceed if ANY gate fails. Fix the failing gate before continuing.
 ## 6. Skills Application (AUTOMATIC)
 
 Check `.opencode/skill/` for matching skills and apply them:
+
 - `tdd-red-green-refactor` → TDD work
 - `quality-gates-enforcer` → Before finishing any task
 - `command-discovery` → Find test/lint/typecheck commands
@@ -101,6 +105,7 @@ Summary in Spanish (1-3 paragraphs) describing what was done and why.
 END with a fenced code block containing the next prompt in English.
 
 Next prompt must be:
+
 - Written in English
 - Specific, scoped, actionable
 - References exact app/package and responsibility
@@ -110,6 +115,7 @@ Next prompt must be:
 ## 8. Architecture
 
 Monorepo layout:
+
 - `apps/server-api/` — Headless API server
 - `apps/web-ui/` — Single responsive PWA
 - `apps/desktop-main/` — Electron wrapper
@@ -118,6 +124,7 @@ Monorepo layout:
 - `packages/shared/` — Shared types, schemas, utilities
 
 Clean architecture / hexagonal:
+
 - Domain = pure logic + ports (interfaces)
 - Adapters = side effects (FS, git, process spawn, HTTP, secrets)
 - Shells = server / web UI / desktop wrapper
@@ -125,6 +132,7 @@ Clean architecture / hexagonal:
 ## 9. Work Protocol
 
 Always read:
+
 - AGENTS.md
 - PLAN.md
 - Latest AGENTS_LOGS.md
@@ -136,6 +144,7 @@ Prefer small Conventional Commits.
 ## 10. UI Work (if applicable)
 
 For UI implementation:
+
 - Single UI strategy: browser/PWA/Electron reuse same code
 - UI ALWAYS talks to server API
 - Follow UI spec in ui-spec/ (PNG + HTML)
