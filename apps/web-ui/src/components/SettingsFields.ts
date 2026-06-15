@@ -1,5 +1,9 @@
 import { StatusBadge } from "./Card.js";
-import { Component, createElement, type ComponentProps } from "../shared/Component.js";
+import {
+  Component,
+  createElement,
+  type ComponentProps,
+} from "../shared/Component.js";
 
 interface SettingsFieldProps extends ComponentProps {
   label: string;
@@ -53,22 +57,37 @@ interface SettingsToggleFieldProps extends ComponentProps {
   onChange: (checked: boolean) => void;
 }
 
-export class SettingsField extends Component<SettingsFieldProps> {
+class SettingsField extends Component<SettingsFieldProps> {
   override render(): HTMLElement {
     const { label, children, className = "" } = this.props;
 
-    return createElement("label", {
-      className: joinClasses("flex flex-col gap-2", className)
-    }, [
-      createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [label]),
-      children
-    ]);
+    return createElement(
+      "label",
+      {
+        className: joinClasses("flex flex-col gap-2", className),
+      },
+      [
+        createElement(
+          "span",
+          { className: "text-[13px] font-medium text-slate-100" },
+          [label],
+        ),
+        children,
+      ],
+    );
   }
 }
 
 export class SettingsTextField extends Component<SettingsTextFieldProps> {
   override render(): HTMLElement {
-    const { label, value, placeholder, testId, type = "text", onChange } = this.props;
+    const {
+      label,
+      value,
+      placeholder,
+      testId,
+      type = "text",
+      onChange,
+    } = this.props;
 
     return createElement(SettingsField, {
       label,
@@ -83,8 +102,8 @@ export class SettingsTextField extends Component<SettingsTextFieldProps> {
           if (target instanceof HTMLInputElement) {
             onChange(target.value);
           }
-        }
-      })
+        },
+      }),
     });
   }
 }
@@ -106,8 +125,8 @@ export class SettingsNumberField extends Component<SettingsNumberFieldProps> {
           if (target instanceof HTMLInputElement) {
             onChange(target.value);
           }
-        }
-      })
+        },
+      }),
     });
   }
 }
@@ -118,22 +137,30 @@ export class SettingsSelectField extends Component<SettingsSelectFieldProps> {
 
     return createElement(SettingsField, {
       label,
-      children: createElement("select", {
-        value,
-        "data-testid": testId,
-        className: readSettingsSelectClassName(),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLSelectElement) {
-            onChange(target.value);
-          }
-        }
-      }, options.map((option) =>
-        createElement("option", {
-          value: option.value,
-          selected: option.value === value
-        }, [option.label])
-      ))
+      children: createElement(
+        "select",
+        {
+          value,
+          "data-testid": testId,
+          className: readSettingsSelectClassName(),
+          onChange: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLSelectElement) {
+              onChange(target.value);
+            }
+          },
+        },
+        options.map((option) =>
+          createElement(
+            "option",
+            {
+              value: option.value,
+              selected: option.value === value,
+            },
+            [option.label],
+          ),
+        ),
+      ),
     });
   }
 }
@@ -143,10 +170,18 @@ export class SettingsSecretField extends Component<SettingsSecretFieldProps> {
     const { label, value, placeholder, testId, onChange } = this.props;
 
     return createElement("label", { className: "flex flex-col gap-2" }, [
-      createElement("div", { className: "flex items-center justify-between gap-3" }, [
-        createElement("span", { className: "text-[13px] font-medium text-slate-100" }, [label]),
-        createElement(StatusBadge, { status: "warning" }, ["session only"])
-      ]),
+      createElement(
+        "div",
+        { className: "flex items-center justify-between gap-3" },
+        [
+          createElement(
+            "span",
+            { className: "text-[13px] font-medium text-slate-100" },
+            [label],
+          ),
+          createElement(StatusBadge, { status: "warning" }, ["session only"]),
+        ],
+      ),
       createElement("input", {
         type: "password",
         value,
@@ -158,11 +193,11 @@ export class SettingsSecretField extends Component<SettingsSecretFieldProps> {
           if (target instanceof HTMLInputElement) {
             onChange(target.value);
           }
-        }
+        },
       }),
       createElement("span", { className: "text-xs text-text-secondary" }, [
-        "The browser keeps this key only in memory for the current session."
-      ])
+        "The browser keeps this key only in memory for the current session.",
+      ]),
     ]);
   }
 }
@@ -171,47 +206,60 @@ export class SettingsToggleField extends Component<SettingsToggleFieldProps> {
   override render(): HTMLElement {
     const { label, description, checked, testId, onChange } = this.props;
 
-    return createElement("div", {
-      className: "flex items-center justify-between gap-4 rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4"
-    }, [
-      createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
-        createElement("span", { className: "text-sm font-medium text-white" }, [label]),
-        createElement("span", { className: "text-xs text-text-secondary" }, [description])
-      ]),
-      createElement("button", {
-        type: "button",
-        role: "switch",
-        "aria-checked": String(checked),
-        "data-testid": testId,
-        className: readSettingsToggleTrackClassName(checked),
-        onClick: () => onChange(!checked)
-      }, [
-        createElement("span", {
-          className: readSettingsToggleKnobClassName(checked)
-        })
-      ])
-    ]);
+    return createElement(
+      "div",
+      {
+        className:
+          "flex items-center justify-between gap-4 rounded-xl border border-[#2b3644] bg-[#1a2129] px-4 py-4",
+      },
+      [
+        createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+          createElement(
+            "span",
+            { className: "text-sm font-medium text-white" },
+            [label],
+          ),
+          createElement("span", { className: "text-xs text-text-secondary" }, [
+            description,
+          ]),
+        ]),
+        createElement(
+          "button",
+          {
+            type: "button",
+            role: "switch",
+            "aria-checked": String(checked),
+            "data-testid": testId,
+            className: readSettingsToggleTrackClassName(checked),
+            onClick: () => onChange(!checked),
+          },
+          [
+            createElement("span", {
+              className: readSettingsToggleKnobClassName(checked),
+            }),
+          ],
+        ),
+      ],
+    );
   }
 }
 
-export const readSettingsInputClassName = (): string =>
+const readSettingsInputClassName = (): string =>
   "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
-export const readSettingsSelectClassName = (): string =>
+const readSettingsSelectClassName = (): string =>
   "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
 export const readSettingsToggleTrackClassName = (checked: boolean): string =>
   joinClasses(
     "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
-    checked
-      ? "border-primary bg-primary"
-      : "border-[#3a4655] bg-[#2b3644]"
+    checked ? "border-primary bg-primary" : "border-[#3a4655] bg-[#2b3644]",
   );
 
 export const readSettingsToggleKnobClassName = (checked: boolean): string =>
   joinClasses(
     "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-    checked ? "translate-x-5" : "translate-x-0.5"
+    checked ? "translate-x-5" : "translate-x-0.5",
   );
 
 const joinClasses = (...values: ReadonlyArray<string>): string =>

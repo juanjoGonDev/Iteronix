@@ -6,9 +6,12 @@ import type {
   GitDiffResult,
   GitPathOperationResult,
   GitRepository,
-  GitStatusResult
+  GitStatusResult,
 } from "../../../packages/adapters/src/git/git-adapter";
-import { GitCommandName, GitErrorCode } from "../../../packages/adapters/src/git/git-adapter";
+import {
+  GitCommandName,
+  GitErrorCode,
+} from "../../../packages/adapters/src/git/git-adapter";
 import { ErrorMessage, GitField, HttpStatus } from "./constants";
 import type { ProjectStore } from "./projects";
 import { ProjectStoreErrorCode } from "./projects";
@@ -30,14 +33,14 @@ export type GitApiDependencies = {
 export const GitPathOperationKind = {
   Stage: "stage",
   Unstage: "unstage",
-  Revert: "revert"
+  Revert: "revert",
 } as const;
 
 export type GitPathOperationKind =
-  typeof GitPathOperationKind[keyof typeof GitPathOperationKind];
+  (typeof GitPathOperationKind)[keyof typeof GitPathOperationKind];
 
 export const parseGitStatusRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -46,19 +49,19 @@ export const parseGitStatusRequest = (
   const projectId = readRequiredString(
     value,
     GitField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
   }
 
   return ok({
-    projectId: projectId.value
+    projectId: projectId.value,
   });
 };
 
 export const parseGitDiffRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; staged: boolean }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -67,7 +70,7 @@ export const parseGitDiffRequest = (
   const projectId = readRequiredString(
     value,
     GitField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -80,12 +83,12 @@ export const parseGitDiffRequest = (
 
   return ok({
     projectId: projectId.value,
-    staged: staged.value ?? false
+    staged: staged.value ?? false,
   });
 };
 
 export const parseGitPathRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; paths: ReadonlyArray<string> }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -94,7 +97,7 @@ export const parseGitPathRequest = (
   const projectId = readRequiredString(
     value,
     GitField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -103,7 +106,7 @@ export const parseGitPathRequest = (
   const paths = readRequiredStringArray(
     value,
     GitField.Paths,
-    ErrorMessage.MissingPaths
+    ErrorMessage.MissingPaths,
   );
   if (paths.type === ResultType.Err) {
     return paths;
@@ -111,12 +114,12 @@ export const parseGitPathRequest = (
 
   return ok({
     projectId: projectId.value,
-    paths: paths.value
+    paths: paths.value,
   });
 };
 
 export const parseGitCommitRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; message: string }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -125,7 +128,7 @@ export const parseGitCommitRequest = (
   const projectId = readRequiredString(
     value,
     GitField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -134,7 +137,7 @@ export const parseGitCommitRequest = (
   const message = readRequiredString(
     value,
     GitField.Message,
-    ErrorMessage.MissingCommitMessage
+    ErrorMessage.MissingCommitMessage,
   );
   if (message.type === ResultType.Err) {
     return message;
@@ -143,18 +146,18 @@ export const parseGitCommitRequest = (
   if (!isConventionalCommitMessage(message.value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidCommitMessage
+      message: ErrorMessage.InvalidCommitMessage,
     });
   }
 
   return ok({
     projectId: projectId.value,
-    message: message.value
+    message: message.value,
   });
 };
 
 export const parseGitBranchMutationRequest = (
-  value: unknown
+  value: unknown,
 ): Result<{ projectId: string; branchName: string }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -163,7 +166,7 @@ export const parseGitBranchMutationRequest = (
   const projectId = readRequiredString(
     value,
     GitField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -172,7 +175,7 @@ export const parseGitBranchMutationRequest = (
   const branchName = readRequiredString(
     value,
     GitField.BranchName,
-    ErrorMessage.MissingBranchName
+    ErrorMessage.MissingBranchName,
   );
   if (branchName.type === ResultType.Err) {
     return branchName;
@@ -181,19 +184,19 @@ export const parseGitBranchMutationRequest = (
   if (!isValidGitBranchName(branchName.value)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBranchName
+      message: ErrorMessage.InvalidBranchName,
     });
   }
 
   return ok({
     projectId: projectId.value,
-    branchName: branchName.value
+    branchName: branchName.value,
   });
 };
 
 export const executeGitStatus = async (
   input: { projectId: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitStatusResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -201,7 +204,7 @@ export const executeGitStatus = async (
   }
 
   const result = await dependencies.git.getStatus({
-    rootPath: root.value
+    rootPath: root.value,
   });
 
   return mapGitResult(result);
@@ -209,7 +212,7 @@ export const executeGitStatus = async (
 
 export const executeGitDiff = async (
   input: { projectId: string; staged: boolean },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitDiffResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -218,7 +221,7 @@ export const executeGitDiff = async (
 
   const result = await dependencies.git.getDiff({
     rootPath: root.value,
-    staged: input.staged
+    staged: input.staged,
   });
 
   return mapGitResult(result);
@@ -227,16 +230,19 @@ export const executeGitDiff = async (
 export const executeGitPathOperation = async (
   input: { projectId: string; paths: ReadonlyArray<string> },
   operation: GitPathOperationKind,
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitPathOperationResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
     return root;
   }
 
-  const result = await readGitPathOperation(operation, dependencies.git)({
+  const result = await readGitPathOperation(
+    operation,
+    dependencies.git,
+  )({
     rootPath: root.value,
-    paths: input.paths
+    paths: input.paths,
   });
 
   return mapGitResult(result);
@@ -244,7 +250,7 @@ export const executeGitPathOperation = async (
 
 export const executeGitCommit = async (
   input: { projectId: string; message: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitCommitResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -253,7 +259,7 @@ export const executeGitCommit = async (
 
   const result = await dependencies.git.createCommit({
     rootPath: root.value,
-    message: input.message
+    message: input.message,
   });
 
   return mapGitResult(result);
@@ -261,7 +267,7 @@ export const executeGitCommit = async (
 
 export const executeGitBranchList = async (
   input: { projectId: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitBranchListResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -269,7 +275,7 @@ export const executeGitBranchList = async (
   }
 
   const result = await dependencies.git.listBranches({
-    rootPath: root.value
+    rootPath: root.value,
   });
 
   return mapGitResult(result);
@@ -277,7 +283,7 @@ export const executeGitBranchList = async (
 
 export const executeGitBranchCreate = async (
   input: { projectId: string; branchName: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitBranchOperationResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -286,7 +292,7 @@ export const executeGitBranchCreate = async (
 
   const result = await dependencies.git.createBranch({
     rootPath: root.value,
-    name: input.branchName
+    name: input.branchName,
   });
 
   return mapGitResult(result);
@@ -294,7 +300,7 @@ export const executeGitBranchCreate = async (
 
 export const executeGitBranchCheckout = async (
   input: { projectId: string; branchName: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitBranchOperationResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -303,7 +309,7 @@ export const executeGitBranchCheckout = async (
 
   const result = await dependencies.git.checkoutBranch({
     rootPath: root.value,
-    name: input.branchName
+    name: input.branchName,
   });
 
   return mapGitResult(result);
@@ -311,7 +317,7 @@ export const executeGitBranchCheckout = async (
 
 export const executeGitBranchPush = async (
   input: { projectId: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitBranchOperationResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -319,7 +325,7 @@ export const executeGitBranchPush = async (
   }
 
   const result = await dependencies.git.pushCurrentBranch({
-    rootPath: root.value
+    rootPath: root.value,
   });
 
   return mapGitResult(result);
@@ -327,7 +333,7 @@ export const executeGitBranchPush = async (
 
 export const executeGitBranchPublish = async (
   input: { projectId: string },
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Promise<Result<GitBranchOperationResult, ApiError>> => {
   const root = resolveGitRoot(input.projectId, dependencies);
   if (root.type === ResultType.Err) {
@@ -335,7 +341,7 @@ export const executeGitBranchPublish = async (
   }
 
   const result = await dependencies.git.publishCurrentBranch({
-    rootPath: root.value
+    rootPath: root.value,
   });
 
   return mapGitResult(result);
@@ -343,7 +349,7 @@ export const executeGitBranchPublish = async (
 
 const resolveGitRoot = (
   projectId: string,
-  dependencies: GitApiDependencies
+  dependencies: GitApiDependencies,
 ): Result<string, ApiError> => {
   const project = dependencies.projectStore.getById(projectId);
   if (project.type === ResultType.Err) {
@@ -353,11 +359,13 @@ const resolveGitRoot = (
   if (project.value.rootPath === null) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingRootPath
+      message: ErrorMessage.MissingRootPath,
     });
   }
 
-  const root = dependencies.workspacePolicy.assertPathAllowed(project.value.rootPath);
+  const root = dependencies.workspacePolicy.assertPathAllowed(
+    project.value.rootPath,
+  );
   if (root.type === ResultType.Err) {
     return err(root.error);
   }
@@ -365,7 +373,7 @@ const resolveGitRoot = (
   const command = dependencies.commandPolicy.assertCommandAllowed({
     command: GitCommandName,
     rootPath: root.value,
-    cwd: root.value
+    cwd: root.value,
   });
   if (command.type === ResultType.Err) {
     return err(command.error);
@@ -375,7 +383,7 @@ const resolveGitRoot = (
 };
 
 const mapGitResult = <T>(
-  result: Result<T, GitAdapterError>
+  result: Result<T, GitAdapterError>,
 ): Result<T, ApiError> => {
   if (result.type === ResultType.Ok) {
     return result;
@@ -396,13 +404,13 @@ const mapGitAdapterError = (error: GitAdapterError): ApiError => {
   ) {
     return {
       status: HttpStatus.BadRequest,
-      message: error.message
+      message: error.message,
     };
   }
 
   return {
     status: HttpStatus.InternalServerError,
-    message: error.message || ErrorMessage.InternalServerError
+    message: error.message || ErrorMessage.InternalServerError,
   };
 };
 
@@ -410,22 +418,22 @@ const mapProjectStoreError = (code: string): ApiError => {
   if (code === ProjectStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.NotFound
+    message: ErrorMessage.NotFound,
   };
 };
 
 const isConventionalCommitMessage = (value: string): boolean =>
   /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9./_-]+\))?!?: .+/u.test(
-    value
+    value,
   );
 
-export const isValidGitBranchName = (value: string): boolean => {
+const isValidGitBranchName = (value: string): boolean => {
   if (value.length === 0) {
     return false;
   }
@@ -463,7 +471,7 @@ export const isValidGitBranchName = (value: string): boolean => {
 const invalidBody = (): Result<never, ApiError> =>
   err({
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody
+    message: ErrorMessage.InvalidBody,
   });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -472,13 +480,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readRequiredString = (
   record: Record<string, unknown>,
   key: string,
-  message: string
+  message: string,
 ): Result<string, ApiError> => {
   const value = record[key];
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message
+      message,
     });
   }
 
@@ -486,7 +494,7 @@ const readRequiredString = (
   if (trimmed.length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message
+      message,
     });
   }
 
@@ -495,7 +503,7 @@ const readRequiredString = (
 
 const readOptionalBoolean = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<boolean | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -512,13 +520,13 @@ const readOptionalBoolean = (
 const readRequiredStringArray = (
   record: Record<string, unknown>,
   key: string,
-  message: string
+  message: string,
 ): Result<ReadonlyArray<string>, ApiError> => {
   const value = record[key];
   if (!Array.isArray(value) || value.length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message
+      message,
     });
   }
 
@@ -532,7 +540,7 @@ const readRequiredStringArray = (
     if (trimmed.length === 0) {
       return err({
         status: HttpStatus.BadRequest,
-        message
+        message,
       });
     }
 
@@ -544,7 +552,7 @@ const readRequiredStringArray = (
 
 const readGitPathOperation = (
   operation: GitPathOperationKind,
-  git: GitRepository
+  git: GitRepository,
 ): GitRepository["stagePaths"] => {
   if (operation === GitPathOperationKind.Stage) {
     return git.stagePaths;

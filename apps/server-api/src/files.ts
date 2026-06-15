@@ -1,7 +1,12 @@
 import { promises as fs } from "node:fs";
 import type { Dirent } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { ErrorMessage, FileEntryKind, HttpStatus, TextEncoding } from "./constants";
+import {
+  ErrorMessage,
+  FileEntryKind,
+  HttpStatus,
+  TextEncoding,
+} from "./constants";
 import { err, ok, ResultType, type Result } from "./result";
 
 export type FileEntry = {
@@ -10,12 +15,12 @@ export type FileEntry = {
   kind: FileEntryKind;
 };
 
-export type FileSearchMatchRange = {
+type FileSearchMatchRange = {
   start: number;
   end: number;
 };
 
-export type FileSearchMatch = {
+type FileSearchMatch = {
   lineNumber: number;
   lineText: string;
   ranges: ReadonlyArray<FileSearchMatchRange>;
@@ -67,12 +72,12 @@ const FsErrorCode = {
   PermissionDenied: "EACCES",
   OperationNotPermitted: "EPERM",
   NotDirectory: "ENOTDIR",
-  IsDirectory: "EISDIR"
+  IsDirectory: "EISDIR",
 } as const;
 
 const SearchLimit = {
   Files: 100,
-  MatchesPerFile: 50
+  MatchesPerFile: 50,
 } as const;
 
 const IgnoredDirectoryName = {
@@ -80,7 +85,7 @@ const IgnoredDirectoryName = {
   NodeModules: "node_modules",
   Dist: "dist",
   Build: "build",
-  Coverage: "coverage"
+  Coverage: "coverage",
 } as const;
 
 const IgnoredSearchDirectories = new Set<string>([
@@ -88,18 +93,18 @@ const IgnoredSearchDirectories = new Set<string>([
   IgnoredDirectoryName.NodeModules,
   IgnoredDirectoryName.Dist,
   IgnoredDirectoryName.Build,
-  IgnoredDirectoryName.Coverage
+  IgnoredDirectoryName.Coverage,
 ]);
 
 export const resolveSandboxPath = (
   rootPath: string,
-  targetPath: string | undefined
+  targetPath: string | undefined,
 ): Result<ResolvedSandboxPath, FileError> => {
   const normalizedRoot = normalizeRootPath(rootPath);
   if (!normalizedRoot) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     });
   }
 
@@ -109,19 +114,19 @@ export const resolveSandboxPath = (
   if (isOutsideRoot(relativePath)) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     });
   }
 
   return ok({
     root: normalizedRoot,
-    target: resolvedTarget
+    target: resolvedTarget,
   });
 };
 
 export const listFileTree = async (
   rootPath: string,
-  targetPath: string | undefined
+  targetPath: string | undefined,
 ): Promise<Result<ReadonlyArray<FileEntry>, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
@@ -130,10 +135,10 @@ export const listFileTree = async (
 
   try {
     const entries = await fs.readdir(resolved.value.target, {
-      withFileTypes: true
+      withFileTypes: true,
     });
     const items = entries.map((entry) =>
-      toFileEntry(resolved.value.root, resolved.value.target, entry)
+      toFileEntry(resolved.value.root, resolved.value.target, entry),
     );
     return ok(items);
   } catch (error: unknown) {
@@ -144,7 +149,7 @@ export const listFileTree = async (
 export const readFileContent = async (
   rootPath: string,
   targetPath: string,
-  window: FileReadWindow = {}
+  window: FileReadWindow = {},
 ): Promise<Result<FileReadContent, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
@@ -161,7 +166,7 @@ export const readFileContent = async (
 
 export const searchFiles = async (
   rootPath: string,
-  options: FileSearchOptions
+  options: FileSearchOptions,
 ): Promise<Result<ReadonlyArray<FileSearchResult>, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, undefined);
   if (resolved.type === ResultType.Err) {
@@ -177,7 +182,7 @@ export const searchFiles = async (
     const results = await searchDirectoryEntries(
       resolved.value.root,
       resolved.value.root,
-      pattern.value
+      pattern.value,
     );
 
     return ok(results);
@@ -189,7 +194,7 @@ export const searchFiles = async (
 export const writeFileContent = async (
   rootPath: string,
   targetPath: string,
-  content: string
+  content: string,
 ): Promise<Result<{ bytesWritten: number }, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
@@ -200,7 +205,7 @@ export const writeFileContent = async (
     await fs.mkdir(dirname(resolved.value.target), { recursive: true });
     await fs.writeFile(resolved.value.target, content, TextEncoding);
     return ok({
-      bytesWritten: Buffer.byteLength(content, TextEncoding)
+      bytesWritten: Buffer.byteLength(content, TextEncoding),
     });
   } catch (error: unknown) {
     return err(mapFsError(error));
@@ -209,7 +214,7 @@ export const writeFileContent = async (
 
 export const deleteFile = async (
   rootPath: string,
-  targetPath: string
+  targetPath: string,
 ): Promise<Result<{ success: boolean }, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
@@ -226,7 +231,7 @@ export const deleteFile = async (
 
 export const createDirectory = async (
   rootPath: string,
-  targetPath: string
+  targetPath: string,
 ): Promise<Result<{ success: boolean }, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, targetPath);
   if (resolved.type === ResultType.Err) {
@@ -244,7 +249,7 @@ export const createDirectory = async (
 export const moveFile = async (
   rootPath: string,
   sourcePath: string,
-  targetPath: string
+  targetPath: string,
 ): Promise<Result<{ success: boolean }, FileError>> => {
   const resolved = resolveSandboxPath(rootPath, sourcePath);
   if (resolved.type === ResultType.Err) {
@@ -263,30 +268,29 @@ export const moveFile = async (
 const toFileEntry = (
   rootPath: string,
   directoryPath: string,
-  entry: Dirent
+  entry: Dirent,
 ): FileEntry => {
   const targetPath = resolve(directoryPath, entry.name);
   const relativePath = relative(rootPath, targetPath);
-  const kind = entry.isDirectory() ? FileEntryKind.Directory : FileEntryKind.File;
+  const kind = entry.isDirectory()
+    ? FileEntryKind.Directory
+    : FileEntryKind.File;
   return {
     path: normalizeRelativePath(relativePath),
     name: entry.name,
-    kind
+    kind,
   };
 };
 
 const createFileReadContent = (
   content: string,
-  window: FileReadWindow
+  window: FileReadWindow,
 ): FileReadContent => {
   const lines = content.split(/\r?\n/);
   const totalLines = lines.length;
   const boundedStartLine = clampFileReadLine(window.startLine ?? 1, totalLines);
   const boundedLineCount = clampFileReadLineCount(window.lineCount, totalLines);
-  const endLine = Math.min(
-    totalLines,
-    boundedStartLine + boundedLineCount - 1
-  );
+  const endLine = Math.min(totalLines, boundedStartLine + boundedLineCount - 1);
   const contentLines = lines.slice(boundedStartLine - 1, endLine);
 
   return {
@@ -294,18 +298,20 @@ const createFileReadContent = (
     startLine: boundedStartLine,
     endLine,
     totalLines,
-    truncated: boundedStartLine > 1 || endLine < totalLines
+    truncated: boundedStartLine > 1 || endLine < totalLines,
   };
 };
 
 const searchDirectoryEntries = async (
   rootPath: string,
   directoryPath: string,
-  pattern: SearchPattern
+  pattern: SearchPattern,
 ): Promise<ReadonlyArray<FileSearchResult>> => {
-  const entries = sortSearchDirectoryEntries(await fs.readdir(directoryPath, {
-    withFileTypes: true
-  }));
+  const entries = sortSearchDirectoryEntries(
+    await fs.readdir(directoryPath, {
+      withFileTypes: true,
+    }),
+  );
   const results: FileSearchResult[] = [];
 
   for (const entry of entries) {
@@ -319,7 +325,11 @@ const searchDirectoryEntries = async (
         continue;
       }
 
-      const childResults = await searchDirectoryEntries(rootPath, targetPath, pattern);
+      const childResults = await searchDirectoryEntries(
+        rootPath,
+        targetPath,
+        pattern,
+      );
       results.push(...childResults);
       continue;
     }
@@ -333,7 +343,7 @@ const searchDirectoryEntries = async (
     results.push({
       path: normalizeRelativePath(relative(rootPath, targetPath)),
       name: entry.name,
-      matches
+      matches,
     });
   }
 
@@ -342,7 +352,7 @@ const searchDirectoryEntries = async (
 
 const findSearchMatches = (
   content: string,
-  pattern: SearchPattern
+  pattern: SearchPattern,
 ): ReadonlyArray<FileSearchMatch> => {
   const lines = content.split(/\r?\n/);
   const matches: FileSearchMatch[] = [];
@@ -362,7 +372,7 @@ const findSearchMatches = (
     matches.push({
       lineNumber: index + 1,
       lineText: line,
-      ranges
+      ranges,
     });
 
     if (matches.length >= SearchLimit.MatchesPerFile) {
@@ -375,7 +385,7 @@ const findSearchMatches = (
 
 const readSearchMatchRanges = (
   line: string,
-  expression: RegExp
+  expression: RegExp,
 ): ReadonlyArray<FileSearchMatchRange> => {
   const ranges: FileSearchMatchRange[] = [];
 
@@ -384,7 +394,7 @@ const readSearchMatchRanges = (
     const start = match.index ?? 0;
     ranges.push({
       start,
-      end: start + text.length
+      end: start + text.length,
     });
 
     if (ranges.length >= SearchLimit.MatchesPerFile) {
@@ -400,23 +410,21 @@ const readSearchMatchRanges = (
 };
 
 const createSearchPattern = (
-  options: FileSearchOptions
+  options: FileSearchOptions,
 ): Result<SearchPattern, FileError> => {
-  const source = options.isRegex
-    ? options.query
-    : escapeRegExp(options.query);
+  const source = options.isRegex ? options.query : escapeRegExp(options.query);
   const boundedSource = options.wholeWord ? `\\b(?:${source})\\b` : source;
   const flags = options.matchCase ? "g" : "gi";
 
   try {
     return ok({
       expression: new RegExp(boundedSource, flags),
-      testExpression: new RegExp(boundedSource, options.matchCase ? "" : "i")
+      testExpression: new RegExp(boundedSource, options.matchCase ? "" : "i"),
     });
   } catch {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     });
   }
 };
@@ -443,7 +451,7 @@ const clampFileReadLine = (value: number, totalLines: number): number => {
 
 const clampFileReadLineCount = (
   value: number | undefined,
-  totalLines: number
+  totalLines: number,
 ): number => {
   if (totalLines <= 0) {
     return 1;
@@ -457,7 +465,7 @@ const clampFileReadLineCount = (
 };
 
 const sortSearchDirectoryEntries = (
-  entries: ReadonlyArray<Dirent>
+  entries: ReadonlyArray<Dirent>,
 ): ReadonlyArray<Dirent> =>
   [...entries].sort((left, right) => {
     if (left.isDirectory() !== right.isDirectory()) {
@@ -492,7 +500,7 @@ const mapFsError = (error: unknown): FileError => {
   if (code === FsErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     };
   }
 
@@ -502,20 +510,20 @@ const mapFsError = (error: unknown): FileError => {
   ) {
     return {
       status: HttpStatus.Forbidden,
-      message: ErrorMessage.Forbidden
+      message: ErrorMessage.Forbidden,
     };
   }
 
   if (code === FsErrorCode.NotDirectory || code === FsErrorCode.IsDirectory) {
     return {
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     };
   }
 
   return {
     status: HttpStatus.InternalServerError,
-    message: ErrorMessage.InternalServerError
+    message: ErrorMessage.InternalServerError,
   };
 };
 

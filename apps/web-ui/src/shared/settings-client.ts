@@ -5,7 +5,7 @@ import type { ProjectRecord } from "./workbench-types.js";
 const EndpointPath = {
   ProjectOpen: "/projects/open",
   ProvidersList: "/providers/list",
-  ProvidersSettings: "/providers/settings"
+  ProvidersSettings: "/providers/settings",
 } as const;
 
 export type RuntimeProviderRecord = {
@@ -16,7 +16,7 @@ export type RuntimeProviderRecord = {
   settingsSchema: Record<string, unknown>;
 };
 
-export type RuntimeProviderSelectionRecord = {
+type RuntimeProviderSelectionRecord = {
   projectId: string;
   profileId: string;
   providerId: string;
@@ -37,8 +37,14 @@ export type RuntimeProviderSettingsRecord = {
 };
 
 export type SettingsClient = {
-  openProject: (input: { rootPath: string | null; name?: string }) => Promise<ProjectRecord>;
-  listProviders: (input?: { projectId?: string; profileId?: string }) => Promise<RuntimeProviderListResponse>;
+  openProject: (input: {
+    rootPath: string | null;
+    name?: string;
+  }) => Promise<ProjectRecord>;
+  listProviders: (input?: {
+    projectId?: string;
+    profileId?: string;
+  }) => Promise<RuntimeProviderListResponse>;
   updateProviderSettings: (input: {
     projectId: string;
     profileId: string;
@@ -53,18 +59,18 @@ export const createSettingsClient = (): SettingsClient => ({
       path: EndpointPath.ProjectOpen,
       body: {
         rootPath: input.rootPath,
-        ...(input.name ? { name: input.name } : {})
+        ...(input.name ? { name: input.name } : {}),
       },
-      parse: parseProjectOpenResponse
+      parse: parseProjectOpenResponse,
     }),
   listProviders: (input) =>
     requestJson({
       path: EndpointPath.ProvidersList,
       body: {
         ...(input?.projectId ? { projectId: input.projectId } : {}),
-        ...(input?.profileId ? { profileId: input.profileId } : {})
+        ...(input?.profileId ? { profileId: input.profileId } : {}),
       },
-      parse: parseProviderListResponse
+      parse: parseProviderListResponse,
     }),
   updateProviderSettings: (input) =>
     requestJson({
@@ -73,54 +79,89 @@ export const createSettingsClient = (): SettingsClient => ({
         projectId: input.projectId,
         profileId: input.profileId,
         providerId: input.providerId,
-        config: input.config
+        config: input.config,
       },
-      parse: parseProviderSettingsResponse
-    })
+      parse: parseProviderSettingsResponse,
+    }),
 });
 
 export const parseProviderListResponse = (
-  value: unknown
+  value: unknown,
 ): RuntimeProviderListResponse => {
   const record = ensureRecord(value, "providerListResponse");
 
   return {
-    providers: readRequiredArray(record, "providerListResponse", "providers").map((provider) =>
-      parseRuntimeProviderRecord(ensureRecord(provider, "runtimeProviderRecord"))
+    providers: readRequiredArray(
+      record,
+      "providerListResponse",
+      "providers",
+    ).map((provider) =>
+      parseRuntimeProviderRecord(
+        ensureRecord(provider, "runtimeProviderRecord"),
+      ),
     ),
-    ...readOptionalSelection(record)
+    ...readOptionalSelection(record),
   };
 };
 
 export const parseProviderSettingsResponse = (
-  value: unknown
+  value: unknown,
 ): RuntimeProviderSettingsRecord =>
   parseRuntimeProviderSettingsRecord(
-    readRequiredRecord(value, "providerSettingsResponse", "settings")
+    readRequiredRecord(value, "providerSettingsResponse", "settings"),
   );
 
 const parseRuntimeProviderRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): RuntimeProviderRecord => ({
   id: readRequiredString(value, "runtimeProviderRecord", "id"),
-  displayName: readRequiredString(value, "runtimeProviderRecord", "displayName"),
+  displayName: readRequiredString(
+    value,
+    "runtimeProviderRecord",
+    "displayName",
+  ),
   type: readRequiredString(value, "runtimeProviderRecord", "type"),
-  authType: readNestedRequiredString(value, "runtimeProviderRecord", "auth", "type"),
-  settingsSchema: readRequiredRecord(value, "runtimeProviderRecord", "settingsSchema")
+  authType: readNestedRequiredString(
+    value,
+    "runtimeProviderRecord",
+    "auth",
+    "type",
+  ),
+  settingsSchema: readRequiredRecord(
+    value,
+    "runtimeProviderRecord",
+    "settingsSchema",
+  ),
 });
 
 const parseRuntimeProviderSettingsRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): RuntimeProviderSettingsRecord => ({
-  projectId: readRequiredString(value, "runtimeProviderSettingsRecord", "projectId"),
-  profileId: readRequiredString(value, "runtimeProviderSettingsRecord", "profileId"),
-  providerId: readRequiredString(value, "runtimeProviderSettingsRecord", "providerId"),
+  projectId: readRequiredString(
+    value,
+    "runtimeProviderSettingsRecord",
+    "projectId",
+  ),
+  profileId: readRequiredString(
+    value,
+    "runtimeProviderSettingsRecord",
+    "profileId",
+  ),
+  providerId: readRequiredString(
+    value,
+    "runtimeProviderSettingsRecord",
+    "providerId",
+  ),
   config: readRequiredRecord(value, "runtimeProviderSettingsRecord", "config"),
-  updatedAt: readRequiredString(value, "runtimeProviderSettingsRecord", "updatedAt")
+  updatedAt: readRequiredString(
+    value,
+    "runtimeProviderSettingsRecord",
+    "updatedAt",
+  ),
 });
 
 const readOptionalSelection = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): Partial<Pick<RuntimeProviderListResponse, "selection">> => {
   const selection = value["selection"];
   if (!selection) {
@@ -130,15 +171,34 @@ const readOptionalSelection = (
   const record = ensureRecord(selection, "runtimeProviderSelectionRecord");
   return {
     selection: {
-      projectId: readRequiredString(record, "runtimeProviderSelectionRecord", "projectId"),
-      profileId: readRequiredString(record, "runtimeProviderSelectionRecord", "profileId"),
-      providerId: readRequiredString(record, "runtimeProviderSelectionRecord", "providerId"),
-      updatedAt: readRequiredString(record, "runtimeProviderSelectionRecord", "updatedAt")
-    }
+      projectId: readRequiredString(
+        record,
+        "runtimeProviderSelectionRecord",
+        "projectId",
+      ),
+      profileId: readRequiredString(
+        record,
+        "runtimeProviderSelectionRecord",
+        "profileId",
+      ),
+      providerId: readRequiredString(
+        record,
+        "runtimeProviderSelectionRecord",
+        "providerId",
+      ),
+      updatedAt: readRequiredString(
+        record,
+        "runtimeProviderSelectionRecord",
+        "updatedAt",
+      ),
+    },
   };
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -149,7 +209,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredRecord = (
   value: Record<string, unknown> | unknown,
   label: string,
-  key: string
+  key: string,
 ): Record<string, unknown> => {
   const record = ensureRecord(value, label);
   return ensureRecord(record[key], `${label}.${key}`);
@@ -158,7 +218,7 @@ const readRequiredRecord = (
 const readRequiredArray = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const nested = value[key];
   if (!Array.isArray(nested)) {
@@ -171,7 +231,7 @@ const readRequiredArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
@@ -185,7 +245,7 @@ const readNestedRequiredString = (
   value: Record<string, unknown>,
   label: string,
   key: string,
-  nestedKey: string
+  nestedKey: string,
 ): string => {
   const nested = readRequiredRecord(value, label, key);
   return readRequiredString(nested, `${label}.${key}`, nestedKey);

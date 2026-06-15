@@ -1,27 +1,23 @@
 import {
   hydrateProjectSession,
-  type ProjectSessionState
+  type ProjectSessionState,
 } from "./project-session.js";
 import { requestJson } from "./server-api-client.js";
 import {
   hydrateSettingsSnapshot,
   parseSettingsSnapshot,
-  type SettingsSnapshot
+  type SettingsSnapshot,
 } from "./settings-storage.js";
-import {
-  hydrateWorkbenchHistory
-} from "./workbench-history.js";
-import {
-  parseWorkbenchHistoryState
-} from "./workbench-codec.js";
+import { hydrateWorkbenchHistory } from "./workbench-history.js";
+import { parseWorkbenchHistoryState } from "./workbench-codec.js";
 import type {
   ProjectRecord,
-  WorkbenchHistoryState
+  WorkbenchHistoryState,
 } from "./workbench-types.js";
 
 const EndpointPath = {
   WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update"
+  WorkspaceStateUpdate: "/workspace/state/update",
 } as const;
 
 export type WorkspaceStateSnapshot = {
@@ -45,26 +41,26 @@ export const createWorkspaceStateClient = (): WorkspaceStateClient => ({
     requestJson({
       path: EndpointPath.WorkspaceStateGet,
       body: {},
-      parse: parseWorkspaceStateResponse
+      parse: parseWorkspaceStateResponse,
     }),
   update: (input) =>
     requestJson({
       path: EndpointPath.WorkspaceStateUpdate,
       body: input,
-      parse: parseWorkspaceStateResponse
-    })
+      parse: parseWorkspaceStateResponse,
+    }),
 });
 
 export const hydrateWorkspaceStateClients = (
-  state: WorkspaceStateSnapshot
+  state: WorkspaceStateSnapshot,
 ): void => {
   hydrateProjectSession(readProjectSessionFromWorkspaceState(state));
   hydrateSettingsSnapshot(state.settings);
   hydrateWorkbenchHistory(state.workbenchHistory);
 };
 
-export const parseWorkspaceStateResponse = (
-  value: unknown
+const parseWorkspaceStateResponse = (
+  value: unknown,
 ): WorkspaceStateSnapshot => {
   const root = readRecord(value, "workspaceStateResponse");
   const state = readRecord(root["state"], "workspaceStateResponse.state");
@@ -72,28 +68,28 @@ export const parseWorkspaceStateResponse = (
   return {
     activeProjectId: readNullableString(state, "activeProjectId"),
     projects: readArray(state, "projects").map((project) =>
-      parseProjectRecord(readRecord(project, "projectRecord"))
+      parseProjectRecord(readRecord(project, "projectRecord")),
     ),
     settings: parseSettingsSnapshot(state["settings"]),
-    workbenchHistory: parseWorkbenchHistoryState(state["workbenchHistory"])
+    workbenchHistory: parseWorkbenchHistoryState(state["workbenchHistory"]),
   };
 };
 
-export const readProjectSessionFromWorkspaceState = (
-  state: WorkspaceStateSnapshot
+const readProjectSessionFromWorkspaceState = (
+  state: WorkspaceStateSnapshot,
 ): ProjectSessionState => {
-  const activeProject = state.projects.find(
-    (project) => project.id === state.activeProjectId
-  ) ?? null;
+  const activeProject =
+    state.projects.find((project) => project.id === state.activeProjectId) ??
+    null;
   const recentProjects = state.projects.map((project) => ({
     rootPath: project.rootPath,
-    name: project.name
+    name: project.name,
   }));
 
   return {
     projectRootPath: activeProject?.rootPath ?? null,
     projectName: activeProject?.name ?? "",
-    recentProjects
+    recentProjects,
   };
 };
 
@@ -102,7 +98,7 @@ const parseProjectRecord = (value: Record<string, unknown>): ProjectRecord => ({
   name: readString(value, "name"),
   rootPath: readNullableString(value, "rootPath"),
   createdAt: readString(value, "createdAt"),
-  updatedAt: readString(value, "updatedAt")
+  updatedAt: readString(value, "updatedAt"),
 });
 
 const readRecord = (value: unknown, label: string): Record<string, unknown> => {
@@ -115,7 +111,7 @@ const readRecord = (value: unknown, label: string): Record<string, unknown> => {
 
 const readArray = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const entry = value[key];
   if (!Array.isArray(entry)) {
@@ -125,10 +121,7 @@ const readArray = (
   return entry;
 };
 
-const readString = (
-  value: Record<string, unknown>,
-  key: string
-): string => {
+const readString = (value: Record<string, unknown>, key: string): string => {
   const entry = value[key];
   if (typeof entry !== "string") {
     throw new Error(`Invalid ${key}`);
@@ -139,7 +132,7 @@ const readString = (
 
 const readNullableString = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null => {
   const entry = value[key];
   return typeof entry === "string" && entry.trim().length > 0 ? entry : null;

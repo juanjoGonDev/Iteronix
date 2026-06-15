@@ -6,18 +6,19 @@ export const HistoryRunStatus = {
   Running: "running",
   Completed: "completed",
   Failed: "failed",
-  Canceled: "canceled"
+  Canceled: "canceled",
 } as const;
 
 export type HistoryRunStatus =
-  typeof HistoryRunStatus[keyof typeof HistoryRunStatus];
+  (typeof HistoryRunStatus)[keyof typeof HistoryRunStatus];
 
 export const HistoryRunType = {
   Provider: "provider",
-  QualityGates: "quality_gates"
+  QualityGates: "quality_gates",
 } as const;
 
-export type HistoryRunType = typeof HistoryRunType[keyof typeof HistoryRunType];
+export type HistoryRunType =
+  (typeof HistoryRunType)[keyof typeof HistoryRunType];
 
 export const HistoryEventType = {
   Delta: "delta",
@@ -25,13 +26,13 @@ export const HistoryEventType = {
   Usage: "usage",
   Error: "error",
   Done: "done",
-  Status: "status"
+  Status: "status",
 } as const;
 
 export type HistoryEventType =
-  typeof HistoryEventType[keyof typeof HistoryEventType];
+  (typeof HistoryEventType)[keyof typeof HistoryEventType];
 
-export type HistoryMetadataValue =
+type HistoryMetadataValue =
   | string
   | number
   | boolean
@@ -62,7 +63,7 @@ export type HistoryEvent = {
   timestamp: string;
 };
 
-export type HistoryListInput = {
+type HistoryListInput = {
   status?: HistoryRunStatus;
   limit?: number;
   projectId?: string;
@@ -72,11 +73,11 @@ export type HistoryListInput = {
 export const HistoryStoreErrorCode = {
   InvalidInput: "invalid_input",
   NotFound: "not_found",
-  Conflict: "conflict"
+  Conflict: "conflict",
 } as const;
 
 export type HistoryStoreErrorCode =
-  typeof HistoryStoreErrorCode[keyof typeof HistoryStoreErrorCode];
+  (typeof HistoryStoreErrorCode)[keyof typeof HistoryStoreErrorCode];
 
 export type HistoryStoreError = {
   code: HistoryStoreErrorCode;
@@ -85,19 +86,17 @@ export type HistoryStoreError = {
 
 export type HistoryStore = {
   createRun: (
-    run: HistoryRunRecord
+    run: HistoryRunRecord,
   ) => Result<HistoryRunRecord, HistoryStoreError>;
   updateRun: (
-    run: HistoryRunRecord
+    run: HistoryRunRecord,
   ) => Result<HistoryRunRecord, HistoryStoreError>;
-  appendEvent: (
-    event: HistoryEvent
-  ) => Result<HistoryEvent, HistoryStoreError>;
+  appendEvent: (event: HistoryEvent) => Result<HistoryEvent, HistoryStoreError>;
   listRuns: (
-    input: HistoryListInput
+    input: HistoryListInput,
   ) => Result<ReadonlyArray<HistoryRunRecord>, HistoryStoreError>;
   listEvents: (
-    runId: string
+    runId: string,
   ) => Result<ReadonlyArray<HistoryEvent>, HistoryStoreError>;
   snapshot: () => HistoryStoreSeed;
 };
@@ -111,7 +110,7 @@ export type HistoryStoreChangeListener = () => void;
 
 export const createHistoryStore = (
   seed: HistoryStoreSeed = {},
-  onChange: HistoryStoreChangeListener = noopHistoryStoreChangeListener
+  onChange: HistoryStoreChangeListener = noopHistoryStoreChangeListener,
 ): HistoryStore => {
   const runs = seed.runs ? [...seed.runs] : [];
   const runsById = new Map<string, HistoryRunRecord>();
@@ -130,40 +129,40 @@ export const createHistoryStore = (
   }
 
   const createRun = (
-    run: HistoryRunRecord
+    run: HistoryRunRecord,
   ): Result<HistoryRunRecord, HistoryStoreError> =>
     notifyWhenOk(storeRun(runs, runsById, run), onChange);
 
   const updateRun = (
-    run: HistoryRunRecord
+    run: HistoryRunRecord,
   ): Result<HistoryRunRecord, HistoryStoreError> =>
     notifyWhenOk(updateStoredRun(runs, runsById, run), onChange);
 
   const appendEvent = (
-    event: HistoryEvent
+    event: HistoryEvent,
   ): Result<HistoryEvent, HistoryStoreError> =>
     notifyWhenOk(storeEvent(runsById, eventsByRun, event), onChange);
 
   const listRuns = (
-    input: HistoryListInput
+    input: HistoryListInput,
   ): Result<ReadonlyArray<HistoryRunRecord>, HistoryStoreError> =>
     ok(filterRuns(runs, input));
 
   const listEvents = (
-    runId: string
+    runId: string,
   ): Result<ReadonlyArray<HistoryEvent>, HistoryStoreError> => {
     const normalized = runId.trim();
     if (normalized.length === 0) {
       return err({
         code: HistoryStoreErrorCode.InvalidInput,
-        message: ErrorMessage.InvalidBody
+        message: ErrorMessage.InvalidBody,
       });
     }
 
     if (!runsById.has(normalized)) {
       return err({
         code: HistoryStoreErrorCode.NotFound,
-        message: ErrorMessage.NotFound
+        message: ErrorMessage.NotFound,
       });
     }
 
@@ -173,7 +172,7 @@ export const createHistoryStore = (
 
   const snapshot = (): HistoryStoreSeed => ({
     runs: [...runs],
-    events: Array.from(eventsByRun.values()).flat()
+    events: Array.from(eventsByRun.values()).flat(),
   });
 
   return {
@@ -182,7 +181,7 @@ export const createHistoryStore = (
     appendEvent,
     listRuns,
     listEvents,
-    snapshot
+    snapshot,
   };
 };
 
@@ -192,7 +191,7 @@ const noopHistoryStoreChangeListener = (): void => {
 
 const notifyWhenOk = <TValue, TError>(
   result: Result<TValue, TError>,
-  onChange: HistoryStoreChangeListener
+  onChange: HistoryStoreChangeListener,
 ): Result<TValue, TError> => {
   if (result.type === ResultType.Ok) {
     onChange();
@@ -204,20 +203,20 @@ const notifyWhenOk = <TValue, TError>(
 const storeRun = (
   runs: HistoryRunRecord[],
   runsById: Map<string, HistoryRunRecord>,
-  run: HistoryRunRecord
+  run: HistoryRunRecord,
 ): Result<HistoryRunRecord, HistoryStoreError> => {
   const normalized = normalizeRunRecord(run);
   if (!normalized) {
     return err({
       code: HistoryStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   if (runsById.has(normalized.id)) {
     return err({
       code: HistoryStoreErrorCode.Conflict,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -230,20 +229,20 @@ const storeRun = (
 const updateStoredRun = (
   runs: HistoryRunRecord[],
   runsById: Map<string, HistoryRunRecord>,
-  run: HistoryRunRecord
+  run: HistoryRunRecord,
 ): Result<HistoryRunRecord, HistoryStoreError> => {
   const normalized = normalizeRunRecord(run);
   if (!normalized) {
     return err({
       code: HistoryStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   if (!runsById.has(normalized.id)) {
     return err({
       code: HistoryStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -251,7 +250,7 @@ const updateStoredRun = (
   if (index < 0) {
     return err({
       code: HistoryStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -264,20 +263,20 @@ const updateStoredRun = (
 const storeEvent = (
   runsById: Map<string, HistoryRunRecord>,
   eventsByRun: Map<string, HistoryEvent[]>,
-  event: HistoryEvent
+  event: HistoryEvent,
 ): Result<HistoryEvent, HistoryStoreError> => {
   const normalized = normalizeEvent(event);
   if (!normalized) {
     return err({
       code: HistoryStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   if (!runsById.has(normalized.runId)) {
     return err({
       code: HistoryStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -290,7 +289,7 @@ const storeEvent = (
 
 const filterRuns = (
   runs: ReadonlyArray<HistoryRunRecord>,
-  input: HistoryListInput
+  input: HistoryListInput,
 ): ReadonlyArray<HistoryRunRecord> => {
   let filtered = input.status
     ? runs.filter((run) => run.status === input.status)
@@ -313,7 +312,7 @@ const filterRuns = (
 };
 
 const normalizeRunRecord = (
-  run: HistoryRunRecord
+  run: HistoryRunRecord,
 ): HistoryRunRecord | undefined => {
   const id = normalizeText(run.id);
   const providerId = normalizeText(run.providerId);
@@ -353,7 +352,7 @@ const normalizeRunRecord = (
     ...(run.system ? { system: run.system } : {}),
     ...(run.projectId ? { projectId: run.projectId } : {}),
     ...(run.runType ? { runType: run.runType } : {}),
-    ...(run.metadata ? { metadata: run.metadata } : {})
+    ...(run.metadata ? { metadata: run.metadata } : {}),
   };
 };
 
@@ -375,7 +374,7 @@ const normalizeEvent = (event: HistoryEvent): HistoryEvent | undefined => {
     runId,
     type,
     data: event.data,
-    timestamp
+    timestamp,
   };
 };
 

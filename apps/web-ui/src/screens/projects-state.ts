@@ -5,14 +5,14 @@ import {
   QualityGateId,
   type QualityGateEventRecord,
   type QualityGateId as QualityGateKey,
-  type QualityGateRunRecord
+  type QualityGateRunRecord,
 } from "../shared/workbench-types.js";
 
 export const DefaultSelectedGates: ReadonlyArray<QualityGateKey> = [
   QualityGateId.Lint,
   QualityGateId.Typecheck,
   QualityGateId.Test,
-  QualityGateId.Build
+  QualityGateId.Build,
 ];
 
 export type GateExecutionState =
@@ -25,24 +25,24 @@ export type GateExecutionState =
 export const GitStatusSection = {
   Staged: "staged",
   Unstaged: "unstaged",
-  Untracked: "untracked"
+  Untracked: "untracked",
 } as const;
 
 export type GitStatusSection =
-  typeof GitStatusSection[keyof typeof GitStatusSection];
+  (typeof GitStatusSection)[keyof typeof GitStatusSection];
 
 export const GitWorkspaceAction = {
   Stage: "stage",
   Unstage: "unstage",
-  Revert: "revert"
+  Revert: "revert",
 } as const;
 
 export type GitWorkspaceAction =
-  typeof GitWorkspaceAction[keyof typeof GitWorkspaceAction];
+  (typeof GitWorkspaceAction)[keyof typeof GitWorkspaceAction];
 
 export const resolveSelectedRunId = (
   selectedRunId: string | null,
-  runs: ReadonlyArray<QualityGateRunRecord>
+  runs: ReadonlyArray<QualityGateRunRecord>,
 ): string | null => {
   if (selectedRunId && runs.some((run) => run.id === selectedRunId)) {
     return selectedRunId;
@@ -53,13 +53,13 @@ export const resolveSelectedRunId = (
 
 export const readSelectedRun = (
   runs: ReadonlyArray<QualityGateRunRecord>,
-  selectedRunId: string | null
+  selectedRunId: string | null,
 ): QualityGateRunRecord | undefined =>
   runs.find((run) => run.id === selectedRunId) ?? runs[0];
 
 export const readStreamingRunId = (
   runs: ReadonlyArray<QualityGateRunRecord>,
-  selectedRunId: string | null
+  selectedRunId: string | null,
 ): string | null => {
   const selectedRun = readSelectedRun(runs, selectedRunId);
   if (selectedRun && isRunActive(selectedRun.status)) {
@@ -72,7 +72,7 @@ export const readStreamingRunId = (
 export const readGateExecutionState = (
   run: QualityGateRunRecord,
   gate: QualityGateKey,
-  index: number
+  index: number,
 ): GateExecutionState => {
   if (index < run.passedCount) {
     return "completed";
@@ -82,7 +82,10 @@ export const readGateExecutionState = (
     return "completed";
   }
 
-  if (run.status === "failed" && (run.failedGate === gate || run.currentGate === gate)) {
+  if (
+    run.status === "failed" &&
+    (run.failedGate === gate || run.currentGate === gate)
+  ) {
     return "failed";
   }
 
@@ -99,27 +102,27 @@ export const readGateExecutionState = (
 
 export const mergeRunEvents = (
   events: ReadonlyArray<QualityGateEventRecord>,
-  nextEvent: QualityGateEventRecord
+  nextEvent: QualityGateEventRecord,
 ): ReadonlyArray<QualityGateEventRecord> => {
   if (events.some((event) => event.id === nextEvent.id)) {
     return events;
   }
 
   return [...events, nextEvent].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp)
+    left.timestamp.localeCompare(right.timestamp),
   );
 };
 
 export const sortQualityGates = (
-  gates: ReadonlyArray<QualityGateKey>
+  gates: ReadonlyArray<QualityGateKey>,
 ): ReadonlyArray<QualityGateKey> =>
   [...gates].sort(
     (left, right) =>
-      DefaultSelectedGates.indexOf(left) - DefaultSelectedGates.indexOf(right)
+      DefaultSelectedGates.indexOf(left) - DefaultSelectedGates.indexOf(right),
   );
 
 export const groupGitStatusEntries = (
-  repository: GitRepositoryRecord
+  repository: GitRepositoryRecord,
 ): {
   staged: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
   unstaged: ReadonlyArray<GitRepositoryRecord["entries"][number]>;
@@ -127,11 +130,11 @@ export const groupGitStatusEntries = (
 } => ({
   staged: repository.entries.filter((entry) => entry.staged),
   unstaged: repository.entries.filter((entry) => entry.unstaged),
-  untracked: repository.entries.filter((entry) => entry.untracked)
+  untracked: repository.entries.filter((entry) => entry.untracked),
 });
 
 export const readGitSectionActions = (
-  section: GitStatusSection
+  section: GitStatusSection,
 ): ReadonlyArray<GitWorkspaceAction> => {
   if (section === GitStatusSection.Staged) {
     return [GitWorkspaceAction.Unstage];
@@ -145,7 +148,7 @@ export const readGitSectionActions = (
 };
 
 export const readGitSectionBulkAction = (
-  section: GitStatusSection
+  section: GitStatusSection,
 ): typeof GitWorkspaceAction.Stage | typeof GitWorkspaceAction.Unstage =>
   section === GitStatusSection.Staged
     ? GitWorkspaceAction.Unstage
@@ -153,7 +156,7 @@ export const readGitSectionBulkAction = (
 
 export const toggleGitPathSelection = (
   selectedPaths: ReadonlyArray<string>,
-  path: string
+  path: string,
 ): ReadonlyArray<string> =>
   selectedPaths.includes(path)
     ? selectedPaths.filter((item) => item !== path)
@@ -161,13 +164,13 @@ export const toggleGitPathSelection = (
 
 export const countSelectedGitEntries = (
   entries: ReadonlyArray<GitRepositoryRecord["entries"][number]>,
-  selectedPaths: ReadonlyArray<string>
+  selectedPaths: ReadonlyArray<string>,
 ): number =>
   entries.filter((entry) => selectedPaths.includes(entry.path)).length;
 
 export const retainGitPathSelection = (
   selectedPaths: ReadonlyArray<string>,
-  repository: GitRepositoryRecord | null
+  repository: GitRepositoryRecord | null,
 ): ReadonlyArray<string> => {
   if (!repository) {
     return [];
@@ -179,7 +182,7 @@ export const retainGitPathSelection = (
 
 export const resolveGitDiffScope = (
   repository: GitRepositoryRecord | null,
-  selectedScope: GitDiffScope
+  selectedScope: GitDiffScope,
 ): GitDiffScope => {
   if (!repository) {
     return selectedScope;
@@ -199,24 +202,23 @@ export const resolveGitDiffScope = (
 export const resolveGitFocusedPath = (
   repository: GitRepositoryRecord | null,
   scope: GitDiffScope,
-  focusedPath: string | null
+  focusedPath: string | null,
 ): string | null => {
   if (!repository || !focusedPath) {
     return null;
   }
 
-  const group = scope === GitDiffScope.Staged
-    ? repository.entries.filter((entry) => entry.staged)
-    : repository.entries.filter((entry) => entry.unstaged);
+  const group =
+    scope === GitDiffScope.Staged
+      ? repository.entries.filter((entry) => entry.staged)
+      : repository.entries.filter((entry) => entry.unstaged);
 
-  return group.some((entry) => entry.path === focusedPath)
-    ? focusedPath
-    : null;
+  return group.some((entry) => entry.path === focusedPath) ? focusedPath : null;
 };
 
 export const filterGitDiffByPath = (
   diff: string,
-  path: string | null
+  path: string | null,
 ): string => {
   if (!path || diff.trim().length === 0) {
     return diff;
@@ -229,7 +231,7 @@ export const filterGitDiffByPath = (
 
 export const readGitCommitValidationMessage = (
   message: string,
-  repository: GitRepositoryRecord | null
+  repository: GitRepositoryRecord | null,
 ): string | null => {
   const trimmed = message.trim();
 
@@ -250,7 +252,7 @@ export const readGitCommitValidationMessage = (
 
 export const readGitBranchValidationMessage = (
   branchName: string,
-  branches: GitBranchListRecord | null
+  branches: GitBranchListRecord | null,
 ): string | null => {
   const trimmed = branchName.trim();
 
@@ -270,7 +272,7 @@ export const readGitBranchValidationMessage = (
 };
 
 export const readGitPushValidationMessage = (
-  repository: GitRepositoryRecord | null
+  repository: GitRepositoryRecord | null,
 ): string | null => {
   if (!repository?.branch) {
     return "Current branch is unavailable.";
@@ -292,7 +294,7 @@ export const readGitPushValidationMessage = (
 };
 
 export const readGitPublishValidationMessage = (
-  repository: GitRepositoryRecord | null
+  repository: GitRepositoryRecord | null,
 ): string | null => {
   if (!repository?.branch) {
     return "Current branch is unavailable.";
@@ -333,12 +335,11 @@ export const isConventionalCommitMessage = (value: string): boolean => {
   const scope = normalizedHeader.slice(scopeStart + 1, -1);
 
   return (
-    isAllowedConventionalCommitType(type) &&
-    /^[a-z0-9./_-]+$/u.test(scope)
+    isAllowedConventionalCommitType(type) && /^[a-z0-9./_-]+$/u.test(scope)
   );
 };
 
-export const isValidGitBranchName = (value: string): boolean => {
+const isValidGitBranchName = (value: string): boolean => {
   if (value.length === 0) {
     return false;
   }
@@ -387,7 +388,7 @@ const ConventionalCommitType = {
   Refactor: "refactor",
   Revert: "revert",
   Style: "style",
-  Test: "test"
+  Test: "test",
 } as const;
 
 const isAllowedConventionalCommitType = (value: string): boolean =>
@@ -404,7 +405,7 @@ const isAllowedConventionalCommitType = (value: string): boolean =>
   value === ConventionalCommitType.Test;
 
 const splitGitDiffSections = (
-  diff: string
+  diff: string,
 ): ReadonlyArray<{ path: string; content: string }> => {
   const trimmed = diff.trim();
   if (trimmed.length === 0) {
@@ -413,13 +414,16 @@ const splitGitDiffSections = (
 
   const parts = trimmed.split("\ndiff --git ");
   return parts
-    .map((part, index) => index === 0 ? part : `diff --git ${part}`)
+    .map((part, index) => (index === 0 ? part : `diff --git ${part}`))
     .map(readGitDiffSection)
-    .filter((section): section is { path: string; content: string } => section !== null);
+    .filter(
+      (section): section is { path: string; content: string } =>
+        section !== null,
+    );
 };
 
 const readGitDiffSection = (
-  value: string
+  value: string,
 ): { path: string; content: string } | null => {
   const firstLine = value.split("\n", 1)[0] ?? "";
   const match = /^diff --git a\/(.+?) b\/(.+)$/u.exec(firstLine);
@@ -429,6 +433,6 @@ const readGitDiffSection = (
 
   return {
     path: match[2],
-    content: value
+    content: value,
   };
 };

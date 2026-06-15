@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { HeaderName, HeaderValue, HttpStatus, MimeType } from "./constants";
 
-export type SseEvent = {
+type SseEvent = {
   event: string;
   data: unknown;
   id?: string;
@@ -15,7 +15,7 @@ export type SseStream = {
 const SseField = {
   Event: "event",
   Data: "data",
-  Id: "id"
+  Id: "id",
 } as const;
 
 export const createSseStream = (res: ServerResponse): SseStream => {
@@ -36,7 +36,7 @@ export const createSseStream = (res: ServerResponse): SseStream => {
 
   return {
     send,
-    close
+    close,
   };
 };
 

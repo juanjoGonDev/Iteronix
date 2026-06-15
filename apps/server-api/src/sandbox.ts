@@ -2,7 +2,7 @@ import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { ErrorMessage, HttpStatus } from "./constants";
 import { ResultType, err, ok, type Result } from "./result";
 
-export type SandboxError = {
+type SandboxError = {
   status: number;
   message: string;
 };
@@ -12,13 +12,13 @@ export type WorkspacePolicy = {
   assertPathAllowed: (path: string) => Result<string, SandboxError>;
 };
 
-export type CommandPolicyInput = {
+type CommandPolicyInput = {
   command: string;
   rootPath: string;
   cwd?: string;
 };
 
-export type CommandPolicyDecision = {
+type CommandPolicyDecision = {
   command: string;
   rootPath: string;
   cwd: string;
@@ -26,12 +26,12 @@ export type CommandPolicyDecision = {
 
 export type CommandPolicy = {
   assertCommandAllowed: (
-    input: CommandPolicyInput
+    input: CommandPolicyInput,
   ) => Result<CommandPolicyDecision, SandboxError>;
 };
 
 export const createWorkspacePolicy = (
-  allowlist: ReadonlyArray<string>
+  allowlist: ReadonlyArray<string>,
 ): WorkspacePolicy => {
   const roots = normalizeAllowlist(allowlist);
 
@@ -40,42 +40,42 @@ export const createWorkspacePolicy = (
 
   return {
     allowlist: roots,
-    assertPathAllowed
+    assertPathAllowed,
   };
 };
 
 export const createCommandPolicy = (
   allowlist: ReadonlyArray<string>,
-  workspacePolicy: WorkspacePolicy
+  workspacePolicy: WorkspacePolicy,
 ): CommandPolicy => {
   const commands = normalizeCommandAllowlist(allowlist);
 
   const assertCommandAllowed = (
-    input: CommandPolicyInput
+    input: CommandPolicyInput,
   ): Result<CommandPolicyDecision, SandboxError> =>
     ensureCommandAllowed(commands, workspacePolicy, input);
 
   return {
-    assertCommandAllowed
+    assertCommandAllowed,
   };
 };
 
 const ensurePathAllowed = (
   roots: ReadonlyArray<string>,
-  path: string
+  path: string,
 ): Result<string, SandboxError> => {
   const normalized = normalizePath(path);
   if (!normalized) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     });
   }
 
   if (roots.length === 0) {
     return err({
       status: HttpStatus.Forbidden,
-      message: ErrorMessage.WorkspaceNotAllowed
+      message: ErrorMessage.WorkspaceNotAllowed,
     });
   }
 
@@ -87,27 +87,27 @@ const ensurePathAllowed = (
 
   return err({
     status: HttpStatus.Forbidden,
-    message: ErrorMessage.WorkspaceNotAllowed
+    message: ErrorMessage.WorkspaceNotAllowed,
   });
 };
 
 const ensureCommandAllowed = (
   commands: ReadonlyArray<string>,
   workspacePolicy: WorkspacePolicy,
-  input: CommandPolicyInput
+  input: CommandPolicyInput,
 ): Result<CommandPolicyDecision, SandboxError> => {
   const command = normalizeCommand(input.command);
   if (!command) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingCommand
+      message: ErrorMessage.MissingCommand,
     });
   }
 
   if (!isCommandAllowed(commands, command)) {
     return err({
       status: HttpStatus.Forbidden,
-      message: ErrorMessage.CommandNotAllowed
+      message: ErrorMessage.CommandNotAllowed,
     });
   }
 
@@ -118,7 +118,7 @@ const ensureCommandAllowed = (
 
   const cwdResult = ensurePathWithinRoot(
     rootResult.value,
-    input.cwd ?? rootResult.value
+    input.cwd ?? rootResult.value,
   );
   if (cwdResult.type === ResultType.Err) {
     return cwdResult;
@@ -127,7 +127,7 @@ const ensureCommandAllowed = (
   return ok({
     command,
     rootPath: rootResult.value,
-    cwd: cwdResult.value
+    cwd: cwdResult.value,
   });
 };
 
@@ -145,7 +145,7 @@ const normalizeAllowlist = (allowlist: ReadonlyArray<string>): string[] => {
 };
 
 const normalizeCommandAllowlist = (
-  allowlist: ReadonlyArray<string>
+  allowlist: ReadonlyArray<string>,
 ): string[] => {
   const commands: string[] = [];
 
@@ -187,20 +187,20 @@ const normalizeCommand = (value: string | undefined): string | undefined => {
 
 const ensurePathWithinRoot = (
   root: string,
-  target: string
+  target: string,
 ): Result<string, SandboxError> => {
   const resolved = normalizePath(target);
   if (!resolved) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidPath
+      message: ErrorMessage.InvalidPath,
     });
   }
 
   if (!isWithinRoot(root, resolved)) {
     return err({
       status: HttpStatus.Forbidden,
-      message: ErrorMessage.WorkspaceNotAllowed
+      message: ErrorMessage.WorkspaceNotAllowed,
     });
   }
 
@@ -235,7 +235,7 @@ const isOutsideRoot = (relativePath: string): boolean => {
 
 const isCommandAllowed = (
   allowlist: ReadonlyArray<string>,
-  command: string
+  command: string,
 ): boolean => {
   const commandName = normalizeCommandCase(basename(command));
 

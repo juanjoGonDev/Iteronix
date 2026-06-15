@@ -4,12 +4,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import type { Page } from "puppeteer";
 
-export const RuntimeFlag = {
-  PreserveScreenshots: "--preserve-screenshots"
+const RuntimeFlag = {
+  PreserveScreenshots: "--preserve-screenshots",
 } as const;
 
 const ScreenshotArtifact = {
-  Extension: ".png"
+  Extension: ".png",
 } as const;
 
 export type WaitForConditionInput = {
@@ -22,9 +22,9 @@ export type BrowserValidationRuntimeOptions = {
 };
 
 export const parseBrowserValidationRuntimeOptions = (
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
 ): BrowserValidationRuntimeOptions => ({
-  preserveScreenshots: args.includes(RuntimeFlag.PreserveScreenshots)
+  preserveScreenshots: args.includes(RuntimeFlag.PreserveScreenshots),
 });
 
 export const prepareBrowserValidationDirectory = async (input: {
@@ -32,7 +32,7 @@ export const prepareBrowserValidationDirectory = async (input: {
   preserveScreenshots: boolean;
 }): Promise<void> => {
   await mkdir(input.directory, {
-    recursive: true
+    recursive: true,
   });
 
   if (input.preserveScreenshots) {
@@ -40,18 +40,21 @@ export const prepareBrowserValidationDirectory = async (input: {
   }
 
   const entries = await readdir(input.directory, {
-    withFileTypes: true
+    withFileTypes: true,
   });
   const removablePaths = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(ScreenshotArtifact.Extension))
+    .filter(
+      (entry) =>
+        entry.isFile() && entry.name.endsWith(ScreenshotArtifact.Extension),
+    )
     .map((entry) => join(input.directory, entry.name));
 
   await Promise.all(
     removablePaths.map((path) =>
       rm(path, {
-        force: true
-      })
-    )
+        force: true,
+      }),
+    ),
   );
 };
 
@@ -64,22 +67,24 @@ export const captureBrowserValidationScreenshot = async (input: {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outputPath = join(
     input.directory,
-    `${timestamp}_${input.suffix}_${input.artifactName}.png`
+    `${timestamp}_${input.suffix}_${input.artifactName}.png`,
   );
 
   await input.page.screenshot({
     path: outputPath,
-    fullPage: true
+    fullPage: true,
   });
 };
 
 export const assertBrowserValidationBuildOutput = async (
-  buildOutputPath: string
+  buildOutputPath: string,
 ): Promise<void> => {
   try {
     await access(buildOutputPath, FsConstants.F_OK);
   } catch {
-    throw new Error(`Build output missing at ${buildOutputPath}. Run pnpm build before this validation.`);
+    throw new Error(
+      `Build output missing at ${buildOutputPath}. Run pnpm build before this validation.`,
+    );
   }
 };
 
@@ -87,27 +92,31 @@ export const startPreviewServer = (projectRoot: string): ChildProcess =>
   spawn("pnpm", ["preview"], {
     cwd: projectRoot,
     stdio: "pipe",
-    shell: process.platform === "win32"
+    shell: process.platform === "win32",
   });
 
 export const waitForHttpReady = async (
   url: string,
-  input: WaitForConditionInput
+  input: WaitForConditionInput,
 ): Promise<void> => {
-  await waitForCondition(async () => {
-    try {
-      const response = await fetch(url);
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, `HTTP readiness for ${url}`, input);
+  await waitForCondition(
+    async () => {
+      try {
+        const response = await fetch(url);
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+    `HTTP readiness for ${url}`,
+    input,
+  );
 };
 
 export const waitForCondition = async (
   check: () => Promise<boolean>,
   label: string,
-  input: WaitForConditionInput
+  input: WaitForConditionInput,
 ): Promise<void> => {
   const startedAt = Date.now();
 
@@ -129,9 +138,13 @@ export const stopProcess = async (child: ChildProcess): Promise<void> => {
 
   if (process.platform === "win32") {
     await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-        stdio: "ignore"
-      });
+      const killer = spawn(
+        "taskkill",
+        ["/pid", String(child.pid), "/T", "/F"],
+        {
+          stdio: "ignore",
+        },
+      );
       killer.on("exit", () => resolve());
       killer.on("error", () => resolve());
     });

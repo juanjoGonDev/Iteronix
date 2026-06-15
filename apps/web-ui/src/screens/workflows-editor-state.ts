@@ -1,6 +1,4 @@
-import {
-  ProviderKind
-} from "./settings-state.js";
+import { ProviderKind } from "./settings-state.js";
 
 export const WorkflowNodeKind = {
   TriggerManual: "trigger.manual",
@@ -12,65 +10,73 @@ export const WorkflowNodeKind = {
   LogicCondition: "logic.condition",
   LogicMerge: "logic.merge",
   HumanReview: "human.review",
-  TerminalResponse: "terminal.response"
+  TerminalResponse: "terminal.response",
 } as const;
 
-export type WorkflowNodeKind = typeof WorkflowNodeKind[keyof typeof WorkflowNodeKind];
+export type WorkflowNodeKind =
+  (typeof WorkflowNodeKind)[keyof typeof WorkflowNodeKind];
 
-export const WorkflowTriggerKind = {
-  Manual: "manual"
+const WorkflowTriggerKind = {
+  Manual: "manual",
 } as const;
 
-export type WorkflowTriggerKind = typeof WorkflowTriggerKind[keyof typeof WorkflowTriggerKind];
+type WorkflowTriggerKind =
+  (typeof WorkflowTriggerKind)[keyof typeof WorkflowTriggerKind];
 
 export const WorkflowRecordStatus = {
   Draft: "draft",
   Published: "published",
-  Archived: "archived"
+  Archived: "archived",
 } as const;
 
-export type WorkflowRecordStatus = typeof WorkflowRecordStatus[keyof typeof WorkflowRecordStatus];
+export type WorkflowRecordStatus =
+  (typeof WorkflowRecordStatus)[keyof typeof WorkflowRecordStatus];
 
 export const WorkflowAssetKind = {
   Prompt: "prompt",
   Instruction: "instruction",
-  Guardrail: "guardrail"
+  Guardrail: "guardrail",
 } as const;
 
-export type WorkflowAssetKind = typeof WorkflowAssetKind[keyof typeof WorkflowAssetKind];
+export type WorkflowAssetKind =
+  (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
   Workspace: "workspace",
-  Project: "project"
+  Project: "project",
 } as const;
 
-export type WorkflowAssetScope = typeof WorkflowAssetScope[keyof typeof WorkflowAssetScope];
+export type WorkflowAssetScope =
+  (typeof WorkflowAssetScope)[keyof typeof WorkflowAssetScope];
 
 export const WorkflowNodeRole = {
   Planner: "planner",
   Retriever: "retriever",
   Executor: "executor",
-  Reviewer: "reviewer"
+  Reviewer: "reviewer",
 } as const;
 
-export type WorkflowNodeRole = typeof WorkflowNodeRole[keyof typeof WorkflowNodeRole];
+export type WorkflowNodeRole =
+  (typeof WorkflowNodeRole)[keyof typeof WorkflowNodeRole];
 
 export const WorkflowReasoningLevel = {
   Low: "low",
   Medium: "medium",
   High: "high",
-  Max: "max"
+  Max: "max",
 } as const;
 
-export type WorkflowReasoningLevel = typeof WorkflowReasoningLevel[keyof typeof WorkflowReasoningLevel];
+export type WorkflowReasoningLevel =
+  (typeof WorkflowReasoningLevel)[keyof typeof WorkflowReasoningLevel];
 
 export const WorkflowVerbosity = {
   Low: "low",
   Medium: "medium",
-  High: "high"
+  High: "high",
 } as const;
 
-export type WorkflowVerbosity = typeof WorkflowVerbosity[keyof typeof WorkflowVerbosity];
+export type WorkflowVerbosity =
+  (typeof WorkflowVerbosity)[keyof typeof WorkflowVerbosity];
 
 export type WorkflowProviderSelectionRecord = {
   providerId: string;
@@ -82,7 +88,7 @@ export type WorkflowProviderSelectionRecord = {
   testedAt?: string;
 };
 
-export type WorkflowNodeConfigRecord = {
+type WorkflowNodeConfigRecord = {
   assetId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
@@ -92,7 +98,7 @@ export type WorkflowNodeConfigRecord = {
   };
 };
 
-export type WorkflowPortRecord = {
+type WorkflowPortRecord = {
   id: string;
   name: string;
   acceptsMany: boolean;
@@ -118,19 +124,19 @@ export type GuardrailValidationRecord = {
 export const WorkflowGuardrailSeverity = {
   Warn: "warn",
   Error: "error",
-  Success: "success"
+  Success: "success",
 } as const;
 
 export type WorkflowGuardrailSeverity =
-  typeof WorkflowGuardrailSeverity[keyof typeof WorkflowGuardrailSeverity];
+  (typeof WorkflowGuardrailSeverity)[keyof typeof WorkflowGuardrailSeverity];
 
 export const WorkflowGuardrailOperator = {
   All: "all",
-  Any: "any"
+  Any: "any",
 } as const;
 
 export type WorkflowGuardrailOperator =
-  typeof WorkflowGuardrailOperator[keyof typeof WorkflowGuardrailOperator];
+  (typeof WorkflowGuardrailOperator)[keyof typeof WorkflowGuardrailOperator];
 
 export type GuardrailDefinitionRecord = {
   id: string;
@@ -139,7 +145,7 @@ export type GuardrailDefinitionRecord = {
   validations: ReadonlyArray<GuardrailValidationRecord>;
 };
 
-export type AttachedGuardrailRecord = {
+type AttachedGuardrailRecord = {
   assetId: string;
   order: number;
   enabled: boolean;
@@ -169,7 +175,9 @@ export const JsonSchemaItemsSegment = "$items" as const;
 export type JsonContractProviderSchemaRecord =
   | {
       t: "o";
-      p?: Readonly<Record<string, JsonContractProviderSchemaRecord & { r?: 1 }>>;
+      p?: Readonly<
+        Record<string, JsonContractProviderSchemaRecord & { r?: 1 }>
+      >;
       n?: 1;
     }
   | {
@@ -192,15 +200,17 @@ export type JsonContractProviderSchemaRecord =
 
 export type JsonContractCompiledSchema = {
   zodExpression: string;
-  safeParse: (value: unknown) => {
-    success: true;
-    data: unknown;
-  } | {
-    success: false;
-    error: {
-      issues: ReadonlyArray<string>;
-    };
-  };
+  safeParse: (value: unknown) =>
+    | {
+        success: true;
+        data: unknown;
+      }
+    | {
+        success: false;
+        error: {
+          issues: ReadonlyArray<string>;
+        };
+      };
 };
 
 export type JsonOutputContractRecord = {
@@ -214,21 +224,21 @@ export type JsonOutputContractRecord = {
 
 export const WorkflowExpressionSegmentKind = {
   Text: "text",
-  Variable: "variable"
+  Variable: "variable",
 } as const;
 
 export type WorkflowExpressionSegmentKind =
-  typeof WorkflowExpressionSegmentKind[keyof typeof WorkflowExpressionSegmentKind];
+  (typeof WorkflowExpressionSegmentKind)[keyof typeof WorkflowExpressionSegmentKind];
 
 export const WorkflowExpressionVariableKind = {
   NodeOutput: "node_output",
   CurrentInput: "current_input",
   WorkflowContext: "workflow_context",
-  AssetOutput: "asset_output"
+  AssetOutput: "asset_output",
 } as const;
 
 export type WorkflowExpressionVariableKind =
-  typeof WorkflowExpressionVariableKind[keyof typeof WorkflowExpressionVariableKind];
+  (typeof WorkflowExpressionVariableKind)[keyof typeof WorkflowExpressionVariableKind];
 
 export type WorkflowExpressionVariableReference = {
   kind: WorkflowExpressionVariableKind;
@@ -279,12 +289,12 @@ export type EdgeMappingEntryRecord = {
   };
 };
 
-export type EdgeMappingRecord = {
+type EdgeMappingRecord = {
   mode: "passthrough" | "object" | "template";
   entries: ReadonlyArray<EdgeMappingEntryRecord>;
 };
 
-export type WorkflowEdgeRecord = {
+type WorkflowEdgeRecord = {
   id: string;
   sourceNodeId: string;
   sourcePortId: string;
@@ -293,7 +303,7 @@ export type WorkflowEdgeRecord = {
   mapping: EdgeMappingRecord;
 };
 
-export type WorkflowTriggerRecord = {
+type WorkflowTriggerRecord = {
   kind: WorkflowTriggerKind;
   enabled: boolean;
   config: Record<string, unknown>;
@@ -305,12 +315,12 @@ export type WorkflowViewportRecord = {
   zoom: number;
 };
 
-export type WorkflowExecutionPolicyRecord = {
+type WorkflowExecutionPolicyRecord = {
   maxNodeRetries: number;
   allowManualCheckpointResume: boolean;
 };
 
-export type WorkflowContextPolicyRecord = {
+type WorkflowContextPolicyRecord = {
   language: string;
   carryMessagesLimit: number;
   carryArtifactLimit: number;
@@ -445,7 +455,7 @@ const DefaultNodeWidth = 264;
 const DefaultWorkflowViewport = {
   x: 96,
   y: 96,
-  zoom: 1
+  zoom: 1,
 } as const;
 
 const DefaultNodeGridColumnWidth = 312;
@@ -471,24 +481,24 @@ export const createEmptyWorkflowDefinition = (input: {
   trigger: {
     kind: WorkflowTriggerKind.Manual,
     enabled: true,
-    config: {}
+    config: {},
   },
   viewport: { ...DefaultWorkflowViewport },
   nodes: [
     createWorkflowNodeRecord(WorkflowNodeKind.TriggerManual, 0),
-    createWorkflowNodeRecord(WorkflowNodeKind.TerminalResponse, 1)
+    createWorkflowNodeRecord(WorkflowNodeKind.TerminalResponse, 1),
   ],
   edges: [],
   executionPolicy: {
     maxNodeRetries: 1,
-    allowManualCheckpointResume: true
+    allowManualCheckpointResume: true,
   },
   defaultContextPolicy: {
     language: DefaultWorkflowLanguage,
     carryMessagesLimit: 8,
-    carryArtifactLimit: 8
+    carryArtifactLimit: 8,
   },
-  tags: []
+  tags: [],
 });
 
 export const createWorkflowAssetDraft = (input: {
@@ -517,11 +527,17 @@ export const createWorkflowAssetDraft = (input: {
     description: "",
     body: readDefaultAssetBody(input.kind),
     language: DefaultWorkflowLanguage,
-    tags: []
+    tags: [],
   };
 
-  if (input.kind === WorkflowAssetKind.Prompt || input.kind === WorkflowAssetKind.Instruction) {
-    draft.outputContract = createDefaultOutputContract(`${baseName} output`, idFactory);
+  if (
+    input.kind === WorkflowAssetKind.Prompt ||
+    input.kind === WorkflowAssetKind.Instruction
+  ) {
+    draft.outputContract = createDefaultOutputContract(
+      `${baseName} output`,
+      idFactory,
+    );
   }
 
   if (input.kind === WorkflowAssetKind.Guardrail) {
@@ -535,9 +551,9 @@ export const createWorkflowAssetDraft = (input: {
           kind: "field_exists",
           target: "output",
           path: "$.result",
-          message: "Expected $.result to be present."
-        }
-      ]
+          message: "Expected $.result to be present.",
+        },
+      ],
     };
   }
 
@@ -545,10 +561,10 @@ export const createWorkflowAssetDraft = (input: {
   return draft;
 };
 
-export const createWorkflowNodeRecord = (
+const createWorkflowNodeRecord = (
   kind: WorkflowNodeKind,
   index: number,
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): WorkflowNodeRecord => {
   const template = readNodeTemplate(kind);
 
@@ -558,7 +574,7 @@ export const createWorkflowNodeRecord = (
     label: template.label,
     position: {
       x: 64 + (index % 3) * DefaultNodeGridColumnWidth,
-      y: 64 + Math.floor(index / 3) * DefaultNodeGridRowHeight
+      y: 64 + Math.floor(index / 3) * DefaultNodeGridRowHeight,
     },
     width: DefaultNodeWidth,
     collapsed: false,
@@ -566,26 +582,28 @@ export const createWorkflowNodeRecord = (
     inputPorts: template.inputPorts,
     outputPorts: template.outputPorts,
     attachedGuardrails: [],
-    ...(template.outputContract ? { outputContract: template.outputContract } : {})
+    ...(template.outputContract
+      ? { outputContract: template.outputContract }
+      : {}),
   };
 };
 
 export const addWorkflowNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   kind: WorkflowNodeKind,
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: [
     ...definition.nodes,
-    createWorkflowNodeRecord(kind, definition.nodes.length, idFactory)
-  ]
+    createWorkflowNodeRecord(kind, definition.nodes.length, idFactory),
+  ],
 });
 
 export const moveWorkflowNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   nodeId: string,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: definition.nodes.map((node) =>
@@ -594,52 +612,36 @@ export const moveWorkflowNode = (
           ...node,
           position: {
             x: Math.round(position.x),
-            y: Math.round(position.y)
-          }
+            y: Math.round(position.y),
+          },
         }
-      : node
-  )
-});
-
-export const updateWorkflowNode = (
-  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  nodeId: string,
-  patch: Partial<WorkflowNodeRecord>
-): WorkflowDefinitionUpsertInput => ({
-  ...stripDefinitionVersionFields(definition),
-  nodes: definition.nodes.map((node) =>
-    node.id === nodeId
-      ? {
-          ...node,
-          ...patch
-        }
-      : node
-  )
+      : node,
+  ),
 });
 
 export const removeWorkflowNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  nodeId: string
+  nodeId: string,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: definition.nodes.filter((node) => node.id !== nodeId),
   edges: definition.edges.filter(
-    (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId
-  )
+    (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId,
+  ),
 });
 
 export const removeWorkflowEdge = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  edgeId: string
+  edgeId: string,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
-  edges: definition.edges.filter((edge) => edge.id !== edgeId)
+  edges: definition.edges.filter((edge) => edge.id !== edgeId),
 });
 
 export const attachGuardrailToNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   nodeId: string,
-  assetId: string
+  assetId: string,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: definition.nodes.map((node) => {
@@ -647,7 +649,9 @@ export const attachGuardrailToNode = (
       return node;
     }
 
-    if (node.attachedGuardrails.some((guardrail) => guardrail.assetId === assetId)) {
+    if (
+      node.attachedGuardrails.some((guardrail) => guardrail.assetId === assetId)
+    ) {
       return node;
     }
 
@@ -658,17 +662,17 @@ export const attachGuardrailToNode = (
         {
           assetId,
           order: node.attachedGuardrails.length,
-          enabled: true
-        }
-      ]
+          enabled: true,
+        },
+      ],
     };
-  })
+  }),
 });
 
 export const detachGuardrailFromNode = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   nodeId: string,
-  assetId: string
+  assetId: string,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: definition.nodes.map((node) =>
@@ -679,11 +683,11 @@ export const detachGuardrailFromNode = (
             .filter((guardrail) => guardrail.assetId !== assetId)
             .map((guardrail, index) => ({
               ...guardrail,
-              order: index
-            }))
+              order: index,
+            })),
         }
-        : node
-  )
+      : node,
+  ),
 });
 
 export type JsonContractValidationResult = {
@@ -710,17 +714,20 @@ export type GuardrailValidityResult = {
 export const updateWorkflowNodeOutputContract = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   nodeId: string,
-  updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord
+  updater: (contract: JsonOutputContractRecord) => JsonOutputContractRecord,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   nodes: definition.nodes.map((node) =>
     node.id === nodeId
       ? {
           ...node,
-          outputContract: updater(node.outputContract ?? createDefaultOutputContract(`${node.label} output`))
+          outputContract: updater(
+            node.outputContract ??
+              createDefaultOutputContract(`${node.label} output`),
+          ),
         }
-      : node
-  )
+      : node,
+  ),
 });
 
 export const createWorkflowOutputContractField = (
@@ -729,7 +736,7 @@ export const createWorkflowOutputContractField = (
     type: JsonSchemaNodeRecord["type"];
     required: boolean;
   },
-  rootSchema: JsonSchemaNodeRecord
+  rootSchema: JsonSchemaNodeRecord,
 ): JsonSchemaNodeRecord => {
   const fieldName = input.name.trim();
   if (fieldName.length === 0) {
@@ -741,25 +748,25 @@ export const createWorkflowOutputContractField = (
     required: input.required,
     node: {
       ...createJsonSchemaNode(input.type),
-      title: toTitle(fieldName)
-    }
+      title: toTitle(fieldName),
+    },
   });
 };
 
 export const readJsonContractValidation = (
-  contract: JsonOutputContractRecord | null
+  contract: JsonOutputContractRecord | null,
 ): JsonContractValidationResult => {
   if (!contract) {
     return {
       valid: false,
-      message: "No output contract is configured."
+      message: "No output contract is configured.",
     };
   }
 
   if (contract.rootType !== "object" || contract.schema.type !== "object") {
     return {
       valid: false,
-      message: "The contract root must be an object."
+      message: "The contract root must be an object.",
     };
   }
 
@@ -767,36 +774,36 @@ export const readJsonContractValidation = (
   if (issues.length > 0) {
     return {
       valid: false,
-      message: issues[0] ?? "The JSON contract is invalid."
+      message: issues[0] ?? "The JSON contract is invalid.",
     };
   }
 
   return {
     valid: true,
-    message: "Output contract is valid."
+    message: "Output contract is valid.",
   };
 };
 
 export const createJsonSchemaNode = (
-  type: JsonSchemaNodeRecord["type"]
+  type: JsonSchemaNodeRecord["type"],
 ): JsonSchemaNodeRecord => {
   if (type === "object") {
     return {
       type,
       properties: {},
-      required: []
+      required: [],
     };
   }
 
   if (type === "array") {
     return {
       type,
-      items: createJsonSchemaNode("string")
+      items: createJsonSchemaNode("string"),
     };
   }
 
   return {
-    type
+    type,
   };
 };
 
@@ -807,7 +814,7 @@ export const upsertJsonSchemaProperty = (
     name: string;
     node: JsonSchemaNodeRecord;
     required: boolean;
-  }
+  },
 ): JsonSchemaNodeRecord => {
   const fieldName = input.name.trim();
   if (fieldName.length === 0) {
@@ -815,9 +822,10 @@ export const upsertJsonSchemaProperty = (
   }
 
   return updateJsonSchemaNode(rootSchema, parentPath, (parentNode) => {
-    const normalizedParent = parentNode.type === "object"
-      ? parentNode
-      : createJsonSchemaNode("object");
+    const normalizedParent =
+      parentNode.type === "object"
+        ? parentNode
+        : createJsonSchemaNode("object");
     const nextRequired = input.required
       ? appendUniqueString(normalizedParent.required, fieldName)
       : removeStringEntry(normalizedParent.required, fieldName);
@@ -826,9 +834,9 @@ export const upsertJsonSchemaProperty = (
       ...normalizedParent,
       properties: {
         ...(normalizedParent.properties ?? {}),
-        [fieldName]: cloneJsonSchemaNode(input.node)
+        [fieldName]: cloneJsonSchemaNode(input.node),
       },
-      required: nextRequired
+      required: nextRequired,
     };
   });
 };
@@ -837,11 +845,15 @@ export const renameJsonSchemaProperty = (
   rootSchema: JsonSchemaNodeRecord,
   parentPath: ReadonlyArray<string>,
   previousName: string,
-  nextName: string
+  nextName: string,
 ): JsonSchemaNodeRecord => {
   const previousKey = previousName.trim();
   const nextKey = nextName.trim();
-  if (previousKey.length === 0 || nextKey.length === 0 || previousKey === nextKey) {
+  if (
+    previousKey.length === 0 ||
+    nextKey.length === 0 ||
+    previousKey === nextKey
+  ) {
     return rootSchema;
   }
 
@@ -867,7 +879,7 @@ export const renameJsonSchemaProperty = (
     return {
       ...parentNode,
       properties: nextProperties,
-      required: nextRequired
+      required: nextRequired,
     };
   });
 };
@@ -875,7 +887,7 @@ export const renameJsonSchemaProperty = (
 export const removeJsonSchemaProperty = (
   rootSchema: JsonSchemaNodeRecord,
   parentPath: ReadonlyArray<string>,
-  propertyName: string
+  propertyName: string,
 ): JsonSchemaNodeRecord =>
   updateJsonSchemaNode(rootSchema, parentPath, (parentNode) => {
     if (parentNode.type !== "object") {
@@ -893,25 +905,26 @@ export const removeJsonSchemaProperty = (
     return {
       ...parentNode,
       properties: nextProperties,
-      required: removeStringEntry(parentNode.required, fieldName)
+      required: removeStringEntry(parentNode.required, fieldName),
     };
   });
 
 export const updateJsonSchemaNode = (
   rootSchema: JsonSchemaNodeRecord,
   path: ReadonlyArray<string>,
-  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord
-): JsonSchemaNodeRecord => updateJsonSchemaNodeAtPath(rootSchema, path, updater);
+  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord,
+): JsonSchemaNodeRecord =>
+  updateJsonSchemaNodeAtPath(rootSchema, path, updater);
 
 export const readJsonSchemaPaths = (
-  schema: JsonSchemaNodeRecord
+  schema: JsonSchemaNodeRecord,
 ): ReadonlyArray<string> => {
   const paths = readJsonSchemaNodePaths(schema, "$");
   return paths.length > 0 ? paths : ["$"];
 };
 
 export const compileJsonContractSchema = (
-  contract: JsonOutputContractRecord
+  contract: JsonOutputContractRecord,
 ): JsonContractCompiledSchema => {
   const issues = readJsonSchemaIssues(contract.schema, "$");
   if (issues.length > 0) {
@@ -921,47 +934,58 @@ export const compileJsonContractSchema = (
   return {
     zodExpression: buildJsonSchemaZodExpression(contract.schema),
     safeParse: (value: unknown) => {
-      const runtimeIssues = validateJsonSchemaValue(contract.schema, value, "$");
+      const runtimeIssues = validateJsonSchemaValue(
+        contract.schema,
+        value,
+        "$",
+      );
       if (runtimeIssues.length > 0) {
         return {
           success: false,
           error: {
-            issues: runtimeIssues
-          }
+            issues: runtimeIssues,
+          },
         };
       }
 
       return {
         success: true,
-        data: value
+        data: value,
       };
-    }
+    },
   };
 };
 
 export const safeParseJsonContractValue = (
   contract: JsonOutputContractRecord,
-  value: unknown
+  value: unknown,
 ): ReturnType<JsonContractCompiledSchema["safeParse"]> =>
   compileJsonContractSchema(contract).safeParse(value);
 
 export const serializeJsonContractForProvider = (
-  contract: JsonOutputContractRecord
+  contract: JsonOutputContractRecord,
 ): JsonContractProviderSchemaRecord => serializeJsonSchemaNode(contract.schema);
 
 export const formatJsonOutputContractDocument = (
-  contract: JsonOutputContractRecord
-): string => JSON.stringify({
-  name: contract.name,
-  schemaVersion: contract.schemaVersion,
-  rootType: contract.rootType,
-  schema: contract.schema,
-  ...(contract.sampleOutput !== undefined ? { sampleOutput: contract.sampleOutput } : {})
-}, null, 2);
+  contract: JsonOutputContractRecord,
+): string =>
+  JSON.stringify(
+    {
+      name: contract.name,
+      schemaVersion: contract.schemaVersion,
+      rootType: contract.rootType,
+      schema: contract.schema,
+      ...(contract.sampleOutput !== undefined
+        ? { sampleOutput: contract.sampleOutput }
+        : {}),
+    },
+    null,
+    2,
+  );
 
 export const parseJsonOutputContractDocument = (
   input: string,
-  current: JsonOutputContractRecord
+  current: JsonOutputContractRecord,
 ): JsonOutputContractDocumentResult => {
   let parsed: unknown;
   try {
@@ -969,27 +993,30 @@ export const parseJsonOutputContractDocument = (
   } catch {
     return {
       success: false,
-      error: "Raw JSON is not valid JSON."
+      error: "Raw JSON is not valid JSON.",
     };
   }
 
   if (!isRecordValue(parsed)) {
     return {
       success: false,
-      error: "Raw JSON must describe an object contract document."
+      error: "Raw JSON must describe an object contract document.",
     };
   }
 
-  const name = typeof parsed["name"] === "string" && parsed["name"].trim().length > 0
-    ? parsed["name"].trim()
-    : current.name;
-  const schemaVersion = parsed["schemaVersion"] === 1 ? 1 : current.schemaVersion;
-  const rootType = parsed["rootType"] === "object" ? "object" : current.rootType;
+  const name =
+    typeof parsed["name"] === "string" && parsed["name"].trim().length > 0
+      ? parsed["name"].trim()
+      : current.name;
+  const schemaVersion =
+    parsed["schemaVersion"] === 1 ? 1 : current.schemaVersion;
+  const rootType =
+    parsed["rootType"] === "object" ? "object" : current.rootType;
   const schemaValue = readJsonSchemaNodeDocument(parsed["schema"]);
   if (!schemaValue) {
     return {
       success: false,
-      error: "Raw JSON schema uses unsupported fields or types."
+      error: "Raw JSON schema uses unsupported fields or types.",
     };
   }
 
@@ -1003,33 +1030,36 @@ export const parseJsonOutputContractDocument = (
       ? { sampleOutput: parsed["sampleOutput"] }
       : current.sampleOutput !== undefined
         ? { sampleOutput: current.sampleOutput }
-        : {})
+        : {}),
   } satisfies JsonOutputContractRecord;
   const validation = readJsonContractValidation(contract);
 
   return validation.valid
     ? {
         success: true,
-        contract
+        contract,
       }
     : {
         success: false,
-        error: validation.message
+        error: validation.message,
       };
 };
 
 export const serializeWorkflowExpression = (
-  expression: WorkflowExpressionRecord
-): string => expression.segments.map((segment) =>
-  segment.kind === WorkflowExpressionSegmentKind.Text
-    ? segment.value
-    : buildWorkflowExpressionToken(segment.reference)
-).join("");
+  expression: WorkflowExpressionRecord,
+): string =>
+  expression.segments
+    .map((segment) =>
+      segment.kind === WorkflowExpressionSegmentKind.Text
+        ? segment.value
+        : buildWorkflowExpressionToken(segment.reference),
+    )
+    .join("");
 
 export const parseWorkflowExpression = (
-  value: string
+  value: string,
 ): WorkflowExpressionRecord => ({
-  segments: splitWorkflowExpressionSegments(value)
+  segments: splitWorkflowExpressionSegments(value),
 });
 
 export const insertWorkflowExpressionVariable = (input: {
@@ -1045,14 +1075,14 @@ export const insertWorkflowExpressionVariable = (input: {
 
   return {
     expression: parseWorkflowExpression(nextValue),
-    value: nextValue
+    value: nextValue,
   };
 };
 
 export const addWorkflowEdgeMappingEntry = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
   edgeId: string,
-  entry: EdgeMappingEntryRecord
+  entry: EdgeMappingEntryRecord,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   edges: definition.edges.map((edge) =>
@@ -1061,26 +1091,27 @@ export const addWorkflowEdgeMappingEntry = (
           ...edge,
           mapping: {
             mode: "object",
-            entries: [...edge.mapping.entries, entry]
-          }
+            entries: [...edge.mapping.entries, entry],
+          },
         }
-      : edge
-  )
+      : edge,
+  ),
 });
 
 export const updateWorkflowAssetGuardrail = (
   asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
-  updater: (definition: GuardrailDefinitionRecord) => GuardrailDefinitionRecord
+  updater: (definition: GuardrailDefinitionRecord) => GuardrailDefinitionRecord,
 ): WorkflowAssetUpsertInput => ({
   ...stripAssetPersistenceFields(asset),
-  guardrail: updater(asset.guardrail ?? createDefaultGuardrailDefinition())
+  guardrail: updater(asset.guardrail ?? createDefaultGuardrailDefinition()),
 });
 
 export const addWorkflowGuardrailValidation = (
   asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): WorkflowAssetUpsertInput => {
-  const guardrail = asset.guardrail ?? createDefaultGuardrailDefinition(idFactory);
+  const guardrail =
+    asset.guardrail ?? createDefaultGuardrailDefinition(idFactory);
   if (guardrail.validations.length >= GuardrailValidationLimit) {
     return stripAssetPersistenceFields(asset);
   }
@@ -1091,20 +1122,20 @@ export const addWorkflowGuardrailValidation = (
       ...guardrail,
       validations: [
         ...guardrail.validations,
-        createDefaultGuardrailValidation(idFactory)
-      ]
-    }
+        createDefaultGuardrailValidation(idFactory),
+      ],
+    },
   };
 };
 
 export const readGuardrailDefinitionValidity = (
-  guardrail: GuardrailDefinitionRecord | null
+  guardrail: GuardrailDefinitionRecord | null,
 ): GuardrailValidityResult => {
   if (!guardrail) {
     return {
       valid: false,
       blocking: false,
-      message: "No guardrail definition is configured."
+      message: "No guardrail definition is configured.",
     };
   }
 
@@ -1112,9 +1143,10 @@ export const readGuardrailDefinitionValidity = (
     return {
       valid: false,
       blocking: guardrail.severity === WorkflowGuardrailSeverity.Error,
-      message: guardrail.severity === WorkflowGuardrailSeverity.Error
-        ? "Error guardrails need at least one validation before the node can be considered valid."
-        : "Add at least one validation to make this guardrail actionable."
+      message:
+        guardrail.severity === WorkflowGuardrailSeverity.Error
+          ? "Error guardrails need at least one validation before the node can be considered valid."
+          : "Add at least one validation to make this guardrail actionable.",
     };
   }
 
@@ -1122,16 +1154,17 @@ export const readGuardrailDefinitionValidity = (
     return {
       valid: false,
       blocking: guardrail.severity === WorkflowGuardrailSeverity.Error,
-      message: `Guardrails support at most ${GuardrailValidationLimit.toString()} validations.`
+      message: `Guardrails support at most ${GuardrailValidationLimit.toString()} validations.`,
     };
   }
 
   return {
     valid: true,
     blocking: false,
-    message: guardrail.severity === WorkflowGuardrailSeverity.Error
-      ? "Error severity blocks node validity only when a validation triggers."
-      : "Warnings and success signals are permissive."
+    message:
+      guardrail.severity === WorkflowGuardrailSeverity.Error
+        ? "Error severity blocks node validity only when a validation triggers."
+        : "Warnings and success signals are permissive.",
   };
 };
 
@@ -1143,24 +1176,32 @@ export const connectWorkflowNodes = (
     targetNodeId: string;
     targetPortId: string;
   },
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): WorkflowDefinitionUpsertInput => {
   if (input.sourceNodeId === input.targetNodeId) {
     return stripDefinitionVersionFields(definition);
   }
 
-  if (definition.edges.some((edge) =>
-    edge.sourceNodeId === input.sourceNodeId &&
-    edge.sourcePortId === input.sourcePortId &&
-    edge.targetNodeId === input.targetNodeId &&
-    edge.targetPortId === input.targetPortId
-  )) {
+  if (
+    definition.edges.some(
+      (edge) =>
+        edge.sourceNodeId === input.sourceNodeId &&
+        edge.sourcePortId === input.sourcePortId &&
+        edge.targetNodeId === input.targetNodeId &&
+        edge.targetPortId === input.targetPortId,
+    )
+  ) {
     return stripDefinitionVersionFields(definition);
   }
 
-  const targetNode = definition.nodes.find((node) => node.id === input.targetNodeId);
-  const targetPort = targetNode?.inputPorts.find((port) => port.id === input.targetPortId);
-  const shouldReplaceExistingTargetConnection = targetPort?.acceptsMany === false;
+  const targetNode = definition.nodes.find(
+    (node) => node.id === input.targetNodeId,
+  );
+  const targetPort = targetNode?.inputPorts.find(
+    (port) => port.id === input.targetPortId,
+  );
+  const shouldReplaceExistingTargetConnection =
+    targetPort?.acceptsMany === false;
 
   return {
     ...stripDefinitionVersionFields(definition),
@@ -1170,7 +1211,10 @@ export const connectWorkflowNodes = (
           return true;
         }
 
-        return !(edge.targetNodeId === input.targetNodeId && edge.targetPortId === input.targetPortId);
+        return !(
+          edge.targetNodeId === input.targetNodeId &&
+          edge.targetPortId === input.targetPortId
+        );
       }),
       {
         id: idFactory(),
@@ -1180,50 +1224,40 @@ export const connectWorkflowNodes = (
         targetPortId: input.targetPortId,
         mapping: {
           mode: "passthrough",
-          entries: []
-        }
-      }
-    ]
+          entries: [],
+        },
+      },
+    ],
   };
 };
 
 export const setWorkflowViewport = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  viewport: WorkflowViewportRecord
+  viewport: WorkflowViewportRecord,
 ): WorkflowDefinitionUpsertInput => ({
   ...stripDefinitionVersionFields(definition),
   viewport: {
     x: Math.round(viewport.x),
     y: Math.round(viewport.y),
-    zoom: Math.max(0.35, Math.min(1.8, Number(viewport.zoom.toFixed(2))))
-    } 
-  });
+    zoom: Math.max(0.35, Math.min(1.8, Number(viewport.zoom.toFixed(2)))),
+  },
+});
 
 export const isWorkflowViewportOnlyChange = (
   previous: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  next: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput
+  next: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
 ): boolean =>
   JSON.stringify({
     ...previous,
-    viewport: DefaultWorkflowViewport
-  }) === JSON.stringify({
+    viewport: DefaultWorkflowViewport,
+  }) ===
+  JSON.stringify({
     ...next,
-    viewport: DefaultWorkflowViewport
+    viewport: DefaultWorkflowViewport,
   });
 
-export const updateWorkflowMetadata = (
-  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
-  patch: Partial<Pick<WorkflowDefinitionUpsertInput, "name" | "description" | "status" | "tags">>
-): WorkflowDefinitionUpsertInput => ({
-  ...stripDefinitionVersionFields(definition),
-  ...(patch.name !== undefined ? { name: patch.name } : {}),
-  ...(patch.description !== undefined ? { description: patch.description } : {}),
-  ...(patch.status !== undefined ? { status: patch.status } : {}),
-  ...(patch.tags !== undefined ? { tags: patch.tags } : {})
-});
-
 export const stripDefinitionVersionFields = (
-  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput
+  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
 ): WorkflowDefinitionUpsertInput => ({
   ...(definition.id ? { id: definition.id } : {}),
   workspaceId: definition.workspaceId,
@@ -1236,11 +1270,11 @@ export const stripDefinitionVersionFields = (
   edges: definition.edges,
   executionPolicy: definition.executionPolicy,
   defaultContextPolicy: definition.defaultContextPolicy,
-  tags: definition.tags
+  tags: definition.tags,
 });
 
-export const stripAssetPersistenceFields = (
-  asset: WorkflowAssetRecord | WorkflowAssetUpsertInput
+const stripAssetPersistenceFields = (
+  asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
 ): WorkflowAssetUpsertInput => ({
   ...(asset.id ? { id: asset.id } : {}),
   workspaceId: asset.workspaceId,
@@ -1255,11 +1289,11 @@ export const stripAssetPersistenceFields = (
   tags: asset.tags,
   ...(asset.outputContract ? { outputContract: asset.outputContract } : {}),
   ...(asset.guardrail ? { guardrail: asset.guardrail } : {}),
-  ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {})
+  ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {}),
 });
 
-export const readNodeTemplate = (
-  kind: WorkflowNodeKind
+const readNodeTemplate = (
+  kind: WorkflowNodeKind,
 ): {
   label: string;
   config: WorkflowNodeConfigRecord;
@@ -1272,7 +1306,7 @@ export const readNodeTemplate = (
       label: "Manual trigger",
       config: {},
       inputPorts: [],
-      outputPorts: [createPort("output", "Run", true)]
+      outputPorts: [createPort("output", "Run", true)],
     };
   }
 
@@ -1282,7 +1316,7 @@ export const readNodeTemplate = (
       config: {},
       inputPorts: [createPort("input", "Context", true)],
       outputPorts: [createPort("output", "Prompt", true)],
-      outputContract: createDefaultOutputContract("Prompt output")
+      outputContract: createDefaultOutputContract("Prompt output"),
     };
   }
 
@@ -1292,7 +1326,7 @@ export const readNodeTemplate = (
       config: {},
       inputPorts: [createPort("input", "Context", true)],
       outputPorts: [createPort("output", "Instruction", true)],
-      outputContract: createDefaultOutputContract("Instruction output")
+      outputContract: createDefaultOutputContract("Instruction output"),
     };
   }
 
@@ -1301,7 +1335,7 @@ export const readNodeTemplate = (
       label: "Guardrail",
       config: {},
       inputPorts: [createPort("input", "Subject", true)],
-      outputPorts: [createPort("output", "Validated", true)]
+      outputPorts: [createPort("output", "Validated", true)],
     };
   }
 
@@ -1311,11 +1345,11 @@ export const readNodeTemplate = (
       config: {
         role: WorkflowNodeRole.Planner,
         provider: createDefaultProviderSelection(),
-        prompt: ""
+        prompt: "",
       },
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [createPort("output", "Output", true)],
-      outputContract: createDefaultOutputContract("Agent output")
+      outputContract: createDefaultOutputContract("Agent output"),
     };
   }
 
@@ -1324,11 +1358,11 @@ export const readNodeTemplate = (
       label: "Provider run",
       config: {
         provider: createDefaultProviderSelection(),
-        prompt: ""
+        prompt: "",
       },
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [createPort("output", "Output", true)],
-      outputContract: createDefaultOutputContract("Provider output")
+      outputContract: createDefaultOutputContract("Provider output"),
     };
   }
 
@@ -1339,8 +1373,8 @@ export const readNodeTemplate = (
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [
         createPort("true", "True", true),
-        createPort("false", "False", true)
-      ]
+        createPort("false", "False", true),
+      ],
     };
   }
 
@@ -1350,9 +1384,9 @@ export const readNodeTemplate = (
       config: {},
       inputPorts: [
         createPort("input-a", "Input A", true),
-        createPort("input-b", "Input B", true)
+        createPort("input-b", "Input B", true),
       ],
-      outputPorts: [createPort("output", "Merged", true)]
+      outputPorts: [createPort("output", "Merged", true)],
     };
   }
 
@@ -1361,14 +1395,14 @@ export const readNodeTemplate = (
       label: "Human review",
       config: {
         reviewPolicy: {
-          requireHumanDecision: true
-        }
+          requireHumanDecision: true,
+        },
       },
       inputPorts: [createPort("input", "Input", true)],
       outputPorts: [
         createPort("approved", "Approved", true),
-        createPort("changes", "Changes", true)
-      ]
+        createPort("changes", "Changes", true),
+      ],
     };
   }
 
@@ -1376,7 +1410,7 @@ export const readNodeTemplate = (
     label: "Response",
     config: {},
     inputPorts: [createPort("input", "Input", true)],
-    outputPorts: []
+    outputPorts: [],
   };
 };
 
@@ -1385,7 +1419,10 @@ export const readNodeAccentClassName = (kind: WorkflowNodeKind): string => {
     return "bg-emerald-500";
   }
 
-  if (kind === WorkflowNodeKind.AssetPrompt || kind === WorkflowNodeKind.AssetInstruction) {
+  if (
+    kind === WorkflowNodeKind.AssetPrompt ||
+    kind === WorkflowNodeKind.AssetInstruction
+  ) {
     return "bg-cyan-500";
   }
 
@@ -1393,7 +1430,10 @@ export const readNodeAccentClassName = (kind: WorkflowNodeKind): string => {
     return "bg-amber-500";
   }
 
-  if (kind === WorkflowNodeKind.AiAgent || kind === WorkflowNodeKind.AiProviderRun) {
+  if (
+    kind === WorkflowNodeKind.AiAgent ||
+    kind === WorkflowNodeKind.AiProviderRun
+  ) {
     return "bg-primary";
   }
 
@@ -1503,7 +1543,9 @@ export const readAssetKindLabel = (kind: WorkflowAssetKind): string => {
 export const readAssetScopeLabel = (scope: WorkflowAssetScope): string =>
   scope === WorkflowAssetScope.Workspace ? "Workspace" : "Project";
 
-export const readNodeAssetKind = (kind: WorkflowNodeKind): WorkflowAssetKind | null => {
+export const readNodeAssetKind = (
+  kind: WorkflowNodeKind,
+): WorkflowAssetKind | null => {
   if (kind === WorkflowNodeKind.AssetPrompt) {
     return WorkflowAssetKind.Prompt;
   }
@@ -1529,22 +1571,22 @@ export const readNodeKindsForPalette = (): ReadonlyArray<WorkflowNodeKind> => [
   WorkflowNodeKind.LogicCondition,
   WorkflowNodeKind.LogicMerge,
   WorkflowNodeKind.HumanReview,
-  WorkflowNodeKind.TerminalResponse
+  WorkflowNodeKind.TerminalResponse,
 ];
 
 const createPort = (
   id: string,
   name: string,
-  acceptsMany: boolean
+  acceptsMany: boolean,
 ): WorkflowPortRecord => ({
   id,
   name,
-  acceptsMany
+  acceptsMany,
 });
 
 const createDefaultOutputContract = (
   name: string,
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): JsonOutputContractRecord => ({
   id: idFactory(),
   name,
@@ -1556,30 +1598,30 @@ const createDefaultOutputContract = (
     properties: {
       result: {
         type: "string",
-        title: "Result"
-      }
-    }
+        title: "Result",
+      },
+    },
   },
-  sampleOutput: "{\n  \"result\": \"\"\n}"
+  sampleOutput: '{\n  "result": ""\n}',
 });
 
 const createDefaultGuardrailDefinition = (
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): GuardrailDefinitionRecord => ({
   id: idFactory(),
   severity: WorkflowGuardrailSeverity.Error,
   operator: WorkflowGuardrailOperator.All,
-  validations: []
+  validations: [],
 });
 
 const createDefaultGuardrailValidation = (
-  idFactory: () => string = () => crypto.randomUUID()
+  idFactory: () => string = () => crypto.randomUUID(),
 ): GuardrailValidationRecord => ({
   id: idFactory(),
   kind: "field_exists",
   target: "output",
   path: "$.result",
-  message: "Expected $.result to be present."
+  message: "Expected $.result to be present.",
 });
 
 const createDefaultProviderSelection = (): WorkflowProviderSelectionRecord => ({
@@ -1588,7 +1630,7 @@ const createDefaultProviderSelection = (): WorkflowProviderSelectionRecord => ({
   reasoningLevel: DefaultReasoningLevel,
   temperature: DefaultTemperature,
   verbosity: DefaultVerbosity,
-  testStatus: "unknown"
+  testStatus: "unknown",
 });
 
 const readDefaultAssetName = (kind: WorkflowAssetKind): string => {
@@ -1632,7 +1674,7 @@ const toTitle = (value: string): string =>
 const updateJsonSchemaNodeAtPath = (
   rootSchema: JsonSchemaNodeRecord,
   path: ReadonlyArray<string>,
-  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord
+  updater: (node: JsonSchemaNodeRecord) => JsonSchemaNodeRecord,
 ): JsonSchemaNodeRecord => {
   if (path.length === 0) {
     return cloneJsonSchemaNode(updater(cloneJsonSchemaNode(rootSchema)));
@@ -1653,8 +1695,8 @@ const updateJsonSchemaNodeAtPath = (
       items: updateJsonSchemaNodeAtPath(
         cloneJsonSchemaNode(rootSchema.items ?? createJsonSchemaNode("string")),
         restPath,
-        updater
-      )
+        updater,
+      ),
     };
   }
 
@@ -1671,45 +1713,53 @@ const updateJsonSchemaNodeAtPath = (
     ...rootSchema,
     properties: {
       ...(rootSchema.properties ?? {}),
-      [segment]: updateJsonSchemaNodeAtPath(currentChild, restPath, updater)
-    }
+      [segment]: updateJsonSchemaNodeAtPath(currentChild, restPath, updater),
+    },
   };
 };
 
 const cloneJsonSchemaNode = (
-  node: JsonSchemaNodeRecord
+  node: JsonSchemaNodeRecord,
 ): JsonSchemaNodeRecord => ({
   ...node,
   ...(node.required ? { required: [...node.required] } : {}),
   ...(node.properties
     ? {
         properties: Object.fromEntries(
-          Object.entries(node.properties).map(([key, value]) => [key, cloneJsonSchemaNode(value)])
-        )
+          Object.entries(node.properties).map(([key, value]) => [
+            key,
+            cloneJsonSchemaNode(value),
+          ]),
+        ),
       }
     : {}),
   ...(node.items ? { items: cloneJsonSchemaNode(node.items) } : {}),
-  ...(node.enum ? { enum: [...node.enum] } : {})
+  ...(node.enum ? { enum: [...node.enum] } : {}),
 });
 
 const appendUniqueString = (
   values: ReadonlyArray<string> | undefined,
-  value: string
+  value: string,
 ): ReadonlyArray<string> => [...new Set([...(values ?? []), value])];
 
 const removeStringEntry = (
   values: ReadonlyArray<string> | undefined,
-  value: string
+  value: string,
 ): ReadonlyArray<string> => (values ?? []).filter((entry) => entry !== value);
 
 const readJsonSchemaNodePaths = (
   schema: JsonSchemaNodeRecord,
-  prefix: string
+  prefix: string,
 ): ReadonlyArray<string> => {
   if (schema.type === "object") {
     const nestedPaths = Object.keys(schema.properties ?? {})
       .sort((left, right) => left.localeCompare(right))
-      .flatMap((key) => readJsonSchemaNodePaths(schema.properties?.[key] ?? createJsonSchemaNode("string"), `${prefix}.${key}`));
+      .flatMap((key) =>
+        readJsonSchemaNodePaths(
+          schema.properties?.[key] ?? createJsonSchemaNode("string"),
+          `${prefix}.${key}`,
+        ),
+      );
     return [prefix, ...nestedPaths];
   }
 
@@ -1726,20 +1776,31 @@ const readJsonSchemaNodePaths = (
 
 const readJsonSchemaIssues = (
   schema: JsonSchemaNodeRecord,
-  prefix: string
+  prefix: string,
 ): ReadonlyArray<string> => {
   if (schema.type === "object") {
     const properties = schema.properties ?? {};
-    const missingRequired = (schema.required ?? []).filter((fieldName) => !properties[fieldName]);
+    const missingRequired = (schema.required ?? []).filter(
+      (fieldName) => !properties[fieldName],
+    );
     if (missingRequired.length > 0) {
-      return [`${prefix} references required fields that do not exist: ${missingRequired.join(", ")}.`];
+      return [
+        `${prefix} references required fields that do not exist: ${missingRequired.join(", ")}.`,
+      ];
     }
 
-    return Object.entries(properties).flatMap(([key, value]) => readJsonSchemaIssues(value, `${prefix}.${key}`));
+    return Object.entries(properties).flatMap(([key, value]) =>
+      readJsonSchemaIssues(value, `${prefix}.${key}`),
+    );
   }
 
   if (schema.type === "array") {
-    const issues = readRangeIssues(prefix, schema.minItems, schema.maxItems, "items");
+    const issues = readRangeIssues(
+      prefix,
+      schema.minItems,
+      schema.maxItems,
+      "items",
+    );
     if (issues.length > 0) {
       return issues;
     }
@@ -1752,7 +1813,12 @@ const readJsonSchemaIssues = (
   }
 
   if (schema.type === "string") {
-    const lengthIssues = readRangeIssues(prefix, schema.minLength, schema.maxLength, "length");
+    const lengthIssues = readRangeIssues(
+      prefix,
+      schema.minLength,
+      schema.maxLength,
+      "length",
+    );
     if (lengthIssues.length > 0) {
       return lengthIssues;
     }
@@ -1779,7 +1845,7 @@ const readRangeIssues = (
   prefix: string,
   minimum: number | undefined,
   maximum: number | undefined,
-  label: string
+  label: string,
 ): ReadonlyArray<string> => {
   if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
     return [`${prefix} has a ${label} minimum greater than its maximum.`];
@@ -1788,22 +1854,22 @@ const readRangeIssues = (
   return [];
 };
 
-const buildJsonSchemaZodExpression = (
-  schema: JsonSchemaNodeRecord
-): string => {
+const buildJsonSchemaZodExpression = (schema: JsonSchemaNodeRecord): string => {
   const baseExpression = buildJsonSchemaZodExpressionCore(schema);
   return schema.nullable ? `${baseExpression}.nullable()` : baseExpression;
 };
 
 const buildJsonSchemaZodExpressionCore = (
-  schema: JsonSchemaNodeRecord
+  schema: JsonSchemaNodeRecord,
 ): string => {
   if (schema.type === "object") {
     const required = new Set(schema.required ?? []);
-    const shapeEntries = Object.entries(schema.properties ?? {}).map(([key, value]) => {
-      const nestedExpression = buildJsonSchemaZodExpression(value);
-      return `${JSON.stringify(key)}: ${required.has(key) ? nestedExpression : `${nestedExpression}.optional()`}`;
-    });
+    const shapeEntries = Object.entries(schema.properties ?? {}).map(
+      ([key, value]) => {
+        const nestedExpression = buildJsonSchemaZodExpression(value);
+        return `${JSON.stringify(key)}: ${required.has(key) ? nestedExpression : `${nestedExpression}.optional()`}`;
+      },
+    );
     return `z.object({${shapeEntries.join(", ")}}).strict()`;
   }
 
@@ -1875,7 +1941,7 @@ const buildJsonSchemaZodExpressionCore = (
 const validateJsonSchemaValue = (
   schema: JsonSchemaNodeRecord,
   value: unknown,
-  prefix: string
+  prefix: string,
 ): ReadonlyArray<string> => {
   if (value === null) {
     return schema.nullable ? [] : [`${prefix} does not allow null values.`];
@@ -1887,9 +1953,13 @@ const validateJsonSchemaValue = (
     }
 
     const required = schema.required ?? [];
-    const missingRequired = required.filter((fieldName) => !(fieldName in value));
+    const missingRequired = required.filter(
+      (fieldName) => !(fieldName in value),
+    );
     if (missingRequired.length > 0) {
-      return [`${prefix} is missing required fields: ${missingRequired.join(", ")}.`];
+      return [
+        `${prefix} is missing required fields: ${missingRequired.join(", ")}.`,
+      ];
     }
 
     const properties = schema.properties ?? {};
@@ -1900,8 +1970,12 @@ const validateJsonSchemaValue = (
 
     return Object.entries(properties).flatMap(([key, propertySchema]) =>
       key in value
-        ? validateJsonSchemaValue(propertySchema, value[key], `${prefix}.${key}`)
-        : []
+        ? validateJsonSchemaValue(
+            propertySchema,
+            value[key],
+            `${prefix}.${key}`,
+          )
+        : [],
     );
   }
 
@@ -1910,22 +1984,32 @@ const validateJsonSchemaValue = (
       return [`${prefix} must be an array.`];
     }
 
-    const minItemsIssue = schema.minItems !== undefined && value.length < schema.minItems
-      ? [`${prefix} must contain at least ${schema.minItems.toString()} items.`]
-      : [];
+    const minItemsIssue =
+      schema.minItems !== undefined && value.length < schema.minItems
+        ? [
+            `${prefix} must contain at least ${schema.minItems.toString()} items.`,
+          ]
+        : [];
     if (minItemsIssue.length > 0) {
       return minItemsIssue;
     }
 
-    const maxItemsIssue = schema.maxItems !== undefined && value.length > schema.maxItems
-      ? [`${prefix} must contain at most ${schema.maxItems.toString()} items.`]
-      : [];
+    const maxItemsIssue =
+      schema.maxItems !== undefined && value.length > schema.maxItems
+        ? [
+            `${prefix} must contain at most ${schema.maxItems.toString()} items.`,
+          ]
+        : [];
     if (maxItemsIssue.length > 0) {
       return maxItemsIssue;
     }
 
     return value.flatMap((entry, index) =>
-      validateJsonSchemaValue(schema.items ?? createJsonSchemaNode("string"), entry, `${prefix}[${index.toString()}]`)
+      validateJsonSchemaValue(
+        schema.items ?? createJsonSchemaNode("string"),
+        entry,
+        `${prefix}[${index.toString()}]`,
+      ),
     );
   }
 
@@ -1943,21 +2027,25 @@ const validateJsonSchemaValue = (
 const validateJsonSchemaStringValue = (
   schema: JsonSchemaNodeRecord,
   value: unknown,
-  prefix: string
+  prefix: string,
 ): ReadonlyArray<string> => {
   if (typeof value !== "string") {
     return [`${prefix} must be a string.`];
   }
 
   if (schema.minLength !== undefined && value.length < schema.minLength) {
-    return [`${prefix} must be at least ${schema.minLength.toString()} characters long.`];
+    return [
+      `${prefix} must be at least ${schema.minLength.toString()} characters long.`,
+    ];
   }
 
   if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-    return [`${prefix} must be at most ${schema.maxLength.toString()} characters long.`];
+    return [
+      `${prefix} must be at most ${schema.maxLength.toString()} characters long.`,
+    ];
   }
 
-  if (schema.pattern && !(new RegExp(schema.pattern, "u")).test(value)) {
+  if (schema.pattern && !new RegExp(schema.pattern, "u").test(value)) {
     return [`${prefix} does not match the configured pattern.`];
   }
 
@@ -1977,7 +2065,12 @@ const validateJsonSchemaStringValue = (
     }
   }
 
-  if (schema.format === "uuid" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) {
+  if (
+    schema.format === "uuid" &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value,
+    )
+  ) {
     return [`${prefix} must be a valid uuid.`];
   }
 
@@ -1991,7 +2084,7 @@ const validateJsonSchemaStringValue = (
 const validateJsonSchemaNumberValue = (
   schema: JsonSchemaNodeRecord,
   value: unknown,
-  prefix: string
+  prefix: string,
 ): ReadonlyArray<string> => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return [`${prefix} must be a number.`];
@@ -2002,23 +2095,25 @@ const validateJsonSchemaNumberValue = (
   }
 
   if (schema.minimum !== undefined && value < schema.minimum) {
-    return [`${prefix} must be greater than or equal to ${schema.minimum.toString()}.`];
+    return [
+      `${prefix} must be greater than or equal to ${schema.minimum.toString()}.`,
+    ];
   }
 
   if (schema.maximum !== undefined && value > schema.maximum) {
-    return [`${prefix} must be less than or equal to ${schema.maximum.toString()}.`];
+    return [
+      `${prefix} must be less than or equal to ${schema.maximum.toString()}.`,
+    ];
   }
 
   return [];
 };
 
-const isRecordValue = (
-  value: unknown
-): value is Record<string, unknown> =>
+const isRecordValue = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readJsonSchemaNodeDocument = (
-  value: unknown
+  value: unknown,
 ): JsonSchemaNodeRecord | null => {
   if (!isRecordValue(value)) {
     return null;
@@ -2037,22 +2132,31 @@ const readJsonSchemaNodeDocument = (
   }
 
   const baseNode: JsonSchemaNodeRecord = {
-    type
+    type,
   };
 
   if (typeof value["title"] === "string" && value["title"].trim().length > 0) {
     baseNode.title = value["title"].trim();
   }
 
-  if (typeof value["description"] === "string" && value["description"].trim().length > 0) {
+  if (
+    typeof value["description"] === "string" &&
+    value["description"].trim().length > 0
+  ) {
     baseNode.description = value["description"].trim();
   }
 
-  if (Array.isArray(value["required"]) && value["required"].every((entry) => typeof entry === "string")) {
+  if (
+    Array.isArray(value["required"]) &&
+    value["required"].every((entry) => typeof entry === "string")
+  ) {
     baseNode.required = [...value["required"]];
   }
 
-  if (Array.isArray(value["enum"]) && value["enum"].every((entry) => typeof entry === "string")) {
+  if (
+    Array.isArray(value["enum"]) &&
+    value["enum"].every((entry) => typeof entry === "string")
+  ) {
     baseNode.enum = [...value["enum"]];
   }
 
@@ -2060,7 +2164,12 @@ const readJsonSchemaNodeDocument = (
     baseNode.nullable = value["nullable"];
   }
 
-  if (value["format"] === "email" || value["format"] === "url" || value["format"] === "uuid" || value["format"] === "nif") {
+  if (
+    value["format"] === "email" ||
+    value["format"] === "url" ||
+    value["format"] === "uuid" ||
+    value["format"] === "nif"
+  ) {
     baseNode.format = value["format"];
   }
 
@@ -2100,7 +2209,10 @@ const readJsonSchemaNodeDocument = (
       if (!isRecordValue(propertiesValue)) {
         return null;
       }
-      const properties = Object.entries(propertiesValue).reduce<Record<string, JsonSchemaNodeRecord> | null>((accumulator, [key, nested]) => {
+      const properties = Object.entries(propertiesValue).reduce<Record<
+        string,
+        JsonSchemaNodeRecord
+      > | null>((accumulator, [key, nested]) => {
         if (accumulator === null) {
           return null;
         }
@@ -2121,9 +2233,10 @@ const readJsonSchemaNodeDocument = (
   }
 
   if (type === "array") {
-    const itemNode = value["items"] === undefined
-      ? createJsonSchemaNode("string")
-      : readJsonSchemaNodeDocument(value["items"]);
+    const itemNode =
+      value["items"] === undefined
+        ? createJsonSchemaNode("string")
+        : readJsonSchemaNodeDocument(value["items"]);
     if (!itemNode) {
       return null;
     }
@@ -2133,20 +2246,18 @@ const readJsonSchemaNodeDocument = (
   return baseNode;
 };
 
-const readOptionalNumberValue = (
-  value: unknown
-): number | undefined =>
+const readOptionalNumberValue = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
 const buildWorkflowExpressionToken = (
-  reference: WorkflowExpressionVariableReference
+  reference: WorkflowExpressionVariableReference,
 ): string =>
   reference.sourceId
     ? `{{var|${reference.kind}|${reference.sourceId}|${reference.path}}}`
     : `{{var|${reference.kind}||${reference.path}}}`;
 
 const splitWorkflowExpressionSegments = (
-  value: string
+  value: string,
 ): ReadonlyArray<WorkflowExpressionSegmentRecord> => {
   const tokenPattern = /\{\{var\|([^|}]+)\|([^|}]*)\|([^}]+)\}\}/gu;
   const segments: WorkflowExpressionSegmentRecord[] = [];
@@ -2157,24 +2268,24 @@ const splitWorkflowExpressionSegments = (
     if (matchIndex > index) {
       segments.push({
         kind: WorkflowExpressionSegmentKind.Text,
-        value: value.slice(index, matchIndex)
+        value: value.slice(index, matchIndex),
       });
     }
 
     const reference = readWorkflowExpressionReferenceFromMatch(
       match[1] ?? "",
       match[2] ?? "",
-      match[3] ?? ""
+      match[3] ?? "",
     );
     if (reference) {
       segments.push({
         kind: WorkflowExpressionSegmentKind.Variable,
-        reference
+        reference,
       });
     } else {
       segments.push({
         kind: WorkflowExpressionSegmentKind.Text,
-        value: match[0]
+        value: match[0],
       });
     }
 
@@ -2184,7 +2295,7 @@ const splitWorkflowExpressionSegments = (
   if (index < value.length || segments.length === 0) {
     segments.push({
       kind: WorkflowExpressionSegmentKind.Text,
-      value: value.slice(index)
+      value: value.slice(index),
     });
   }
 
@@ -2194,7 +2305,7 @@ const splitWorkflowExpressionSegments = (
 const readWorkflowExpressionReferenceFromMatch = (
   kind: string,
   sourceId: string,
-  path: string
+  path: string,
 ): WorkflowExpressionVariableReference | null => {
   if (
     kind !== WorkflowExpressionVariableKind.NodeOutput &&
@@ -2213,12 +2324,12 @@ const readWorkflowExpressionReferenceFromMatch = (
   return {
     kind,
     ...(sourceId.trim().length > 0 ? { sourceId: sourceId.trim() } : {}),
-    path: normalizedPath
+    path: normalizedPath,
   };
 };
 
 const serializeJsonSchemaNode = (
-  schema: JsonSchemaNodeRecord
+  schema: JsonSchemaNodeRecord,
 ): JsonContractProviderSchemaRecord => {
   if (schema.type === "object") {
     const required = new Set(schema.required ?? []);
@@ -2227,24 +2338,26 @@ const serializeJsonSchemaNode = (
         key,
         {
           ...serializeJsonSchemaNode(value),
-          ...(required.has(key) ? { r: 1 as const } : {})
-        }
-      ])
+          ...(required.has(key) ? { r: 1 as const } : {}),
+        },
+      ]),
     );
     return {
       t: "o",
       ...(Object.keys(properties).length > 0 ? { p: properties } : {}),
-      ...(schema.nullable ? { n: 1 as const } : {})
+      ...(schema.nullable ? { n: 1 as const } : {}),
     };
   }
 
   if (schema.type === "array") {
     return {
       t: "a",
-      i: serializeJsonSchemaNode(schema.items ?? createJsonSchemaNode("string")),
+      i: serializeJsonSchemaNode(
+        schema.items ?? createJsonSchemaNode("string"),
+      ),
       ...(schema.minItems !== undefined ? { min: schema.minItems } : {}),
       ...(schema.maxItems !== undefined ? { max: schema.maxItems } : {}),
-      ...(schema.nullable ? { n: 1 as const } : {})
+      ...(schema.nullable ? { n: 1 as const } : {}),
     };
   }
 
@@ -2257,12 +2370,12 @@ const serializeJsonSchemaNode = (
     ...(schema.maximum !== undefined ? { max: schema.maximum } : {}),
     ...(schema.pattern ? { re: schema.pattern } : {}),
     ...(schema.enum && schema.enum.length > 0 ? { e: [...schema.enum] } : {}),
-    ...(schema.nullable ? { n: 1 as const } : {})
+    ...(schema.nullable ? { n: 1 as const } : {}),
   };
 };
 
 const readCompactPrimitiveType = (
-  type: JsonSchemaNodeRecord["type"]
+  type: JsonSchemaNodeRecord["type"],
 ): "s" | "n" | "i" | "b" => {
   if (type === "string") {
     return "s";

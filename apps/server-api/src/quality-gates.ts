@@ -7,14 +7,14 @@ import {
   HistoryRunStatus,
   HistoryRunType,
   HistoryStoreErrorCode,
-  type HistoryStore
+  type HistoryStore,
 } from "./history";
 import {
   ErrorMessage,
   HistoryField,
   HttpStatus,
   ProjectField,
-  QualityGateField
+  QualityGateField,
 } from "./constants";
 import type { Project, ProjectStore } from "./projects";
 import { ProjectStoreErrorCode } from "./projects";
@@ -22,7 +22,7 @@ import { ResultType, err, ok, type Result } from "./result";
 import type { CommandPolicy, WorkspacePolicy } from "./sandbox";
 import {
   CommandOutputSource,
-  type CommandRunner
+  type CommandRunner,
 } from "../../../packages/adapters/src/command-runner/command-runner";
 
 export type ApiError = {
@@ -34,13 +34,13 @@ export const QualityGateId = {
   Lint: "lint",
   Typecheck: "typecheck",
   Test: "test",
-  Build: "build"
+  Build: "build",
 } as const;
 
-export type QualityGateId = typeof QualityGateId[keyof typeof QualityGateId];
+export type QualityGateId = (typeof QualityGateId)[keyof typeof QualityGateId];
 
 export const QualityGateEventName = {
-  Progress: "quality-gates-progress"
+  Progress: "quality-gates-progress",
 } as const;
 
 export type QualityGateDefinition = {
@@ -92,13 +92,13 @@ export type QualityGateListDependencies = {
   historyStore: HistoryStore;
 };
 
-export type QualityGateEventSubscriber = (event: HistoryEvent) => void;
+type QualityGateEventSubscriber = (event: HistoryEvent) => void;
 
 export type QualityGateEventHub = {
   publish: (event: HistoryEvent) => void;
   subscribe: (
     runId: string,
-    subscriber: QualityGateEventSubscriber
+    subscriber: QualityGateEventSubscriber,
   ) => () => void;
 };
 
@@ -106,14 +106,14 @@ const QualityGateList = [
   QualityGateId.Lint,
   QualityGateId.Typecheck,
   QualityGateId.Test,
-  QualityGateId.Build
+  QualityGateId.Build,
 ] as const;
 
 const QualityGateMetadataKey = {
   Gates: "gates",
   CurrentGate: "currentGate",
   PassedCount: "passedCount",
-  FailedGate: "failedGate"
+  FailedGate: "failedGate",
 } as const;
 
 const QualityGateHistoryProviderId = "server";
@@ -122,9 +122,11 @@ const QualityGateCommandName = "pnpm";
 
 export const createDefaultQualityGateCatalog = (): QualityGateCatalog => ({
   [QualityGateId.Lint]: createQualityGateDefinition(QualityGateId.Lint),
-  [QualityGateId.Typecheck]: createQualityGateDefinition(QualityGateId.Typecheck),
+  [QualityGateId.Typecheck]: createQualityGateDefinition(
+    QualityGateId.Typecheck,
+  ),
   [QualityGateId.Test]: createQualityGateDefinition(QualityGateId.Test),
-  [QualityGateId.Build]: createQualityGateDefinition(QualityGateId.Build)
+  [QualityGateId.Build]: createQualityGateDefinition(QualityGateId.Build),
 });
 
 export const createQualityGateEventHub = (): QualityGateEventHub => {
@@ -143,9 +145,10 @@ export const createQualityGateEventHub = (): QualityGateEventHub => {
 
   const subscribe = (
     runId: string,
-    subscriber: QualityGateEventSubscriber
+    subscriber: QualityGateEventSubscriber,
   ): (() => void) => {
-    const current = subscribers.get(runId) ?? new Set<QualityGateEventSubscriber>();
+    const current =
+      subscribers.get(runId) ?? new Set<QualityGateEventSubscriber>();
     current.add(subscriber);
     subscribers.set(runId, current);
 
@@ -164,12 +167,12 @@ export const createQualityGateEventHub = (): QualityGateEventHub => {
 
   return {
     publish,
-    subscribe
+    subscribe,
   };
 };
 
 export const parseQualityGateRunRequest = (
-  value: unknown
+  value: unknown,
 ): Result<QualityGateRunRequest, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -178,7 +181,7 @@ export const parseQualityGateRunRequest = (
   const projectId = readRequiredString(
     value,
     ProjectField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -191,12 +194,12 @@ export const parseQualityGateRunRequest = (
 
   return ok({
     projectId: projectId.value,
-    gates: gates.value ?? [...QualityGateList]
+    gates: gates.value ?? [...QualityGateList],
   });
 };
 
 export const parseQualityGateListRequest = (
-  value: unknown
+  value: unknown,
 ): Result<QualityGateListRequest, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -205,7 +208,7 @@ export const parseQualityGateListRequest = (
   const projectId = readRequiredString(
     value,
     ProjectField.ProjectId,
-    ErrorMessage.MissingProjectId
+    ErrorMessage.MissingProjectId,
   );
   if (projectId.type === ResultType.Err) {
     return projectId;
@@ -224,12 +227,12 @@ export const parseQualityGateListRequest = (
   return ok({
     projectId: projectId.value,
     ...(status.value ? { status: status.value } : {}),
-    ...(limit.value !== undefined ? { limit: limit.value } : {})
+    ...(limit.value !== undefined ? { limit: limit.value } : {}),
   });
 };
 
 export const parseQualityGateEventsRequest = (
-  value: unknown
+  value: unknown,
 ): Result<QualityGateEventsRequest, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
@@ -238,36 +241,36 @@ export const parseQualityGateEventsRequest = (
   const runId = readRequiredString(
     value,
     HistoryField.RunId,
-    ErrorMessage.MissingRunId
+    ErrorMessage.MissingRunId,
   );
   if (runId.type === ResultType.Err) {
     return runId;
   }
 
   return ok({
-    runId: runId.value
+    runId: runId.value,
   });
 };
 
 export const parseQualityGateStreamRequest = (
-  query: URLSearchParams
+  query: URLSearchParams,
 ): Result<QualityGateEventsRequest, ApiError> => {
   const runId = query.get(HistoryField.RunId);
   if (!runId || runId.trim().length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingRunId
+      message: ErrorMessage.MissingRunId,
     });
   }
 
   return ok({
-    runId: runId.trim()
+    runId: runId.trim(),
   });
 };
 
 export const startQualityGateRun = async (
   input: QualityGateRunRequest,
-  dependencies: QualityGateApiDependencies
+  dependencies: QualityGateApiDependencies,
 ): Promise<Result<QualityGateRunRecord, ApiError>> => {
   const preparation = prepareQualityGateRun(input, dependencies);
   if (preparation.type === ResultType.Err) {
@@ -288,13 +291,13 @@ export const startQualityGateRun = async (
 
 export const listQualityGateRuns = (
   input: QualityGateListRequest,
-  dependencies: QualityGateListDependencies
+  dependencies: QualityGateListDependencies,
 ): Result<ReadonlyArray<QualityGateRunRecord>, ApiError> => {
   const listed = dependencies.historyStore.listRuns({
     projectId: input.projectId,
     runType: HistoryRunType.QualityGates,
     ...(input.status ? { status: input.status } : {}),
-    ...(input.limit !== undefined ? { limit: input.limit } : {})
+    ...(input.limit !== undefined ? { limit: input.limit } : {}),
   });
   if (listed.type === ResultType.Err) {
     return err(mapHistoryStoreError(listed.error.code));
@@ -305,7 +308,7 @@ export const listQualityGateRuns = (
 
 export const listQualityGateEvents = (
   input: QualityGateEventsRequest,
-  dependencies: QualityGateListDependencies
+  dependencies: QualityGateListDependencies,
 ): Result<ReadonlyArray<HistoryEvent>, ApiError> => {
   const events = dependencies.historyStore.listEvents(input.runId);
   if (events.type === ResultType.Err) {
@@ -317,7 +320,7 @@ export const listQualityGateEvents = (
 
 const prepareQualityGateRun = (
   input: QualityGateRunRequest,
-  dependencies: QualityGateApiDependencies
+  dependencies: QualityGateApiDependencies,
 ): Result<
   {
     run: HistoryRunRecord;
@@ -334,11 +337,13 @@ const prepareQualityGateRun = (
   if (project.value.rootPath === null) {
     return err({
       status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingRootPath
+      message: ErrorMessage.MissingRootPath,
     });
   }
 
-  const root = dependencies.workspacePolicy.assertPathAllowed(project.value.rootPath);
+  const root = dependencies.workspacePolicy.assertPathAllowed(
+    project.value.rootPath,
+  );
   if (root.type === ResultType.Err) {
     return err(root.error);
   }
@@ -346,7 +351,7 @@ const prepareQualityGateRun = (
   const definitionsResult = resolveQualityGateDefinitions(
     input.gates,
     root.value,
-    dependencies
+    dependencies,
   );
   if (definitionsResult.type === ResultType.Err) {
     return definitionsResult;
@@ -354,16 +359,16 @@ const prepareQualityGateRun = (
 
   const run = createQualityGateHistoryRun({
     projectId: project.value.id,
-    gates: input.gates
+    gates: input.gates,
   });
 
   return ok({
     run,
     project: {
       ...project.value,
-      rootPath: root.value
+      rootPath: root.value,
     },
-    definitions: definitionsResult.value
+    definitions: definitionsResult.value,
   });
 };
 
@@ -373,7 +378,7 @@ const executeQualityGateRun = async (
     project: Project & { rootPath: string };
     definitions: ReadonlyArray<QualityGateDefinition>;
   },
-  dependencies: QualityGateApiDependencies
+  dependencies: QualityGateApiDependencies,
 ): Promise<void> => {
   let passedCount = 0;
 
@@ -381,7 +386,7 @@ const executeQualityGateRun = async (
     const startingRun = updateHistoryRun(input.run, {
       status: HistoryRunStatus.Running,
       currentGate: definition.id,
-      passedCount
+      passedCount,
     });
     const updatedStart = dependencies.historyStore.updateRun(startingRun);
     if (updatedStart.type !== ResultType.Ok) {
@@ -393,8 +398,8 @@ const executeQualityGateRun = async (
       dependencies,
       createHistoryEvent(input.run.id, HistoryEventType.Message, {
         gate: definition.id,
-        text: `Running ${definition.id}`
-      })
+        text: `Running ${definition.id}`,
+      }),
     );
 
     const execution = await dependencies.commandRunner.run({
@@ -408,10 +413,10 @@ const executeQualityGateRun = async (
           createHistoryEvent(input.run.id, toHistoryEventType(event.source), {
             gate: definition.id,
             stream: event.source,
-            text: event.text
-          })
+            text: event.text,
+          }),
         );
-      }
+      },
     });
 
     if (execution.type === ResultType.Err) {
@@ -419,7 +424,7 @@ const executeQualityGateRun = async (
         status: HistoryRunStatus.Failed,
         currentGate: definition.id,
         passedCount,
-        failedGate: definition.id
+        failedGate: definition.id,
       });
       const updatedFailed = dependencies.historyStore.updateRun(failedRun);
       if (updatedFailed.type !== ResultType.Ok) {
@@ -431,14 +436,14 @@ const executeQualityGateRun = async (
         dependencies,
         createHistoryEvent(input.run.id, HistoryEventType.Error, {
           gate: definition.id,
-          text: execution.error.message
-        })
+          text: execution.error.message,
+        }),
       );
       publishHistoryEvent(
         dependencies,
         createHistoryEvent(input.run.id, HistoryEventType.Done, {
-          status: HistoryRunStatus.Failed
-        })
+          status: HistoryRunStatus.Failed,
+        }),
       );
       return;
     }
@@ -448,7 +453,7 @@ const executeQualityGateRun = async (
         status: HistoryRunStatus.Failed,
         currentGate: definition.id,
         passedCount,
-        failedGate: definition.id
+        failedGate: definition.id,
       });
       const updatedFailed = dependencies.historyStore.updateRun(failedRun);
       if (updatedFailed.type !== ResultType.Ok) {
@@ -464,14 +469,14 @@ const executeQualityGateRun = async (
           text:
             execution.value.stderr.trim().length > 0
               ? execution.value.stderr
-              : execution.value.stdout
-        })
+              : execution.value.stdout,
+        }),
       );
       publishHistoryEvent(
         dependencies,
         createHistoryEvent(input.run.id, HistoryEventType.Done, {
-          status: HistoryRunStatus.Failed
-        })
+          status: HistoryRunStatus.Failed,
+        }),
       );
       return;
     }
@@ -480,7 +485,7 @@ const executeQualityGateRun = async (
     const passedRun = updateHistoryRun(input.run, {
       status: HistoryRunStatus.Running,
       currentGate: definition.id,
-      passedCount
+      passedCount,
     });
     const updatedPassed = dependencies.historyStore.updateRun(passedRun);
     if (updatedPassed.type !== ResultType.Ok) {
@@ -491,7 +496,7 @@ const executeQualityGateRun = async (
 
   const completedRun = updateHistoryRun(input.run, {
     status: HistoryRunStatus.Completed,
-    passedCount
+    passedCount,
   });
   const updatedCompleted = dependencies.historyStore.updateRun(completedRun);
   if (updatedCompleted.type !== ResultType.Ok) {
@@ -501,15 +506,15 @@ const executeQualityGateRun = async (
   publishHistoryEvent(
     dependencies,
     createHistoryEvent(updatedCompleted.value.id, HistoryEventType.Done, {
-      status: HistoryRunStatus.Completed
-    })
+      status: HistoryRunStatus.Completed,
+    }),
   );
 };
 
 const resolveQualityGateDefinitions = (
   gates: ReadonlyArray<QualityGateId>,
   rootPath: string,
-  dependencies: QualityGateApiDependencies
+  dependencies: QualityGateApiDependencies,
 ): Result<ReadonlyArray<QualityGateDefinition>, ApiError> => {
   const definitions: QualityGateDefinition[] = [];
 
@@ -522,7 +527,7 @@ const resolveQualityGateDefinitions = (
     const command = dependencies.commandPolicy.assertCommandAllowed({
       command: definition.command,
       rootPath,
-      cwd: rootPath
+      cwd: rootPath,
     });
     if (command.type === ResultType.Err) {
       return err(command.error);
@@ -530,7 +535,7 @@ const resolveQualityGateDefinitions = (
 
     definitions.push({
       ...definition,
-      command: command.value.command
+      command: command.value.command,
     });
   }
 
@@ -554,8 +559,8 @@ const createQualityGateHistoryRun = (input: {
     runType: HistoryRunType.QualityGates,
     metadata: createQualityGateMetadata({
       gates: input.gates,
-      passedCount: 0
-    })
+      passedCount: 0,
+    }),
   };
 };
 
@@ -566,7 +571,7 @@ const updateHistoryRun = (
     passedCount: number;
     currentGate?: QualityGateId;
     failedGate?: QualityGateId;
-  }
+  },
 ): HistoryRunRecord => ({
   ...run,
   status: input.status,
@@ -575,8 +580,8 @@ const updateHistoryRun = (
     gates: readMetadataGates(run.metadata),
     passedCount: input.passedCount,
     ...(input.currentGate ? { currentGate: input.currentGate } : {}),
-    ...(input.failedGate ? { failedGate: input.failedGate } : {})
-  })
+    ...(input.failedGate ? { failedGate: input.failedGate } : {}),
+  }),
 });
 
 const createQualityGateMetadata = (input: {
@@ -592,10 +597,12 @@ const createQualityGateMetadata = (input: {
     : {}),
   ...(input.failedGate
     ? { [QualityGateMetadataKey.FailedGate]: input.failedGate }
-    : {})
+    : {}),
 });
 
-const toQualityGateRunRecord = (run: HistoryRunRecord): QualityGateRunRecord => {
+const toQualityGateRunRecord = (
+  run: HistoryRunRecord,
+): QualityGateRunRecord => {
   const currentGate = readMetadataCurrentGate(run.metadata);
   const failedGate = readMetadataFailedGate(run.metadata);
 
@@ -608,12 +615,12 @@ const toQualityGateRunRecord = (run: HistoryRunRecord): QualityGateRunRecord => 
     gates: readMetadataGates(run.metadata),
     passedCount: readMetadataPassedCount(run.metadata),
     ...(currentGate ? { currentGate } : {}),
-    ...(failedGate ? { failedGate } : {})
+    ...(failedGate ? { failedGate } : {}),
   };
 };
 
 const readMetadataGates = (
-  metadata: HistoryMetadata | undefined
+  metadata: HistoryMetadata | undefined,
 ): ReadonlyArray<QualityGateId> => {
   const value = metadata?.[QualityGateMetadataKey.Gates];
   if (!Array.isArray(value)) {
@@ -623,40 +630,46 @@ const readMetadataGates = (
   return value.filter(isQualityGateId);
 };
 
-const readMetadataPassedCount = (metadata: HistoryMetadata | undefined): number => {
+const readMetadataPassedCount = (
+  metadata: HistoryMetadata | undefined,
+): number => {
   const value = metadata?.[QualityGateMetadataKey.PassedCount];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 };
 
 const readMetadataCurrentGate = (
-  metadata: HistoryMetadata | undefined
+  metadata: HistoryMetadata | undefined,
 ): QualityGateId | undefined => {
   const value = metadata?.[QualityGateMetadataKey.CurrentGate];
-  return typeof value === "string" && isQualityGateId(value) ? value : undefined;
+  return typeof value === "string" && isQualityGateId(value)
+    ? value
+    : undefined;
 };
 
 const readMetadataFailedGate = (
-  metadata: HistoryMetadata | undefined
+  metadata: HistoryMetadata | undefined,
 ): QualityGateId | undefined => {
   const value = metadata?.[QualityGateMetadataKey.FailedGate];
-  return typeof value === "string" && isQualityGateId(value) ? value : undefined;
+  return typeof value === "string" && isQualityGateId(value)
+    ? value
+    : undefined;
 };
 
 const createHistoryEvent = (
   runId: string,
   type: HistoryEventType,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ): HistoryEvent => ({
   id: randomUUID(),
   runId,
   type,
   data,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 });
 
 const publishHistoryEvent = (
   dependencies: QualityGateApiDependencies,
-  event: HistoryEvent
+  event: HistoryEvent,
 ): void => {
   const appended = dependencies.historyStore.appendEvent(event);
   if (appended.type !== ResultType.Ok) {
@@ -666,9 +679,7 @@ const publishHistoryEvent = (
   dependencies.eventHub.publish(appended.value);
 };
 
-const toHistoryEventType = (
-  source: CommandOutputSource
-): HistoryEventType => {
+const toHistoryEventType = (source: CommandOutputSource): HistoryEventType => {
   if (source === CommandOutputSource.Stderr) {
     return HistoryEventType.Error;
   }
@@ -677,24 +688,24 @@ const toHistoryEventType = (
 };
 
 const createQualityGateDefinition = (
-  id: QualityGateId
+  id: QualityGateId,
 ): QualityGateDefinition => ({
   id,
   command: QualityGateCommandName,
-  args: [id]
+  args: [id],
 });
 
 const mapProjectStoreError = (code: string): ApiError => {
   if (code === ProjectStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.NotFound
+    message: ErrorMessage.NotFound,
   };
 };
 
@@ -702,20 +713,20 @@ const mapHistoryStoreError = (code: string): ApiError => {
   if (code === HistoryStoreErrorCode.NotFound) {
     return {
       status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     };
   }
 
   return {
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody
+    message: ErrorMessage.InvalidBody,
   };
 };
 
 const invalidBody = (): Result<never, ApiError> =>
   err({
     status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody
+    message: ErrorMessage.InvalidBody,
   });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -737,13 +748,13 @@ const isHistoryRunStatus = (value: string): value is HistoryRunStatus =>
 const readRequiredString = (
   record: Record<string, unknown>,
   key: string,
-  message: string
+  message: string,
 ): Result<string, ApiError> => {
   const value = record[key];
   if (typeof value !== "string") {
     return err({
       status: HttpStatus.BadRequest,
-      message
+      message,
     });
   }
 
@@ -751,7 +762,7 @@ const readRequiredString = (
   if (trimmed.length === 0) {
     return err({
       status: HttpStatus.BadRequest,
-      message
+      message,
     });
   }
 
@@ -760,7 +771,7 @@ const readRequiredString = (
 
 const readOptionalQualityGateList = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<ReadonlyArray<QualityGateId> | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -788,7 +799,7 @@ const readOptionalQualityGateList = (
 
 const readOptionalHistoryRunStatus = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<HistoryRunStatus | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {
@@ -804,7 +815,7 @@ const readOptionalHistoryRunStatus = (
 
 const readOptionalNumber = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): Result<number | undefined, ApiError> => {
   const value = record[key];
   if (value === undefined) {

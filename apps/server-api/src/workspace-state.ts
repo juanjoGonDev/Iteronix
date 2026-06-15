@@ -8,28 +8,28 @@ import type { Project } from "./projects";
 import type { ProviderSelection, ProviderSettingsRecord } from "./providers";
 
 export const WorkspaceStateVersion = {
-  Current: 1
+  Current: 1,
 } as const;
 
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue =
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue =
   | JsonPrimitive
   | ReadonlyArray<JsonValue>
   | { readonly [key: string]: JsonValue };
-export type JsonRecord = Record<string, JsonValue>;
+type JsonRecord = Record<string, JsonValue>;
 
-export type WorkspaceWorkflowLimits = {
+type WorkspaceWorkflowLimits = {
   infiniteLoops: boolean;
   maxLoops: number;
   externalCalls: boolean;
 };
 
-export type WorkspaceNotifications = {
+type WorkspaceNotifications = {
   soundEnabled: boolean;
   webhookUrl: string;
 };
 
-export type WorkspaceProviderProfile = JsonRecord;
+type WorkspaceProviderProfile = JsonRecord;
 
 export type WorkspaceSettingsSnapshot = {
   profileId: string;
@@ -73,7 +73,7 @@ export type WorkspaceStateStore = {
   load: () => Promise<WorkspaceState>;
   save: (state: WorkspaceState) => Promise<WorkspaceState>;
   update: (
-    updater: (state: WorkspaceState) => WorkspaceState
+    updater: (state: WorkspaceState) => WorkspaceState,
   ) => Promise<WorkspaceState>;
 };
 
@@ -86,7 +86,7 @@ const DefaultServerUrl = "http://localhost:4000";
 const DefaultAuthToken = "dev-token";
 
 export const createFileWorkspaceStateStore = (
-  stateFilePath: string
+  stateFilePath: string,
 ): WorkspaceStateStore => {
   const load = async (): Promise<WorkspaceState> => {
     try {
@@ -100,22 +100,26 @@ export const createFileWorkspaceStateStore = (
   const save = async (state: WorkspaceState): Promise<WorkspaceState> => {
     const normalized = parseWorkspaceState(state);
     await mkdir(dirname(stateFilePath), {
-      recursive: true
+      recursive: true,
     });
     const tempFilePath = `${stateFilePath}.tmp`;
-    await writeFile(tempFilePath, JSON.stringify(normalized, null, JsonIndent), "utf8");
+    await writeFile(
+      tempFilePath,
+      JSON.stringify(normalized, null, JsonIndent),
+      "utf8",
+    );
     await rename(tempFilePath, stateFilePath);
     return normalized;
   };
 
   const update = async (
-    updater: (state: WorkspaceState) => WorkspaceState
+    updater: (state: WorkspaceState) => WorkspaceState,
   ): Promise<WorkspaceState> => save(updater(await load()));
 
   return {
     load,
     save,
-    update
+    update,
   };
 };
 
@@ -131,19 +135,19 @@ export const createDefaultWorkspaceState = (): WorkspaceState => {
     kanban: {
       boards: [],
       columns: [],
-      tasks: []
+      tasks: [],
     },
     qualityHistory: {
       runs: [],
-      events: []
+      events: [],
     },
     workbenchHistory: {
       runs: [],
-      evals: []
+      evals: [],
     },
     workflows: createDefaultWorkflowCatalogState(),
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
@@ -167,7 +171,7 @@ export const parseWorkspaceState = (value: unknown): WorkspaceState => {
     workbenchHistory: readWorkbenchHistory(value["workbenchHistory"]),
     workflows: readWorkflowCatalogState(value["workflows"]),
     createdAt,
-    updatedAt: readString(value, "updatedAt") ?? createdAt
+    updatedAt: readString(value, "updatedAt") ?? createdAt,
   };
 };
 
@@ -205,12 +209,12 @@ export const createWorkspaceStateFromStores = (input: {
     kanban: input.kanbanSnapshot,
     qualityHistory: {
       runs: input.historySnapshot.runs ?? [],
-      events: input.historySnapshot.events ?? []
+      events: input.historySnapshot.events ?? [],
     },
     workbenchHistory: input.workbenchHistory,
     workflows: input.workflowSnapshot,
     createdAt: input.previousState?.createdAt ?? now,
-    updatedAt: now
+    updatedAt: now,
   });
 };
 
@@ -224,22 +228,22 @@ const createDefaultSettingsSnapshot = (): WorkspaceSettingsSnapshot => ({
       modelId: "",
       endpointUrl: "",
       command: "codex",
-      promptMode: DefaultPromptMode
-    }
+      promptMode: DefaultPromptMode,
+    },
   ],
   workflowLimits: {
     infiniteLoops: false,
     maxLoops: DefaultMaxLoops,
-    externalCalls: true
+    externalCalls: true,
   },
   notifications: {
     soundEnabled: true,
-    webhookUrl: ""
+    webhookUrl: "",
   },
   serverConnection: {
     serverUrl: DefaultServerUrl,
-    authToken: DefaultAuthToken
-  }
+    authToken: DefaultAuthToken,
+  },
 });
 
 const readSettingsSnapshot = (value: unknown): WorkspaceSettingsSnapshot => {
@@ -252,10 +256,13 @@ const readSettingsSnapshot = (value: unknown): WorkspaceSettingsSnapshot => {
 
   return {
     profileId: readString(value, "profileId") ?? defaults.profileId,
-    providerProfiles: providerProfiles.length > 0 ? providerProfiles : defaults.providerProfiles,
+    providerProfiles:
+      providerProfiles.length > 0
+        ? providerProfiles
+        : defaults.providerProfiles,
     workflowLimits: readWorkflowLimits(value["workflowLimits"]),
     notifications: readNotifications(value["notifications"]),
-    serverConnection: readServerConnection(value["serverConnection"])
+    serverConnection: readServerConnection(value["serverConnection"]),
   };
 };
 
@@ -267,7 +274,7 @@ const readWorkflowLimits = (value: unknown): WorkspaceWorkflowLimits => {
   return {
     infiniteLoops: readBoolean(value, "infiniteLoops") ?? false,
     maxLoops: readPositiveInteger(value, "maxLoops") ?? DefaultMaxLoops,
-    externalCalls: readBoolean(value, "externalCalls") ?? true
+    externalCalls: readBoolean(value, "externalCalls") ?? true,
   };
 };
 
@@ -278,18 +285,20 @@ const readNotifications = (value: unknown): WorkspaceNotifications => {
 
   return {
     soundEnabled: readBoolean(value, "soundEnabled") ?? true,
-    webhookUrl: readString(value, "webhookUrl") ?? ""
+    webhookUrl: readString(value, "webhookUrl") ?? "",
   };
 };
 
-const readServerConnection = (value: unknown): WorkspaceSettingsSnapshot["serverConnection"] => {
+const readServerConnection = (
+  value: unknown,
+): WorkspaceSettingsSnapshot["serverConnection"] => {
   if (!isRecord(value)) {
     return createDefaultSettingsSnapshot().serverConnection;
   }
 
   return {
     serverUrl: readString(value, "serverUrl") ?? DefaultServerUrl,
-    authToken: readString(value, "authToken") ?? DefaultAuthToken
+    authToken: readString(value, "authToken") ?? DefaultAuthToken,
   };
 };
 
@@ -303,16 +312,20 @@ const readProjectArray = (value: unknown): ReadonlyArray<Project> =>
       return [];
     }
 
-    return [{
-      id,
-      name,
-      rootPath: readNullableString(record, "rootPath"),
-      createdAt,
-      updatedAt
-    }];
+    return [
+      {
+        id,
+        name,
+        rootPath: readNullableString(record, "rootPath"),
+        createdAt,
+        updatedAt,
+      },
+    ];
   });
 
-const readProviderSelections = (value: unknown): ReadonlyArray<ProviderSelection> =>
+const readProviderSelections = (
+  value: unknown,
+): ReadonlyArray<ProviderSelection> =>
   readRecordArray(value).flatMap((record) => {
     const projectId = readString(record, "projectId");
     const profileId = readString(record, "profileId");
@@ -322,15 +335,19 @@ const readProviderSelections = (value: unknown): ReadonlyArray<ProviderSelection
       return [];
     }
 
-    return [{
-      projectId,
-      profileId,
-      providerId,
-      updatedAt
-    }];
+    return [
+      {
+        projectId,
+        profileId,
+        providerId,
+        updatedAt,
+      },
+    ];
   });
 
-const readProviderSettings = (value: unknown): ReadonlyArray<ProviderSettingsRecord> =>
+const readProviderSettings = (
+  value: unknown,
+): ReadonlyArray<ProviderSettingsRecord> =>
   readRecordArray(value).flatMap((record) => {
     const projectId = readString(record, "projectId");
     const profileId = readString(record, "profileId");
@@ -341,13 +358,15 @@ const readProviderSettings = (value: unknown): ReadonlyArray<ProviderSettingsRec
       return [];
     }
 
-    return [{
-      projectId,
-      profileId,
-      providerId,
-      config,
-      updatedAt
-    }];
+    return [
+      {
+        projectId,
+        profileId,
+        providerId,
+        config,
+        updatedAt,
+      },
+    ];
   });
 
 const readKanbanSnapshot = (value: unknown): WorkspaceState["kanban"] => {
@@ -355,28 +374,32 @@ const readKanbanSnapshot = (value: unknown): WorkspaceState["kanban"] => {
     return {
       boards: [],
       columns: [],
-      tasks: []
+      tasks: [],
     };
   }
 
   return {
     boards: readJsonRecordArray(value["boards"]) as ReadonlyArray<KanbanBoard>,
-    columns: readJsonRecordArray(value["columns"]) as ReadonlyArray<KanbanColumn>,
-    tasks: readJsonRecordArray(value["tasks"]) as ReadonlyArray<KanbanTask>
+    columns: readJsonRecordArray(
+      value["columns"],
+    ) as ReadonlyArray<KanbanColumn>,
+    tasks: readJsonRecordArray(value["tasks"]) as ReadonlyArray<KanbanTask>,
   };
 };
 
-const readQualityHistory = (value: unknown): WorkspaceState["qualityHistory"] => {
+const readQualityHistory = (
+  value: unknown,
+): WorkspaceState["qualityHistory"] => {
   if (!isRecord(value)) {
     return {
       runs: [],
-      events: []
+      events: [],
     };
   }
 
   return {
     runs: readJsonRecordArray(value["runs"]) as ReadonlyArray<HistoryRunRecord>,
-    events: readJsonRecordArray(value["events"]) as ReadonlyArray<HistoryEvent>
+    events: readJsonRecordArray(value["events"]) as ReadonlyArray<HistoryEvent>,
   };
 };
 
@@ -384,13 +407,13 @@ const readWorkbenchHistory = (value: unknown): WorkspaceWorkbenchHistory => {
   if (!isRecord(value)) {
     return {
       runs: [],
-      evals: []
+      evals: [],
     };
   }
 
   return {
     runs: readJsonRecordArray(value["runs"]),
-    evals: readJsonRecordArray(value["evals"])
+    evals: readJsonRecordArray(value["evals"]),
   };
 };
 
@@ -400,10 +423,18 @@ const readWorkflowCatalogState = (value: unknown): WorkflowCatalogState => {
   }
 
   return {
-    definitions: readJsonRecordArray(value["definitions"]) as WorkflowCatalogState["definitions"],
-    assets: readJsonRecordArray(value["assets"]) as WorkflowCatalogState["assets"],
-    assetUsages: readJsonRecordArray(value["assetUsages"]) as WorkflowCatalogState["assetUsages"],
-    executions: readJsonRecordArray(value["executions"]) as WorkflowCatalogState["executions"]
+    definitions: readJsonRecordArray(
+      value["definitions"],
+    ) as WorkflowCatalogState["definitions"],
+    assets: readJsonRecordArray(
+      value["assets"],
+    ) as WorkflowCatalogState["assets"],
+    assetUsages: readJsonRecordArray(
+      value["assetUsages"],
+    ) as WorkflowCatalogState["assetUsages"],
+    executions: readJsonRecordArray(
+      value["executions"],
+    ) as WorkflowCatalogState["executions"],
   };
 };
 
@@ -413,10 +444,14 @@ const readJsonRecordArray = (value: unknown): ReadonlyArray<JsonRecord> =>
     return json ? [json] : [];
   });
 
-const readRecordArray = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
+const readRecordArray = (
+  value: unknown,
+): ReadonlyArray<Record<string, unknown>> =>
   Array.isArray(value) ? value.filter(isRecord) : [];
 
-const toJsonRecord = (record: Record<string, unknown>): JsonRecord | undefined => {
+const toJsonRecord = (
+  record: Record<string, unknown>,
+): JsonRecord | undefined => {
   const output: JsonRecord = {};
   for (const [key, value] of Object.entries(record)) {
     const jsonValue = toJsonValue(value);
@@ -457,7 +492,7 @@ const toJsonValue = (value: unknown): JsonValue | undefined => {
 
 const readString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined => {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0
@@ -467,12 +502,12 @@ const readString = (
 
 const readNullableString = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null => readString(record, key) ?? null;
 
 const readBoolean = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): boolean | undefined => {
   const value = record[key];
   return typeof value === "boolean" ? value : undefined;
@@ -480,7 +515,7 @@ const readBoolean = (
 
 const readPositiveInteger = (
   record: Record<string, unknown>,
-  key: string
+  key: string,
 ): number | undefined => {
   const value = record[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {

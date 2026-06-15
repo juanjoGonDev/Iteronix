@@ -4,18 +4,17 @@ import { err, ok, type Result } from "./result";
 
 export const SessionStatus = {
   Running: "running",
-  Stopped: "stopped"
+  Stopped: "stopped",
 } as const;
 
-export type SessionStatus =
-  typeof SessionStatus[keyof typeof SessionStatus];
+export type SessionStatus = (typeof SessionStatus)[keyof typeof SessionStatus];
 
 export const SessionEventType = {
-  Status: "status"
+  Status: "status",
 } as const;
 
 export type SessionEventType =
-  typeof SessionEventType[keyof typeof SessionEventType];
+  (typeof SessionEventType)[keyof typeof SessionEventType];
 
 export type Session = {
   id: string;
@@ -33,17 +32,17 @@ export type SessionEvent = {
   timestamp: string;
 };
 
-export type SessionStartInput = {
+type SessionStartInput = {
   projectId: string;
 };
 
 export const SessionStoreErrorCode = {
   InvalidInput: "invalid_input",
-  NotFound: "not_found"
+  NotFound: "not_found",
 } as const;
 
 export type SessionStoreErrorCode =
-  typeof SessionStoreErrorCode[keyof typeof SessionStoreErrorCode];
+  (typeof SessionStoreErrorCode)[keyof typeof SessionStoreErrorCode];
 
 export type SessionStoreError = {
   code: SessionStoreErrorCode;
@@ -59,8 +58,9 @@ export type SessionStore = {
 export const createSessionStore = (): SessionStore => {
   const sessions = new Map<string, Session>();
 
-  const start = (input: SessionStartInput): Result<Session, SessionStoreError> =>
-    startSession(sessions, input);
+  const start = (
+    input: SessionStartInput,
+  ): Result<Session, SessionStoreError> => startSession(sessions, input);
 
   const stop = (sessionId: string): Result<Session, SessionStoreError> =>
     stopSession(sessions, sessionId);
@@ -71,15 +71,18 @@ export const createSessionStore = (): SessionStore => {
   return {
     start,
     stop,
-    getById
+    getById,
   };
 };
 
-export type SessionEventSubscriber = (event: SessionEvent) => void;
+type SessionEventSubscriber = (event: SessionEvent) => void;
 
 export type SessionEventHub = {
   publish: (event: SessionEvent) => void;
-  subscribe: (sessionId: string, subscriber: SessionEventSubscriber) => () => void;
+  subscribe: (
+    sessionId: string,
+    subscriber: SessionEventSubscriber,
+  ) => () => void;
 };
 
 export const createSessionEventHub = (): SessionEventHub => {
@@ -98,9 +101,10 @@ export const createSessionEventHub = (): SessionEventHub => {
 
   const subscribe = (
     sessionId: string,
-    subscriber: SessionEventSubscriber
+    subscriber: SessionEventSubscriber,
   ): (() => void) => {
-    const existing = subscribers.get(sessionId) ?? new Set<SessionEventSubscriber>();
+    const existing =
+      subscribers.get(sessionId) ?? new Set<SessionEventSubscriber>();
     existing.add(subscriber);
     subscribers.set(sessionId, existing);
 
@@ -119,7 +123,7 @@ export const createSessionEventHub = (): SessionEventHub => {
 
   return {
     publish,
-    subscribe
+    subscribe,
   };
 };
 
@@ -128,24 +132,24 @@ export const createStatusEvent = (session: Session): SessionEvent => ({
   sessionId: session.id,
   type: SessionEventType.Status,
   status: session.status,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 });
 
 const startSession = (
   sessions: Map<string, Session>,
-  input: SessionStartInput
+  input: SessionStartInput,
 ): Result<Session, SessionStoreError> => {
   const projectId = input.projectId.trim();
   if (projectId.length === 0) {
     return err({
       code: SessionStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
   const session = createSessionEntity({
     projectId,
-    status: SessionStatus.Running
+    status: SessionStatus.Running,
   });
 
   sessions.set(session.id, session);
@@ -155,20 +159,20 @@ const startSession = (
 
 const stopSession = (
   sessions: Map<string, Session>,
-  sessionId: string
+  sessionId: string,
 ): Result<Session, SessionStoreError> => {
   const existing = sessions.get(sessionId);
   if (!existing) {
     return err({
       code: SessionStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
   const updated = {
     ...existing,
     status: SessionStatus.Stopped,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   sessions.set(updated.id, updated);
@@ -178,13 +182,13 @@ const stopSession = (
 
 const getSessionById = (
   sessions: Map<string, Session>,
-  sessionId: string
+  sessionId: string,
 ): Result<Session, SessionStoreError> => {
   const existing = sessions.get(sessionId);
   if (!existing) {
     return err({
       code: SessionStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -201,6 +205,6 @@ const createSessionEntity = (input: {
     projectId: input.projectId,
     status: input.status,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };

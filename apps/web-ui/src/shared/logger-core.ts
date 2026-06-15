@@ -1,5 +1,5 @@
 const LogLimits = {
-  MaxMessageLength: 10000
+  MaxMessageLength: 10000,
 } as const;
 
 export const SharedLogLevel = {
@@ -8,11 +8,11 @@ export const SharedLogLevel = {
   Info: "info",
   Warn: "warn",
   Error: "error",
-  Fatal: "fatal"
+  Fatal: "fatal",
 } as const;
 
 export type SharedLogLevel =
-  typeof SharedLogLevel[keyof typeof SharedLogLevel];
+  (typeof SharedLogLevel)[keyof typeof SharedLogLevel];
 
 export type SharedLogEntry = {
   id: string;
@@ -39,7 +39,7 @@ type ConsoleForwarderConfig = {
 };
 
 const Separator = {
-  Space: " "
+  Space: " ",
 } as const;
 
 const ConsoleMethodLevel: Record<ConsoleMethodName, SharedLogLevel> = {
@@ -48,11 +48,11 @@ const ConsoleMethodLevel: Record<ConsoleMethodName, SharedLogLevel> = {
   warn: SharedLogLevel.Warn,
   error: SharedLogLevel.Error,
   debug: SharedLogLevel.Debug,
-  trace: SharedLogLevel.Trace
+  trace: SharedLogLevel.Trace,
 };
 
 export const installConsoleForwarder = (
-  config: ConsoleForwarderConfig
+  config: ConsoleForwarderConfig,
 ): InstalledConsoleForwarder => {
   if (config.reset && (config.shouldReset ? config.shouldReset() : true)) {
     void Promise.resolve(config.reset()).catch(() => undefined);
@@ -64,11 +64,13 @@ export const installConsoleForwarder = (
     warn: console.warn.bind(console),
     error: console.error.bind(console),
     debug: console.debug.bind(console),
-    trace: console.trace.bind(console)
+    trace: console.trace.bind(console),
   };
 
   const send = (level: SharedLogLevel, args: unknown[]): void => {
-    const entry = createSharedLogEntry(buildSharedLogEntryInput(config, level, args));
+    const entry = createSharedLogEntry(
+      buildSharedLogEntryInput(config, level, args),
+    );
     void Promise.resolve(config.send(entry)).catch(() => undefined);
   };
 
@@ -86,7 +88,10 @@ export const installConsoleForwarder = (
   console.debug = wrap("debug");
   console.trace = wrap("trace");
 
-  const uninstallGlobalListeners = installGlobalErrorListenersIfNeeded(config, send);
+  const uninstallGlobalListeners = installGlobalErrorListenersIfNeeded(
+    config,
+    send,
+  );
 
   return {
     uninstall: (): void => {
@@ -97,7 +102,7 @@ export const installConsoleForwarder = (
       console.debug = original.debug;
       console.trace = original.trace;
       uninstallGlobalListeners();
-    }
+    },
   };
 };
 
@@ -110,10 +115,10 @@ export const createSharedLogEntry = (input: {
   id: (input.createId ?? createDefaultId)(),
   timestamp: (input.now ?? createTimestamp)(),
   level: input.level,
-  message: truncateLogMessage(formatLogArgs(input.args))
+  message: truncateLogMessage(formatLogArgs(input.args)),
 });
 
-export const formatLogArgs = (args: ReadonlyArray<unknown>): string =>
+const formatLogArgs = (args: ReadonlyArray<unknown>): string =>
   args.map((value) => serializeLogValue(value)).join(Separator.Space);
 
 export const serializeLogValue = (value: unknown): string => {
@@ -134,10 +139,12 @@ export const serializeLogValue = (value: unknown): string => {
 
 export const formatLogError = (error: Error): string => {
   const stack = error.stack;
-  return stack ? `${error.name}: ${error.message}\n${stack}` : `${error.name}: ${error.message}`;
+  return stack
+    ? `${error.name}: ${error.message}\n${stack}`
+    : `${error.name}: ${error.message}`;
 };
 
-export const truncateLogMessage = (message: string): string => {
+const truncateLogMessage = (message: string): string => {
   if (message.length <= LogLimits.MaxMessageLength) {
     return message;
   }
@@ -148,7 +155,7 @@ export const truncateLogMessage = (message: string): string => {
 const buildSharedLogEntryInput = (
   config: ConsoleForwarderConfig,
   level: SharedLogLevel,
-  args: unknown[]
+  args: unknown[],
 ): {
   level: SharedLogLevel;
   args: ReadonlyArray<unknown>;
@@ -158,12 +165,12 @@ const buildSharedLogEntryInput = (
   level,
   args,
   ...(config.createId ? { createId: config.createId } : {}),
-  ...(config.now ? { now: config.now } : {})
+  ...(config.now ? { now: config.now } : {}),
 });
 
 const installGlobalErrorListenersIfNeeded = (
   config: ConsoleForwarderConfig,
-  send: (level: SharedLogLevel, args: unknown[]) => void
+  send: (level: SharedLogLevel, args: unknown[]) => void,
 ): (() => void) => {
   const globalEventTarget = readGlobalEventTarget();
   if (!config.includeGlobalErrorEvents || !globalEventTarget) {
@@ -174,24 +181,34 @@ const installGlobalErrorListenersIfNeeded = (
 
   const onError = (event: unknown): void => {
     const errorEvent = readErrorEvent(event);
-    const message = errorEvent.error instanceof Error ? formatLogError(errorEvent.error) : errorEvent.message;
+    const message =
+      errorEvent.error instanceof Error
+        ? formatLogError(errorEvent.error)
+        : errorEvent.message;
     send(SharedLogLevel.Error, ["window.error", message]);
   };
 
   const onUnhandledRejection = (event: unknown): void => {
     const rejectionEvent = readPromiseRejectionEvent(event);
-    const message = rejectionEvent.reason instanceof Error
-      ? formatLogError(rejectionEvent.reason)
-      : serializeLogValue(rejectionEvent.reason);
+    const message =
+      rejectionEvent.reason instanceof Error
+        ? formatLogError(rejectionEvent.reason)
+        : serializeLogValue(rejectionEvent.reason);
     send(SharedLogLevel.Error, ["window.unhandledrejection", message]);
   };
 
   globalEventTarget.addEventListener("error", onError);
-  globalEventTarget.addEventListener("unhandledrejection", onUnhandledRejection);
+  globalEventTarget.addEventListener(
+    "unhandledrejection",
+    onUnhandledRejection,
+  );
 
   return (): void => {
     globalEventTarget.removeEventListener("error", onError);
-    globalEventTarget.removeEventListener("unhandledrejection", onUnhandledRejection);
+    globalEventTarget.removeEventListener(
+      "unhandledrejection",
+      onUnhandledRejection,
+    );
   };
 };
 
@@ -211,43 +228,53 @@ const readGlobalEventTarget = (): {
   ) {
     return value as {
       addEventListener: (type: string, listener: GlobalEventListener) => void;
-      removeEventListener: (type: string, listener: GlobalEventListener) => void;
+      removeEventListener: (
+        type: string,
+        listener: GlobalEventListener,
+      ) => void;
     };
   }
 
   return null;
 };
 
-const readErrorEvent = (value: unknown): {
+const readErrorEvent = (
+  value: unknown,
+): {
   message: string;
   error: unknown;
 } => {
   if (typeof value === "object" && value !== null) {
     const record = value as Record<string, unknown>;
     return {
-      message: typeof record["message"] === "string" ? record["message"] : "Unknown error",
-      error: record["error"]
+      message:
+        typeof record["message"] === "string"
+          ? record["message"]
+          : "Unknown error",
+      error: record["error"],
     };
   }
 
   return {
     message: "Unknown error",
-    error: undefined
+    error: undefined,
   };
 };
 
-const readPromiseRejectionEvent = (value: unknown): {
+const readPromiseRejectionEvent = (
+  value: unknown,
+): {
   reason: unknown;
 } => {
   if (typeof value === "object" && value !== null) {
     const record = value as Record<string, unknown>;
     return {
-      reason: record["reason"]
+      reason: record["reason"],
     };
   }
 
   return {
-    reason: value
+    reason: value,
   };
 };
 

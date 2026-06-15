@@ -1,9 +1,9 @@
 export const HttpMethod = {
   Get: "GET",
-  Post: "POST"
+  Post: "POST",
 } as const;
 
-export type HttpMethod = typeof HttpMethod[keyof typeof HttpMethod];
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 export const RoutePath = {
   ProjectsCreate: "/projects/create",
@@ -73,20 +73,20 @@ export const RoutePath = {
   WorkflowExecutionsDelete: "/workflows/executions/delete",
   WorkflowExecutionsRun: "/workflows/executions/run",
   WorkflowExecutionsStream: "/workflows/executions/stream",
-  WorkflowProvidersTest: "/workflows/providers/test"
+  WorkflowProvidersTest: "/workflows/providers/test",
 } as const;
 
-export type RoutePath = typeof RoutePath[keyof typeof RoutePath];
+export type RoutePath = (typeof RoutePath)[keyof typeof RoutePath];
 
 export const HeaderName = {
   Authorization: "authorization",
   WwwAuthenticate: "www-authenticate",
   ContentType: "content-type",
   CacheControl: "cache-control",
-  Connection: "connection"
+  Connection: "connection",
 } as const;
 
-export type HeaderName = typeof HeaderName[keyof typeof HeaderName];
+export type HeaderName = (typeof HeaderName)[keyof typeof HeaderName];
 
 export const BearerPrefix = "Bearer ";
 export const BearerScheme = "Bearer";
@@ -99,7 +99,7 @@ export const EnvKey = {
   CommandAllowlist: "COMMAND_ALLOWLIST",
   LogDir: "LOG_DIR",
   LogMaxEntries: "LOG_MAX_ENTRIES",
-  WorkspaceStateFile: "WORKSPACE_STATE_FILE"
+  WorkspaceStateFile: "WORKSPACE_STATE_FILE",
 } as const;
 
 export const DefaultServerConfig = {
@@ -107,7 +107,7 @@ export const DefaultServerConfig = {
   Port: 4000,
   LogDir: "../web-ui/logs",
   LogMaxEntries: 1000,
-  WorkspaceStateFile: ".iteronix/workspace-state.json"
+  WorkspaceStateFile: ".iteronix/workspace-state.json",
 } as const;
 
 export const ErrorMessage = {
@@ -160,17 +160,17 @@ export const ErrorMessage = {
   MissingWorkflowId: "Missing workflowId",
   MissingAssetId: "Missing assetId",
   MissingExecutionId: "Missing executionId",
-  MissingNodeId: "Missing nodeId"
+  MissingNodeId: "Missing nodeId",
 } as const;
 
 export const MimeType = {
   Json: "application/json",
-  EventStream: "text/event-stream"
+  EventStream: "text/event-stream",
 } as const;
 
 export const HeaderValue = {
   NoCache: "no-cache",
-  KeepAlive: "keep-alive"
+  KeepAlive: "keep-alive",
 } as const;
 
 export const TextEncoding = "utf8";
@@ -178,7 +178,7 @@ export const TextEncoding = "utf8";
 export const ProjectField = {
   ProjectId: "projectId",
   RootPath: "rootPath",
-  Name: "name"
+  Name: "name",
 } as const;
 
 export const FileField = {
@@ -186,7 +186,7 @@ export const FileField = {
   Path: "path",
   Content: "content",
   StartLine: "startLine",
-  LineCount: "lineCount"
+  LineCount: "lineCount",
 } as const;
 
 export const FileSearchField = {
@@ -194,48 +194,48 @@ export const FileSearchField = {
   Query: "query",
   IsRegex: "isRegex",
   MatchCase: "matchCase",
-  WholeWord: "wholeWord"
+  WholeWord: "wholeWord",
 } as const;
 
 export const FileMoveField = {
   ProjectId: "projectId",
   SourcePath: "sourcePath",
-  TargetPath: "targetPath"
+  TargetPath: "targetPath",
 } as const;
 
 export const SessionField = {
   SessionId: "sessionId",
-  ProjectId: "projectId"
+  ProjectId: "projectId",
 } as const;
 
 export const QueryParam = {
   SessionId: "sessionId",
-  WorkflowId: "workflowId"
+  WorkflowId: "workflowId",
 } as const;
 
 export const HistoryField = {
   Status: "status",
   Limit: "limit",
-  RunId: "runId"
+  RunId: "runId",
 } as const;
 
 export const LogsField = {
   Level: "level",
   Limit: "limit",
-  RunId: "runId"
+  RunId: "runId",
 } as const;
 
 export const ProviderField = {
   ProjectId: "projectId",
   ProfileId: "profileId",
   ProviderId: "providerId",
-  Config: "config"
+  Config: "config",
 } as const;
 
 export const KanbanBoardField = {
   ProjectId: "projectId",
   BoardId: "boardId",
-  Name: "name"
+  Name: "name",
 } as const;
 
 export const KanbanColumnField = {
@@ -243,7 +243,7 @@ export const KanbanColumnField = {
   BoardId: "boardId",
   ColumnId: "columnId",
   Name: "name",
-  Position: "position"
+  Position: "position",
 } as const;
 
 export const KanbanTaskField = {
@@ -253,7 +253,7 @@ export const KanbanTaskField = {
   TaskId: "taskId",
   Title: "title",
   Description: "description",
-  Position: "position"
+  Position: "position",
 } as const;
 
 export const AiField = {
@@ -263,7 +263,7 @@ export const AiField = {
   DatasetPath: "datasetPath",
   AutoApprove: "autoApprove",
   Query: "query",
-  Limit: "limit"
+  Limit: "limit",
 } as const;
 
 export const GitField = {
@@ -271,7 +271,7 @@ export const GitField = {
   Paths: "paths",
   Staged: "staged",
   Message: "message",
-  BranchName: "branchName"
+  BranchName: "branchName",
 } as const;
 
 export const QualityGateField = {
@@ -279,26 +279,15 @@ export const QualityGateField = {
   RunId: "runId",
   Gates: "gates",
   Status: "status",
-  Limit: "limit"
-} as const;
-
-export const WorkflowField = {
-  ProjectId: "projectId",
-  WorkflowId: "workflowId",
-  NodeId: "nodeId",
-  AssetId: "assetId",
-  ExecutionId: "executionId",
-  WorkspaceId: "workspaceId",
-  Definition: "definition",
-  Asset: "asset"
+  Limit: "limit",
 } as const;
 
 export const FileEntryKind = {
   File: "file",
-  Directory: "directory"
+  Directory: "directory",
 } as const;
 
-export type FileEntryKind = typeof FileEntryKind[keyof typeof FileEntryKind];
+export type FileEntryKind = (typeof FileEntryKind)[keyof typeof FileEntryKind];
 
 export const HttpStatus = {
   Ok: 200,
@@ -310,5 +299,5 @@ export const HttpStatus = {
   Conflict: 409,
   MethodNotAllowed: 405,
   TooManyRequests: 429,
-  InternalServerError: 500
+  InternalServerError: 500,
 } as const;

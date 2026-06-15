@@ -9,13 +9,20 @@
     "dev:web": "pnpm -C apps/web-ui dev",
     "dev:desktop": "pnpm -w exec concurrently -k -n web,desktop \"pnpm -C apps/web-ui dev\" \"pnpm -C apps/desktop-main dev\"",
     "lint": "eslint \"{apps,packages}/**/*.{ts,tsx}\"",
+    "lint:strict": "eslint \"{apps,packages}/**/*.{ts,tsx}\" --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run --passWithNoTests",
     "eval:min": "vitest run packages/eval/src/ci-eval.test.ts",
     "build": "tsc -p tsconfig.build.json && tsc -p apps/web-ui/tsconfig.build.json",
     "start": "pnpm -C apps/server-api start",
     "preview:web": "pnpm -C apps/web-ui preview",
-    "clean": "node -e \"const { rmSync } = require('node:fs'); rmSync('dist', { recursive: true, force: true }); rmSync('apps/web-ui/dist', { recursive: true, force: true });\""
+    "deadcode": "knip",
+    "deps:check": "depcruise --config .dependency-cruiser.cjs \"{apps,packages}/**/*.{ts,tsx}\" --exclude \"node_modules\"",
+    "quality": "pnpm lint:strict && pnpm typecheck && pnpm deadcode && pnpm deps:check && pnpm test",
+    "clean": "node -e \"const { rmSync } = require('node:fs'); rmSync('dist', { recursive: true, force: true }); rmSync('apps/web-ui/dist', { recursive: true, force: true });\"",
+    "postinstall": "node --import tsx scripts/install-hooks.ts"
   },
   "devDependencies": {
     "@types/node": "25.0.3",
@@ -23,13 +30,16 @@
     "@typescript-eslint/eslint-plugin": "8.51.0",
     "@typescript-eslint/parser": "8.51.0",
     "concurrently": "^9.2.1",
+    "dependency-cruiser": "17.4.3",
     "eslint": "9.39.2",
-    "live-server": "^1.2.2",
+    "knip": "6.13.0",
+    "lefthook": "2.1.8",
+    "prettier": "3.8.3",
+    "tsx": "^4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.0.16"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
     "@opentelemetry/sdk-node": "^0.213.0",
@@ -37,7 +47,11 @@
     "dotenv": "17.2.3",
     "lru-cache": "^11.2.6",
     "pg": "^8.20.0",
-    "rate-limiter-flexible": "^9.1.1",
     "zod": "^4.3.6"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "lefthook"
+    ]
   }
 }

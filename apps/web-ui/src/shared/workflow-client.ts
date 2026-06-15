@@ -10,7 +10,7 @@ import type {
   WorkflowGuardrailFindingRecord,
   WorkflowNodeKind,
   WorkflowProviderSelectionRecord,
-  WorkflowUsageTotalsRecord
+  WorkflowUsageTotalsRecord,
 } from "../screens/workflows-editor-state.js";
 
 const EndpointPath = {
@@ -28,7 +28,7 @@ const EndpointPath = {
   ExecutionsDelete: "/workflows/executions/delete",
   ExecutionsRun: "/workflows/executions/run",
   ExecutionsStream: "/workflows/executions/stream",
-  ProvidersTest: "/workflows/providers/test"
+  ProvidersTest: "/workflows/providers/test",
 } as const;
 
 export type WorkflowNodeProviderTestResult = {
@@ -46,7 +46,7 @@ export const WorkflowRunStreamEventType = {
   NodeCompleted: "node_completed",
   NodeFailed: "node_failed",
   WorkflowCompleted: "workflow_completed",
-  WorkflowFailed: "workflow_failed"
+  WorkflowFailed: "workflow_failed",
 } as const;
 
 export type WorkflowRunStreamEvent =
@@ -117,13 +117,19 @@ export type WorkflowRunStreamEvent =
     };
 
 export type WorkflowClient = {
-  listDefinitions: (input: { projectId: string }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
-  getDefinition: (input: { workflowId: string }) => Promise<WorkflowDefinitionRecord>;
+  listDefinitions: (input: {
+    projectId: string;
+  }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
+  getDefinition: (input: {
+    workflowId: string;
+  }) => Promise<WorkflowDefinitionRecord>;
   upsertDefinition: (input: {
     projectId: string;
     definition: WorkflowDefinitionUpsertInput;
   }) => Promise<WorkflowDefinitionRecord>;
-  deleteDefinition: (input: { workflowId: string }) => Promise<WorkflowDefinitionRecord>;
+  deleteDefinition: (input: {
+    workflowId: string;
+  }) => Promise<WorkflowDefinitionRecord>;
   listAssets: (input: {
     projectId: string;
     workspaceId: string;
@@ -143,9 +149,15 @@ export type WorkflowClient = {
     projectId: string;
     workflowId?: string;
   }) => Promise<ReadonlyArray<WorkflowExecutionRecord>>;
-  getExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
-  deleteExecution: (input: { executionId: string }) => Promise<WorkflowExecutionRecord>;
-  runWorkflow: (input: { workflowId: string }) => Promise<WorkflowExecutionRecord>;
+  getExecution: (input: {
+    executionId: string;
+  }) => Promise<WorkflowExecutionRecord>;
+  deleteExecution: (input: {
+    executionId: string;
+  }) => Promise<WorkflowExecutionRecord>;
+  runWorkflow: (input: {
+    workflowId: string;
+  }) => Promise<WorkflowExecutionRecord>;
   streamWorkflow: (input: {
     workflowId: string;
     signal?: AbortSignal;
@@ -162,68 +174,68 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.DefinitionsList,
       body: {
-        projectId: input.projectId
+        projectId: input.projectId,
       },
-      parse: parseWorkflowDefinitionListResponse
+      parse: parseWorkflowDefinitionListResponse,
     }),
   getDefinition: (input) =>
     requestJson({
       path: EndpointPath.DefinitionsGet,
       body: {
-        workflowId: input.workflowId
+        workflowId: input.workflowId,
       },
-      parse: parseWorkflowDefinitionResponse
+      parse: parseWorkflowDefinitionResponse,
     }),
   upsertDefinition: (input) =>
     requestJson({
       path: EndpointPath.DefinitionsUpsert,
       body: {
         projectId: input.projectId,
-        definition: input.definition
+        definition: input.definition,
       },
-      parse: parseWorkflowDefinitionResponse
+      parse: parseWorkflowDefinitionResponse,
     }),
   deleteDefinition: (input) =>
     requestJson({
       path: EndpointPath.DefinitionsDelete,
       body: {
-        workflowId: input.workflowId
+        workflowId: input.workflowId,
       },
-      parse: parseWorkflowDefinitionResponse
+      parse: parseWorkflowDefinitionResponse,
     }),
   listAssets: (input) =>
     requestJson({
       path: EndpointPath.AssetsList,
       body: {
         projectId: input.projectId,
-        workspaceId: input.workspaceId
+        workspaceId: input.workspaceId,
       },
-      parse: parseWorkflowAssetListResponse
+      parse: parseWorkflowAssetListResponse,
     }),
   getAsset: (input) =>
     requestJson({
       path: EndpointPath.AssetsGet,
       body: {
-        assetId: input.assetId
+        assetId: input.assetId,
       },
-      parse: parseWorkflowAssetResponse
+      parse: parseWorkflowAssetResponse,
     }),
   upsertAsset: (input) =>
     requestJson({
       path: EndpointPath.AssetsUpsert,
       body: {
         projectId: input.projectId,
-        asset: input.asset
+        asset: input.asset,
       },
-      parse: parseWorkflowAssetResponse
+      parse: parseWorkflowAssetResponse,
     }),
   deleteAsset: (input) =>
     requestJson({
       path: EndpointPath.AssetsDelete,
       body: {
-        assetId: input.assetId
+        assetId: input.assetId,
       },
-      parse: parseWorkflowAssetResponse
+      parse: parseWorkflowAssetResponse,
     }),
   listAssetUsages: (input) =>
     requestJson({
@@ -231,42 +243,42 @@ export const createWorkflowClient = (): WorkflowClient => ({
       body: {
         ...(input.assetId ? { assetId: input.assetId } : {}),
         ...(input.workflowId ? { workflowId: input.workflowId } : {}),
-        ...(input.projectId ? { projectId: input.projectId } : {})
+        ...(input.projectId ? { projectId: input.projectId } : {}),
       },
-      parse: parseWorkflowAssetUsageListResponse
+      parse: parseWorkflowAssetUsageListResponse,
     }),
   listExecutions: (input) =>
     requestJson({
       path: EndpointPath.ExecutionsList,
       body: {
         projectId: input.projectId,
-        ...(input.workflowId ? { workflowId: input.workflowId } : {})
+        ...(input.workflowId ? { workflowId: input.workflowId } : {}),
       },
-      parse: parseWorkflowExecutionListResponse
+      parse: parseWorkflowExecutionListResponse,
     }),
   getExecution: (input) =>
     requestJson({
       path: EndpointPath.ExecutionsGet,
       body: {
-        executionId: input.executionId
+        executionId: input.executionId,
       },
-      parse: parseWorkflowExecutionResponse
+      parse: parseWorkflowExecutionResponse,
     }),
   deleteExecution: (input) =>
     requestJson({
       path: EndpointPath.ExecutionsDelete,
       body: {
-        executionId: input.executionId
+        executionId: input.executionId,
       },
-      parse: parseWorkflowExecutionResponse
+      parse: parseWorkflowExecutionResponse,
     }),
   runWorkflow: (input) =>
     requestJson({
       path: EndpointPath.ExecutionsRun,
       body: {
-        workflowId: input.workflowId
+        workflowId: input.workflowId,
       },
-      parse: parseWorkflowExecutionResponse
+      parse: parseWorkflowExecutionResponse,
     }),
   streamWorkflow: async (input) => {
     let buffer = "";
@@ -289,7 +301,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
 
           boundaryIndex = buffer.indexOf("\n\n");
         }
-      }
+      },
     });
   },
   testNodeProvider: (input) =>
@@ -297,78 +309,105 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.ProvidersTest,
       body: {
         workflowId: input.workflowId,
-        nodeId: input.nodeId
+        nodeId: input.nodeId,
       },
-      parse: parseWorkflowNodeProviderTestResponse
-    })
+      parse: parseWorkflowNodeProviderTestResponse,
+    }),
 });
 
 export const parseWorkflowDefinitionListResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<WorkflowDefinitionRecord> =>
-  readRequiredArray(value, "workflowDefinitionListResponse", "definitions").map((item) =>
-    parseWorkflowDefinitionRecord(ensureRecord(item, "workflowDefinitionRecord"))
+  readRequiredArray(value, "workflowDefinitionListResponse", "definitions").map(
+    (item) =>
+      parseWorkflowDefinitionRecord(
+        ensureRecord(item, "workflowDefinitionRecord"),
+      ),
   );
 
-export const parseWorkflowDefinitionResponse = (
-  value: unknown
+const parseWorkflowDefinitionResponse = (
+  value: unknown,
 ): WorkflowDefinitionRecord =>
   parseWorkflowDefinitionRecord(
-    readRequiredRecord(value, "workflowDefinitionResponse", "definition")
+    readRequiredRecord(value, "workflowDefinitionResponse", "definition"),
   );
 
 export const parseWorkflowAssetListResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<WorkflowAssetRecord> =>
   readRequiredArray(value, "workflowAssetListResponse", "assets").map((item) =>
-    parseWorkflowAssetRecord(ensureRecord(item, "workflowAssetRecord"))
+    parseWorkflowAssetRecord(ensureRecord(item, "workflowAssetRecord")),
   );
 
-export const parseWorkflowAssetResponse = (
-  value: unknown
-): WorkflowAssetRecord =>
+const parseWorkflowAssetResponse = (value: unknown): WorkflowAssetRecord =>
   parseWorkflowAssetRecord(
-    readRequiredRecord(value, "workflowAssetResponse", "asset")
+    readRequiredRecord(value, "workflowAssetResponse", "asset"),
   );
 
-export const parseWorkflowAssetUsageListResponse = (
-  value: unknown
+const parseWorkflowAssetUsageListResponse = (
+  value: unknown,
 ): ReadonlyArray<WorkflowAssetUsageRecord> =>
-  readRequiredArray(value, "workflowAssetUsageListResponse", "usages").map((item) =>
-    parseWorkflowAssetUsageRecord(ensureRecord(item, "workflowAssetUsageRecord"))
+  readRequiredArray(value, "workflowAssetUsageListResponse", "usages").map(
+    (item) =>
+      parseWorkflowAssetUsageRecord(
+        ensureRecord(item, "workflowAssetUsageRecord"),
+      ),
   );
 
 export const parseWorkflowExecutionListResponse = (
-  value: unknown
+  value: unknown,
 ): ReadonlyArray<WorkflowExecutionRecord> =>
-  readRequiredArray(value, "workflowExecutionListResponse", "executions").map((item) =>
-    parseWorkflowExecutionRecord(ensureRecord(item, "workflowExecutionRecord"))
+  readRequiredArray(value, "workflowExecutionListResponse", "executions").map(
+    (item) =>
+      parseWorkflowExecutionRecord(
+        ensureRecord(item, "workflowExecutionRecord"),
+      ),
   );
 
-export const parseWorkflowExecutionResponse = (
-  value: unknown
+const parseWorkflowExecutionResponse = (
+  value: unknown,
 ): WorkflowExecutionRecord =>
   parseWorkflowExecutionRecord(
-    readRequiredRecord(value, "workflowExecutionResponse", "execution")
+    readRequiredRecord(value, "workflowExecutionResponse", "execution"),
   );
 
 export const parseWorkflowNodeProviderTestResponse = (
-  value: unknown
+  value: unknown,
 ): WorkflowNodeProviderTestResult => {
   const record = ensureRecord(value, "workflowNodeProviderTestResponse");
   return {
     definition: parseWorkflowDefinitionRecord(
-      readRequiredRecord(record, "workflowNodeProviderTestResponse", "definition")
+      readRequiredRecord(
+        record,
+        "workflowNodeProviderTestResponse",
+        "definition",
+      ),
     ),
-    nodeId: readRequiredString(record, "workflowNodeProviderTestResponse", "nodeId"),
-    status: readRequiredString(record, "workflowNodeProviderTestResponse", "status") as WorkflowNodeProviderTestResult["status"],
-    testedAt: readRequiredString(record, "workflowNodeProviderTestResponse", "testedAt"),
-    message: readRequiredString(record, "workflowNodeProviderTestResponse", "message")
+    nodeId: readRequiredString(
+      record,
+      "workflowNodeProviderTestResponse",
+      "nodeId",
+    ),
+    status: readRequiredString(
+      record,
+      "workflowNodeProviderTestResponse",
+      "status",
+    ) as WorkflowNodeProviderTestResult["status"],
+    testedAt: readRequiredString(
+      record,
+      "workflowNodeProviderTestResponse",
+      "testedAt",
+    ),
+    message: readRequiredString(
+      record,
+      "workflowNodeProviderTestResponse",
+      "message",
+    ),
   };
 };
 
 export const decodeServerSentEvents = (
-  value: string
+  value: string,
 ): ReadonlyArray<{
   event: string;
   data: unknown;
@@ -409,153 +448,335 @@ export const decodeServerSentEvents = (
       return {
         event: eventName,
         data: JSON.parse(dataLines.join("\n")) as unknown,
-        ...(id ? { id } : {})
+        ...(id ? { id } : {}),
       };
     })
-    .filter((event): event is { event: string; data: unknown; id?: string } => event !== null);
+    .filter(
+      (event): event is { event: string; data: unknown; id?: string } =>
+        event !== null,
+    );
 };
 
 export const parseWorkflowRunStreamEvent = (
   eventName: string,
-  value: unknown
+  value: unknown,
 ): WorkflowRunStreamEvent => {
   const record = ensureRecord(value, "workflowRunStreamEvent");
 
   if (eventName === WorkflowRunStreamEventType.WorkflowStarted) {
     return {
       type: WorkflowRunStreamEventType.WorkflowStarted,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
-      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt")
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
+      startedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "startedAt",
+      ),
     };
   }
 
   if (eventName === WorkflowRunStreamEventType.NodeStarted) {
     return {
       type: WorkflowRunStreamEventType.NodeStarted,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
       nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
-      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      nodeKind: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "nodeKind",
+      ) as WorkflowNodeKind,
       label: readRequiredString(record, "workflowRunStreamEvent", "label"),
-      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt")
+      startedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "startedAt",
+      ),
     };
   }
 
   if (eventName === WorkflowRunStreamEventType.NodeDelta) {
     return {
       type: WorkflowRunStreamEventType.NodeDelta,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
       nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
       delta: readRequiredString(record, "workflowRunStreamEvent", "delta"),
-      emittedAt: readRequiredString(record, "workflowRunStreamEvent", "emittedAt")
+      emittedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "emittedAt",
+      ),
     };
   }
 
   if (eventName === WorkflowRunStreamEventType.NodeCompleted) {
     return {
       type: WorkflowRunStreamEventType.NodeCompleted,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
       nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
-      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      nodeKind: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "nodeKind",
+      ) as WorkflowNodeKind,
       label: readRequiredString(record, "workflowRunStreamEvent", "label"),
-      status: readRequiredString(record, "workflowRunStreamEvent", "status") as "completed" | "failed" | "awaiting_review",
-      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt"),
-      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+      status: readRequiredString(record, "workflowRunStreamEvent", "status") as
+        | "completed"
+        | "failed"
+        | "awaiting_review",
+      startedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "startedAt",
+      ),
+      finishedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "finishedAt",
+      ),
       outputSnapshot: record["outputSnapshot"],
-      alerts: readRequiredArray(record, "workflowRunStreamEvent", "alerts") as ReadonlyArray<WorkflowAlertRecord>,
-      guardrailFindings: readRequiredArray(record, "workflowRunStreamEvent", "guardrailFindings") as ReadonlyArray<WorkflowGuardrailFindingRecord>,
-      ...(record["usage"] ? { usage: record["usage"] as WorkflowUsageTotalsRecord } : {}),
-      ...(record["provider"] ? { provider: record["provider"] as WorkflowProviderSelectionRecord } : {})
+      alerts: readRequiredArray(
+        record,
+        "workflowRunStreamEvent",
+        "alerts",
+      ) as ReadonlyArray<WorkflowAlertRecord>,
+      guardrailFindings: readRequiredArray(
+        record,
+        "workflowRunStreamEvent",
+        "guardrailFindings",
+      ) as ReadonlyArray<WorkflowGuardrailFindingRecord>,
+      ...(record["usage"]
+        ? { usage: record["usage"] as WorkflowUsageTotalsRecord }
+        : {}),
+      ...(record["provider"]
+        ? { provider: record["provider"] as WorkflowProviderSelectionRecord }
+        : {}),
     };
   }
 
   if (eventName === WorkflowRunStreamEventType.NodeFailed) {
     return {
       type: WorkflowRunStreamEventType.NodeFailed,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
       nodeId: readRequiredString(record, "workflowRunStreamEvent", "nodeId"),
-      nodeKind: readRequiredString(record, "workflowRunStreamEvent", "nodeKind") as WorkflowNodeKind,
+      nodeKind: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "nodeKind",
+      ) as WorkflowNodeKind,
       label: readRequiredString(record, "workflowRunStreamEvent", "label"),
-      startedAt: readRequiredString(record, "workflowRunStreamEvent", "startedAt"),
-      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
-      message: readRequiredString(record, "workflowRunStreamEvent", "message")
+      startedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "startedAt",
+      ),
+      finishedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "finishedAt",
+      ),
+      message: readRequiredString(record, "workflowRunStreamEvent", "message"),
     };
   }
 
   if (eventName === WorkflowRunStreamEventType.WorkflowCompleted) {
     return {
       type: WorkflowRunStreamEventType.WorkflowCompleted,
-      workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-      workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
-      finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+      workflowId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowId",
+      ),
+      workflowRunId: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "workflowRunId",
+      ),
+      finishedAt: readRequiredString(
+        record,
+        "workflowRunStreamEvent",
+        "finishedAt",
+      ),
       execution: parseWorkflowExecutionRecord(
-        readRequiredRecord(record, "workflowRunStreamEvent", "execution")
-      )
+        readRequiredRecord(record, "workflowRunStreamEvent", "execution"),
+      ),
     };
   }
 
   return {
     type: WorkflowRunStreamEventType.WorkflowFailed,
-    workflowId: readRequiredString(record, "workflowRunStreamEvent", "workflowId"),
-    workflowRunId: readRequiredString(record, "workflowRunStreamEvent", "workflowRunId"),
-    finishedAt: readRequiredString(record, "workflowRunStreamEvent", "finishedAt"),
+    workflowId: readRequiredString(
+      record,
+      "workflowRunStreamEvent",
+      "workflowId",
+    ),
+    workflowRunId: readRequiredString(
+      record,
+      "workflowRunStreamEvent",
+      "workflowRunId",
+    ),
+    finishedAt: readRequiredString(
+      record,
+      "workflowRunStreamEvent",
+      "finishedAt",
+    ),
     ...(typeof record["error"] === "string" ? { error: record["error"] } : {}),
     ...(record["execution"]
       ? {
           execution: parseWorkflowExecutionRecord(
-            readRequiredRecord(record, "workflowRunStreamEvent", "execution")
-          )
+            readRequiredRecord(record, "workflowRunStreamEvent", "execution"),
+          ),
         }
-      : {})
+      : {}),
   };
 };
 
 const parseWorkflowDefinitionRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): WorkflowDefinitionRecord => ({
   id: readRequiredString(value, "workflowDefinitionRecord", "id"),
-  workspaceId: readRequiredString(value, "workflowDefinitionRecord", "workspaceId"),
+  workspaceId: readRequiredString(
+    value,
+    "workflowDefinitionRecord",
+    "workspaceId",
+  ),
   projectId: readRequiredString(value, "workflowDefinitionRecord", "projectId"),
   name: readRequiredString(value, "workflowDefinitionRecord", "name"),
-  description: readRequiredString(value, "workflowDefinitionRecord", "description"),
-  status: readRequiredString(value, "workflowDefinitionRecord", "status") as WorkflowDefinitionRecord["status"],
+  description: readRequiredString(
+    value,
+    "workflowDefinitionRecord",
+    "description",
+  ),
+  status: readRequiredString(
+    value,
+    "workflowDefinitionRecord",
+    "status",
+  ) as WorkflowDefinitionRecord["status"],
   version: readRequiredNumber(value, "workflowDefinitionRecord", "version"),
   createdAt: readRequiredString(value, "workflowDefinitionRecord", "createdAt"),
   updatedAt: readRequiredString(value, "workflowDefinitionRecord", "updatedAt"),
-  trigger: readRequiredRecord(value, "workflowDefinitionRecord", "trigger") as WorkflowDefinitionRecord["trigger"],
-  viewport: readRequiredRecord(value, "workflowDefinitionRecord", "viewport") as WorkflowDefinitionRecord["viewport"],
-  nodes: readRequiredArray(value, "workflowDefinitionRecord", "nodes") as WorkflowDefinitionRecord["nodes"],
-  edges: readRequiredArray(value, "workflowDefinitionRecord", "edges") as WorkflowDefinitionRecord["edges"],
-  executionPolicy: readRequiredRecord(value, "workflowDefinitionRecord", "executionPolicy") as WorkflowDefinitionRecord["executionPolicy"],
-  defaultContextPolicy: readRequiredRecord(value, "workflowDefinitionRecord", "defaultContextPolicy") as WorkflowDefinitionRecord["defaultContextPolicy"],
-  tags: readRequiredStringArray(value, "workflowDefinitionRecord", "tags")
+  trigger: readRequiredRecord(
+    value,
+    "workflowDefinitionRecord",
+    "trigger",
+  ) as WorkflowDefinitionRecord["trigger"],
+  viewport: readRequiredRecord(
+    value,
+    "workflowDefinitionRecord",
+    "viewport",
+  ) as WorkflowDefinitionRecord["viewport"],
+  nodes: readRequiredArray(
+    value,
+    "workflowDefinitionRecord",
+    "nodes",
+  ) as WorkflowDefinitionRecord["nodes"],
+  edges: readRequiredArray(
+    value,
+    "workflowDefinitionRecord",
+    "edges",
+  ) as WorkflowDefinitionRecord["edges"],
+  executionPolicy: readRequiredRecord(
+    value,
+    "workflowDefinitionRecord",
+    "executionPolicy",
+  ) as WorkflowDefinitionRecord["executionPolicy"],
+  defaultContextPolicy: readRequiredRecord(
+    value,
+    "workflowDefinitionRecord",
+    "defaultContextPolicy",
+  ) as WorkflowDefinitionRecord["defaultContextPolicy"],
+  tags: readRequiredStringArray(value, "workflowDefinitionRecord", "tags"),
 });
 
 const parseWorkflowAssetRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): WorkflowAssetRecord => {
   const projectId = readOptionalString(value, "projectId");
   const archivedAt = readOptionalString(value, "archivedAt");
   const outputContract = hasDefinedProperty(value, "outputContract")
-    ? readRequiredRecord(value, "workflowAssetRecord", "outputContract") as NonNullable<WorkflowAssetRecord["outputContract"]>
+    ? (readRequiredRecord(
+        value,
+        "workflowAssetRecord",
+        "outputContract",
+      ) as NonNullable<WorkflowAssetRecord["outputContract"]>)
     : undefined;
   const guardrail = hasDefinedProperty(value, "guardrail")
-    ? readRequiredRecord(value, "workflowAssetRecord", "guardrail") as NonNullable<WorkflowAssetRecord["guardrail"]>
+    ? (readRequiredRecord(
+        value,
+        "workflowAssetRecord",
+        "guardrail",
+      ) as NonNullable<WorkflowAssetRecord["guardrail"]>)
     : undefined;
 
   return {
     id: readRequiredString(value, "workflowAssetRecord", "id"),
-    workspaceId: readRequiredString(value, "workflowAssetRecord", "workspaceId"),
+    workspaceId: readRequiredString(
+      value,
+      "workflowAssetRecord",
+      "workspaceId",
+    ),
     ...(projectId ? { projectId } : {}),
-    kind: readRequiredString(value, "workflowAssetRecord", "kind") as WorkflowAssetRecord["kind"],
-    scope: readRequiredString(value, "workflowAssetRecord", "scope") as WorkflowAssetRecord["scope"],
+    kind: readRequiredString(
+      value,
+      "workflowAssetRecord",
+      "kind",
+    ) as WorkflowAssetRecord["kind"],
+    scope: readRequiredString(
+      value,
+      "workflowAssetRecord",
+      "scope",
+    ) as WorkflowAssetRecord["scope"],
     name: readRequiredString(value, "workflowAssetRecord", "name"),
     slug: readRequiredString(value, "workflowAssetRecord", "slug"),
-    description: readRequiredString(value, "workflowAssetRecord", "description"),
+    description: readRequiredString(
+      value,
+      "workflowAssetRecord",
+      "description",
+    ),
     body: readRequiredString(value, "workflowAssetRecord", "body"),
     language: readRequiredString(value, "workflowAssetRecord", "language"),
     version: readRequiredNumber(value, "workflowAssetRecord", "version"),
@@ -564,46 +785,101 @@ const parseWorkflowAssetRecord = (
     ...(guardrail ? { guardrail } : {}),
     createdAt: readRequiredString(value, "workflowAssetRecord", "createdAt"),
     updatedAt: readRequiredString(value, "workflowAssetRecord", "updatedAt"),
-    ...(archivedAt ? { archivedAt } : {})
+    ...(archivedAt ? { archivedAt } : {}),
   };
 };
 
 const parseWorkflowAssetUsageRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): WorkflowAssetUsageRecord => ({
   assetId: readRequiredString(value, "workflowAssetUsageRecord", "assetId"),
-  workflowId: readRequiredString(value, "workflowAssetUsageRecord", "workflowId"),
+  workflowId: readRequiredString(
+    value,
+    "workflowAssetUsageRecord",
+    "workflowId",
+  ),
   projectId: readRequiredString(value, "workflowAssetUsageRecord", "projectId"),
   nodeId: readRequiredString(value, "workflowAssetUsageRecord", "nodeId"),
-  nodeKind: readRequiredString(value, "workflowAssetUsageRecord", "nodeKind") as WorkflowAssetUsageRecord["nodeKind"],
-  role: readRequiredString(value, "workflowAssetUsageRecord", "role") as WorkflowAssetUsageRecord["role"],
-  createdAt: readRequiredString(value, "workflowAssetUsageRecord", "createdAt")
+  nodeKind: readRequiredString(
+    value,
+    "workflowAssetUsageRecord",
+    "nodeKind",
+  ) as WorkflowAssetUsageRecord["nodeKind"],
+  role: readRequiredString(
+    value,
+    "workflowAssetUsageRecord",
+    "role",
+  ) as WorkflowAssetUsageRecord["role"],
+  createdAt: readRequiredString(value, "workflowAssetUsageRecord", "createdAt"),
 });
 
 const parseWorkflowExecutionRecord = (
-  value: Record<string, unknown>
+  value: Record<string, unknown>,
 ): WorkflowExecutionRecord => {
   const finishedAt = readOptionalString(value, "finishedAt");
   const durationMs = readOptionalNumber(value, "durationMs");
 
   return {
     id: readRequiredString(value, "workflowExecutionRecord", "id"),
-    workflowId: readRequiredString(value, "workflowExecutionRecord", "workflowId"),
-    projectId: readRequiredString(value, "workflowExecutionRecord", "projectId"),
-    triggerKind: readRequiredString(value, "workflowExecutionRecord", "triggerKind") as WorkflowExecutionRecord["triggerKind"],
-    status: readRequiredString(value, "workflowExecutionRecord", "status") as WorkflowExecutionRecord["status"],
-    startedAt: readRequiredString(value, "workflowExecutionRecord", "startedAt"),
+    workflowId: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "workflowId",
+    ),
+    projectId: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "projectId",
+    ),
+    triggerKind: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "triggerKind",
+    ) as WorkflowExecutionRecord["triggerKind"],
+    status: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "status",
+    ) as WorkflowExecutionRecord["status"],
+    startedAt: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "startedAt",
+    ),
     ...(finishedAt ? { finishedAt } : {}),
     ...(durationMs !== undefined ? { durationMs } : {}),
-    warningsCount: readRequiredNumber(value, "workflowExecutionRecord", "warningsCount"),
-    errorsCount: readRequiredNumber(value, "workflowExecutionRecord", "errorsCount"),
-    totals: readRequiredRecord(value, "workflowExecutionRecord", "totals") as WorkflowExecutionRecord["totals"],
-    contextSessionId: readRequiredString(value, "workflowExecutionRecord", "contextSessionId"),
-    nodeRuns: readRequiredArray(value, "workflowExecutionRecord", "nodeRuns") as WorkflowExecutionRecord["nodeRuns"]
+    warningsCount: readRequiredNumber(
+      value,
+      "workflowExecutionRecord",
+      "warningsCount",
+    ),
+    errorsCount: readRequiredNumber(
+      value,
+      "workflowExecutionRecord",
+      "errorsCount",
+    ),
+    totals: readRequiredRecord(
+      value,
+      "workflowExecutionRecord",
+      "totals",
+    ) as WorkflowExecutionRecord["totals"],
+    contextSessionId: readRequiredString(
+      value,
+      "workflowExecutionRecord",
+      "contextSessionId",
+    ),
+    nodeRuns: readRequiredArray(
+      value,
+      "workflowExecutionRecord",
+      "nodeRuns",
+    ) as WorkflowExecutionRecord["nodeRuns"],
   };
 };
 
-const ensureRecord = (value: unknown, label: string): Record<string, unknown> => {
+const ensureRecord = (
+  value: unknown,
+  label: string,
+): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid ${label}`);
   }
@@ -614,7 +890,7 @@ const ensureRecord = (value: unknown, label: string): Record<string, unknown> =>
 const readRequiredRecord = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): Record<string, unknown> => {
   const record = ensureRecord(value, label);
   return ensureRecord(record[key], `${label}.${key}`);
@@ -623,7 +899,7 @@ const readRequiredRecord = (
 const readRequiredArray = (
   value: unknown,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<unknown> => {
   const record = ensureRecord(value, label);
   const nested = record[key];
@@ -637,10 +913,13 @@ const readRequiredArray = (
 const readRequiredStringArray = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): ReadonlyArray<string> => {
   const nested = value[key];
-  if (!Array.isArray(nested) || nested.some((item) => typeof item !== "string")) {
+  if (
+    !Array.isArray(nested) ||
+    nested.some((item) => typeof item !== "string")
+  ) {
     throw new Error(`Invalid ${label}.${key}`);
   }
 
@@ -650,7 +929,7 @@ const readRequiredStringArray = (
 const readRequiredString = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
@@ -662,7 +941,7 @@ const readRequiredString = (
 
 const readOptionalString = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined => {
   const nested = value[key];
   return typeof nested === "string" ? nested : undefined;
@@ -671,7 +950,7 @@ const readOptionalString = (
 const readRequiredNumber = (
   value: Record<string, unknown>,
   label: string,
-  key: string
+  key: string,
 ): number => {
   const nested = value[key];
   if (typeof nested !== "number" || Number.isNaN(nested)) {
@@ -683,13 +962,15 @@ const readRequiredNumber = (
 
 const readOptionalNumber = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): number | undefined => {
   const nested = value[key];
-  return typeof nested === "number" && !Number.isNaN(nested) ? nested : undefined;
+  return typeof nested === "number" && !Number.isNaN(nested)
+    ? nested
+    : undefined;
 };
 
 const hasDefinedProperty = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): boolean => value[key] !== undefined;

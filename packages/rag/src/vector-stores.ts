@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { Pool, type PoolConfig } from "pg";
 import { QdrantClient } from "@qdrant/js-client-rest";
-import type { RagChunk } from "./rag-service";
+import type { RagChunk } from "./rag-types";
 
 export const VectorEmbeddingSize = 48;
 
@@ -14,26 +14,29 @@ export type VectorStorePort = {
   upsertChunks: (chunks: ReadonlyArray<RagChunk>) => Promise<void>;
   query: (
     query: string,
-    topK: number
+    topK: number,
   ) => Promise<ReadonlyArray<VectorSearchResult>>;
 };
 
 export const createInMemoryVectorStore = (): VectorStorePort => {
-  const chunks: Array<{ chunk: RagChunk; embedding: ReadonlyArray<number> }> = [];
+  const chunks: Array<{ chunk: RagChunk; embedding: ReadonlyArray<number> }> =
+    [];
 
-  const upsertChunks = async (records: ReadonlyArray<RagChunk>): Promise<void> => {
+  const upsertChunks = async (
+    records: ReadonlyArray<RagChunk>,
+  ): Promise<void> => {
     for (const record of records) {
       const embedding = embedText(record.content);
       const index = chunks.findIndex((item) => item.chunk.id === record.id);
       if (index >= 0) {
         chunks[index] = {
           chunk: record,
-          embedding
+          embedding,
         };
       } else {
         chunks.push({
           chunk: record,
-          embedding
+          embedding,
         });
       }
     }
@@ -41,13 +44,13 @@ export const createInMemoryVectorStore = (): VectorStorePort => {
 
   const query = async (
     input: string,
-    topK: number
+    topK: number,
   ): Promise<ReadonlyArray<VectorSearchResult>> => {
     const queryEmbedding = embedText(input);
     return chunks
       .map((item) => ({
         chunk: item.chunk,
-        score: cosineSimilarity(queryEmbedding, item.embedding)
+        score: cosineSimilarity(queryEmbedding, item.embedding),
       }))
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
@@ -55,24 +58,26 @@ export const createInMemoryVectorStore = (): VectorStorePort => {
 
   return {
     upsertChunks,
-    query
+    query,
   };
 };
 
 export const createFileVectorStore = async (
-  baseDir: string
+  baseDir: string,
 ): Promise<VectorStorePort> => {
   const filePath = `${baseDir}/vector-store.json`;
   await mkdir(baseDir, { recursive: true });
   await ensureVectorFile(filePath);
 
-  const upsertChunks = async (records: ReadonlyArray<RagChunk>): Promise<void> => {
+  const upsertChunks = async (
+    records: ReadonlyArray<RagChunk>,
+  ): Promise<void> => {
     const current = await readStoredChunks(filePath);
     const next = [...current];
     for (const record of records) {
       const item = {
         chunk: record,
-        embedding: embedText(record.content)
+        embedding: embedText(record.content),
       };
       const index = next.findIndex((entry) => entry.chunk.id === record.id);
       if (index >= 0) {
@@ -87,14 +92,14 @@ export const createFileVectorStore = async (
 
   const query = async (
     input: string,
-    topK: number
+    topK: number,
   ): Promise<ReadonlyArray<VectorSearchResult>> => {
     const current = await readStoredChunks(filePath);
     const queryEmbedding = embedText(input);
     return current
       .map((item) => ({
         chunk: item.chunk,
-        score: cosineSimilarity(queryEmbedding, item.embedding)
+        score: cosineSimilarity(queryEmbedding, item.embedding),
       }))
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
@@ -102,7 +107,7 @@ export const createFileVectorStore = async (
 
   return {
     upsertChunks,
-    query
+    query,
   };
 };
 
@@ -114,15 +119,17 @@ export const createQdrantVectorStore = (input: {
   const client = new QdrantClient(
     input.apiKey === undefined
       ? {
-          url: input.url
+          url: input.url,
         }
       : {
           url: input.url,
-          apiKey: input.apiKey
-        }
+          apiKey: input.apiKey,
+        },
   );
 
-  const upsertChunks = async (records: ReadonlyArray<RagChunk>): Promise<void> => {
+  const upsertChunks = async (
+    records: ReadonlyArray<RagChunk>,
+  ): Promise<void> => {
     await ensureQdrantCollection(client, input.collectionName);
     await client.upsert(input.collectionName, {
       wait: true,
@@ -130,33 +137,31 @@ export const createQdrantVectorStore = (input: {
         id: record.id,
         vector: embedText(record.content),
         payload: {
-          chunk: record
-        }
-      }))
+          chunk: record,
+        },
+      })),
     });
   };
 
   const query = async (
     value: string,
-    topK: number
+    topK: number,
   ): Promise<ReadonlyArray<VectorSearchResult>> => {
     await ensureQdrantCollection(client, input.collectionName);
     const result = await client.search(input.collectionName, {
       vector: embedText(value),
       limit: topK,
-      with_payload: true
+      with_payload: true,
     });
 
     return result
       .map((entry) => toQdrantSearchResult(entry.payload, entry.score))
-      .filter(
-        (entry): entry is VectorSearchResult => entry !== undefined
-      );
+      .filter((entry): entry is VectorSearchResult => entry !== undefined);
   };
 
   return {
     upsertChunks,
-    query
+    query,
   };
 };
 
@@ -166,10 +171,12 @@ export const createPgVectorStore = (input: {
 }): VectorStorePort => {
   const tableName = input.tableName ?? "iteronix_rag_chunks";
   const pool = new Pool({
-    connectionString: input.connectionString
+    connectionString: input.connectionString,
   } satisfies PoolConfig);
 
-  const upsertChunks = async (records: ReadonlyArray<RagChunk>): Promise<void> => {
+  const upsertChunks = async (
+    records: ReadonlyArray<RagChunk>,
+  ): Promise<void> => {
     await ensurePgVectorSchema(pool, tableName);
     for (const record of records) {
       await pool.query(
@@ -189,15 +196,15 @@ export const createPgVectorStore = (input: {
           record.sourceType,
           record.updatedAt,
           record.content,
-          toPgVector(embedText(record.content))
-        ]
+          toPgVector(embedText(record.content)),
+        ],
       );
     }
   };
 
   const query = async (
     value: string,
-    topK: number
+    topK: number,
   ): Promise<ReadonlyArray<VectorSearchResult>> => {
     await ensurePgVectorSchema(pool, tableName);
     const result = await pool.query<{
@@ -214,7 +221,7 @@ export const createPgVectorStore = (input: {
          from ${tableName}
          order by embedding <=> $1::vector
          limit $2`,
-      [toPgVector(embedText(value)), topK]
+      [toPgVector(embedText(value)), topK],
     );
 
     return result.rows.map((row) => ({
@@ -224,19 +231,20 @@ export const createPgVectorStore = (input: {
         uri: row.uri,
         sourceType: row.source_type,
         updatedAt: row.updated_at,
-        content: row.content
+        content: row.content,
       },
-      score: row.score
+      score: row.score,
     }));
   };
 
   return {
     upsertChunks,
-    query
+    query,
   };
 };
 
-export const createEmbeddedQuery = (query: string): number[] => embedText(query);
+export const createEmbeddedQuery = (query: string): number[] =>
+  embedText(query);
 
 export const embedText = (text: string): number[] => {
   const vector = new Array<number>(VectorEmbeddingSize).fill(0);
@@ -259,7 +267,7 @@ const ensureVectorFile = async (filePath: string): Promise<void> => {
 };
 
 const readStoredChunks = async (
-  filePath: string
+  filePath: string,
 ): Promise<Array<{ chunk: RagChunk; embedding: ReadonlyArray<number> }>> => {
   const content = await readFile(filePath, "utf8");
   return JSON.parse(content) as Array<{
@@ -270,26 +278,26 @@ const readStoredChunks = async (
 
 const ensureQdrantCollection = async (
   client: QdrantClient,
-  collectionName: string
+  collectionName: string,
 ): Promise<void> => {
   const collections = await client.getCollections();
   const exists = collections.collections.some(
-    (collection) => collection.name === collectionName
+    (collection) => collection.name === collectionName,
   );
 
   if (!exists) {
     await client.createCollection(collectionName, {
       vectors: {
         size: VectorEmbeddingSize,
-        distance: "Cosine"
-      }
+        distance: "Cosine",
+      },
     });
   }
 };
 
 const toQdrantSearchResult = (
   payload: Record<string, unknown> | null | undefined,
-  score: number
+  score: number,
 ): VectorSearchResult | undefined => {
   if (!payload) {
     return undefined;
@@ -302,13 +310,13 @@ const toQdrantSearchResult = (
 
   return {
     chunk,
-    score
+    score,
   };
 };
 
 const ensurePgVectorSchema = async (
   pool: Pool,
-  tableName: string
+  tableName: string,
 ): Promise<void> => {
   await pool.query("create extension if not exists vector");
   await pool.query(
@@ -320,7 +328,7 @@ const ensurePgVectorSchema = async (
       updated_at text not null,
       content text not null,
       embedding vector(${VectorEmbeddingSize}) not null
-    )`
+    )`,
   );
 };
 
@@ -329,7 +337,7 @@ const toPgVector = (values: ReadonlyArray<number>): string =>
 
 const cosineSimilarity = (
   left: ReadonlyArray<number>,
-  right: ReadonlyArray<number>
+  right: ReadonlyArray<number>,
 ): number => {
   let dotProduct = 0;
   let leftMagnitude = 0;
@@ -366,7 +374,9 @@ const hashToken = (token: string): number => {
 };
 
 const normalizeVector = (values: ReadonlyArray<number>): number[] => {
-  const magnitude = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
+  const magnitude = Math.sqrt(
+    values.reduce((sum, value) => sum + value * value, 0),
+  );
   if (magnitude === 0) {
     return [...values];
   }

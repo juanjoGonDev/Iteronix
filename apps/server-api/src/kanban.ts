@@ -4,11 +4,11 @@ import { ResultType, err, ok, type Result } from "./result";
 
 export const KanbanStoreErrorCode = {
   InvalidInput: "invalid_input",
-  NotFound: "not_found"
+  NotFound: "not_found",
 } as const;
 
 export type KanbanStoreErrorCode =
-  typeof KanbanStoreErrorCode[keyof typeof KanbanStoreErrorCode];
+  (typeof KanbanStoreErrorCode)[keyof typeof KanbanStoreErrorCode];
 
 export type KanbanStoreError = {
   code: KanbanStoreErrorCode;
@@ -43,39 +43,39 @@ export type KanbanTask = {
   updatedAt: string;
 };
 
-export type KanbanBoardListInput = {
+type KanbanBoardListInput = {
   projectId: string;
 };
 
-export type KanbanBoardCreateInput = {
+type KanbanBoardCreateInput = {
   projectId: string;
   name: string;
 };
 
-export type KanbanBoardUpdateInput = {
+type KanbanBoardUpdateInput = {
   projectId: string;
   boardId: string;
   name: string;
 };
 
-export type KanbanBoardDeleteInput = {
+type KanbanBoardDeleteInput = {
   projectId: string;
   boardId: string;
 };
 
-export type KanbanColumnListInput = {
+type KanbanColumnListInput = {
   projectId: string;
   boardId: string;
 };
 
-export type KanbanColumnCreateInput = {
+type KanbanColumnCreateInput = {
   projectId: string;
   boardId: string;
   name: string;
   position?: number;
 };
 
-export type KanbanColumnUpdateInput = {
+type KanbanColumnUpdateInput = {
   projectId: string;
   boardId: string;
   columnId: string;
@@ -83,19 +83,19 @@ export type KanbanColumnUpdateInput = {
   position?: number;
 };
 
-export type KanbanColumnDeleteInput = {
+type KanbanColumnDeleteInput = {
   projectId: string;
   boardId: string;
   columnId: string;
 };
 
-export type KanbanTaskListInput = {
+type KanbanTaskListInput = {
   projectId: string;
   boardId: string;
   columnId?: string;
 };
 
-export type KanbanTaskCreateInput = {
+type KanbanTaskCreateInput = {
   projectId: string;
   boardId: string;
   columnId: string;
@@ -104,7 +104,7 @@ export type KanbanTaskCreateInput = {
   position?: number;
 };
 
-export type KanbanTaskUpdateInput = {
+type KanbanTaskUpdateInput = {
   projectId: string;
   boardId: string;
   taskId: string;
@@ -114,7 +114,7 @@ export type KanbanTaskUpdateInput = {
   position?: number;
 };
 
-export type KanbanTaskDeleteInput = {
+type KanbanTaskDeleteInput = {
   projectId: string;
   boardId: string;
   taskId: string;
@@ -122,45 +122,45 @@ export type KanbanTaskDeleteInput = {
 
 export type KanbanStore = {
   listBoards: (
-    input: KanbanBoardListInput
+    input: KanbanBoardListInput,
   ) => Result<ReadonlyArray<KanbanBoard>, KanbanStoreError>;
   createBoard: (
-    input: KanbanBoardCreateInput
+    input: KanbanBoardCreateInput,
   ) => Result<KanbanBoard, KanbanStoreError>;
   updateBoard: (
-    input: KanbanBoardUpdateInput
+    input: KanbanBoardUpdateInput,
   ) => Result<KanbanBoard, KanbanStoreError>;
   deleteBoard: (
-    input: KanbanBoardDeleteInput
+    input: KanbanBoardDeleteInput,
   ) => Result<KanbanBoard, KanbanStoreError>;
   listColumns: (
-    input: KanbanColumnListInput
+    input: KanbanColumnListInput,
   ) => Result<ReadonlyArray<KanbanColumn>, KanbanStoreError>;
   createColumn: (
-    input: KanbanColumnCreateInput
+    input: KanbanColumnCreateInput,
   ) => Result<KanbanColumn, KanbanStoreError>;
   updateColumn: (
-    input: KanbanColumnUpdateInput
+    input: KanbanColumnUpdateInput,
   ) => Result<KanbanColumn, KanbanStoreError>;
   deleteColumn: (
-    input: KanbanColumnDeleteInput
+    input: KanbanColumnDeleteInput,
   ) => Result<KanbanColumn, KanbanStoreError>;
   listTasks: (
-    input: KanbanTaskListInput
+    input: KanbanTaskListInput,
   ) => Result<ReadonlyArray<KanbanTask>, KanbanStoreError>;
   createTask: (
-    input: KanbanTaskCreateInput
+    input: KanbanTaskCreateInput,
   ) => Result<KanbanTask, KanbanStoreError>;
   updateTask: (
-    input: KanbanTaskUpdateInput
+    input: KanbanTaskUpdateInput,
   ) => Result<KanbanTask, KanbanStoreError>;
   deleteTask: (
-    input: KanbanTaskDeleteInput
+    input: KanbanTaskDeleteInput,
   ) => Result<KanbanTask, KanbanStoreError>;
   snapshot: () => KanbanStoreSnapshot;
 };
 
-export type KanbanStoreSnapshot = {
+type KanbanStoreSnapshot = {
   boards: ReadonlyArray<KanbanBoard>;
   columns: ReadonlyArray<KanbanColumn>;
   tasks: ReadonlyArray<KanbanTask>;
@@ -190,69 +190,69 @@ export const createKanbanStore = (seed: KanbanStoreSeed = {}): KanbanStore => {
   }
 
   const listBoards = (
-    input: KanbanBoardListInput
+    input: KanbanBoardListInput,
   ): Result<ReadonlyArray<KanbanBoard>, KanbanStoreError> =>
     listBoardsForProject(boardsById, input);
 
   const createBoard = (
-    input: KanbanBoardCreateInput
+    input: KanbanBoardCreateInput,
   ): Result<KanbanBoard, KanbanStoreError> =>
     createBoardRecord(boardsById, input);
 
   const updateBoard = (
-    input: KanbanBoardUpdateInput
+    input: KanbanBoardUpdateInput,
   ): Result<KanbanBoard, KanbanStoreError> =>
     updateBoardRecord(boardsById, input);
 
   const deleteBoard = (
-    input: KanbanBoardDeleteInput
+    input: KanbanBoardDeleteInput,
   ): Result<KanbanBoard, KanbanStoreError> =>
     deleteBoardRecord(boardsById, columnsById, tasksById, input);
 
   const listColumns = (
-    input: KanbanColumnListInput
+    input: KanbanColumnListInput,
   ): Result<ReadonlyArray<KanbanColumn>, KanbanStoreError> =>
     listColumnsForBoard(boardsById, columnsById, input);
 
   const createColumn = (
-    input: KanbanColumnCreateInput
+    input: KanbanColumnCreateInput,
   ): Result<KanbanColumn, KanbanStoreError> =>
     createColumnRecord(boardsById, columnsById, input);
 
   const updateColumn = (
-    input: KanbanColumnUpdateInput
+    input: KanbanColumnUpdateInput,
   ): Result<KanbanColumn, KanbanStoreError> =>
     updateColumnRecord(boardsById, columnsById, input);
 
   const deleteColumn = (
-    input: KanbanColumnDeleteInput
+    input: KanbanColumnDeleteInput,
   ): Result<KanbanColumn, KanbanStoreError> =>
     deleteColumnRecord(boardsById, columnsById, tasksById, input);
 
   const listTasks = (
-    input: KanbanTaskListInput
+    input: KanbanTaskListInput,
   ): Result<ReadonlyArray<KanbanTask>, KanbanStoreError> =>
     listTasksForBoard(boardsById, columnsById, tasksById, input);
 
   const createTask = (
-    input: KanbanTaskCreateInput
+    input: KanbanTaskCreateInput,
   ): Result<KanbanTask, KanbanStoreError> =>
     createTaskRecord(boardsById, columnsById, tasksById, input);
 
   const updateTask = (
-    input: KanbanTaskUpdateInput
+    input: KanbanTaskUpdateInput,
   ): Result<KanbanTask, KanbanStoreError> =>
     updateTaskRecord(boardsById, columnsById, tasksById, input);
 
   const deleteTask = (
-    input: KanbanTaskDeleteInput
+    input: KanbanTaskDeleteInput,
   ): Result<KanbanTask, KanbanStoreError> =>
     deleteTaskRecord(boardsById, tasksById, input);
 
   const snapshot = (): KanbanStoreSnapshot => ({
     boards: Array.from(boardsById.values()),
     columns: Array.from(columnsById.values()),
-    tasks: Array.from(tasksById.values())
+    tasks: Array.from(tasksById.values()),
   });
 
   return {
@@ -268,37 +268,37 @@ export const createKanbanStore = (seed: KanbanStoreSeed = {}): KanbanStore => {
     createTask,
     updateTask,
     deleteTask,
-    snapshot
+    snapshot,
   };
 };
 
 const listBoardsForProject = (
   boardsById: Map<string, KanbanBoard>,
-  input: KanbanBoardListInput
+  input: KanbanBoardListInput,
 ): Result<ReadonlyArray<KanbanBoard>, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
   const boards = Array.from(boardsById.values()).filter(
-    (board) => board.projectId === projectId
+    (board) => board.projectId === projectId,
   );
   return ok(boards);
 };
 
 const createBoardRecord = (
   boardsById: Map<string, KanbanBoard>,
-  input: KanbanBoardCreateInput
+  input: KanbanBoardCreateInput,
 ): Result<KanbanBoard, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -306,13 +306,13 @@ const createBoardRecord = (
   if (!name) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardName
+      message: ErrorMessage.MissingBoardName,
     });
   }
 
   const board = createBoardEntity({
     projectId,
-    name
+    name,
   });
   boardsById.set(board.id, board);
   return ok(board);
@@ -320,13 +320,13 @@ const createBoardRecord = (
 
 const updateBoardRecord = (
   boardsById: Map<string, KanbanBoard>,
-  input: KanbanBoardUpdateInput
+  input: KanbanBoardUpdateInput,
 ): Result<KanbanBoard, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -334,7 +334,7 @@ const updateBoardRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -342,7 +342,7 @@ const updateBoardRecord = (
   if (!name) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardName
+      message: ErrorMessage.MissingBoardName,
     });
   }
 
@@ -352,7 +352,7 @@ const updateBoardRecord = (
   }
 
   const updated = updateBoardEntity(boardResult.value, {
-    name
+    name,
   });
   boardsById.set(updated.id, updated);
   return ok(updated);
@@ -362,13 +362,13 @@ const deleteBoardRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanBoardDeleteInput
+  input: KanbanBoardDeleteInput,
 ): Result<KanbanBoard, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -376,7 +376,7 @@ const deleteBoardRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -392,13 +392,13 @@ const deleteBoardRecord = (
 const listColumnsForBoard = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
-  input: KanbanColumnListInput
+  input: KanbanColumnListInput,
 ): Result<ReadonlyArray<KanbanColumn>, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -406,7 +406,7 @@ const listColumnsForBoard = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -416,7 +416,7 @@ const listColumnsForBoard = (
   }
 
   const columns = Array.from(columnsById.values()).filter(
-    (column) => column.boardId === boardId
+    (column) => column.boardId === boardId,
   );
   return ok(sortByPosition(columns));
 };
@@ -424,13 +424,13 @@ const listColumnsForBoard = (
 const createColumnRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
-  input: KanbanColumnCreateInput
+  input: KanbanColumnCreateInput,
 ): Result<KanbanColumn, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -438,7 +438,7 @@ const createColumnRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -446,7 +446,7 @@ const createColumnRecord = (
   if (!name) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingColumnName
+      message: ErrorMessage.MissingColumnName,
     });
   }
 
@@ -464,14 +464,14 @@ const createColumnRecord = (
     positionResult.value ??
     getNextPosition(
       Array.from(columnsById.values()).filter(
-        (column) => column.boardId === boardId
-      )
+        (column) => column.boardId === boardId,
+      ),
     );
 
   const column = createColumnEntity({
     boardId,
     name,
-    position
+    position,
   });
   columnsById.set(column.id, column);
   return ok(column);
@@ -480,13 +480,13 @@ const createColumnRecord = (
 const updateColumnRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
-  input: KanbanColumnUpdateInput
+  input: KanbanColumnUpdateInput,
 ): Result<KanbanColumn, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -494,7 +494,7 @@ const updateColumnRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -502,7 +502,7 @@ const updateColumnRecord = (
   if (!columnId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingColumnId
+      message: ErrorMessage.MissingColumnId,
     });
   }
 
@@ -510,7 +510,7 @@ const updateColumnRecord = (
   if (input.name !== undefined && !name) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingColumnName
+      message: ErrorMessage.MissingColumnName,
     });
   }
 
@@ -522,7 +522,7 @@ const updateColumnRecord = (
   if (name === undefined && positionResult.value === undefined) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -554,13 +554,13 @@ const deleteColumnRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanColumnDeleteInput
+  input: KanbanColumnDeleteInput,
 ): Result<KanbanColumn, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -568,7 +568,7 @@ const deleteColumnRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -576,7 +576,7 @@ const deleteColumnRecord = (
   if (!columnId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingColumnId
+      message: ErrorMessage.MissingColumnId,
     });
   }
 
@@ -598,13 +598,13 @@ const listTasksForBoard = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanTaskListInput
+  input: KanbanTaskListInput,
 ): Result<ReadonlyArray<KanbanTask>, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -612,7 +612,7 @@ const listTasksForBoard = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -628,7 +628,7 @@ const listTasksForBoard = (
     if (!columnId) {
       return err({
         code: KanbanStoreErrorCode.InvalidInput,
-        message: ErrorMessage.MissingColumnId
+        message: ErrorMessage.MissingColumnId,
       });
     }
 
@@ -659,13 +659,13 @@ const createTaskRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanTaskCreateInput
+  input: KanbanTaskCreateInput,
 ): Result<KanbanTask, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -673,7 +673,7 @@ const createTaskRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -681,7 +681,7 @@ const createTaskRecord = (
   if (!columnId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingColumnId
+      message: ErrorMessage.MissingColumnId,
     });
   }
 
@@ -689,12 +689,14 @@ const createTaskRecord = (
   if (!title) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingTaskTitle
+      message: ErrorMessage.MissingTaskTitle,
     });
   }
 
   const description =
-    input.description !== undefined ? normalizeText(input.description) : undefined;
+    input.description !== undefined
+      ? normalizeText(input.description)
+      : undefined;
 
   const boardResult = getBoardForProject(boardsById, projectId, boardId);
   if (boardResult.type === ResultType.Err) {
@@ -715,8 +717,8 @@ const createTaskRecord = (
     positionResult.value ??
     getNextPosition(
       Array.from(tasksById.values()).filter(
-        (task) => task.columnId === columnId
-      )
+        (task) => task.columnId === columnId,
+      ),
     );
 
   const taskInput: {
@@ -729,7 +731,7 @@ const createTaskRecord = (
     boardId,
     columnId,
     title,
-    position
+    position,
   };
 
   if (description !== undefined) {
@@ -745,13 +747,13 @@ const updateTaskRecord = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanTaskUpdateInput
+  input: KanbanTaskUpdateInput,
 ): Result<KanbanTask, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -759,7 +761,7 @@ const updateTaskRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -767,7 +769,7 @@ const updateTaskRecord = (
   if (!taskId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingTaskId
+      message: ErrorMessage.MissingTaskId,
     });
   }
 
@@ -776,12 +778,14 @@ const updateTaskRecord = (
   if (input.title !== undefined && !title) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingTaskTitle
+      message: ErrorMessage.MissingTaskTitle,
     });
   }
 
   const description =
-    input.description !== undefined ? normalizeText(input.description) : undefined;
+    input.description !== undefined
+      ? normalizeText(input.description)
+      : undefined;
 
   const positionResult = normalizePosition(input.position);
   if (positionResult.type === ResultType.Err) {
@@ -794,7 +798,7 @@ const updateTaskRecord = (
     if (!normalized) {
       return err({
         code: KanbanStoreErrorCode.InvalidInput,
-        message: ErrorMessage.MissingColumnId
+        message: ErrorMessage.MissingColumnId,
       });
     }
 
@@ -809,7 +813,7 @@ const updateTaskRecord = (
   ) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
@@ -861,13 +865,13 @@ const updateTaskRecord = (
 const deleteTaskRecord = (
   boardsById: Map<string, KanbanBoard>,
   tasksById: Map<string, KanbanTask>,
-  input: KanbanTaskDeleteInput
+  input: KanbanTaskDeleteInput,
 ): Result<KanbanTask, KanbanStoreError> => {
   const projectId = normalizeId(input.projectId);
   if (!projectId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId
+      message: ErrorMessage.MissingProjectId,
     });
   }
 
@@ -875,7 +879,7 @@ const deleteTaskRecord = (
   if (!boardId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingBoardId
+      message: ErrorMessage.MissingBoardId,
     });
   }
 
@@ -883,7 +887,7 @@ const deleteTaskRecord = (
   if (!taskId) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingTaskId
+      message: ErrorMessage.MissingTaskId,
     });
   }
 
@@ -904,13 +908,13 @@ const deleteTaskRecord = (
 const getBoardForProject = (
   boardsById: Map<string, KanbanBoard>,
   projectId: string,
-  boardId: string
+  boardId: string,
 ): Result<KanbanBoard, KanbanStoreError> => {
   const board = boardsById.get(boardId);
   if (!board || board.projectId !== projectId) {
     return err({
       code: KanbanStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -920,13 +924,13 @@ const getBoardForProject = (
 const getColumnForBoard = (
   columnsById: Map<string, KanbanColumn>,
   boardId: string,
-  columnId: string
+  columnId: string,
 ): Result<KanbanColumn, KanbanStoreError> => {
   const column = columnsById.get(columnId);
   if (!column || column.boardId !== boardId) {
     return err({
       code: KanbanStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -936,13 +940,13 @@ const getColumnForBoard = (
 const getTaskForBoard = (
   tasksById: Map<string, KanbanTask>,
   boardId: string,
-  taskId: string
+  taskId: string,
 ): Result<KanbanTask, KanbanStoreError> => {
   const task = tasksById.get(taskId);
   if (!task || task.boardId !== boardId) {
     return err({
       code: KanbanStoreErrorCode.NotFound,
-      message: ErrorMessage.NotFound
+      message: ErrorMessage.NotFound,
     });
   }
 
@@ -953,7 +957,7 @@ const removeBoardData = (
   boardsById: Map<string, KanbanBoard>,
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  boardId: string
+  boardId: string,
 ): void => {
   boardsById.delete(boardId);
 
@@ -973,7 +977,7 @@ const removeBoardData = (
 const removeColumnData = (
   columnsById: Map<string, KanbanColumn>,
   tasksById: Map<string, KanbanTask>,
-  columnId: string
+  columnId: string,
 ): void => {
   columnsById.delete(columnId);
 
@@ -994,17 +998,17 @@ const createBoardEntity = (input: {
     projectId: input.projectId,
     name: input.name,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
 const updateBoardEntity = (
   board: KanbanBoard,
-  input: { name: string }
+  input: { name: string },
 ): KanbanBoard => ({
   ...board,
   name: input.name,
-  updatedAt: new Date().toISOString()
+  updatedAt: new Date().toISOString(),
 });
 
 const createColumnEntity = (input: {
@@ -1019,17 +1023,17 @@ const createColumnEntity = (input: {
     name: input.name,
     position: input.position,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 };
 
 const updateColumnEntity = (
   column: KanbanColumn,
-  input: { name?: string; position?: number }
+  input: { name?: string; position?: number },
 ): KanbanColumn => {
   const updated: KanbanColumn = {
     ...column,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   if (input.name !== undefined) {
@@ -1058,7 +1062,7 @@ const createTaskEntity = (input: {
     title: input.title,
     position: input.position,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
   if (input.description !== undefined) {
@@ -1070,11 +1074,16 @@ const createTaskEntity = (input: {
 
 const updateTaskEntity = (
   task: KanbanTask,
-  input: { title?: string; description?: string; columnId?: string; position?: number }
+  input: {
+    title?: string;
+    description?: string;
+    columnId?: string;
+    position?: number;
+  },
 ): KanbanTask => {
   const updated: KanbanTask = {
     ...task,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 
   if (input.title !== undefined) {
@@ -1115,7 +1124,7 @@ const normalizeText = (value: string | undefined): string | undefined => {
 };
 
 const normalizePosition = (
-  value: number | undefined
+  value: number | undefined,
 ): Result<number | undefined, KanbanStoreError> => {
   if (value === undefined) {
     return ok(undefined);
@@ -1124,14 +1133,16 @@ const normalizePosition = (
   if (!Number.isFinite(value) || value < 0) {
     return err({
       code: KanbanStoreErrorCode.InvalidInput,
-      message: ErrorMessage.InvalidBody
+      message: ErrorMessage.InvalidBody,
     });
   }
 
   return ok(Math.floor(value));
 };
 
-const getNextPosition = (items: ReadonlyArray<{ position: number }>): number => {
+const getNextPosition = (
+  items: ReadonlyArray<{ position: number }>,
+): number => {
   if (items.length === 0) {
     return 0;
   }
@@ -1147,6 +1158,5 @@ const getNextPosition = (items: ReadonlyArray<{ position: number }>): number => 
 };
 
 const sortByPosition = <T extends { position: number }>(
-  items: ReadonlyArray<T>
-): ReadonlyArray<T> =>
-  [...items].sort((a, b) => a.position - b.position);
+  items: ReadonlyArray<T>,
+): ReadonlyArray<T> => [...items].sort((a, b) => a.position - b.position);

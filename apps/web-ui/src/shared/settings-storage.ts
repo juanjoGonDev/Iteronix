@@ -1,14 +1,13 @@
 import {
   DefaultServerConnection,
   type ServerConnection,
-  type StorageLike
+  type StorageLike,
 } from "./server-config.js";
 import {
   ProviderKind,
   createDefaultProviderProfiles,
   normalizeProviderProfiles,
   type ProviderProfileRecord,
-  type ProviderPromptMode
 } from "../screens/settings-state.js";
 
 export const DefaultSettingsProfileId = "default";
@@ -42,28 +41,32 @@ export type SettingsStorage = {
 const DefaultWorkflowLimits: WorkflowLimitsSettings = {
   infiniteLoops: false,
   maxLoops: 50,
-  externalCalls: true
+  externalCalls: true,
 };
 
 const DefaultNotifications: NotificationsSettings = {
   soundEnabled: true,
-  webhookUrl: ""
+  webhookUrl: "",
 };
 
 const DefaultSettingsServerConnection: ServerConnection = {
   serverUrl: DefaultServerConnection.serverUrl,
-  authToken: DefaultServerConnection.authToken
+  authToken: DefaultServerConnection.authToken,
 };
 
 let settingsSnapshotCache = createDefaultSettingsSnapshot();
 
-export const createSettingsStorage = (storage?: StorageLike): SettingsStorage => ({
+export const createSettingsStorage = (
+  storage?: StorageLike,
+): SettingsStorage => ({
   load: () => readSettingsSnapshot(storage),
   save: (input) => writeSettingsSnapshot(input, storage),
-  reset: () => writeSettingsSnapshot(createDefaultSettingsSnapshot(), storage)
+  reset: () => writeSettingsSnapshot(createDefaultSettingsSnapshot(), storage),
 });
 
-export const readSettingsSnapshot = (storage?: StorageLike): SettingsSnapshot => {
+export const readSettingsSnapshot = (
+  storage?: StorageLike,
+): SettingsSnapshot => {
   if (storage) {
     const raw = storage.getItem(SettingsSnapshotStorageKey);
     if (!raw) {
@@ -82,7 +85,7 @@ export const readSettingsSnapshot = (storage?: StorageLike): SettingsSnapshot =>
 
 export const writeSettingsSnapshot = (
   input: SettingsSnapshot,
-  storage?: StorageLike
+  storage?: StorageLike,
 ): SettingsSnapshot => {
   const normalized = normalizeSettingsSnapshot(input);
   if (storage) {
@@ -93,22 +96,23 @@ export const writeSettingsSnapshot = (
   return normalized;
 };
 
-export const hydrateSettingsSnapshot = (input: SettingsSnapshot): SettingsSnapshot =>
-  writeSettingsSnapshot(input);
+export const hydrateSettingsSnapshot = (
+  input: SettingsSnapshot,
+): SettingsSnapshot => writeSettingsSnapshot(input);
 
 export function createDefaultSettingsSnapshot(): SettingsSnapshot {
   return {
     profileId: DefaultSettingsProfileId,
     providerProfiles: createDefaultProviderProfiles(),
     workflowLimits: {
-      ...DefaultWorkflowLimits
+      ...DefaultWorkflowLimits,
     },
     notifications: {
-      ...DefaultNotifications
+      ...DefaultNotifications,
     },
     serverConnection: {
-      ...DefaultSettingsServerConnection
-    }
+      ...DefaultSettingsServerConnection,
+    },
   };
 }
 
@@ -123,77 +127,106 @@ export const parseSettingsSnapshot = (value: unknown): SettingsSnapshot => {
     providerProfiles: normalizeProviderProfiles(value["providerProfiles"]),
     workflowLimits: parseWorkflowLimits(value["workflowLimits"]),
     notifications: parseNotifications(value["notifications"]),
-    serverConnection: parseServerConnection(value["serverConnection"])
+    serverConnection: parseServerConnection(value["serverConnection"]),
   });
 };
 
-export const normalizeSettingsSnapshot = (input: SettingsSnapshot): SettingsSnapshot => {
+const normalizeSettingsSnapshot = (
+  input: SettingsSnapshot,
+): SettingsSnapshot => {
   const profileId = normalizeText(input.profileId) || DefaultSettingsProfileId;
   const providerProfiles = normalizeProviderProfiles(input.providerProfiles);
 
   return {
     profileId,
-    providerProfiles: providerProfiles.length > 0 ? providerProfiles : createDefaultProviderProfiles(),
+    providerProfiles:
+      providerProfiles.length > 0
+        ? providerProfiles
+        : createDefaultProviderProfiles(),
     workflowLimits: normalizeWorkflowLimits(input.workflowLimits),
     notifications: normalizeNotifications(input.notifications),
-    serverConnection: normalizeServerConnection(input.serverConnection)
+    serverConnection: normalizeServerConnection(input.serverConnection),
   };
 };
 
 const parseWorkflowLimits = (value: unknown): WorkflowLimitsSettings => {
   if (!isRecord(value)) {
     return {
-      ...DefaultWorkflowLimits
+      ...DefaultWorkflowLimits,
     };
   }
 
   return normalizeWorkflowLimits({
-    infiniteLoops: readOptionalBoolean(value, "infiniteLoops") ?? DefaultWorkflowLimits.infiniteLoops,
-    maxLoops: readOptionalNumber(value, "maxLoops") ?? DefaultWorkflowLimits.maxLoops,
-    externalCalls: readOptionalBoolean(value, "externalCalls") ?? DefaultWorkflowLimits.externalCalls
+    infiniteLoops:
+      readOptionalBoolean(value, "infiniteLoops") ??
+      DefaultWorkflowLimits.infiniteLoops,
+    maxLoops:
+      readOptionalNumber(value, "maxLoops") ?? DefaultWorkflowLimits.maxLoops,
+    externalCalls:
+      readOptionalBoolean(value, "externalCalls") ??
+      DefaultWorkflowLimits.externalCalls,
   });
 };
 
 const parseNotifications = (value: unknown): NotificationsSettings => {
   if (!isRecord(value)) {
     return {
-      ...DefaultNotifications
+      ...DefaultNotifications,
     };
   }
 
   return normalizeNotifications({
-    soundEnabled: readOptionalBoolean(value, "soundEnabled") ?? DefaultNotifications.soundEnabled,
-    webhookUrl: readOptionalString(value, "webhookUrl") ?? DefaultNotifications.webhookUrl
+    soundEnabled:
+      readOptionalBoolean(value, "soundEnabled") ??
+      DefaultNotifications.soundEnabled,
+    webhookUrl:
+      readOptionalString(value, "webhookUrl") ??
+      DefaultNotifications.webhookUrl,
   });
 };
 
 const parseServerConnection = (value: unknown): ServerConnection => {
   if (!isRecord(value)) {
     return {
-      ...DefaultSettingsServerConnection
+      ...DefaultSettingsServerConnection,
     };
   }
 
   return normalizeServerConnection({
-    serverUrl: readOptionalString(value, "serverUrl") ?? DefaultSettingsServerConnection.serverUrl,
-    authToken: readOptionalString(value, "authToken") ?? DefaultSettingsServerConnection.authToken
+    serverUrl:
+      readOptionalString(value, "serverUrl") ??
+      DefaultSettingsServerConnection.serverUrl,
+    authToken:
+      readOptionalString(value, "authToken") ??
+      DefaultSettingsServerConnection.authToken,
   });
 };
 
-const normalizeWorkflowLimits = (value: WorkflowLimitsSettings): WorkflowLimitsSettings => ({
+const normalizeWorkflowLimits = (
+  value: WorkflowLimitsSettings,
+): WorkflowLimitsSettings => ({
   infiniteLoops: value.infiniteLoops,
-  maxLoops: normalizePositiveInteger(value.maxLoops, DefaultWorkflowLimits.maxLoops),
-  externalCalls: value.externalCalls
+  maxLoops: normalizePositiveInteger(
+    value.maxLoops,
+    DefaultWorkflowLimits.maxLoops,
+  ),
+  externalCalls: value.externalCalls,
 });
 
-const normalizeNotifications = (value: NotificationsSettings): NotificationsSettings => ({
+const normalizeNotifications = (
+  value: NotificationsSettings,
+): NotificationsSettings => ({
   soundEnabled: value.soundEnabled,
-  webhookUrl: normalizeText(value.webhookUrl)
+  webhookUrl: normalizeText(value.webhookUrl),
 });
 
-const normalizeServerConnection = (value: ServerConnection): ServerConnection => ({
-  serverUrl: normalizeText(value.serverUrl) || DefaultSettingsServerConnection.serverUrl,
-  authToken: normalizeText(value.authToken) || DefaultSettingsServerConnection.authToken
+const normalizeServerConnection = (
+  value: ServerConnection,
+): ServerConnection => ({
+  serverUrl:
+    normalizeText(value.serverUrl) || DefaultSettingsServerConnection.serverUrl,
+  authToken:
+    normalizeText(value.authToken) || DefaultSettingsServerConnection.authToken,
 });
 
 const normalizePositiveInteger = (value: number, fallback: number): number => {
@@ -210,7 +243,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const readOptionalString = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | undefined => {
   const entry = value[key];
   return typeof entry === "string" ? normalizeText(entry) : undefined;
@@ -218,7 +251,7 @@ const readOptionalString = (
 
 const readOptionalBoolean = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): boolean | undefined => {
   const entry = value[key];
   return typeof entry === "boolean" ? entry : undefined;
@@ -226,13 +259,14 @@ const readOptionalBoolean = (
 
 const readOptionalNumber = (
   value: Record<string, unknown>,
-  key: string
+  key: string,
 ): number | undefined => {
   const entry = value[key];
-  return typeof entry === "number" && Number.isFinite(entry) ? entry : undefined;
+  return typeof entry === "number" && Number.isFinite(entry)
+    ? entry
+    : undefined;
 };
 
 const normalizeText = (value: string): string => value.trim();
 
-export type { ProviderProfileRecord, ProviderPromptMode };
 export { ProviderKind };

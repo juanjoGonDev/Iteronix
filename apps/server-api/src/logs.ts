@@ -7,10 +7,10 @@ export const LogLevel = {
   Info: "info",
   Warn: "warn",
   Error: "error",
-  Fatal: "fatal"
+  Fatal: "fatal",
 } as const;
 
-export type LogLevel = typeof LogLevel[keyof typeof LogLevel];
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 export type LogEntry = {
   id: string;
@@ -21,20 +21,20 @@ export type LogEntry = {
   context?: Record<string, string>;
 };
 
-export type LogsQuery = {
+type LogsQuery = {
   level?: LogLevel;
   runId?: string;
   limit?: number;
 };
 
 export const LogsStoreErrorCode = {
-  InvalidInput: "invalid_input"
+  InvalidInput: "invalid_input",
 } as const;
 
 export type LogsStoreErrorCode =
-  typeof LogsStoreErrorCode[keyof typeof LogsStoreErrorCode];
+  (typeof LogsStoreErrorCode)[keyof typeof LogsStoreErrorCode];
 
-export type LogsStoreError = {
+type LogsStoreError = {
   code: LogsStoreErrorCode;
   message: string;
 };
@@ -51,12 +51,12 @@ export const createLogsStore = (seed: LogsStoreSeed = {}): LogsStore => {
   const entries = seed.entries ? [...seed.entries] : [];
 
   const query = (
-    input: LogsQuery
+    input: LogsQuery,
   ): Result<ReadonlyArray<LogEntry>, LogsStoreError> => {
     if (input.limit !== undefined && input.limit < 0) {
       return err({
         code: LogsStoreErrorCode.InvalidInput,
-        message: ErrorMessage.InvalidBody
+        message: ErrorMessage.InvalidBody,
       });
     }
 
@@ -70,7 +70,7 @@ export const createLogsStore = (seed: LogsStoreSeed = {}): LogsStore => {
   };
 
   return {
-    query
+    query,
   };
 };
 

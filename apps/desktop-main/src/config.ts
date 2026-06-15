@@ -8,7 +8,7 @@ import {
   DesktopMode,
   EnvKey,
   DefaultUi,
-  UiMode
+  UiMode,
 } from "./constants";
 import { err, ok, ResultType, type Result } from "./result";
 
@@ -30,7 +30,7 @@ export type LocalServerConfig = Omit<LocalServerConfigInput, "authToken"> & {
   authToken: string;
 };
 
-export type UiSource =
+type UiSource =
   | { mode: typeof UiMode.Dev; url: string }
   | {
       mode: typeof UiMode.Prod;
@@ -51,7 +51,7 @@ type RemoteConfigBase = {
   authToken?: string;
 };
 
-export type LocalDesktopConfig = LocalConfigBase & { ui: UiSource };
+type LocalDesktopConfig = LocalConfigBase & { ui: UiSource };
 
 export type RemoteDesktopConfig = RemoteConfigBase & { ui: UiSource };
 
@@ -59,7 +59,7 @@ export type DesktopConfig = LocalDesktopConfig | RemoteDesktopConfig;
 
 export const resolveDesktopConfig = (
   env: NodeJS.ProcessEnv,
-  cwd: string
+  cwd: string,
 ): Result<DesktopConfig, ConfigError> => {
   const mode = parseMode(env[EnvKey.Mode]);
   if (mode.type === ResultType.Err) {
@@ -78,7 +78,7 @@ export const resolveDesktopConfig = (
     }
     return ok({
       ...remote.value,
-      ui: uiSource.value
+      ui: uiSource.value,
     });
   }
 
@@ -88,11 +88,13 @@ export const resolveDesktopConfig = (
   }
   return ok({
     ...local.value,
-    ui: uiSource.value
+    ui: uiSource.value,
   });
 };
 
-const parseMode = (value: string | undefined): Result<DesktopMode, ConfigError> => {
+const parseMode = (
+  value: string | undefined,
+): Result<DesktopMode, ConfigError> => {
   if (!value) {
     return ok(DesktopMode.Local);
   }
@@ -102,13 +104,13 @@ const parseMode = (value: string | undefined): Result<DesktopMode, ConfigError> 
   }
   return err({
     code: ConfigErrorCode.InvalidMode,
-    message: `${ConfigErrorMessage.InvalidMode}: ${value}`
+    message: `${ConfigErrorMessage.InvalidMode}: ${value}`,
   });
 };
 
 const resolveUiSource = (
   env: NodeJS.ProcessEnv,
-  cwd: string
+  cwd: string,
 ): Result<UiSource, ConfigError> => {
   const mode = resolveUiMode(env);
   if (mode.type === ResultType.Err) {
@@ -123,24 +125,24 @@ const resolveUiSource = (
     }
     return ok({
       mode: UiMode.Dev,
-      url: normalized.value
+      url: normalized.value,
     });
   }
 
   const entryPath = resolvePath(
     cwd,
-    readOptional(env[EnvKey.UiProdIndex]) ?? DefaultUi.ProdIndex
+    readOptional(env[EnvKey.UiProdIndex]) ?? DefaultUi.ProdIndex,
   );
   const assetsPath = resolvePath(
     cwd,
-    readOptional(env[EnvKey.UiProdAssets]) ?? DefaultUi.ProdAssets
+    readOptional(env[EnvKey.UiProdAssets]) ?? DefaultUi.ProdAssets,
   );
   const entryUrl = pathToFileURL(entryPath).toString();
   return ok({
     mode: UiMode.Prod,
     entryPath,
     entryUrl,
-    assetsPath
+    assetsPath,
   });
 };
 
@@ -153,7 +155,7 @@ const resolveUiMode = (env: NodeJS.ProcessEnv): Result<UiMode, ConfigError> => {
     }
     return err({
       code: ConfigErrorCode.InvalidUiMode,
-      message: `${ConfigErrorMessage.InvalidUiMode}: ${explicit}`
+      message: `${ConfigErrorMessage.InvalidUiMode}: ${explicit}`,
     });
   }
 
@@ -166,20 +168,20 @@ const resolveUiMode = (env: NodeJS.ProcessEnv): Result<UiMode, ConfigError> => {
 };
 
 const resolveRemoteConfig = (
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
 ): Result<RemoteConfigBase, ConfigError> => {
   const urlValue = readOptional(env[EnvKey.RemoteUrl]);
   const authToken = readOptional(env[EnvKey.AuthToken]);
 
   const base: RemoteConfigBase = {
-    mode: DesktopMode.Remote
+    mode: DesktopMode.Remote,
   };
 
   if (!urlValue) {
     if (authToken) {
       return ok({
         ...base,
-        authToken
+        authToken,
       });
     }
     return ok(base);
@@ -192,13 +194,13 @@ const resolveRemoteConfig = (
 
   const withUrl: RemoteConfigBase = {
     ...base,
-    serverUrl: normalizedUrl.value
+    serverUrl: normalizedUrl.value,
   };
 
   if (authToken) {
     return ok({
       ...withUrl,
-      authToken
+      authToken,
     });
   }
 
@@ -207,7 +209,7 @@ const resolveRemoteConfig = (
 
 const resolveLocalConfig = (
   env: NodeJS.ProcessEnv,
-  cwd: string
+  cwd: string,
 ): Result<LocalConfigBase, ConfigError> => {
   const workspaceRoots = readRequiredWorkspaceRoots(env);
   if (workspaceRoots.type === ResultType.Err) {
@@ -230,7 +232,7 @@ const resolveLocalConfig = (
     host,
     port: port.value,
     workspaceRoots: workspaceRoots.value,
-    commandAllowlist
+    commandAllowlist,
   };
 
   if (authToken) {
@@ -240,13 +242,13 @@ const resolveLocalConfig = (
   return ok({
     mode: DesktopMode.Local,
     serverUrl,
-    server
+    server,
   });
 };
 
 const parsePort = (
   value: string | undefined,
-  fallback: number
+  fallback: number,
 ): Result<number, ConfigError> => {
   if (!value) {
     return ok(fallback);
@@ -255,20 +257,20 @@ const parsePort = (
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return err({
       code: ConfigErrorCode.InvalidServerPort,
-      message: `${ConfigErrorMessage.InvalidServerPort}: ${value}`
+      message: `${ConfigErrorMessage.InvalidServerPort}: ${value}`,
     });
   }
   return ok(parsed);
 };
 
 const readRequiredWorkspaceRoots = (
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
 ): Result<ReadonlyArray<string>, ConfigError> => {
   const roots = parseAllowlist(env[EnvKey.WorkspaceRoots]);
   if (roots.length === 0) {
     return err({
       code: ConfigErrorCode.MissingWorkspaceRoots,
-      message: ConfigErrorMessage.MissingWorkspaceRoots
+      message: ConfigErrorMessage.MissingWorkspaceRoots,
     });
   }
   return ok(roots);
@@ -314,14 +316,14 @@ const normalizeUrl = (value: string): Result<string, ConfigError> => {
     if (!isAllowedProtocol(parsed.protocol)) {
       return err({
         code: ConfigErrorCode.InvalidRemoteUrl,
-        message: ConfigErrorMessage.InvalidRemoteUrl
+        message: ConfigErrorMessage.InvalidRemoteUrl,
       });
     }
     return ok(trimTrailingSlash(parsed.toString()));
   } catch {
     return err({
       code: ConfigErrorCode.InvalidRemoteUrl,
-      message: ConfigErrorMessage.InvalidRemoteUrl
+      message: ConfigErrorMessage.InvalidRemoteUrl,
     });
   }
 };
@@ -332,14 +334,14 @@ const normalizeUiUrl = (value: string): Result<string, ConfigError> => {
     if (!isAllowedProtocol(parsed.protocol)) {
       return err({
         code: ConfigErrorCode.InvalidUiDevUrl,
-        message: ConfigErrorMessage.InvalidUiDevUrl
+        message: ConfigErrorMessage.InvalidUiDevUrl,
       });
     }
     return ok(trimTrailingSlash(parsed.toString()));
   } catch {
     return err({
       code: ConfigErrorCode.InvalidUiDevUrl,
-      message: ConfigErrorMessage.InvalidUiDevUrl
+      message: ConfigErrorMessage.InvalidUiDevUrl,
     });
   }
 };

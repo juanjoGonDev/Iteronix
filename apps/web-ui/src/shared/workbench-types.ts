@@ -1,19 +1,18 @@
-export const WorkbenchSkillName = "example-skill";
-export const MinimalEvalDatasetPath = "packages/eval/fixtures/minimal-suite.jsonl";
-export const DefaultMemoryQueryLimit = 4;
+export const MinimalEvalDatasetPath =
+  "packages/eval/fixtures/minimal-suite.jsonl";
 
 export const QualityGateEventName = {
-  Progress: "quality-gates-progress"
+  Progress: "quality-gates-progress",
 } as const;
 
 export const QualityGateId = {
   Lint: "lint",
   Typecheck: "typecheck",
   Test: "test",
-  Build: "build"
+  Build: "build",
 } as const;
 
-export type QualityGateId = typeof QualityGateId[keyof typeof QualityGateId];
+export type QualityGateId = (typeof QualityGateId)[keyof typeof QualityGateId];
 
 export type QualityGateRunStatus =
   | "pending"
@@ -32,12 +31,12 @@ export type ProjectRecord = {
 
 export const GitDiffScope = {
   Staged: "staged",
-  Unstaged: "unstaged"
+  Unstaged: "unstaged",
 } as const;
 
-export type GitDiffScope = typeof GitDiffScope[keyof typeof GitDiffScope];
+export type GitDiffScope = (typeof GitDiffScope)[keyof typeof GitDiffScope];
 
-export type GitStatusEntryRecord = {
+type GitStatusEntryRecord = {
   path: string;
   originalPath?: string;
   indexStatus: string;
@@ -73,7 +72,7 @@ export type GitPathOperationRecord = {
   paths: ReadonlyArray<string>;
 };
 
-export type GitBranchRecord = {
+type GitBranchRecord = {
   name: string;
   current: boolean;
   remote: boolean;
@@ -118,29 +117,29 @@ export type ServerSentEventMessage = {
 
 export const ReviewerDecision = {
   Approved: "approved",
-  Denied: "denied"
+  Denied: "denied",
 } as const;
 
 export type ReviewerDecision =
-  typeof ReviewerDecision[keyof typeof ReviewerDecision];
+  (typeof ReviewerDecision)[keyof typeof ReviewerDecision];
 
 export const WorkbenchRunRecordKind = {
   Skill: "skill",
-  Workflow: "workflow"
+  Workflow: "workflow",
 } as const;
 
 export type WorkbenchRunRecordKind =
-  typeof WorkbenchRunRecordKind[keyof typeof WorkbenchRunRecordKind];
+  (typeof WorkbenchRunRecordKind)[keyof typeof WorkbenchRunRecordKind];
 
 export const WorkbenchRecordStatus = {
   Completed: "completed",
   AwaitingApproval: "awaiting_approval",
   Approved: "approved",
-  Denied: "denied"
+  Denied: "denied",
 } as const;
 
 export type WorkbenchRecordStatus =
-  typeof WorkbenchRecordStatus[keyof typeof WorkbenchRecordStatus];
+  (typeof WorkbenchRecordStatus)[keyof typeof WorkbenchRecordStatus];
 
 export type Citation = {
   chunkId: string;
