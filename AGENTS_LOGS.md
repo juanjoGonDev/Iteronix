@@ -3032,3 +3032,14 @@
   - Live execution remains a UI preview until the workflow API exposes real streaming node progress.
 - Next:
   - Add real server-sent execution streaming and wire the canvas/inspector to actual runtime node events instead of simulated progression.
+
+### 2026-06-16 10:00 (Europe/Madrid) — Feature backlog: Prompt Versioning
+
+- Summary: Añadida sección "Prompt Versioning" al Feature backlog en PLAN.md con cinco puntos: editor de prompts con variables de entrada inteligente, visibilidad de flujos/steps que usan el prompt, histórico de versiones con diff y revert, integración con el editor de flujos para selección de versión, y API de versionado.
+- Decisions:
+  - Se crea una nueva sección "Feature backlog" en PLAN.md para ideas sin milestone asignado, en lugar de meterlas en Deferred (que es "explicitamente fuera de scope").
+  - Prompt Versioning queda como idea sin milestone hasta que se priorice.
+- Changes:
+  - **PLAN.md**: nueva sección `Feature backlog (ideas sin milestone asignado)` con subsección `Prompt Versioning` y 5 checkboxes.
+- Next:
+  - null (no hay siguiente paso concreto; backlog está pendiente de priorización).

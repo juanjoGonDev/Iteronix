@@ -800,3 +800,19 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
 - Multi-user collaboration
 - Cloud sync / hosted SaaS
 - Full plugin marketplace
+
+---
+
+## Feature backlog (ideas sin milestone asignado)
+
+Las siguientes funcionalidades están identificadas pero aún no tienen milestone ni descomposición asignada. Se incorporarán a un milestone cuando se prioricen.
+
+### Prompt Versioning
+
+Sistema de versionado de prompts con trazabilidad entre prompts, variables de entrada, flujos que los consumen e histórico de cambios.
+
+- [ ] **Editor de prompts con variables de entrada**: editor de texto inteligente que permita definir y colocar variables de entrada (`{{varName}}`) dentro del prompt, con autocompletado, validación de variables no definidas y una interfaz visual para gestionar el catálogo de variables disponibles por prompt.
+- [ ] **Visibilidad de flujos/steps que usan el prompt**: desde la vista de un prompt, poder ver qué flujos (workflows) o steps lo referencian, con enlaces directos para navegar a ellos y ejecutarlos.
+- [ ] **Histórico de versiones**: cada cambio en un prompt genera una nueva versión inmutable. El histórico debe mostrar diff entre versiones, quién cambió qué, cuándo, y permitir revertir a una versión anterior.
+- [ ] **Integración con el editor de flujos**: los nodos de tipo `asset.prompt` en el workflow editor deben poder seleccionar una versión específica de un prompt y mostrar advertencias si la versión referenciada no es la última.
+- [ ] **API de versionado**: endpoints para listar versiones de un prompt, crear nuevas versiones, obtener diff, y consultar el grafo de dependencias (qué flujos/steps usan cada versión).
