@@ -362,6 +362,30 @@ type WorkflowInspectorLogsScope = {
   emptyMessage: string;
 };
 
+type ExecutionNodeModalState = {
+  mode: "execution" | "live";
+  executionId: string | null;
+  nodeId: string;
+};
+
+type ExecutionNodeModalContext = {
+  modal: ExecutionNodeModalState;
+  workflow: WorkflowDefinitionUpsertInput;
+  node: WorkflowNodeRecord;
+  runId?: string | undefined;
+  runStatus:
+    | WorkflowNodeExecutionRecord["status"]
+    | LiveNodeRunState["status"]
+    | "awaiting_review";
+  outputText: string;
+  alerts: ReadonlyArray<WorkflowAlertRecord>;
+  findings: ReadonlyArray<WorkflowGuardrailFindingRecord>;
+  usage?: WorkflowNodeExecutionRecord["usage"] | undefined;
+  providerLabel: string;
+  durationLabel: string;
+  isPinned: boolean;
+};
+
 type WorkflowVariableToken = {
   id: string;
   label: string;
@@ -477,6 +501,7 @@ interface WorkflowsScreenState {
   guardrailValidationMessage: string;
   deepEditor: DeepEditorState | null;
   liveExecution: LiveExecutionState | null;
+  executionNodeModal: ExecutionNodeModalState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
 }
@@ -533,6 +558,7 @@ export class WorkflowsScreen extends Component<
       guardrailValidationPath: "$.result",
       guardrailValidationMessage: "Expected $.result to be present.",
       deepEditor: null,
+      executionNodeModal: null,
       liveExecution: null,
       errorMessage: null,
       noticeMessage: null,
@@ -576,6 +602,7 @@ export class WorkflowsScreen extends Component<
         this.renderToolbar(),
         this.renderSurface(),
         this.state.deepEditor ? this.renderDeepEditorModal() : "",
+        this.state.executionNodeModal ? this.renderExecutionNodeModal() : "",
       ],
     );
   }
@@ -761,62 +788,85 @@ export class WorkflowsScreen extends Component<
   }
 
   private renderActivityRail(): HTMLElement {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+
     return createElement(
       "aside",
       {
         className:
-          "flex w-14 shrink-0 flex-col items-center border-r border-border-dark bg-[#151b22] px-1.5 py-3",
+          "flex w-[60px] shrink-0 flex-col items-center border-r border-border-dark bg-[#11161c] px-2 py-3",
         "data-testid": WorkflowScreenSelector.SidebarRail,
       },
       [
-        this.renderRailButton(
-          "list",
-          "Definitions",
-          this.state.activeSidebarSection === SidebarSection.Workflows,
-          () =>
-            this.setState({
-              activeSidebarSection: SidebarSection.Workflows,
-              compactView: CompactView.Sidebar,
-            }),
-          WorkflowScreenSelector.SectionWorkflows,
+        createElement(
+          "div",
+          {
+            className:
+              "mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-border-dark bg-[#171d25] text-sm font-semibold text-white",
+            title: currentWorkflow?.name ?? "Workflow editor",
+          },
+          [currentWorkflow?.name.slice(0, 2).toUpperCase() ?? "WF"],
         ),
-        this.renderRailButton(
-          "deployed_code",
-          "Nodes",
-          this.state.activeSidebarSection === SidebarSection.Nodes,
-          () =>
-            this.setState({
-              activeSidebarSection: SidebarSection.Nodes,
-              compactView: CompactView.Sidebar,
-            }),
-          WorkflowScreenSelector.SectionNodes,
-        ),
-        this.renderRailButton(
-          "library_books",
-          "Assets",
-          this.state.activeSidebarSection === SidebarSection.Assets,
-          () =>
-            this.setState({
-              activeSidebarSection: SidebarSection.Assets,
-              compactView: CompactView.Sidebar,
-            }),
-          WorkflowScreenSelector.SectionAssets,
-        ),
-        this.renderRailButton(
-          "history",
-          "History",
-          this.state.activeSidebarSection === SidebarSection.History,
-          () =>
-            this.setState({
-              activeSidebarSection: SidebarSection.History,
-              compactView: CompactView.Sidebar,
-            }),
-          WorkflowScreenSelector.SectionHistory,
+        createElement(
+          "div",
+          {
+            className:
+              "flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
+          },
+          [
+            this.renderRailButton(
+              "list",
+              "Definitions",
+              this.state.activeSidebarSection === SidebarSection.Workflows,
+              () =>
+                this.setState({
+                  activeSidebarSection: SidebarSection.Workflows,
+                  compactView: CompactView.Sidebar,
+                }),
+              WorkflowScreenSelector.SectionWorkflows,
+            ),
+            this.renderRailButton(
+              "deployed_code",
+              "Nodes",
+              this.state.activeSidebarSection === SidebarSection.Nodes,
+              () =>
+                this.setState({
+                  activeSidebarSection: SidebarSection.Nodes,
+                  compactView: CompactView.Sidebar,
+                }),
+              WorkflowScreenSelector.SectionNodes,
+            ),
+            this.renderRailButton(
+              "library_books",
+              "Assets",
+              this.state.activeSidebarSection === SidebarSection.Assets,
+              () =>
+                this.setState({
+                  activeSidebarSection: SidebarSection.Assets,
+                  compactView: CompactView.Sidebar,
+                }),
+              WorkflowScreenSelector.SectionAssets,
+            ),
+            this.renderRailButton(
+              "history",
+              "History",
+              this.state.activeSidebarSection === SidebarSection.History,
+              () =>
+                this.setState({
+                  activeSidebarSection: SidebarSection.History,
+                  compactView: CompactView.Sidebar,
+                }),
+              WorkflowScreenSelector.SectionHistory,
+            ),
+          ],
         ),
         !this.state.isCompactViewport
           ? createElement(
               "div",
-              { className: "mt-auto flex flex-col gap-1 px-1" },
+              {
+                className:
+                  "mt-auto flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
+              },
               [
                 this.renderRailButton(
                   this.state.desktopSidebarCollapsed
@@ -852,7 +902,10 @@ export class WorkflowsScreen extends Component<
         this.state.isCompactViewport
           ? createElement(
               "div",
-              { className: "mt-auto flex flex-col gap-1 px-1" },
+              {
+                className:
+                  "mt-2 flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
+              },
               [
                 this.renderRailButton(
                   "left_panel_open",
@@ -895,7 +948,7 @@ export class WorkflowsScreen extends Component<
         type: "button",
         title,
         ...(testId ? { "data-testid": testId } : {}),
-        className: `flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${active ? "border-primary/40 bg-primary/10 text-primary shadow-[0_8px_20px_rgba(37,99,235,0.16)]" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#202833] hover:text-white"}`,
+        className: `flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
         onClick,
       },
       [
@@ -924,6 +977,13 @@ export class WorkflowsScreen extends Component<
   }
 
   private renderSidebarHeader(): HTMLElement {
+    const sectionTitle = this.readSidebarSectionTitle(
+      this.state.activeSidebarSection,
+    );
+    const sectionCount = this.readSidebarSectionCount(
+      this.state.activeSidebarSection,
+    );
+
     return createElement(
       "div",
       {
@@ -934,16 +994,17 @@ export class WorkflowsScreen extends Component<
         createElement("div", { className: "min-w-0 flex-1" }, [
           createElement(
             "p",
-            {
-              className:
-                "text-[11px] font-medium tracking-[0.14em] text-text-secondary",
-            },
-            [formatSelectOptionLabel(this.state.activeSidebarSection)],
+            { className: "truncate text-sm font-semibold text-white" },
+            [sectionTitle],
           ),
           createElement(
             "p",
-            { className: "mt-1 truncate text-sm text-slate-300" },
-            [this.state.currentProject?.name ?? "No project"],
+            { className: "mt-1 truncate text-xs text-text-secondary" },
+            [
+              this.state.currentProject?.name
+                ? `${this.state.currentProject.name} · ${sectionCount}`
+                : "No project loaded",
+            ],
           ),
         ]),
         !this.state.isCompactViewport
@@ -957,6 +1018,42 @@ export class WorkflowsScreen extends Component<
           : "",
       ],
     );
+  }
+
+  private readSidebarSectionTitle(section: SidebarSection): string {
+    if (section === SidebarSection.Workflows) {
+      return "Definitions";
+    }
+
+    if (section === SidebarSection.Nodes) {
+      return "Nodes";
+    }
+
+    if (section === SidebarSection.Assets) {
+      return "Assets";
+    }
+
+    return "History";
+  }
+
+  private readSidebarSectionCount(section: SidebarSection): string {
+    if (section === SidebarSection.Workflows) {
+      return `${this.state.workflows.length.toString()} workflows`;
+    }
+
+    if (section === SidebarSection.Nodes) {
+      return `${this.state.draftWorkflow?.nodes.length.toString() ?? "0"} nodes`;
+    }
+
+    if (section === SidebarSection.Assets) {
+      return `${this.state.assets.length.toString()} assets`;
+    }
+
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    const executionCount = currentWorkflow
+      ? readWorkflowExecutions(this.state.executions, currentWorkflow.id).length
+      : 0;
+    return `${executionCount.toString()} runs`;
   }
 
   private renderSidebarSection(): HTMLElement {
@@ -3263,6 +3360,27 @@ export class WorkflowsScreen extends Component<
             ),
           ],
         ),
+        createElement(
+          "div",
+          {
+            className:
+              "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+          },
+          [
+            createElement(
+              "p",
+              { className: "text-sm font-medium text-white" },
+              ["Inspect node output"],
+            ),
+            createElement(
+              "p",
+              { className: "mt-1 text-xs text-text-secondary" },
+              [
+                "Click a canvas node or use Open in the run cards to inspect full node output in a modal without leaving this persisted run.",
+              ],
+            ),
+          ],
+        ),
         hasAlerts
           ? createElement(
               "div",
@@ -3474,11 +3592,26 @@ export class WorkflowsScreen extends Component<
                           ),
                         ]),
                         createElement(
-                          StatusBadge,
-                          {
-                            status: readExecutionBadgeStatus(nodeRun.status),
-                          },
-                          [formatSelectOptionLabel(nodeRun.status)],
+                          "div",
+                          { className: "flex items-center gap-2" },
+                          [
+                            createElement(
+                              StatusBadge,
+                              {
+                                status: readExecutionBadgeStatus(
+                                  nodeRun.status,
+                                ),
+                              },
+                              [formatSelectOptionLabel(nodeRun.status)],
+                            ),
+                            createElement(Button, {
+                              variant: "ghost",
+                              size: "sm",
+                              onClick: () =>
+                                this.openExecutionNodeModal(nodeRun.nodeId),
+                              children: "Open",
+                            }),
+                          ],
                         ),
                       ],
                     ),
@@ -3547,7 +3680,7 @@ export class WorkflowsScreen extends Component<
                           "pre",
                           {
                             className:
-                              "mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#11161d] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200",
+                              "mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#11161d] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200",
                           },
                           [formatOutputSnapshot(nodeRun.outputSnapshot)],
                         ),
@@ -3780,6 +3913,27 @@ export class WorkflowsScreen extends Component<
               : "",
           ],
         ),
+        createElement(
+          "div",
+          {
+            className:
+              "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+          },
+          [
+            createElement(
+              "p",
+              { className: "text-sm font-medium text-white" },
+              ["Inspect node output"],
+            ),
+            createElement(
+              "p",
+              { className: "mt-1 text-xs text-text-secondary" },
+              [
+                "While this workflow streams, click a canvas node or use Open in the run cards to inspect the live output in a dedicated modal.",
+              ],
+            ),
+          ],
+        ),
         hasAlerts
           ? createElement(
               "div",
@@ -3982,12 +4136,25 @@ export class WorkflowsScreen extends Component<
                           ),
                         ]),
                         createElement(
-                          StatusBadge,
-                          {
-                            status: readLiveNodeRunBadgeStatus(run.status),
-                            pulse: run.status === "running",
-                          },
-                          [formatSelectOptionLabel(run.status)],
+                          "div",
+                          { className: "flex items-center gap-2" },
+                          [
+                            createElement(
+                              StatusBadge,
+                              {
+                                status: readLiveNodeRunBadgeStatus(run.status),
+                                pulse: run.status === "running",
+                              },
+                              [formatSelectOptionLabel(run.status)],
+                            ),
+                            createElement(Button, {
+                              variant: "ghost",
+                              size: "sm",
+                              onClick: () =>
+                                this.openExecutionNodeModal(node.id),
+                              children: "Open",
+                            }),
+                          ],
                         ),
                       ],
                     ),
@@ -4068,7 +4235,7 @@ export class WorkflowsScreen extends Component<
                           "pre",
                           {
                             className:
-                              "mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#11161d] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200",
+                              "mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#11161d] px-3 py-3 font-mono text-[11px] leading-5 text-slate-200",
                           },
                           [
                             run.outputText.trim().length > 0
@@ -4153,6 +4320,549 @@ export class WorkflowsScreen extends Component<
         },
         { label: "Workspace", value: workflow.workspaceId },
       ]),
+    ]);
+  }
+
+  private openExecutionNodeModal(nodeId: string): void {
+    if (this.state.selection.type === "execution") {
+      this.setState({
+        executionNodeModal: {
+          mode: "execution",
+          executionId: this.state.selection.id,
+          nodeId,
+        },
+      });
+      return;
+    }
+
+    if (this.state.liveExecution) {
+      this.setState({
+        executionNodeModal: {
+          mode: "live",
+          executionId: this.state.liveExecution.workflowRunId,
+          nodeId,
+        },
+      });
+    }
+  }
+
+  private closeExecutionNodeModal(): void {
+    this.setState({ executionNodeModal: null });
+  }
+
+  private stepExecutionNodeModal(offset: -1 | 1): void {
+    const modal = this.state.executionNodeModal;
+    const workflow = this.state.draftWorkflow;
+    if (!modal || !workflow || workflow.nodes.length === 0) {
+      return;
+    }
+
+    const currentIndex = workflow.nodes.findIndex(
+      (node) => node.id === modal.nodeId,
+    );
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextIndex =
+      (currentIndex + offset + workflow.nodes.length) % workflow.nodes.length;
+    const nextNode = workflow.nodes[nextIndex];
+    if (!nextNode) {
+      return;
+    }
+
+    this.setState({
+      executionNodeModal: {
+        ...modal,
+        nodeId: nextNode.id,
+      },
+    });
+  }
+
+  private handlePinExecutionNodeModalSampleOutput(): void {
+    const modal = this.state.executionNodeModal;
+    const workflow = this.state.draftWorkflow;
+    if (!modal || !workflow) {
+      return;
+    }
+
+    const node = workflow.nodes.find((entry) => entry.id === modal.nodeId);
+    if (!node?.outputContract) {
+      this.setState({
+        noticeMessage: null,
+        errorMessage:
+          "This node needs a JSON output contract before a response can be pinned for testing.",
+      });
+      return;
+    }
+
+    const outputText = this.readExecutionNodeModalOutputText();
+    if (outputText.trim().length === 0) {
+      this.setState({
+        noticeMessage: null,
+        errorMessage: "There is no node output available to pin right now.",
+      });
+      return;
+    }
+
+    const nextWorkflow = updateWorkflowNodeOutputContract(
+      workflow,
+      node.id,
+      (current) => ({
+        ...current,
+        sampleOutput: outputText,
+      }),
+    );
+    this.updateDraftWorkflow(nextWorkflow, this.state.selection);
+    this.setState({
+      noticeMessage: `${node.label} sample output updated from this run.`,
+      errorMessage: null,
+    });
+  }
+
+  private readExecutionNodeModalOutputText(): string {
+    const modal = this.state.executionNodeModal;
+    const workflow = this.state.draftWorkflow;
+    if (!modal || !workflow) {
+      return "";
+    }
+
+    if (modal.mode === "execution") {
+      const execution = this.state.executions.find(
+        (entry) => entry.id === modal.executionId,
+      );
+      const nodeRun = execution?.nodeRuns.find(
+        (entry) => entry.nodeId === modal.nodeId,
+      );
+      return nodeRun ? formatOutputSnapshot(nodeRun.outputSnapshot) : "";
+    }
+
+    const liveNodeRun = this.state.liveExecution?.nodeRuns[modal.nodeId];
+    if (!liveNodeRun) {
+      return "";
+    }
+
+    return liveNodeRun.outputText.trim().length > 0
+      ? liveNodeRun.outputText
+      : liveNodeRun.outputSnapshot !== undefined
+        ? formatOutputSnapshot(liveNodeRun.outputSnapshot)
+        : "";
+  }
+
+  private readExecutionNodeModalContext(): ExecutionNodeModalContext | null {
+    const modal = this.state.executionNodeModal;
+    const workflow = this.state.draftWorkflow;
+    if (!modal || !workflow) {
+      return null;
+    }
+
+    const node = workflow.nodes.find((entry) => entry.id === modal.nodeId);
+    if (!node) {
+      return null;
+    }
+
+    const persistedExecution =
+      modal.mode === "execution"
+        ? (this.state.executions.find(
+            (entry) => entry.id === modal.executionId,
+          ) ?? null)
+        : null;
+    const persistedNodeRun =
+      persistedExecution?.nodeRuns.find((entry) => entry.nodeId === node.id) ??
+      null;
+    const liveNodeRun =
+      modal.mode === "live"
+        ? (this.state.liveExecution?.nodeRuns[node.id] ??
+          createPendingLiveNodeRunState())
+        : null;
+    const runStatus =
+      modal.mode === "execution"
+        ? (persistedNodeRun?.status ?? "awaiting_review")
+        : (liveNodeRun?.status ?? "pending");
+    const outputText = this.readExecutionNodeModalOutputText();
+    const runId =
+      modal.mode === "execution"
+        ? (modal.executionId ?? undefined)
+        : (this.state.liveExecution?.workflowRunId ?? undefined);
+    const alerts =
+      modal.mode === "execution"
+        ? (persistedNodeRun?.alerts ?? [])
+        : (liveNodeRun?.alerts ?? []);
+    const findings =
+      modal.mode === "execution"
+        ? (persistedNodeRun?.guardrailFindings ?? [])
+        : (liveNodeRun?.guardrailFindings ?? []);
+    const usage =
+      modal.mode === "execution" ? persistedNodeRun?.usage : liveNodeRun?.usage;
+    const providerLabel =
+      modal.mode === "execution"
+        ? persistedNodeRun
+          ? readNodeRunProviderLabel(persistedNodeRun)
+          : "No provider data"
+        : liveNodeRun?.provider
+          ? formatProviderLabel(liveNodeRun.provider)
+          : readNodeSecondaryText(node);
+    const isPinned = node.outputContract?.sampleOutput === outputText;
+
+    return {
+      modal,
+      workflow,
+      node,
+      ...(runId ? { runId } : {}),
+      runStatus,
+      outputText,
+      alerts,
+      findings,
+      ...(usage ? { usage } : {}),
+      providerLabel,
+      durationLabel:
+        modal.mode === "execution"
+          ? formatDuration(persistedNodeRun?.durationMs)
+          : liveNodeRun?.finishedAt && liveNodeRun.startedAt
+            ? formatDuration(
+                new Date(liveNodeRun.finishedAt).getTime() -
+                  new Date(liveNodeRun.startedAt).getTime(),
+              )
+            : runStatus === "running"
+              ? "Running"
+              : "Pending",
+      isPinned,
+    };
+  }
+
+  private renderExecutionNodeModal(): HTMLElement {
+    const context = this.readExecutionNodeModalContext();
+    if (!context) {
+      return createElement("div");
+    }
+
+    const badgeStatus = this.readExecutionNodeModalBadgeStatus(context);
+
+    return createElement(
+      "div",
+      {
+        className: "fixed inset-0 z-50 bg-black/72 p-3 md:p-6",
+        onClick: () => this.closeExecutionNodeModal(),
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "mx-auto flex h-full w-full max-w-[1480px] overflow-hidden rounded-lg border border-border-dark bg-[#0f141a] shadow-2xl",
+            onClick: (event: Event) => event.stopPropagation(),
+          },
+          [
+            createElement(
+              "section",
+              {
+                className:
+                  "flex min-w-0 flex-1 flex-col border-r border-border-dark",
+              },
+              [
+                createElement(
+                  "div",
+                  {
+                    className:
+                      "flex flex-wrap items-center justify-between gap-3 border-b border-border-dark px-4 py-3",
+                  },
+                  [
+                    createElement("div", { className: "min-w-0" }, [
+                      createElement(
+                        "p",
+                        {
+                          className:
+                            "truncate text-sm font-semibold text-white",
+                        },
+                        [
+                          `${context.node.label} · ${readNodeKindLabel(context.node.kind)}`,
+                        ],
+                      ),
+                      createElement(
+                        "p",
+                        { className: "mt-1 text-xs text-text-secondary" },
+                        [
+                          `${context.modal.mode === "live" ? "Live run" : "Persisted run"} · ArrowLeft / ArrowRight to move · P to pin output`,
+                        ],
+                      ),
+                    ]),
+                    createElement(
+                      "div",
+                      { className: "flex items-center gap-2" },
+                      [
+                        createElement(
+                          StatusBadge,
+                          {
+                            status: badgeStatus,
+                            pulse: context.runStatus === "running",
+                          },
+                          [formatSelectOptionLabel(context.runStatus)],
+                        ),
+                        createElement(Button, {
+                          variant: context.isPinned ? "secondary" : "ghost",
+                          size: "sm",
+                          onClick: () =>
+                            this.handlePinExecutionNodeModalSampleOutput(),
+                          children: context.isPinned
+                            ? "Pinned to test"
+                            : "Pin output",
+                        }),
+                        createElement(IconButton, {
+                          icon: "close",
+                          tooltip: "Close",
+                          onClick: () => this.closeExecutionNodeModal(),
+                          className:
+                            "h-8 w-8 rounded-md border border-transparent hover:border-border-dark hover:bg-[#1b222c]",
+                        }),
+                      ],
+                    ),
+                  ],
+                ),
+                createElement(
+                  "div",
+                  {
+                    className:
+                      "grid min-h-0 flex-1 gap-0 xl:grid-cols-[minmax(0,1fr)_320px]",
+                  },
+                  [
+                    createElement(
+                      "div",
+                      {
+                        className:
+                          "min-h-0 overflow-y-auto border-b border-border-dark px-4 py-4 xl:border-b-0",
+                      },
+                      [this.renderExecutionNodeModalMain(context)],
+                    ),
+                    createElement(
+                      "aside",
+                      {
+                        className:
+                          "min-h-0 overflow-y-auto bg-[#121820] px-3 py-3",
+                      },
+                      [this.renderExecutionNodeModalSidebar(context)],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private readExecutionNodeModalBadgeStatus(
+    context: ExecutionNodeModalContext,
+  ): "info" | "success" | "warning" | "running" | "failed" {
+    if (context.runStatus === "warn") {
+      return "warning";
+    }
+
+    if (context.runStatus === "pending") {
+      return "info";
+    }
+
+    if (context.modal.mode === "live") {
+      return context.runStatus === "completed" ||
+        context.runStatus === "running" ||
+        context.runStatus === "failed"
+        ? readLiveNodeRunBadgeStatus(context.runStatus)
+        : "info";
+    }
+
+    return readExecutionBadgeStatus(context.runStatus);
+  }
+
+  private renderExecutionNodeModalMain(
+    context: ExecutionNodeModalContext,
+  ): HTMLElement {
+    return createElement("div", { className: "flex flex-col" }, [
+      createElement(
+        "div",
+        { className: "grid gap-3 sm:grid-cols-2 xl:grid-cols-4" },
+        [
+          this.renderInlineMetaTile("Provider", context.providerLabel),
+          this.renderInlineMetaTile("Runtime", context.durationLabel),
+          this.renderInlineMetaTile(
+            "Tokens",
+            context.usage
+              ? context.usage.totalTokens.toLocaleString()
+              : "No token data",
+          ),
+          this.renderInlineMetaTile(
+            "Alerts",
+            `${context.alerts.length.toString()} · ${context.findings.length.toString()} findings`,
+          ),
+        ],
+      ),
+      createElement(
+        "div",
+        {
+          className: "mt-4 rounded-lg border border-border-dark bg-[#10161d]",
+        },
+        [
+          createElement(
+            "div",
+            {
+              className:
+                "flex items-center justify-between gap-2 border-b border-border-dark px-3 py-2.5",
+            },
+            [
+              createElement(
+                "span",
+                { className: "text-sm font-medium text-white" },
+                ["Node output"],
+              ),
+              createElement(
+                "span",
+                { className: "text-[11px] text-text-secondary" },
+                [context.outputText.trim().length > 0 ? "Captured" : "Pending"],
+              ),
+            ],
+          ),
+          createElement(
+            "pre",
+            {
+              className:
+                "max-h-[44vh] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[12px] leading-6 text-slate-200",
+            },
+            [
+              context.outputText.trim().length > 0
+                ? context.outputText
+                : "No output captured for this node yet.",
+            ],
+          ),
+        ],
+      ),
+      context.alerts.length > 0
+        ? createElement(
+            "div",
+            { className: "mt-4 flex flex-col gap-2" },
+            context.alerts.map((alert) =>
+              createElement(
+                "div",
+                {
+                  key: alert.id,
+                  className:
+                    "rounded-md border border-border-dark bg-[#11161d] px-3 py-2.5",
+                },
+                [
+                  createElement(
+                    "div",
+                    {
+                      className: "flex items-center justify-between gap-2",
+                    },
+                    [
+                      createElement(
+                        "span",
+                        { className: "text-xs font-medium text-white" },
+                        [alert.message],
+                      ),
+                      createElement(
+                        StatusBadge,
+                        {
+                          status: readAlertBadgeStatus(alert.level),
+                        },
+                        [formatSelectOptionLabel(alert.level)],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+        : "",
+      context.findings.length > 0
+        ? createElement(
+            "div",
+            { className: "mt-4 flex flex-col gap-2" },
+            context.findings.map((finding, index) =>
+              createElement(
+                "div",
+                {
+                  key: `${context.node.id}-modal-finding-${index.toString()}`,
+                  className:
+                    "rounded-md border border-border-dark bg-[#11161d] px-3 py-2.5",
+                },
+                [
+                  createElement(
+                    "div",
+                    {
+                      className: "flex items-center justify-between gap-2",
+                    },
+                    [
+                      createElement(
+                        "span",
+                        { className: "text-xs font-medium text-white" },
+                        [finding.message],
+                      ),
+                      createElement(
+                        StatusBadge,
+                        {
+                          status: readGuardrailFindingBadgeStatus(
+                            finding.severity,
+                          ),
+                        },
+                        [formatSelectOptionLabel(finding.severity)],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+        : "",
+    ]);
+  }
+
+  private renderExecutionNodeModalSidebar(
+    context: ExecutionNodeModalContext,
+  ): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-3" }, [
+      createElement(
+        "div",
+        { className: "flex flex-col gap-2" },
+        context.workflow.nodes.map((workflowNode) => {
+          const selected = workflowNode.id === context.node.id;
+          const visual = this.readNodeRunVisual(workflowNode.id);
+          return createElement(
+            "button",
+            {
+              type: "button",
+              key: workflowNode.id,
+              className: `flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors ${selected ? "border-primary/50 bg-primary/10" : "border-border-dark bg-[#0f141a] hover:border-slate-600 hover:bg-[#18202a]"}`,
+              onClick: () => this.openExecutionNodeModal(workflowNode.id),
+            },
+            [
+              createElement("div", { className: "min-w-0 flex-1" }, [
+                createElement(
+                  "p",
+                  { className: "truncate text-sm font-medium text-white" },
+                  [workflowNode.label],
+                ),
+                createElement(
+                  "p",
+                  { className: "text-[11px] text-text-secondary" },
+                  [readNodeKindLabel(workflowNode.kind)],
+                ),
+              ]),
+              createElement(
+                StatusBadge,
+                {
+                  status: visual.badgeStatus,
+                  pulse: visual.status === "running",
+                },
+                [visual.label ?? "Idle"],
+              ),
+            ],
+          );
+        }),
+      ),
+      this.renderScopedInspectorLogs({
+        ...(context.runId ? { runId: context.runId } : {}),
+        title: "Run logs",
+        emptyMessage: "No server log entries captured for this run.",
+      }),
     ]);
   }
 
@@ -7874,6 +8584,14 @@ export class WorkflowsScreen extends Component<
     }
 
     if (
+      this.state.selection.type === "execution" ||
+      this.state.liveExecution !== null
+    ) {
+      this.openExecutionNodeModal(nodeId);
+      return;
+    }
+
+    if (
       event.target.closest("button") &&
       !event.target.closest("[data-drag-handle]")
     ) {
@@ -8939,6 +9657,32 @@ export class WorkflowsScreen extends Component<
   };
 
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (this.state.executionNodeModal) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeExecutionNodeModal();
+        return;
+      }
+
+      if (event.key === "ArrowRight" || event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        this.stepExecutionNodeModal(1);
+        return;
+      }
+
+      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        this.stepExecutionNodeModal(-1);
+        return;
+      }
+
+      if (event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        this.handlePinExecutionNodeModalSampleOutput();
+        return;
+      }
+    }
+
     if (event.code === "Space") {
       this.spacePanPressed = true;
       return;
