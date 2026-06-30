@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  WorkflowExecutionStatus,
   WorkflowTriggerKind,
   createDefaultWorkflowCatalogState,
   isWorkflowTriggerKindSupportedInMvp,
@@ -13,6 +14,10 @@ describe("workflow shared contracts", () => {
       assetUsages: [],
       executions: [],
     });
+  });
+
+  it("exposes queued as a persisted workflow execution status", () => {
+    expect(WorkflowExecutionStatus.Queued).toBe("queued");
   });
 
   it("supports only manual triggers in the MVP runtime", () => {

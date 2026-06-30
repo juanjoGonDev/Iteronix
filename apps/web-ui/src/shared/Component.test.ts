@@ -295,6 +295,42 @@ describe("createElement", () => {
     expect(recorded).toContain("listener:pointerdown");
   });
 
+  it("binds double-click handlers to the native dblclick event", () => {
+    const recorded: string[] = [];
+    const originalDocument = globalThis.document;
+    const fakeElement = createFakeElement(recorded);
+
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => fakeElement,
+        createTextNode: (value: string) => ({
+          nodeType: 3,
+          textContent: value,
+        }),
+      },
+    });
+
+    try {
+      createElement("button", {
+        onDblClick: () => {
+          recorded.push("handled");
+        },
+      });
+    } finally {
+      if (originalDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: originalDocument,
+        });
+      }
+    }
+
+    expect(recorded).toContain("listener:dblclick");
+  });
+
   it("creates svg child elements with the svg namespace", () => {
     const recorded: string[] = [];
     const originalDocument = globalThis.document;

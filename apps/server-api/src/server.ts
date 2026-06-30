@@ -156,6 +156,7 @@ import {
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
+  executeWorkflowNodeExecutionRun,
   executeWorkflowExecutionRun,
   executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
@@ -170,6 +171,7 @@ import {
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
   parseWorkflowExecutionListRequest,
+  parseWorkflowNodeExecutionRunRequest,
   parseWorkflowExecutionRunRequest,
   parseWorkflowNodeProviderTestRequest,
 } from "./workflows";
@@ -181,6 +183,14 @@ import {
   WorkflowRuntimeEventType,
   type WorkflowRuntimeEvent,
 } from "../../../packages/agents/src/workflow-runtime";
+import {
+  WorkflowExecutionStatus,
+  type WorkflowAlertRecord,
+  type WorkflowDefinitionRecord,
+  type WorkflowExecutionRecord,
+  type WorkflowNodeExecutionRecord,
+  type WorkflowUsageTotalsRecord,
+} from "../../../packages/shared/src/workflows";
 import {
   createFileWorkspaceStateStore,
   createWorkspaceStateFromStores,
@@ -876,6 +886,22 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.WorkflowExecutionsRunNode) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowNodeExecutionRun(
+      req,
+      res,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence,
+    );
+    return;
+  }
+
   if (path === RoutePath.WorkflowExecutionsStream) {
     if (method !== HttpMethod.Get) {
       respondMethodNotAllowed(res);
@@ -884,6 +910,22 @@ const handleRequest = async (
 
     await handleWorkflowExecutionStream(
       req,
+      res,
+      url,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence,
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowExecutionsStreamNode) {
+    if (method !== HttpMethod.Get) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowNodeExecutionStream(
       res,
       url,
       workflowCatalog,
@@ -4614,6 +4656,40 @@ const handleWorkflowExecutionRun = async (
   });
 };
 
+const handleWorkflowNodeExecutionRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowNodeExecutionRunRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = await executeWorkflowNodeExecutionRun(parsed.value, {
+    catalog: workflowCatalog,
+    runNode: workflowRuntime.runNode,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value,
+  });
+};
+
 const handleWorkflowExecutionStream = async (
   _req: IncomingMessage,
   res: ServerResponse,
@@ -4640,6 +4716,7 @@ const handleWorkflowExecutionStream = async (
         catalog: workflowCatalog,
         runWorkflow: workflowRuntime.runWorkflow,
         onEvent: (event) => {
+          persistWorkflowRuntimeProgress(workflowCatalog, event);
           stream.send({
             event: readWorkflowStreamEventName(event),
             data: event,
@@ -4680,6 +4757,85 @@ const handleWorkflowExecutionStream = async (
   }
 };
 
+const handleWorkflowNodeExecutionStream = async (
+  res: ServerResponse,
+  url: URL,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const parsed = parseWorkflowNodeExecutionRunRequest(
+    readWorkflowNodeExecutionStreamRequest(url),
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const stream = createSseStream(res);
+
+  try {
+    const result = await executeWorkflowNodeExecutionRun(parsed.value, {
+      catalog: workflowCatalog,
+      runNode: workflowRuntime.runNode,
+      onEvent: (event) => {
+        persistWorkflowRuntimeProgress(workflowCatalog, event);
+        stream.send({
+          event: readWorkflowStreamEventName(event),
+          data: event,
+        });
+      },
+    });
+
+    if (result.type === ResultType.Err) {
+      stream.send({
+        event: WorkflowRuntimeEventType.WorkflowFailed,
+        data: {
+          type: WorkflowRuntimeEventType.WorkflowFailed,
+          workflowId: parsed.value.workflowId,
+          workflowRunId: "",
+          finishedAt: new Date().toISOString(),
+          error: result.error.message,
+        },
+      });
+      return;
+    }
+
+    await workspacePersistence.saveCurrent();
+  } catch (error) {
+    stream.send({
+      event: WorkflowRuntimeEventType.WorkflowFailed,
+      data: {
+        type: WorkflowRuntimeEventType.WorkflowFailed,
+        workflowId: parsed.value.workflowId,
+        workflowRunId: "",
+        finishedAt: new Date().toISOString(),
+        error:
+          error instanceof Error
+            ? error.message
+            : "Workflow node stream failed.",
+      },
+    });
+  } finally {
+    stream.close();
+  }
+};
+
+const readWorkflowNodeExecutionStreamRequest = (
+  url: URL,
+): Record<string, unknown> => {
+  const inputSourceKind = url.searchParams.get(QueryParam.InputSourceKind);
+  const sourceNodeId = url.searchParams.get(QueryParam.SourceNodeId);
+  return {
+    workflowId: url.searchParams.get(QueryParam.WorkflowId),
+    nodeId: url.searchParams.get(QueryParam.NodeId),
+    inputSource: {
+      kind: inputSourceKind,
+      ...(sourceNodeId ? { nodeId: sourceNodeId } : {}),
+    },
+  };
+};
+
 const handleWorkflowNodeProviderTest = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -4714,6 +4870,254 @@ const handleWorkflowNodeProviderTest = async (
 
 const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string =>
   event.type;
+
+const persistWorkflowRuntimeProgress = (
+  workflowCatalog: WorkflowCatalogStore,
+  event: WorkflowRuntimeEvent,
+): void => {
+  if (event.type === WorkflowRuntimeEventType.WorkflowCompleted) {
+    workflowCatalog.upsertExecution(event.execution);
+    return;
+  }
+
+  if (event.type === WorkflowRuntimeEventType.WorkflowFailed) {
+    workflowCatalog.upsertExecution(event.execution);
+    return;
+  }
+
+  const workflow = workflowCatalog.getWorkflow(event.workflowId);
+  if (!workflow) {
+    return;
+  }
+
+  const current = workflowCatalog.getExecution(event.workflowRunId);
+  const next = createWorkflowProgressExecution(workflow, current, event);
+  if (!next) {
+    return;
+  }
+
+  workflowCatalog.upsertExecution(next);
+};
+
+const createWorkflowProgressExecution = (
+  workflow: WorkflowDefinitionRecord,
+  current: WorkflowExecutionRecord | undefined,
+  event: WorkflowRuntimeEvent,
+): WorkflowExecutionRecord | null => {
+  if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
+    return createRunningWorkflowExecution(workflow, current, event);
+  }
+
+  if (event.workflowRunId.trim().length === 0) {
+    return null;
+  }
+
+  const startedAt =
+    current?.startedAt ??
+    ("startedAt" in event ? event.startedAt : new Date().toISOString());
+  const nodeRuns = mergeWorkflowProgressNodeRuns(
+    current?.nodeRuns ?? [],
+    event,
+  );
+  return {
+    id: event.workflowRunId,
+    workflowId: workflow.id,
+    projectId: workflow.projectId,
+    triggerKind: workflow.trigger.kind,
+    status: WorkflowExecutionStatus.Running,
+    startedAt,
+    warningsCount: countWorkflowWarnings(nodeRuns),
+    errorsCount: countWorkflowErrors(nodeRuns),
+    totals: sumWorkflowUsageTotals(nodeRuns),
+    contextSessionId: event.workflowRunId,
+    nodeRuns,
+  };
+};
+
+const createRunningWorkflowExecution = (
+  workflow: WorkflowDefinitionRecord,
+  current: WorkflowExecutionRecord | undefined,
+  event: Extract<
+    WorkflowRuntimeEvent,
+    { type: typeof WorkflowRuntimeEventType.WorkflowStarted }
+  >,
+): WorkflowExecutionRecord => ({
+  id: event.workflowRunId,
+  workflowId: workflow.id,
+  projectId: workflow.projectId,
+  triggerKind: workflow.trigger.kind,
+  status: WorkflowExecutionStatus.Running,
+  startedAt: current?.startedAt ?? event.startedAt,
+  warningsCount: current?.warningsCount ?? 0,
+  errorsCount: current?.errorsCount ?? 0,
+  totals: current?.totals ?? createEmptyWorkflowUsageTotals(),
+  contextSessionId: event.workflowRunId,
+  nodeRuns: current?.nodeRuns ?? [],
+});
+
+const mergeWorkflowProgressNodeRuns = (
+  current: ReadonlyArray<WorkflowNodeExecutionRecord>,
+  event: WorkflowRuntimeEvent,
+): ReadonlyArray<WorkflowNodeExecutionRecord> => {
+  if (event.type === WorkflowRuntimeEventType.NodeStarted) {
+    return upsertWorkflowNodeRun(current, {
+      id: `${event.workflowRunId}:${event.nodeId}`,
+      nodeId: event.nodeId,
+      nodeKind: event.nodeKind,
+      status: "running",
+      startedAt: event.startedAt,
+      alerts: [],
+      guardrailFindings: [],
+    });
+  }
+
+  if (event.type === WorkflowRuntimeEventType.NodeDelta) {
+    const existing = current.find((nodeRun) => nodeRun.nodeId === event.nodeId);
+    if (!existing) {
+      return current;
+    }
+
+    return upsertWorkflowNodeRun(current, {
+      ...existing,
+      outputSnapshot:
+        typeof existing.outputSnapshot === "string"
+          ? `${existing.outputSnapshot}${event.delta}`
+          : event.delta,
+    });
+  }
+
+  if (event.type === WorkflowRuntimeEventType.NodeCompleted) {
+    return upsertWorkflowNodeRun(current, {
+      id: `${event.workflowRunId}:${event.nodeId}`,
+      nodeId: event.nodeId,
+      nodeKind: event.nodeKind,
+      status: event.status,
+      startedAt: event.startedAt,
+      finishedAt: event.finishedAt,
+      durationMs: readDurationMs(event.startedAt, event.finishedAt),
+      ...(event.provider?.providerId
+        ? { providerId: event.provider.providerId }
+        : {}),
+      ...(event.provider?.modelId ? { modelId: event.provider.modelId } : {}),
+      ...(event.provider?.reasoningLevel
+        ? { reasoningLevel: event.provider.reasoningLevel }
+        : {}),
+      ...(event.provider?.temperature !== undefined
+        ? { temperature: event.provider.temperature }
+        : {}),
+      ...(event.provider?.verbosity
+        ? { verbosity: event.provider.verbosity }
+        : {}),
+      ...(event.usage ? { usage: event.usage } : {}),
+      alerts: event.alerts,
+      guardrailFindings: event.guardrailFindings,
+      outputSnapshot: event.outputSnapshot,
+    });
+  }
+
+  if (event.type === WorkflowRuntimeEventType.NodeFailed) {
+    return upsertWorkflowNodeRun(current, {
+      id: `${event.workflowRunId}:${event.nodeId}`,
+      nodeId: event.nodeId,
+      nodeKind: event.nodeKind,
+      status: "failed",
+      startedAt: event.startedAt,
+      finishedAt: event.finishedAt,
+      durationMs: readDurationMs(event.startedAt, event.finishedAt),
+      alerts: [
+        createWorkflowRuntimeErrorAlert(event.message, event.finishedAt),
+      ],
+      guardrailFindings: [],
+      outputSnapshot: { error: event.message },
+    });
+  }
+
+  return current;
+};
+
+const upsertWorkflowNodeRun = (
+  current: ReadonlyArray<WorkflowNodeExecutionRecord>,
+  next: WorkflowNodeExecutionRecord,
+): ReadonlyArray<WorkflowNodeExecutionRecord> =>
+  current.some((nodeRun) => nodeRun.nodeId === next.nodeId)
+    ? current.map((nodeRun) =>
+        nodeRun.nodeId === next.nodeId ? next : nodeRun,
+      )
+    : [...current, next];
+
+const createWorkflowRuntimeErrorAlert = (
+  message: string,
+  createdAt: string,
+): WorkflowAlertRecord => ({
+  id: `runtime-error:${createdAt}`,
+  level: "error",
+  source: "system",
+  message,
+  createdAt,
+});
+
+const countWorkflowWarnings = (
+  nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>,
+): number =>
+  nodeRuns.reduce(
+    (total, nodeRun) =>
+      total +
+      nodeRun.alerts.filter((alert) => alert.level === "warn").length +
+      nodeRun.guardrailFindings.filter((finding) => finding.severity === "warn")
+        .length,
+    0,
+  );
+
+const countWorkflowErrors = (
+  nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>,
+): number =>
+  nodeRuns.reduce(
+    (total, nodeRun) =>
+      total +
+      (nodeRun.status === "failed" ? 1 : 0) +
+      nodeRun.alerts.filter((alert) => alert.level === "error").length,
+    0,
+  );
+
+const sumWorkflowUsageTotals = (
+  nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>,
+): WorkflowUsageTotalsRecord =>
+  nodeRuns.reduce(
+    (totals, nodeRun) =>
+      nodeRun.usage ? addWorkflowUsageTotals(totals, nodeRun.usage) : totals,
+    createEmptyWorkflowUsageTotals(),
+  );
+
+const addWorkflowUsageTotals = (
+  left: WorkflowUsageTotalsRecord,
+  right: WorkflowUsageTotalsRecord,
+): WorkflowUsageTotalsRecord => ({
+  promptTokens: left.promptTokens + right.promptTokens,
+  completionTokens: left.completionTokens + right.completionTokens,
+  totalTokens: left.totalTokens + right.totalTokens,
+  estimatedCostEur: left.estimatedCostEur + right.estimatedCostEur,
+  latencyMs: left.latencyMs + right.latencyMs,
+  ...(right.estimatedCostSourceCurrency
+    ? { estimatedCostSourceCurrency: right.estimatedCostSourceCurrency }
+    : {}),
+  ...(right.estimatedCostSourceValue !== undefined
+    ? { estimatedCostSourceValue: right.estimatedCostSourceValue }
+    : {}),
+  ...(right.exchangeRateEur !== undefined
+    ? { exchangeRateEur: right.exchangeRateEur }
+    : {}),
+});
+
+const createEmptyWorkflowUsageTotals = (): WorkflowUsageTotalsRecord => ({
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+  estimatedCostEur: 0,
+  latencyMs: 0,
+});
+
+const readDurationMs = (startedAt: string, finishedAt: string): number =>
+  Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
 
 const handleGitStatusRequest = async (
   req: IncomingMessage,

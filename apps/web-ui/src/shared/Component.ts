@@ -91,6 +91,8 @@ type EventHandlerConfig = {
 
 const EventHandlerMap: Record<string, EventHandlerConfig> = {
   onClick: { event: "click" },
+  onDblClick: { event: "dblclick" },
+  onDoubleClick: { event: "dblclick" },
   onInput: { event: "input" },
   onChange: { event: "change" },
   onBlur: { event: "blur" },

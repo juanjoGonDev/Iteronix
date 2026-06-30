@@ -1,5 +1,5 @@
 import { Button, IconButton } from "../components/Button.js";
-import { Card, StatusBadge } from "../components/Card.js";
+import { StatusBadge } from "../components/Card.js";
 import { PageNoticeStack } from "../components/PageScaffold.js";
 import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
 import {
@@ -25,11 +25,22 @@ import {
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
+  buildWorkflowDebugInputSources,
+  readWorkflowDebugItemLabel,
+  readWorkflowDebugSchemaEntries,
+  readWorkflowDebugStatusTone,
+  selectWorkflowDebugExecution,
+  type WorkflowDebugInputSource,
+  type WorkflowDebugOutputMap,
+  type WorkflowDebugStatusTone,
+} from "./workflows-debug-state.js";
+import {
   WorkflowAssetKind,
   WorkflowAssetScope,
   WorkflowGuardrailOperator,
   WorkflowGuardrailSeverity,
   WorkflowNodeKind,
+  WorkflowNodeExecutionInputSourceKind,
   WorkflowNodeRole,
   WorkflowReasoningLevel,
   WorkflowRecordStatus,
@@ -88,6 +99,7 @@ import {
   type WorkflowExpressionVariableReference,
   type WorkflowGuardrailFindingRecord,
   type WorkflowNodeExecutionRecord,
+  type WorkflowNodeExecutionInputSourceRecord,
   type WorkflowNodeKind as WorkflowNodeKindValue,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
@@ -227,9 +239,16 @@ const WorkflowScreenSelector = {
 
 const EdgeDeleteButtonSize = 20;
 const EdgeDeleteNodeAvoidancePadding = 12;
-const WorkflowNodeApproximateHeight = 104;
+const WorkflowNodeVisualWidth = 104;
+const WorkflowNodeApproximateHeight = 120;
+const PortLabelSingleOutputMinimum = 2;
+const EdgeDirectionArrowSize = 7;
 const EdgeDeleteOffset = 34;
 const EdgeDeleteWideOffset = 58;
+const WorkflowNodePaletteDragMimeType = "application/x-iteronix-workflow-node";
+const LatestResponseSourcePath = "$";
+const LatestResponseSourceLabel = "Latest response";
+const ExecutionRefreshIntervalMs = 1_500;
 const InspectorInputClassName =
   "w-full rounded-md border border-border-dark bg-[#0e141b] px-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-primary focus:ring-1 focus:ring-primary/40";
 const InspectorTextInputClassName = `h-10 ${InspectorInputClassName}`;
@@ -320,6 +339,7 @@ type DeepEditorTarget =
 
 type DeepEditorTab = "prompt" | "output" | "preview";
 type DeepEditorOutputTab = "visual" | "json";
+type WorkflowDebugPanelTab = "schema" | "table" | "json";
 
 type DeepEditorState = {
   target: DeepEditorTarget;
@@ -384,6 +404,18 @@ type ExecutionNodeModalContext = {
   providerLabel: string;
   durationLabel: string;
   isPinned: boolean;
+};
+
+type WorkflowNodeDebugContext = {
+  node: WorkflowNodeRecord;
+  workflow: WorkflowDefinitionUpsertInput;
+  execution: WorkflowExecutionRecord | null;
+  liveRun: LiveNodeRunState | null;
+  outputValue: unknown;
+  inputSources: ReadonlyArray<WorkflowDebugInputSource>;
+  selectedInputSource: WorkflowDebugInputSource | null;
+  statusTone: WorkflowDebugStatusTone;
+  statusLabel: string;
 };
 
 type WorkflowVariableToken = {
@@ -500,6 +532,11 @@ interface WorkflowsScreenState {
   guardrailValidationPath: string;
   guardrailValidationMessage: string;
   deepEditor: DeepEditorState | null;
+  editorModalOpen: boolean;
+  debugInputTab: WorkflowDebugPanelTab;
+  debugOutputTab: WorkflowDebugPanelTab;
+  debugInputSourceId: string;
+  debugExecutionId: string | null;
   liveExecution: LiveExecutionState | null;
   executionNodeModal: ExecutionNodeModalState | null;
   errorMessage: string | null;
@@ -521,6 +558,7 @@ export class WorkflowsScreen extends Component<
   private panOrigin: { x: number; y: number } | null = null;
   private panViewportOrigin: WorkflowViewportRecord | null = null;
   private liveExecutionAbortController: AbortController | null = null;
+  private executionRefreshIntervalId: number | null = null;
 
   constructor(props: ComponentProps = {}) {
     super(props, {
@@ -558,6 +596,11 @@ export class WorkflowsScreen extends Component<
       guardrailValidationPath: "$.result",
       guardrailValidationMessage: "Expected $.result to be present.",
       deepEditor: null,
+      editorModalOpen: false,
+      debugInputTab: "json",
+      debugOutputTab: "json",
+      debugInputSourceId: "last-upstream",
+      debugExecutionId: null,
       executionNodeModal: null,
       liveExecution: null,
       errorMessage: null,
@@ -585,14 +628,17 @@ export class WorkflowsScreen extends Component<
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
     window.removeEventListener("keyup", this.handleGlobalKeyUp);
     this.cancelLiveExecutionStream();
+    this.stopExecutionRefreshPolling();
   }
 
   override render(): HTMLElement {
     return createElement(
       "div",
       {
-        className: "flex h-full w-full flex-col bg-[#11161d] text-white",
+        className:
+          "flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#11161d] text-white",
         "data-testid": WorkflowScreenSelector.Root,
+        style: "min-height: calc(100vh - 64px);",
       },
       [
         createElement(PageNoticeStack, {
@@ -601,6 +647,7 @@ export class WorkflowsScreen extends Component<
         }),
         this.renderToolbar(),
         this.renderSurface(),
+        this.state.editorModalOpen ? this.renderSelectionEditorModal() : "",
         this.state.deepEditor ? this.renderDeepEditorModal() : "",
         this.state.executionNodeModal ? this.renderExecutionNodeModal() : "",
       ],
@@ -680,6 +727,20 @@ export class WorkflowsScreen extends Component<
           "div",
           { className: "flex flex-wrap items-center gap-2 xl:flex-nowrap" },
           [
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled:
+                currentWorkflow === null || this.state.pendingAction !== null,
+              onClick: () =>
+                currentWorkflow
+                  ? this.openSelectionEditorModal({
+                      type: "workflow",
+                      id: currentWorkflow.id,
+                    })
+                  : undefined,
+              children: "Edit workflow",
+            }),
             createElement(Button, {
               variant: "secondary",
               size: "sm",
@@ -782,7 +843,6 @@ export class WorkflowsScreen extends Component<
         this.renderActivityRail(),
         this.shouldShowSidebar() ? this.renderSidebarPanel() : "",
         this.shouldShowCanvas() ? this.renderCanvasPanel() : "",
-        this.shouldShowInspector() ? this.renderInspectorPanel() : "",
       ],
     );
   }
@@ -818,44 +878,28 @@ export class WorkflowsScreen extends Component<
               "list",
               "Definitions",
               this.state.activeSidebarSection === SidebarSection.Workflows,
-              () =>
-                this.setState({
-                  activeSidebarSection: SidebarSection.Workflows,
-                  compactView: CompactView.Sidebar,
-                }),
+              () => this.showSidebarSection(SidebarSection.Workflows),
               WorkflowScreenSelector.SectionWorkflows,
             ),
             this.renderRailButton(
               "deployed_code",
               "Nodes",
               this.state.activeSidebarSection === SidebarSection.Nodes,
-              () =>
-                this.setState({
-                  activeSidebarSection: SidebarSection.Nodes,
-                  compactView: CompactView.Sidebar,
-                }),
+              () => this.showSidebarSection(SidebarSection.Nodes),
               WorkflowScreenSelector.SectionNodes,
             ),
             this.renderRailButton(
               "library_books",
               "Assets",
               this.state.activeSidebarSection === SidebarSection.Assets,
-              () =>
-                this.setState({
-                  activeSidebarSection: SidebarSection.Assets,
-                  compactView: CompactView.Sidebar,
-                }),
+              () => this.showSidebarSection(SidebarSection.Assets),
               WorkflowScreenSelector.SectionAssets,
             ),
             this.renderRailButton(
               "history",
               "History",
               this.state.activeSidebarSection === SidebarSection.History,
-              () =>
-                this.setState({
-                  activeSidebarSection: SidebarSection.History,
-                  compactView: CompactView.Sidebar,
-                }),
+              () => this.showSidebarSection(SidebarSection.History),
               WorkflowScreenSelector.SectionHistory,
             ),
           ],
@@ -880,20 +924,6 @@ export class WorkflowsScreen extends Component<
                     this.setState({
                       desktopSidebarCollapsed:
                         !this.state.desktopSidebarCollapsed,
-                    }),
-                ),
-                this.renderRailButton(
-                  this.state.desktopInspectorCollapsed
-                    ? "right_panel_open"
-                    : "right_panel_close",
-                  this.state.desktopInspectorCollapsed
-                    ? "Expand inspector"
-                    : "Collapse inspector",
-                  false,
-                  () =>
-                    this.setState({
-                      desktopInspectorCollapsed:
-                        !this.state.desktopInspectorCollapsed,
                     }),
                 ),
               ],
@@ -921,13 +951,6 @@ export class WorkflowsScreen extends Component<
                   () => this.setState({ compactView: CompactView.Canvas }),
                   WorkflowScreenSelector.CompactCanvas,
                 ),
-                this.renderRailButton(
-                  "tune",
-                  "Inspector",
-                  this.state.compactView === CompactView.Inspector,
-                  () => this.setState({ compactView: CompactView.Inspector }),
-                  WorkflowScreenSelector.CompactInspector,
-                ),
               ],
             )
           : "",
@@ -948,19 +971,28 @@ export class WorkflowsScreen extends Component<
         type: "button",
         title,
         ...(testId ? { "data-testid": testId } : {}),
-        className: `flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
+        className: `flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border leading-none transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
         onClick,
       },
       [
         createElement(
           "span",
           {
-            className: "material-symbols-outlined text-[19px]",
+            className:
+              "material-symbols-outlined block max-h-5 max-w-5 overflow-hidden text-[19px] leading-none",
           },
           [icon],
         ),
       ],
     );
+  }
+
+  private showSidebarSection(section: SidebarSection): void {
+    this.setState({
+      activeSidebarSection: section,
+      compactView: CompactView.Sidebar,
+      desktopSidebarCollapsed: false,
+    });
   }
 
   private renderSidebarPanel(): HTMLElement {
@@ -1069,12 +1101,7 @@ export class WorkflowsScreen extends Component<
       return createElement(
         "div",
         { className: "flex min-h-0 flex-1 flex-col" },
-        [
-          createElement("div", { className: "min-h-0 flex-1" }, [
-            this.renderExecutionSection(),
-          ]),
-          this.renderServerLogsPanel(),
-        ],
+        [this.renderExecutionSection()],
       );
     }
 
@@ -1243,13 +1270,18 @@ export class WorkflowsScreen extends Component<
               type: "button",
               key: kind,
               className:
-                "mb-2 flex w-full items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors hover:border-slate-600 hover:bg-[#1a222c]",
+                "mb-2 flex w-full cursor-grab items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors active:cursor-grabbing hover:border-slate-600 hover:bg-[#1a222c]",
               disabled:
                 this.state.currentProject === null ||
                 this.state.pendingAction !== null,
+              draggable:
+                this.state.currentProject !== null &&
+                this.state.pendingAction === null,
               onClick: () => {
                 void this.handleAddNode(kind);
               },
+              onDragStart: (event: Event) =>
+                this.handleNodePaletteDragStart(event as DragEvent, kind),
               dataset: {
                 testid: `${WorkflowScreenSelector.NodePalettePrefix}${kind}`,
               },
@@ -1351,8 +1383,9 @@ export class WorkflowsScreen extends Component<
                             key: asset.id,
                             className: `flex w-full flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition-colors ${this.state.selection.type === "asset" && this.state.selection.id === asset.id ? "border-primary/50 bg-primary/10 shadow-[0_10px_24px_rgba(37,99,235,0.16)]" : "border-border-dark bg-[#10161d] hover:border-slate-600 hover:bg-[#1a222c]"}`,
                             onClick: () =>
-                              this.setState({
-                                selection: { type: "asset", id: asset.id },
+                              this.openSelectionEditorModal({
+                                type: "asset",
+                                id: asset.id,
                               }),
                             dataset: {
                               testid: `${WorkflowScreenSelector.AssetCardPrefix}${asset.id}`,
@@ -1423,617 +1456,183 @@ export class WorkflowsScreen extends Component<
       executions,
       this.state.executionHistoryFilter,
     );
-    const snapshotSummary = readExecutionSnapshotSummary(executions);
-    const aggregateSummary = readExecutionAggregateSummary(executions);
-    const attentionSummary = readExecutionAttentionSummary(executions);
+    const liveExecution =
+      this.state.liveExecution?.workflowId === currentWorkflow?.id
+        ? this.state.liveExecution
+        : null;
 
     return createElement(
       "div",
       {
-        className: "min-h-0 flex-1 overflow-y-auto p-3",
-      },
-      [
-        currentWorkflow === null
-          ? createElement(EmptyStatePanel, {
-              icon: "history",
-              title: "Select a workflow",
-              description:
-                "Pick a workflow first. Execution observability stays scoped to the selected definition only.",
-            })
-          : executions.length === 0
-            ? createElement(EmptyStatePanel, {
-                icon: "history_toggle_off",
-                title: "No recorded runs",
-                description:
-                  "This workflow has no persisted runs yet. When the server records executions, this rail will show them here.",
-              })
-            : createElement("div", { className: "flex flex-col gap-3" }, [
-                createElement(
-                  "div",
-                  {
-                    className:
-                      "rounded-2xl border border-border-dark bg-[#10161d] px-3 py-3",
-                    "data-testid": WorkflowScreenSelector.ExecutionSummary,
-                  },
-                  [
-                    createElement("div", { className: "flex flex-col gap-3" }, [
-                      createElement("div", { className: "min-w-0" }, [
-                        createElement(
-                          "p",
-                          { className: "text-sm font-medium text-white" },
-                          ["Workflow totals"],
-                        ),
-                        createElement(
-                          "p",
-                          { className: "mt-1 text-xs text-text-secondary" },
-                          [
-                            "Accumulated observability from persisted runs for the selected workflow only.",
-                          ],
-                        ),
-                      ]),
-                      createElement(
-                        "div",
-                        {
-                          className:
-                            "grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3",
-                        },
-                        [
-                          this.renderInlineMetaTile(
-                            "Latest run",
-                            snapshotSummary.latestExecution === null
-                              ? "n/a"
-                              : formatTimestamp(
-                                  snapshotSummary.latestExecution.startedAt,
-                                ),
-                            WorkflowScreenSelector.ExecutionSummaryLatestRun,
-                          ),
-                          this.renderInlineMetaTile(
-                            "Latest status",
-                            snapshotSummary.latestExecution === null
-                              ? "n/a"
-                              : formatSelectOptionLabel(
-                                  snapshotSummary.latestExecution.status,
-                                ),
-                            WorkflowScreenSelector.ExecutionSummaryLatestStatus,
-                          ),
-                          this.renderInlineMetaTile(
-                            "Status mix",
-                            snapshotSummary.statusDistributionLabel,
-                            WorkflowScreenSelector.ExecutionSummaryStatusDistribution,
-                          ),
-                        ],
-                      ),
-                      createElement(
-                        "div",
-                        {
-                          className:
-                            "grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5",
-                        },
-                        [
-                          this.renderInlineMetaTile(
-                            "Runs",
-                            aggregateSummary.runCount.toString(),
-                            WorkflowScreenSelector.ExecutionSummaryRuns,
-                          ),
-                          this.renderInlineMetaTile(
-                            "EUR",
-                            formatEuro(aggregateSummary.totalCostEur),
-                            WorkflowScreenSelector.ExecutionSummaryCost,
-                          ),
-                          this.renderInlineMetaTile(
-                            "Tokens",
-                            aggregateSummary.totalTokens.toLocaleString(),
-                            WorkflowScreenSelector.ExecutionSummaryTokens,
-                          ),
-                          this.renderInlineMetaTile(
-                            "Warnings",
-                            aggregateSummary.warningCount.toString(),
-                            WorkflowScreenSelector.ExecutionSummaryWarnings,
-                          ),
-                          this.renderInlineMetaTile(
-                            "Errors",
-                            aggregateSummary.errorCount.toString(),
-                            WorkflowScreenSelector.ExecutionSummaryErrors,
-                          ),
-                        ],
-                      ),
-                      createElement(
-                        "div",
-                        {
-                          className:
-                            "rounded-lg border border-border-dark bg-[#161b22] px-3 py-3",
-                          "data-testid":
-                            WorkflowScreenSelector.ExecutionSummaryAttention,
-                        },
-                        [
-                          createElement(
-                            "div",
-                            {
-                              className:
-                                "flex flex-col gap-3 md:flex-row md:items-start md:justify-between",
-                            },
-                            [
-                              createElement("div", { className: "min-w-0" }, [
-                                createElement(
-                                  "p",
-                                  {
-                                    className: "text-sm font-medium text-white",
-                                  },
-                                  ["Needs attention"],
-                                ),
-                                createElement(
-                                  "p",
-                                  {
-                                    className:
-                                      "mt-1 text-xs text-text-secondary",
-                                  },
-                                  [
-                                    attentionSummary.attentionRunCount === 0
-                                      ? "No persisted failures or alerts need review right now."
-                                      : "Recent failing or alerted persisted runs, without opening each run first.",
-                                  ],
-                                ),
-                              ]),
-                              createElement(
-                                StatusBadge,
-                                {
-                                  status:
-                                    attentionSummary.failedRunCount > 0
-                                      ? "failed"
-                                      : attentionSummary.attentionRunCount > 0
-                                        ? "warning"
-                                        : "success",
-                                },
-                                [
-                                  attentionSummary.attentionRunCount === 0
-                                    ? "Clear"
-                                    : `${attentionSummary.attentionRunCount} run${attentionSummary.attentionRunCount === 1 ? "" : "s"}`,
-                                ],
-                              ),
-                            ],
-                          ),
-                          createElement(
-                            "div",
-                            {
-                              className:
-                                "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3",
-                            },
-                            [
-                              this.renderInlineMetaTile(
-                                "Needs attention",
-                                attentionSummary.attentionRunCount.toString(),
-                                WorkflowScreenSelector.ExecutionSummaryAttentionRuns,
-                              ),
-                              this.renderInlineMetaTile(
-                                "Failed runs",
-                                attentionSummary.failedRunCount.toString(),
-                                WorkflowScreenSelector.ExecutionSummaryAttentionFailedRuns,
-                              ),
-                              this.renderInlineMetaTile(
-                                "Runs with alerts",
-                                attentionSummary.alertedRunCount.toString(),
-                                WorkflowScreenSelector.ExecutionSummaryAttentionAlertedRuns,
-                              ),
-                            ],
-                          ),
-                          attentionSummary.recentAttentionRuns.length === 0
-                            ? ""
-                            : createElement(
-                                "div",
-                                { className: "mt-3 flex flex-col gap-2" },
-                                [
-                                  attentionSummary.recentAttentionRuns.map(
-                                    (execution) =>
-                                      this.renderExecutionAttentionItem(
-                                        execution,
-                                      ),
-                                  ),
-                                  attentionSummary.remainingAttentionRunCount >
-                                  0
-                                    ? createElement(
-                                        "p",
-                                        {
-                                          className:
-                                            "text-xs text-text-secondary",
-                                        },
-                                        [
-                                          `${attentionSummary.remainingAttentionRunCount} older attention run${attentionSummary.remainingAttentionRunCount === 1 ? "" : "s"} remain in persisted history.`,
-                                        ],
-                                      )
-                                    : "",
-                                ],
-                              ),
-                        ],
-                      ),
-                    ]),
-                  ],
-                ),
-                createElement(
-                  "div",
-                  {
-                    className:
-                      "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
-                  },
-                  [
-                    createElement("div", { className: "flex flex-col gap-3" }, [
-                      createElement(
-                        "div",
-                        {
-                          className:
-                            "flex flex-col gap-3 md:flex-row md:items-start md:justify-between",
-                        },
-                        [
-                          createElement("div", { className: "min-w-0" }, [
-                            createElement(
-                              "p",
-                              { className: "text-sm font-medium text-white" },
-                              ["Persisted runs"],
-                            ),
-                            createElement(
-                              "p",
-                              { className: "mt-1 text-xs text-text-secondary" },
-                              [
-                                "Inspect runtime, tokens, EUR cost, warnings and node alerts. Manual run baseline is now available for saved workflows.",
-                              ],
-                            ),
-                          ]),
-                          createElement(
-                            StatusBadge,
-                            {
-                              status: filteredExecutions.some(
-                                (execution) => execution.status === "failed",
-                              )
-                                ? "failed"
-                                : filteredExecutions.some(
-                                      (execution) =>
-                                        execution.status === "running",
-                                    )
-                                  ? "running"
-                                  : "info",
-                            },
-                            [`${filteredExecutions.length} shown`],
-                          ),
-                        ],
-                      ),
-                      createElement(
-                        "div",
-                        { className: "flex flex-wrap items-center gap-2" },
-                        [
-                          createElement(
-                            "span",
-                            { className: "text-xs text-text-secondary" },
-                            ["Show"],
-                          ),
-                          this.renderExecutionFilterButton(
-                            ExecutionHistoryFilter.All,
-                            "All runs",
-                            WorkflowScreenSelector.ExecutionFilterAll,
-                          ),
-                          this.renderExecutionFilterButton(
-                            ExecutionHistoryFilter.Failed,
-                            "Failed",
-                            WorkflowScreenSelector.ExecutionFilterFailed,
-                          ),
-                          this.renderExecutionFilterButton(
-                            ExecutionHistoryFilter.Attention,
-                            "Needs attention",
-                            WorkflowScreenSelector.ExecutionFilterAttention,
-                          ),
-                        ],
-                      ),
-                    ]),
-                  ],
-                ),
-                filteredExecutions.length === 0
-                  ? createElement(
-                      "div",
-                      {
-                        className:
-                          "rounded-lg border border-dashed border-border-dark bg-[#11161d] px-3 py-4",
-                      },
-                      [
-                        createElement(
-                          "p",
-                          { className: "text-sm font-medium text-white" },
-                          [
-                            readExecutionFilterEmptyTitle(
-                              this.state.executionHistoryFilter,
-                            ),
-                          ],
-                        ),
-                        createElement(
-                          "p",
-                          { className: "mt-1 text-xs text-text-secondary" },
-                          [
-                            readExecutionFilterEmptyDescription(
-                              this.state.executionHistoryFilter,
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
-                  : filteredExecutions.map((execution) =>
-                      createElement(Card, {
-                        key: execution.id,
-                        className: `border border-border-dark bg-[#11161d] ${this.state.selection.type === "execution" && this.state.selection.id === execution.id ? "border-primary bg-primary/10" : ""}`,
-                        padding: "md",
-                        hover: true,
-                        active:
-                          this.state.selection.type === "execution" &&
-                          this.state.selection.id === execution.id,
-                        children: [
-                          createElement(
-                            "button",
-                            {
-                              type: "button",
-                              className: "flex w-full flex-col gap-3 text-left",
-                              onClick: () => {
-                                void this.handleSelectExecution(execution.id);
-                              },
-                              "data-testid": `${WorkflowScreenSelector.ExecutionCardPrefix}${execution.id}`,
-                            },
-                            [
-                              createElement(
-                                "div",
-                                {
-                                  className:
-                                    "flex items-center justify-between gap-3",
-                                },
-                                [
-                                  createElement(
-                                    "div",
-                                    { className: "min-w-0" },
-                                    [
-                                      createElement(
-                                        "p",
-                                        {
-                                          className:
-                                            "truncate text-sm font-medium text-white",
-                                        },
-                                        [readExecutionLabel(execution)],
-                                      ),
-                                      createElement(
-                                        "p",
-                                        {
-                                          className:
-                                            "text-xs text-text-secondary",
-                                        },
-                                        [formatTimestamp(execution.startedAt)],
-                                      ),
-                                    ],
-                                  ),
-                                  createElement(
-                                    StatusBadge,
-                                    {
-                                      status: readExecutionBadgeStatus(
-                                        execution.status,
-                                      ),
-                                      pulse: execution.status === "running",
-                                    },
-                                    [formatSelectOptionLabel(execution.status)],
-                                  ),
-                                ],
-                              ),
-                              createElement(
-                                "div",
-                                {
-                                  className:
-                                    "grid grid-cols-2 gap-2 text-xs text-text-secondary",
-                                },
-                                [
-                                  createElement("span", {}, [
-                                    formatDuration(execution.durationMs),
-                                  ]),
-                                  createElement("span", {}, [
-                                    `${execution.totals.totalTokens.toLocaleString()} tokens`,
-                                  ]),
-                                  createElement("span", {}, [
-                                    formatEuro(
-                                      execution.totals.estimatedCostEur,
-                                    ),
-                                  ]),
-                                  createElement("span", {}, [
-                                    `${execution.warningsCount} warnings · ${execution.errorsCount} errors`,
-                                  ]),
-                                ],
-                              ),
-                            ],
-                          ),
-                          createElement(Button, {
-                            variant: "ghost",
-                            size: "sm",
-                            disabled: this.state.pendingAction !== null,
-                            onClick: () => {
-                              void this.handleDeleteExecution(execution.id);
-                            },
-                            children:
-                              this.state.pendingAction ===
-                              PendingAction.DeleteExecution
-                                ? "Deleting"
-                                : "Delete run",
-                            dataset: {
-                              testid: `${WorkflowScreenSelector.ExecutionDeletePrefix}${execution.id}`,
-                            },
-                          }),
-                        ],
-                      }),
-                    ),
-              ]),
-      ],
-    );
-  }
-
-  private renderServerLogsPanel(): HTMLElement {
-    const activeRunId = this.readActiveLogsRunId();
-    const filteredLogs = this.readScopedLogs(
-      activeRunId
-        ? {
-            runId: activeRunId,
-            title: "Server logs",
-            emptyMessage: "No server log entries for this filter.",
-          }
-        : {
-            title: "Server logs",
-            emptyMessage: "No server log entries for this filter.",
-          },
-    );
-
-    return createElement(
-      "section",
-      {
-        className:
-          "flex h-[280px] shrink-0 flex-col border-t border-border-dark bg-[#11161d]",
+        className: "flex min-h-0 flex-1 flex-col bg-[#232323]",
       },
       [
         createElement(
           "div",
           {
-            className:
-              "flex flex-wrap items-center justify-between gap-2 border-b border-border-dark px-3 py-2.5",
+            className: "shrink-0 border-b border-[#343434] px-4 pb-3 pt-5",
           },
           [
-            createElement("div", { className: "min-w-0" }, [
-              createElement(
-                "p",
-                { className: "text-sm font-medium text-white" },
-                ["Server logs"],
-              ),
-              createElement(
-                "p",
-                { className: "text-[11px] leading-5 text-text-secondary" },
+            createElement(
+              "div",
+              { className: "flex items-center justify-between gap-3" },
+              [
+                createElement(
+                  "h2",
+                  { className: "text-base font-medium text-white" },
+                  ["Executions"],
+                ),
+                createElement(IconButton, {
+                  icon: "filter_list",
+                  tooltip: "Filter executions",
+                  onClick: () =>
+                    this.handleSelectExecutionFilter(
+                      this.state.executionHistoryFilter ===
+                        ExecutionHistoryFilter.All
+                        ? ExecutionHistoryFilter.Failed
+                        : ExecutionHistoryFilter.All,
+                    ),
+                  className:
+                    "h-8 w-8 rounded border border-[#454545] bg-[#2b2b2b] text-slate-200 hover:bg-[#333]",
+                }),
+              ],
+            ),
+            createElement(
+              "label",
+              {
+                className:
+                  "mt-5 flex items-center gap-2 text-sm text-slate-100",
+              },
+              [
+                createElement("input", {
+                  type: "checkbox",
+                  checked: true,
+                  disabled: true,
+                  className:
+                    "h-4 w-4 rounded border-[#ff6d00] bg-[#ff6d00] accent-[#ff6d00]",
+                }),
+                "Auto refresh",
+              ],
+            ),
+            createElement(
+              "div",
+              { className: "mt-3 flex items-center gap-1.5" },
+              [
+                this.renderExecutionFilterButton(
+                  ExecutionHistoryFilter.All,
+                  "All",
+                  WorkflowScreenSelector.ExecutionFilterAll,
+                ),
+                this.renderExecutionFilterButton(
+                  ExecutionHistoryFilter.Failed,
+                  "Failed",
+                  WorkflowScreenSelector.ExecutionFilterFailed,
+                ),
+                this.renderExecutionFilterButton(
+                  ExecutionHistoryFilter.Attention,
+                  "Issues",
+                  WorkflowScreenSelector.ExecutionFilterAttention,
+                ),
+              ],
+            ),
+          ],
+        ),
+        currentWorkflow === null
+          ? createElement(
+              "div",
+              {
+                className:
+                  "flex min-h-0 flex-1 items-center justify-center p-4",
+              },
+              [
+                createElement(EmptyStatePanel, {
+                  icon: "history",
+                  title: "Select a workflow",
+                  description: "Pick a workflow first to inspect executions.",
+                }),
+              ],
+            )
+          : executions.length === 0 && liveExecution === null
+            ? createElement(
+                "div",
+                {
+                  className:
+                    "flex min-h-0 flex-1 items-center justify-center p-4",
+                },
                 [
-                  "Useful for provider/settings save failures and workflow runtime issues.",
+                  createElement(EmptyStatePanel, {
+                    icon: "history_toggle_off",
+                    title: "No executions",
+                    description: "Run this workflow once to inspect history.",
+                  }),
+                ],
+              )
+            : createElement(
+                "div",
+                { className: "min-h-0 flex-1 overflow-y-auto px-4 pb-4" },
+                [
+                  filteredExecutions.length === 0
+                    ? liveExecution
+                      ? this.renderLiveExecutionHistoryRow(liveExecution)
+                      : createElement(
+                          "div",
+                          {
+                            className:
+                              "mt-4 rounded border border-dashed border-[#454545] px-3 py-4 text-sm text-slate-300",
+                          },
+                          [
+                            readExecutionFilterEmptyDescription(
+                              this.state.executionHistoryFilter,
+                            ),
+                          ],
+                        )
+                    : [
+                        ...(liveExecution
+                          ? [this.renderLiveExecutionHistoryRow(liveExecution)]
+                          : []),
+                        ...filteredExecutions.map((execution) =>
+                          this.renderExecutionHistoryRow(execution),
+                        ),
+                      ],
                 ],
               ),
-            ]),
-            createElement("div", { className: "flex items-center gap-1.5" }, [
-              activeRunId
-                ? createElement(
-                    "span",
-                    {
-                      className:
-                        "rounded-full border border-border-dark px-2 py-0.5 font-mono text-[10px] text-slate-300",
-                    },
-                    [activeRunId],
-                  )
-                : "",
-              this.renderLogsFilterButton("Errors", WorkflowLogsFilter.Errors),
-              this.renderLogsFilterButton("All", WorkflowLogsFilter.All),
-              createElement(IconButton, {
-                icon: "refresh",
-                tooltip: "Refresh logs",
-                onClick: () => {
-                  void this.refreshServerLogs();
-                },
-                className:
-                  "h-8 w-8 rounded-lg border border-transparent hover:border-border-dark hover:bg-[#20262f]",
-              }),
-            ]),
-          ],
-        ),
-        createElement(
-          "div",
-          { className: "min-h-0 flex-1 overflow-y-auto px-3 py-2" },
-          [
-            filteredLogs.length === 0
-              ? createElement(
-                  "div",
-                  {
-                    className:
-                      "flex h-full items-center justify-center rounded-xl border border-dashed border-border-dark bg-[#0d1319] px-4 text-center text-xs leading-6 text-text-secondary",
-                  },
-                  [
-                    this.state.refreshingLogs
-                      ? "Refreshing logs..."
-                      : "No server log entries for this filter.",
-                  ],
-                )
-              : filteredLogs.slice(-24).map((entry) =>
-                  createElement(
-                    "article",
-                    {
-                      key: entry.id,
-                      className:
-                        "mb-2 rounded-xl border border-border-dark bg-[#0d1319] px-3 py-2.5",
-                    },
-                    [
-                      createElement(
-                        "div",
-                        { className: "flex flex-wrap items-center gap-2" },
-                        [
-                          createElement(
-                            StatusBadge,
-                            {
-                              status: readServerLogBadgeStatus(entry.level),
-                            },
-                            [entry.level],
-                          ),
-                          createElement(
-                            "span",
-                            { className: "text-[11px] text-text-secondary" },
-                            [formatTimestamp(entry.timestamp)],
-                          ),
-                          entry.runId
-                            ? createElement(
-                                "span",
-                                {
-                                  className:
-                                    "rounded-full border border-border-dark px-2 py-0.5 font-mono text-[10px] text-slate-300",
-                                },
-                                [entry.runId],
-                              )
-                            : "",
-                        ],
-                      ),
-                      createElement(
-                        "pre",
-                        {
-                          className:
-                            "mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-slate-200",
-                        },
-                        [entry.message],
-                      ),
-                    ],
-                  ),
-                ),
-          ],
-        ),
       ],
     );
   }
 
-  private renderLogsFilterButton(
-    label: string,
-    value: WorkflowLogsFilter,
+  private renderExecutionHistoryRow(
+    execution: WorkflowExecutionRecord,
   ): HTMLElement {
-    const active = this.state.workflowLogsFilter === value;
+    const selected =
+      this.state.selection.type === "execution" &&
+      this.state.selection.id === execution.id;
+    const accentClassName = readExecutionHistoryAccentClassName(execution);
 
-    return createElement(Button, {
-      variant: active ? "secondary" : "ghost",
-      size: "sm",
-      onClick: () => {
-        this.setState({ workflowLogsFilter: value, refreshingLogs: true });
-        const runId = this.readActiveLogsRunId();
-        void this.logsClient
-          .query({
-            ...(value === WorkflowLogsFilter.Errors
-              ? { level: ServerLogLevel.Warn }
-              : {}),
-            ...(runId ? { runId } : {}),
-            limit: 80,
-          })
-          .then((logs) => {
-            this.setState({
-              serverLogs: [...logs].reverse(),
-              refreshingLogs: false,
-            });
-          })
-          .catch(() => {
-            this.setState({ refreshingLogs: false });
-          });
+    return createElement(
+      "button",
+      {
+        type: "button",
+        key: execution.id,
+        className: `relative flex w-full flex-col gap-1 border-l-4 px-3 py-3 text-left transition-colors ${selected ? "bg-[#333333]" : "bg-[#282828] hover:bg-[#303030]"}`,
+        onClick: () => {
+          void this.handleSelectExecution(execution.id);
+        },
+        "data-testid": `${WorkflowScreenSelector.ExecutionCardPrefix}${execution.id}`,
       },
-      children: label,
-    });
+      [
+        createElement("span", {
+          className: `absolute bottom-0 left-0 top-0 w-1 ${accentClassName}`,
+        }),
+        createElement(
+          "span",
+          { className: "pl-2 text-sm font-medium text-white" },
+          [formatExecutionHistoryTitle(execution.startedAt)],
+        ),
+        createElement("span", { className: "pl-2 text-xs text-slate-300" }, [
+          `${formatSelectOptionLabel(execution.status)} in ${formatDuration(execution.durationMs)}`,
+        ]),
+      ],
+    );
   }
 
   private readActiveLogsRunId(): string | undefined {
@@ -2165,60 +1764,6 @@ export class WorkflowsScreen extends Component<
     );
   }
 
-  private renderExecutionAttentionItem(
-    execution: WorkflowExecutionRecord,
-  ): HTMLElement {
-    const alertCount = readExecutionAlertCount(execution);
-    const isSelected =
-      this.state.selection.type === "execution" &&
-      this.state.selection.id === execution.id;
-
-    return createElement(
-      "button",
-      {
-        type: "button",
-        className: `flex w-full items-start justify-between gap-3 rounded-lg border border-border-dark px-3 py-2 text-left transition-colors ${
-          isSelected
-            ? "border-primary bg-primary/10"
-            : "bg-[#11161d] hover:border-primary/40 hover:bg-[#171c22]"
-        }`,
-        onClick: () => {
-          void this.handleSelectExecution(execution.id);
-        },
-        "data-testid": `${WorkflowScreenSelector.ExecutionAttentionRunPrefix}${execution.id}`,
-      },
-      [
-        createElement("div", { className: "min-w-0 flex-1" }, [
-          createElement(
-            "p",
-            { className: "truncate text-sm font-medium text-white" },
-            [readExecutionLabel(execution)],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-xs text-text-secondary" },
-            [formatTimestamp(execution.startedAt)],
-          ),
-          createElement(
-            "p",
-            { className: "mt-2 text-xs text-text-secondary" },
-            [
-              `${alertCount} alert${alertCount === 1 ? "" : "s"} · ${execution.warningsCount} warning${execution.warningsCount === 1 ? "" : "s"} · ${execution.errorsCount} error${execution.errorsCount === 1 ? "" : "s"}`,
-            ],
-          ),
-        ]),
-        createElement(
-          StatusBadge,
-          {
-            status: readExecutionBadgeStatus(execution.status),
-            pulse: execution.status === "running",
-          },
-          [formatSelectOptionLabel(execution.status)],
-        ),
-      ],
-    );
-  }
-
   private renderExecutionFilterButton(
     filter: ExecutionHistoryFilter,
     label: string,
@@ -2230,10 +1775,10 @@ export class WorkflowsScreen extends Component<
       "button",
       {
         type: "button",
-        className: `rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+        className: `rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
           isActive
-            ? "border-primary bg-primary/10 text-white"
-            : "border-border-dark bg-[#161b22] text-text-secondary hover:border-primary/40 hover:text-white"
+            ? "border-[#555] bg-[#333] text-white"
+            : "border-[#3a3a3a] bg-[#292929] text-slate-300 hover:bg-[#333] hover:text-white"
         }`,
         onClick: () => {
           this.handleSelectExecutionFilter(filter);
@@ -2288,8 +1833,15 @@ export class WorkflowsScreen extends Component<
                   this.handleCanvasMouseMove(event as MouseEvent),
                 onWheel: (event: Event) =>
                   this.handleCanvasWheel(event as WheelEvent),
+                onDragOver: (event: Event) =>
+                  this.handleCanvasDragOver(event as DragEvent),
+                onDrop: (event: Event) =>
+                  void this.handleCanvasDrop(event as DragEvent),
                 "data-testid": WorkflowScreenSelector.CanvasViewport,
-                style: readCanvasBackgroundStyle(viewport),
+                style: readCanvasBackgroundStyle(
+                  viewport,
+                  this.state.selection.type === "execution",
+                ),
               },
               [
                 createElement(
@@ -2426,7 +1978,7 @@ export class WorkflowsScreen extends Component<
                     ),
                   ],
                 ),
-                this.renderConnectionHint(),
+                this.renderSelectedExecutionCanvasHeader(),
                 this.renderCanvasFooter(),
               ],
             )
@@ -2444,6 +1996,38 @@ export class WorkflowsScreen extends Component<
                 }),
               ],
             ),
+      ],
+    );
+  }
+
+  private renderSelectedExecutionCanvasHeader(): HTMLElement | string {
+    if (this.state.selection.type !== "execution") {
+      return "";
+    }
+
+    const execution = this.readWorkflowDebugExecution();
+    if (!execution) {
+      return "";
+    }
+
+    return createElement(
+      "div",
+      {
+        className:
+          "pointer-events-none absolute left-5 top-5 z-10 flex flex-col gap-1 text-sm",
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "flex items-center gap-2 text-base font-medium text-white",
+          },
+          [formatExecutionHistoryTitle(execution.startedAt)],
+        ),
+        createElement("div", { className: "text-sm text-slate-200" }, [
+          `${formatSelectOptionLabel(execution.status)} in ${formatDuration(execution.durationMs)} | ID#${readExecutionLabel(execution)} | Autosave`,
+        ]),
       ],
     );
   }
@@ -2598,55 +2182,13 @@ export class WorkflowsScreen extends Component<
     );
   }
 
-  private renderConnectionHint(): HTMLElement {
-    const hintTitle = this.state.pendingConnection
-      ? "Connection mode"
-      : "Connect nodes";
-    const hintBody = this.state.pendingConnection
-      ? "Pick an input port on another node. Hover highlights valid targets and the preview wire follows the cursor."
-      : "Drag from any output port into a target input port. Ports stay visible on every node so the graph behaves like n8n.";
-
-    return createElement(
-      "div",
-      {
-        className:
-          "pointer-events-none absolute left-4 top-4 max-w-md rounded-2xl border border-border-dark bg-[#121820]/95 px-4 py-3 shadow-[0_12px_32px_rgba(3,7,18,0.28)]",
-        "data-testid": WorkflowScreenSelector.ConnectionHint,
-      },
-      [
-        createElement("div", { className: "flex items-center gap-2" }, [
-          createElement(
-            "span",
-            {
-              className: `material-symbols-outlined text-[18px] ${this.state.pendingConnection ? "text-amber-300" : "text-primary"}`,
-            },
-            [this.state.pendingConnection ? "alt_route" : "tips_and_updates"],
-          ),
-          createElement(
-            "span",
-            { className: "text-sm font-semibold text-white" },
-            [hintTitle],
-          ),
-        ]),
-        createElement(
-          "p",
-          { className: "mt-2 text-xs leading-5 text-text-secondary" },
-          [hintBody],
-        ),
-      ],
-    );
-  }
-
   private renderCanvasNode(node: WorkflowNodeRecord): HTMLElement {
     const selected =
       this.state.selection.type === "node" &&
       this.state.selection.id === node.id;
-    const asset = node.config.assetId
-      ? (this.state.assets.find((entry) => entry.id === node.config.assetId) ??
-        null)
-      : null;
     const canAcceptConnection =
-      this.state.pendingConnection !== null && node.inputPorts.length > 0;
+      this.state.pendingConnection !== null &&
+      readNodeInputPorts(node).length > 0;
     const highlightedInputNode =
       this.state.hoveredPort?.side === "input" &&
       this.state.hoveredPort.nodeId === node.id;
@@ -2660,35 +2202,27 @@ export class WorkflowsScreen extends Component<
       "div",
       {
         key: node.id,
-        className: `pointer-events-auto absolute flex flex-col rounded-2xl border bg-[#171d25] shadow-[0_10px_28px_rgba(3,7,18,0.28)] transition-colors ${selected ? "border-primary ring-1 ring-primary/30 shadow-[0_12px_32px_rgba(37,99,235,0.18)]" : canAcceptConnection ? "border-slate-500/90 shadow-[0_10px_30px_rgba(59,130,246,0.12)]" : stateToneClassName} ${nodeRunVisual.status === "running" ? "animate-pulse" : ""}`,
-        style: `left:${node.position.x}px; top:${node.position.y}px; width:${node.width}px;`,
+        className:
+          "group pointer-events-auto absolute flex flex-col items-center",
+        style: `left:${node.position.x}px; top:${node.position.y}px; width:${WorkflowNodeVisualWidth}px;`,
         onPointerMove: (event: Event) =>
           this.handleNodeConnectionMouseMove(event as PointerEvent),
         onPointerUp: (event: Event) =>
           this.handleNodeConnectionMouseUp(event as PointerEvent),
+        onDblClick: (event: MouseEvent) => {
+          event.stopPropagation();
+          this.openSelectionEditorModal({ type: "node", id: node.id });
+        },
         dataset: {
           nodeId: node.id,
           testid: `${WorkflowScreenSelector.NodeCardPrefix}${node.id}`,
         },
       },
       [
-        nodeRunVisual.status !== "idle"
-          ? createElement("div", {
-              className: `pointer-events-none absolute inset-0 rounded-2xl border ${readNodeRunOverlayClassName(nodeRunVisual.status)}`,
-            })
-          : "",
-        createElement("div", {
-          className: `h-1.5 rounded-t-2xl ${stateAccentClassName ?? readNodeAccentClassName(node.kind)}`,
-        }),
-        canAcceptConnection
-          ? createElement("div", {
-              className: `pointer-events-none absolute inset-y-6 left-0 w-16 rounded-l-2xl border-r transition-colors ${highlightedInputNode ? "border-primary/70 bg-primary/10" : "border-slate-500/20 bg-slate-500/5"}`,
-            })
-          : "",
         createElement(
           "div",
           {
-            className: "cursor-move px-3 py-3",
+            className: `relative flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border bg-[#2d2d2d] transition-colors active:cursor-grabbing ${selected ? "border-[#ff8a3d] ring-1 ring-[#ff8a3d]/40" : canAcceptConnection ? "border-slate-400" : stateToneClassName} ${nodeRunVisual.status === "running" ? "animate-pulse" : ""}`,
             dataset: {
               dragHandle: node.id,
             },
@@ -2696,117 +2230,189 @@ export class WorkflowsScreen extends Component<
               this.handleNodePointerDown(event as PointerEvent, node.id),
           },
           [
+            nodeRunVisual.status !== "idle"
+              ? createElement("div", {
+                  className: `pointer-events-none absolute inset-0 rounded-md border ${readNodeRunOverlayClassName(nodeRunVisual.status)}`,
+                })
+              : "",
+            createElement("div", {
+              className: `pointer-events-none absolute left-0 top-0 h-1 w-full rounded-t-md ${stateAccentClassName ? `bg-gradient-to-r ${stateAccentClassName}` : readNodeAccentClassName(node.kind)}`,
+            }),
+            canAcceptConnection
+              ? createElement("div", {
+                  className: `pointer-events-none absolute inset-y-0 left-0 w-8 rounded-l-md border-r transition-colors ${highlightedInputNode ? "border-primary/70 bg-primary/10" : "border-slate-500/20 bg-slate-500/5"}`,
+                })
+              : "",
             createElement(
-              "div",
-              { className: "flex items-start justify-between gap-3" },
-              [
-                createElement("div", { className: "min-w-0 flex-1" }, [
-                  createElement(
-                    "div",
-                    { className: "flex items-center gap-2" },
-                    [
-                      createElement(
-                        "span",
-                        {
-                          className:
-                            "material-symbols-outlined text-[18px] text-white/90",
-                        },
-                        [readNodeIcon(node.kind)],
-                      ),
-                      createElement(
-                        "span",
-                        {
-                          className:
-                            "truncate text-sm font-semibold text-white",
-                        },
-                        [node.label],
-                      ),
-                      nodeRunVisual.label
-                        ? createElement(
-                            StatusBadge,
-                            {
-                              status: nodeRunVisual.badgeStatus,
-                              pulse: nodeRunVisual.status === "running",
-                            },
-                            [nodeRunVisual.label],
-                          )
-                        : "",
-                    ],
-                  ),
-                  createElement(
-                    "p",
-                    {
-                      className:
-                        "mt-1 truncate text-[11px] text-text-secondary",
-                    },
-                    [asset ? asset.name : readNodeSecondaryText(node)],
-                  ),
-                ]),
-                createElement(Button, {
-                  variant: "ghost",
-                  size: "sm",
-                  onClick: () =>
-                    this.setState({
-                      selection: { type: "node", id: node.id },
-                      compactView: CompactView.Inspector,
-                      desktopInspectorCollapsed: false,
-                    }),
-                  children: selected ? "Selected" : "Edit",
-                }),
-              ],
+              "span",
+              {
+                className:
+                  "material-symbols-outlined text-[34px] text-[#ff8a3d]",
+              },
+              [readNodeIcon(node.kind)],
             ),
+            nodeRunVisual.label
+              ? createElement(
+                  "span",
+                  {
+                    className:
+                      "absolute right-1.5 top-1 rounded-sm bg-[#3a3a3a] px-1.5 py-0.5 text-[10px] font-semibold text-white",
+                  },
+                  [readNodeRunCountLabel(nodeRunVisual.label)],
+                )
+              : "",
+            this.renderNodeHoverToolbar(node),
+            readNodeInputPorts(node).map((port, index) =>
+              this.renderNodePort(
+                node,
+                port.id,
+                port.name,
+                "input",
+                index,
+                readNodeInputPorts(node).length,
+              ),
+            ),
+            node.outputPorts.map((port, index) =>
+              this.renderNodePort(
+                node,
+                port.id,
+                port.name,
+                "output",
+                index,
+                node.outputPorts.length,
+              ),
+            ),
+            node.outputPorts.length >= PortLabelSingleOutputMinimum
+              ? node.outputPorts.map((port, index) =>
+                  this.renderNodeOutputPortLabel(
+                    port.name,
+                    index,
+                    node.outputPorts.length,
+                  ),
+                )
+              : "",
           ],
         ),
         createElement(
           "div",
           {
             className:
-              "flex items-center justify-between border-t border-border-dark/70 px-3 py-2 text-[10px] font-medium tracking-[0.14em] text-slate-400",
+              "mt-2 w-44 -translate-x-10 text-center text-sm font-medium leading-5 text-white",
           },
-          [
-            createElement("span", {}, [
-              node.inputPorts.length === 0
-                ? "No inputs"
-                : `${node.inputPorts.length} input${node.inputPorts.length === 1 ? "" : "s"}`,
-            ]),
-            createElement("span", {}, [
-              node.outputPorts.length === 0
-                ? "No outputs"
-                : `${node.outputPorts.length} output${node.outputPorts.length === 1 ? "" : "s"}`,
-            ]),
-          ],
-        ),
-        nodeRunVisual.detail
-          ? createElement(
-              "div",
-              {
-                className:
-                  "border-t border-border-dark/70 px-3 py-2 text-[11px] leading-5 text-slate-300",
-              },
-              [nodeRunVisual.detail],
-            )
-          : "",
-        node.inputPorts.map((port, index) =>
-          this.renderNodePort(
-            node,
-            port.id,
-            port.name,
-            "input",
-            index,
-            node.inputPorts.length,
-          ),
-        ),
-        node.outputPorts.map((port, index) =>
-          this.renderNodePort(
-            node,
-            port.id,
-            port.name,
-            "output",
-            index,
-            node.outputPorts.length,
-          ),
+          [node.label],
         ),
       ],
+    );
+  }
+
+  private renderNodeHoverToolbar(node: WorkflowNodeRecord): HTMLElement {
+    const canRunProviderTest = this.canRunNodeProviderTest(node);
+    const runTitle = canRunProviderTest
+      ? "Run provider test"
+      : "Run is available for saved AI/provider nodes";
+
+    return createElement(
+      "div",
+      {
+        className:
+          "pointer-events-none absolute -top-12 left-1/2 z-20 flex h-12 w-32 -translate-x-1/2 items-start justify-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+        onPointerDown: (event: Event) => event.stopPropagation(),
+        onMouseDown: (event: Event) => event.stopPropagation(),
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "relative flex items-center overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
+          },
+          [
+            this.renderNodeHoverToolbarButton({
+              icon: "play_arrow",
+              title: runTitle,
+              disabled: !canRunProviderTest,
+              onClick: () => {
+                void this.handleTestNodeProvider(node.id);
+              },
+            }),
+            this.renderNodeHoverToolbarButton({
+              icon: "edit",
+              title: "Edit node",
+              onClick: () =>
+                this.openSelectionEditorModal({ type: "node", id: node.id }),
+            }),
+            this.renderNodeHoverToolbarButton({
+              icon: "delete",
+              title: "Delete node",
+              tone: "danger",
+              onClick: () => this.handleRemoveNode(node.id),
+            }),
+            this.renderNodeHoverToolbarButton({
+              icon: "more_horiz",
+              title: "Node settings",
+              onClick: () =>
+                this.openSelectionEditorModal({ type: "node", id: node.id }),
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderNodeHoverToolbarButton(input: {
+    icon: string;
+    title: string;
+    onClick: () => void;
+    disabled?: boolean;
+    tone?: "default" | "danger";
+  }): HTMLElement {
+    const disabled = input.disabled ?? false;
+    const tone = input.tone ?? "default";
+
+    return createElement(
+      "button",
+      {
+        type: "button",
+        title: input.title,
+        disabled,
+        className: `flex h-7 w-7 items-center justify-center border-r border-[#333] text-slate-200 last:border-r-0 ${disabled ? "cursor-not-allowed opacity-45" : tone === "danger" ? "hover:bg-rose-950/70 hover:text-rose-100" : "hover:bg-[#2c2c2c] hover:text-white"}`,
+        onPointerDown: (event: Event) => event.stopPropagation(),
+        onMouseDown: (event: Event) => event.stopPropagation(),
+        onClick: (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (disabled) {
+            return;
+          }
+          input.onClick();
+        },
+      },
+      [
+        createElement(
+          "span",
+          { className: "material-symbols-outlined text-[16px] leading-none" },
+          [input.icon],
+        ),
+      ],
+    );
+  }
+
+  private renderNodeOutputPortLabel(
+    name: string,
+    index: number,
+    total: number,
+  ): HTMLElement {
+    const topOffset = readPortOffset(index, total);
+
+    return createElement(
+      "span",
+      {
+        className:
+          "pointer-events-none absolute left-[92px] max-w-[68px] truncate rounded border border-[#4a4a4a] bg-[#242424] px-1.5 py-0.5 text-[10px] font-medium leading-none text-slate-200",
+        style: `top: ${topOffset + 2}px;`,
+        title: name,
+      },
+      [name],
     );
   }
 
@@ -2830,44 +2436,26 @@ export class WorkflowsScreen extends Component<
       side === "input" && this.state.pendingConnection !== null;
     const incompatiblePort =
       side === "output" && this.state.pendingConnection !== null && !active;
-    const labelClassName = active
-      ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
-      : hovered
-        ? side === "input"
-          ? "border-primary/60 bg-primary/10 text-white"
-          : "border-emerald-400/60 bg-emerald-400/10 text-white"
-        : compatibleTarget
-          ? "border-primary/30 bg-[#182130] text-slate-100"
-          : "border-border-dark bg-[#11161d] text-text-secondary";
     const pinClassName = active
-      ? "border-amber-300 bg-amber-400 shadow-[0_0_0_6px_rgba(245,158,11,0.18)]"
+      ? "border-amber-300 bg-amber-400"
       : hovered
         ? side === "input"
-          ? "border-sky-200 bg-primary shadow-[0_0_0_6px_rgba(59,130,246,0.18)]"
-          : "border-emerald-200 bg-emerald-400 shadow-[0_0_0_6px_rgba(52,211,153,0.18)]"
+          ? "border-sky-200 bg-primary"
+          : "border-emerald-200 bg-emerald-400"
         : compatibleTarget
           ? "border-sky-300 bg-sky-500/80"
           : side === "input"
-            ? "border-slate-300 bg-slate-500"
+            ? "border-[#7a7a7a] bg-[#464646]"
             : incompatiblePort
               ? "border-emerald-200/40 bg-emerald-400/40"
-              : "border-emerald-200 bg-emerald-400";
-    const stemClassName = active
-      ? "bg-amber-400/70"
-      : hovered
-        ? side === "input"
-          ? "bg-primary/80"
-          : "bg-emerald-400/80"
-        : compatibleTarget
-          ? "bg-primary/50"
-          : "bg-slate-600";
+              : "border-[#777] bg-[#3a3a3a]";
 
     return createElement(
       "button",
       {
         type: "button",
         title: `${side} · ${name}`,
-        className: `absolute flex items-center gap-2 cursor-crosshair select-none transition-transform duration-150 ${side === "input" ? "-left-6 pl-1" : "-right-6 pr-1"} ${hovered || active ? "scale-[1.06]" : ""}`,
+        className: `absolute flex cursor-crosshair select-none items-center transition-transform ${side === "input" ? "-left-3" : "-right-3"} ${hovered || active ? "scale-110" : ""}`,
         style: `top: ${topOffset}px;`,
         onPointerDown: (event: Event) =>
           this.handlePortPointerDown(
@@ -2902,33 +2490,9 @@ export class WorkflowsScreen extends Component<
         },
       },
       [
-        side === "output"
-          ? createElement(
-              "span",
-              {
-                className: `rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${labelClassName}`,
-              },
-              [name],
-            )
-          : "",
         createElement("span", {
-          className: `block h-px w-4 ${stemClassName}`,
+          className: `block h-5 w-5 rounded-full border-2 transition-all ${pinClassName}`,
         }),
-        createElement("span", {
-          className: `block h-6 w-6 rounded-full border-2 transition-all duration-150 ${pinClassName}`,
-        }),
-        createElement("span", {
-          className: `block h-px w-4 ${stemClassName}`,
-        }),
-        side === "input"
-          ? createElement(
-              "span",
-              {
-                className: `rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${labelClassName}`,
-              },
-              [name],
-            )
-          : "",
       ],
     );
   }
@@ -2946,7 +2510,8 @@ export class WorkflowsScreen extends Component<
     const sourcePortIndex = sourceNode.outputPorts.findIndex(
       (port) => port.id === edge.sourcePortId,
     );
-    const targetPortIndex = targetNode.inputPorts.findIndex(
+    const targetInputPorts = readNodeInputPorts(targetNode);
+    const targetPortIndex = targetInputPorts.findIndex(
       (port) => port.id === edge.targetPortId,
     );
     const source = readPortAnchorPoint(
@@ -2959,10 +2524,11 @@ export class WorkflowsScreen extends Component<
       targetNode,
       "input",
       Math.max(targetPortIndex, 0),
-      targetNode.inputPorts.length,
+      targetInputPorts.length,
     );
     const path = readEdgeCurvePath(source, target);
     const hovered = this.state.hoveredEdgeId === edge.id;
+    const itemLabel = this.readWorkflowDebugEdgeItemLabel(edge.sourceNodeId);
 
     return createElement(
       "g",
@@ -2996,8 +2562,123 @@ export class WorkflowsScreen extends Component<
           onMouseEnter: () => this.handleEdgeHover(edge.id),
           "data-testid": "workflows-edge",
         }),
+        this.renderEdgeDirectionArrow(source, target, hovered),
+        itemLabel
+          ? this.renderEdgeItemLabel(source, target, itemLabel, hovered)
+          : "",
       ],
     );
+  }
+
+  private renderLiveExecutionHistoryRow(
+    liveExecution: LiveExecutionState,
+  ): HTMLElement {
+    const runningCount = Object.values(liveExecution.nodeRuns).filter(
+      (nodeRun) => nodeRun.status === "running",
+    ).length;
+    const completedCount = liveExecution.completedNodeIds.length;
+    const accentClassName =
+      liveExecution.status === "failed"
+        ? "bg-[#ff5c5c]"
+        : runningCount > 0
+          ? "bg-[#f7c948]"
+          : "bg-[#8b5cf6]";
+
+    return createElement(
+      "button",
+      {
+        type: "button",
+        key: liveExecution.workflowRunId ?? "queued-live-execution",
+        className:
+          "relative flex w-full flex-col gap-1 border-l-4 bg-[#282828] px-3 py-3 text-left transition-colors hover:bg-[#303030]",
+        onClick: () =>
+          this.setState({
+            selection: { type: "workflow", id: liveExecution.workflowId },
+            compactView: this.state.isCompactViewport
+              ? CompactView.Canvas
+              : this.state.compactView,
+          }),
+      },
+      [
+        createElement("span", {
+          className: `absolute bottom-0 left-0 top-0 w-1 ${accentClassName}`,
+        }),
+        createElement(
+          "span",
+          { className: "pl-2 text-sm font-medium text-white" },
+          [formatExecutionHistoryTitle(liveExecution.startedAt)],
+        ),
+        createElement("span", { className: "pl-2 text-xs text-slate-300" }, [
+          liveExecution.workflowRunId
+            ? `Running · ${completedCount.toString()} reached · ${runningCount.toString()} active`
+            : "Queued · waiting for server",
+        ]),
+      ],
+    );
+  }
+
+  private renderEdgeItemLabel(
+    source: ConnectionPreviewPoint,
+    target: ConnectionPreviewPoint,
+    label: string,
+    hovered: boolean,
+  ): HTMLElement {
+    const center = readEdgeDirectionCenter(source, target);
+
+    return createElement(
+      "g",
+      {
+        style: "pointer-events: none;",
+      },
+      [
+        createElement("rect", {
+          x: (center.x - 28).toString(),
+          y: (center.y - 18).toString(),
+          width: "56",
+          height: "20",
+          rx: "5",
+          fill: hovered ? "#202833" : "#111820",
+          stroke: "#2f3a47",
+        }),
+        createElement(
+          "text",
+          {
+            x: center.x.toString(),
+            y: (center.y - 4).toString(),
+            "text-anchor": "middle",
+            fill: "#d6dde7",
+            "font-size": "11",
+            "font-family": "monospace",
+          },
+          [label],
+        ),
+      ],
+    );
+  }
+
+  private readWorkflowDebugEdgeItemLabel(sourceNodeId: string): string | null {
+    const execution = this.readWorkflowDebugExecution();
+    const outputsByNodeId = this.readWorkflowDebugOutputMap(execution);
+    const output = outputsByNodeId.get(sourceNodeId);
+    return output === undefined ? null : readWorkflowDebugItemLabel(output);
+  }
+
+  private renderEdgeDirectionArrow(
+    source: ConnectionPreviewPoint,
+    target: ConnectionPreviewPoint,
+    hovered: boolean,
+  ): HTMLElement {
+    const center = readEdgeDirectionCenter(source, target);
+    const angle = readEdgeDirectionAngle(source, target);
+    const fill = hovered ? "#aab4c2" : "#7f8da0";
+
+    return createElement("path", {
+      d: readEdgeDirectionArrowPath(center, EdgeDirectionArrowSize),
+      fill,
+      opacity: hovered ? "1" : "0.9",
+      style: "pointer-events: none;",
+      transform: `rotate(${angle.toString()} ${center.x.toString()} ${center.y.toString()})`,
+    });
   }
 
   private renderEdgeDeleteControl(
@@ -3013,7 +2694,8 @@ export class WorkflowsScreen extends Component<
     const sourcePortIndex = sourceNode.outputPorts.findIndex(
       (port) => port.id === edge.sourcePortId,
     );
-    const targetPortIndex = targetNode.inputPorts.findIndex(
+    const targetInputPorts = readNodeInputPorts(targetNode);
+    const targetPortIndex = targetInputPorts.findIndex(
       (port) => port.id === edge.targetPortId,
     );
     const source = readPortAnchorPoint(
@@ -3026,7 +2708,7 @@ export class WorkflowsScreen extends Component<
       targetNode,
       "input",
       Math.max(targetPortIndex, 0),
-      targetNode.inputPorts.length,
+      targetInputPorts.length,
     );
     const point = readEdgeActionPoint(source, target, nodes);
     const hovered = this.state.hoveredEdgeId === edge.id;
@@ -3120,84 +2802,121 @@ export class WorkflowsScreen extends Component<
         : "Connection mode active";
     }
 
-    return "Space + drag pans anywhere. Drag nodes or drag from outputs to create connections";
+    return "Click + drag pans the canvas. Drag nodes or drag from outputs to connect";
   }
 
-  private renderInspectorPanel(): HTMLElement {
+  private openSelectionEditorModal(selection?: WorkflowSelection): void {
+    this.setState({
+      ...(selection ? { selection } : {}),
+      editorModalOpen: true,
+    });
+  }
+
+  private closeSelectionEditorModal(): void {
+    this.setState({ editorModalOpen: false });
+  }
+
+  private renderSelectionEditorModal(): HTMLElement {
     return createElement(
-      "aside",
+      "div",
       {
-        className: this.state.isCompactViewport
-          ? "flex min-h-0 flex-1 flex-col border-l border-border-dark bg-[#1a1f27]"
-          : "flex min-h-0 w-[380px] shrink-0 flex-col border-l border-border-dark bg-[#171d25] xl:w-[420px]",
-        "data-testid": WorkflowScreenSelector.InspectorPanel,
+        className:
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-5",
+        onClick: () => this.closeSelectionEditorModal(),
       },
       [
         createElement(
-          "div",
+          "section",
           {
-            className:
-              "flex items-center justify-between border-b border-border-dark px-3 py-3 xl:px-4",
+            className: `flex h-full max-h-[min(900px,calc(100vh-40px))] w-full ${this.state.selection.type === "node" ? "max-w-[1560px]" : "max-w-[980px]"} flex-col overflow-hidden rounded-lg border border-border-dark bg-[#11161d] shadow-xl`,
+            onClick: (event: Event) => event.stopPropagation(),
+            "data-testid": WorkflowScreenSelector.InspectorPanel,
           },
           [
-            createElement("div", { className: "flex min-w-0 flex-col" }, [
-              createElement(
-                "span",
-                { className: "text-sm font-semibold text-white" },
-                [this.readInspectorTitle()],
-              ),
-              createElement(
-                "span",
-                { className: "truncate text-xs text-text-secondary" },
-                [this.readInspectorSubtitle()],
-              ),
-            ]),
-            createElement("div", { className: "flex items-center gap-2" }, [
-              this.state.selection.type === "node"
-                ? createElement(Button, {
-                    variant: "danger",
-                    size: "sm",
-                    onClick: () => this.handleRemoveSelectedNode(),
-                    children: "Delete node",
-                  })
-                : this.state.selection.type === "execution"
-                  ? (() => {
-                      const executionId = this.state.selection.id;
-                      return createElement(Button, {
-                        variant: "danger",
+            createElement(
+              "div",
+              {
+                className:
+                  "flex items-center justify-between border-b border-border-dark px-4 py-3",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement(
+                    "p",
+                    { className: "truncate text-sm font-semibold text-white" },
+                    [this.readInspectorTitle()],
+                  ),
+                  createElement(
+                    "p",
+                    {
+                      className: "mt-0.5 truncate text-xs text-text-secondary",
+                    },
+                    [this.readInspectorSubtitle()],
+                  ),
+                ]),
+                createElement("div", { className: "flex items-center gap-2" }, [
+                  this.state.selection.type === "node"
+                    ? createElement(Button, {
+                        variant: "primary",
                         size: "sm",
-                        disabled: this.state.pendingAction !== null,
+                        disabled: !this.canExecuteSelectedNodeStep(),
                         onClick: () => {
-                          void this.handleDeleteExecution(executionId);
+                          void this.handleExecuteSelectedNodeStep();
                         },
                         children:
-                          this.state.pendingAction ===
-                          PendingAction.DeleteExecution
-                            ? "Deleting"
-                            : "Delete run",
-                      });
-                    })()
-                  : "",
-              !this.state.isCompactViewport
-                ? createElement(IconButton, {
-                    icon: "right_panel_close",
-                    tooltip: "Collapse inspector",
-                    onClick: () =>
-                      this.setState({ desktopInspectorCollapsed: true }),
+                          this.state.pendingAction === PendingAction.RunWorkflow
+                            ? "Executing"
+                            : "Execute step",
+                      })
+                    : "",
+                  this.state.selection.type === "node"
+                    ? createElement(IconButton, {
+                        icon: "delete",
+                        tooltip: "Delete node",
+                        onClick: (event: MouseEvent) => {
+                          event.stopPropagation();
+                          this.handleRemoveSelectedNode();
+                        },
+                        className:
+                          "h-9 w-9 overflow-hidden rounded-md border border-rose-500/60 bg-rose-950/40 text-rose-100 hover:bg-rose-900/60",
+                      })
+                    : this.state.selection.type === "execution"
+                      ? (() => {
+                          const executionId = this.state.selection.id;
+                          return createElement(Button, {
+                            variant: "danger",
+                            size: "sm",
+                            disabled: this.state.pendingAction !== null,
+                            onClick: () => {
+                              void this.handleDeleteExecution(executionId);
+                            },
+                            children:
+                              this.state.pendingAction ===
+                              PendingAction.DeleteExecution
+                                ? "Deleting"
+                                : "Delete run",
+                          });
+                        })()
+                      : "",
+                  createElement(IconButton, {
+                    icon: "close",
+                    tooltip: "Close editor",
+                    onClick: () => this.closeSelectionEditorModal(),
                     className:
                       "h-8 w-8 rounded-md border border-transparent hover:border-border-dark hover:bg-[#20262f]",
-                  })
-                : "",
-            ]),
+                  }),
+                ]),
+              ],
+            ),
+            createElement(
+              "div",
+              {
+                className: "min-h-0 flex-1 overflow-y-auto p-4",
+                "data-preserve-scroll-key": "workflows-editor-modal-scroll",
+              },
+              [this.renderInspectorBody()],
+            ),
           ],
-        ),
-        createElement(
-          "div",
-          {
-            className: "min-h-0 flex-1 overflow-y-auto p-4",
-            "data-preserve-scroll-key": "workflows-inspector-scroll",
-          },
-          [this.renderInspectorBody()],
         ),
       ],
     );
@@ -3214,7 +2933,7 @@ export class WorkflowsScreen extends Component<
     if (this.state.selection.type === "node") {
       const node = this.readSelectedNode();
       return node
-        ? this.renderNodeInspector(node)
+        ? this.renderNodeDebugEditor(node)
         : this.renderEmptyInspector();
     }
 
@@ -4866,6 +4585,499 @@ export class WorkflowsScreen extends Component<
     ]);
   }
 
+  private renderNodeDebugEditor(node: WorkflowNodeRecord): HTMLElement {
+    const context = this.readNodeDebugContext(node);
+    if (!context) {
+      return this.renderNodeInspector(node);
+    }
+
+    return createElement(
+      "div",
+      {
+        className:
+          "grid min-h-[640px] gap-0 overflow-hidden rounded-lg border border-border-dark bg-[#0f141a] xl:grid-cols-[minmax(280px,0.9fr)_minmax(420px,1.15fr)_minmax(280px,0.9fr)]",
+      },
+      [
+        this.renderWorkflowDebugDataPanel({
+          title: "INPUT",
+          tab: this.state.debugInputTab,
+          onTabChange: (tab) => this.setState({ debugInputTab: tab }),
+          value: context.selectedInputSource?.value,
+          statusTone: context.statusTone,
+          itemLabel: context.selectedInputSource
+            ? readWorkflowDebugItemLabel(context.selectedInputSource.value)
+            : "0 items",
+          emptyMessage: "Run the workflow or connect an upstream node first.",
+          selector: this.renderWorkflowDebugInputSelector(context),
+        }),
+        createElement(
+          "div",
+          {
+            className:
+              "min-h-0 overflow-y-auto border-y border-border-dark bg-[#11161d] p-4 xl:border-x xl:border-y-0",
+          },
+          [
+            createElement(
+              "div",
+              {
+                className:
+                  "mb-3 flex flex-wrap items-center justify-between gap-2",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement(
+                    "p",
+                    { className: "truncate text-sm font-semibold text-white" },
+                    [node.label],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-1 text-xs text-text-secondary" },
+                    [
+                      `${readNodeKindLabel(node.kind)} · ${context.statusLabel}`,
+                    ],
+                  ),
+                ]),
+                createElement(
+                  StatusBadge,
+                  {
+                    status: readWorkflowDebugBadgeStatus(context.statusTone),
+                    pulse: context.statusTone === "running",
+                  },
+                  [context.statusLabel],
+                ),
+              ],
+            ),
+            this.renderNodeInspector(node),
+          ],
+        ),
+        this.renderWorkflowDebugDataPanel({
+          title: "OUTPUT",
+          tab: this.state.debugOutputTab,
+          onTabChange: (tab) => this.setState({ debugOutputTab: tab }),
+          value: context.outputValue,
+          statusTone: context.statusTone,
+          itemLabel: readWorkflowDebugItemLabel(context.outputValue),
+          emptyMessage: "Execute this step to inspect the current node output.",
+          selector: "",
+        }),
+      ],
+    );
+  }
+
+  private renderWorkflowDebugInputSelector(
+    context: WorkflowNodeDebugContext,
+  ): HTMLElement | string {
+    if (context.inputSources.length === 0) {
+      return "";
+    }
+
+    return createElement(
+      "select",
+      {
+        value: context.selectedInputSource?.id ?? "",
+        className:
+          "h-8 min-w-0 rounded-md border border-border-dark bg-[#151b23] px-2 text-xs text-white outline-none focus:border-primary",
+        onChange: (event: Event) => {
+          const target = event.target as HTMLSelectElement;
+          this.setState({ debugInputSourceId: target.value });
+        },
+      },
+      context.inputSources.map((source) =>
+        createElement(
+          "option",
+          {
+            key: source.id,
+            value: source.id,
+          },
+          [`${source.label} · ${source.detail}`],
+        ),
+      ),
+    );
+  }
+
+  private renderWorkflowDebugDataPanel(input: {
+    title: "INPUT" | "OUTPUT";
+    tab: WorkflowDebugPanelTab;
+    onTabChange: (tab: WorkflowDebugPanelTab) => void;
+    value: unknown;
+    statusTone: WorkflowDebugStatusTone;
+    itemLabel: string;
+    emptyMessage: string;
+    selector: HTMLElement | string;
+  }): HTMLElement {
+    return createElement(
+      "section",
+      { className: "flex min-h-0 flex-col bg-[#0f141a]" },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "flex min-h-[64px] flex-wrap items-center justify-between gap-2 border-b border-border-dark px-3 py-2",
+          },
+          [
+            createElement("div", { className: "flex items-center gap-2" }, [
+              createElement("span", {
+                className: `h-2 w-2 rounded-full ${readWorkflowDebugDotClassName(input.statusTone)}`,
+              }),
+              createElement(
+                "span",
+                {
+                  className:
+                    "text-xs font-semibold tracking-[0.18em] text-white",
+                },
+                [input.title],
+              ),
+              createElement(
+                "span",
+                { className: "text-xs text-text-secondary" },
+                [input.itemLabel],
+              ),
+            ]),
+            input.selector,
+          ],
+        ),
+        createElement(
+          "div",
+          {
+            className:
+              "flex items-center gap-1 border-b border-border-dark bg-[#121820] px-3 py-2",
+          },
+          (["schema", "table", "json"] as const).map((tab) =>
+            createElement(
+              "button",
+              {
+                type: "button",
+                key: `${input.title}-${tab}`,
+                className: `rounded-md px-2.5 py-1.5 text-xs ${input.tab === tab ? "bg-[#202833] text-white" : "text-text-secondary hover:bg-[#1a222b] hover:text-white"}`,
+                onClick: () => input.onTabChange(tab),
+              },
+              [formatSelectOptionLabel(tab)],
+            ),
+          ),
+        ),
+        createElement(
+          "div",
+          { className: "min-h-0 flex-1 overflow-auto p-3" },
+          [this.renderWorkflowDebugPanelBody(input)],
+        ),
+      ],
+    );
+  }
+
+  private renderWorkflowDebugPanelBody(input: {
+    tab: WorkflowDebugPanelTab;
+    value: unknown;
+    emptyMessage: string;
+  }): HTMLElement {
+    if (input.value === undefined) {
+      return createElement(
+        "div",
+        {
+          className:
+            "flex min-h-[320px] items-center justify-center rounded-md border border-dashed border-border-dark px-4 text-center text-sm text-text-secondary",
+        },
+        [input.emptyMessage],
+      );
+    }
+
+    if (input.tab === "schema") {
+      return this.renderWorkflowDebugSchema(input.value);
+    }
+
+    if (input.tab === "table") {
+      return this.renderWorkflowDebugTable(input.value);
+    }
+
+    return createElement(
+      "pre",
+      {
+        className:
+          "whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-slate-200",
+      },
+      [formatOutputSnapshot(input.value)],
+    );
+  }
+
+  private renderWorkflowDebugSchema(value: unknown): HTMLElement {
+    return createElement(
+      "div",
+      { className: "flex flex-col divide-y divide-border-dark" },
+      readWorkflowDebugSchemaEntries(value).map((entry) =>
+        createElement(
+          "div",
+          {
+            key: `${entry.path}-${entry.type}`,
+            className: "grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 py-2",
+          },
+          [
+            createElement("div", { className: "min-w-0" }, [
+              createElement(
+                "p",
+                { className: "truncate font-mono text-xs text-white" },
+                [entry.path],
+              ),
+              createElement(
+                "p",
+                { className: "text-[11px] text-text-secondary" },
+                [entry.type],
+              ),
+            ]),
+            createElement(
+              "span",
+              { className: "text-right text-xs text-text-secondary" },
+              [`${entry.items.toString()} items`],
+            ),
+            createElement("span", { className: "flex justify-end" }, [
+              createElement("span", {
+                className: `mt-1 h-2 w-2 rounded-full ${readWorkflowDebugDotClassName(entry.status)}`,
+              }),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  private renderWorkflowDebugTable(value: unknown): HTMLElement {
+    const rows = Array.isArray(value) ? value : [value];
+    const columns = readWorkflowDebugTableColumns(rows);
+
+    if (columns.length === 0) {
+      return createElement(
+        "pre",
+        {
+          className:
+            "whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-slate-200",
+        },
+        [formatOutputSnapshot(value)],
+      );
+    }
+
+    return createElement(
+      "table",
+      { className: "w-full border-collapse text-left text-xs" },
+      [
+        createElement("thead", {}, [
+          createElement(
+            "tr",
+            {},
+            columns.map((column) =>
+              createElement(
+                "th",
+                {
+                  key: column,
+                  className:
+                    "border-b border-border-dark px-2 py-2 font-medium text-text-secondary",
+                },
+                [column],
+              ),
+            ),
+          ),
+        ]),
+        createElement(
+          "tbody",
+          {},
+          rows.slice(0, DebugTableMaximumRows).map((row, index) =>
+            createElement(
+              "tr",
+              { key: `debug-row-${index.toString()}` },
+              columns.map((column) =>
+                createElement(
+                  "td",
+                  {
+                    key: `${index.toString()}-${column}`,
+                    className:
+                      "max-w-[180px] truncate border-b border-border-dark/70 px-2 py-2 text-slate-200",
+                  },
+                  [readWorkflowDebugTableCell(row, column)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  private readNodeDebugContext(
+    node: WorkflowNodeRecord,
+  ): WorkflowNodeDebugContext | null {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow) {
+      return null;
+    }
+
+    const execution = this.readWorkflowDebugExecution();
+    const liveRun = this.state.liveExecution?.nodeRuns[node.id] ?? null;
+    const persistedRun =
+      execution?.nodeRuns.find((nodeRun) => nodeRun.nodeId === node.id) ?? null;
+    const outputsByNodeId = this.readWorkflowDebugOutputMap(execution);
+    const inputSources = buildWorkflowDebugInputSources({
+      workflow,
+      nodeId: node.id,
+      outputsByNodeId,
+    });
+    const selectedInputSource =
+      inputSources.find(
+        (source) => source.id === this.state.debugInputSourceId,
+      ) ??
+      inputSources[0] ??
+      null;
+    const outputValue =
+      liveRun?.outputSnapshot ??
+      (liveRun?.outputText.trim().length ? liveRun.outputText : undefined) ??
+      persistedRun?.outputSnapshot;
+    const debugStatus = liveRun?.status ?? persistedRun?.status;
+    const statusTone = readWorkflowDebugStatusTone({
+      ...(debugStatus ? { status: debugStatus } : {}),
+      alertsCount: liveRun?.alerts.length ?? persistedRun?.alerts.length ?? 0,
+      findingsCount:
+        liveRun?.guardrailFindings.length ??
+        persistedRun?.guardrailFindings.length ??
+        0,
+    });
+
+    return {
+      node,
+      workflow,
+      execution,
+      liveRun,
+      outputValue,
+      inputSources,
+      selectedInputSource,
+      statusTone,
+      statusLabel: readWorkflowDebugStatusLabel(statusTone),
+    };
+  }
+
+  private readWorkflowDebugExecution(): WorkflowExecutionRecord | null {
+    const workflowId = this.state.draftWorkflow?.id;
+    if (!workflowId) {
+      return null;
+    }
+
+    return selectWorkflowDebugExecution({
+      workflowId,
+      activeExecutionId: this.state.debugExecutionId,
+      selectedExecutionId:
+        this.state.selection.type === "execution"
+          ? this.state.selection.id
+          : null,
+      liveExecutionId: this.state.liveExecution?.workflowRunId ?? null,
+      executions: this.state.executions,
+    });
+  }
+
+  private readWorkflowDebugOutputMap(
+    execution: WorkflowExecutionRecord | null,
+  ): WorkflowDebugOutputMap {
+    const entries = new Map<string, unknown>();
+    for (const nodeRun of execution?.nodeRuns ?? []) {
+      entries.set(nodeRun.nodeId, nodeRun.outputSnapshot);
+    }
+
+    for (const [nodeId, liveRun] of Object.entries(
+      this.state.liveExecution?.nodeRuns ?? {},
+    )) {
+      if (liveRun.outputSnapshot !== undefined) {
+        entries.set(nodeId, liveRun.outputSnapshot);
+      } else if (liveRun.outputText.trim().length > 0) {
+        entries.set(nodeId, liveRun.outputText);
+      }
+    }
+
+    return entries;
+  }
+
+  private canExecuteSelectedNodeStep(): boolean {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    return (
+      this.state.selection.type === "node" &&
+      this.state.pendingAction === null &&
+      this.state.currentProject !== null &&
+      currentWorkflow !== null &&
+      !this.state.dirtyWorkflow &&
+      this.state.dirtyAssetIds.length === 0
+    );
+  }
+
+  private async handleExecuteSelectedNodeStep(): Promise<void> {
+    const selectedNode = this.readSelectedNode();
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    const projectId = this.state.currentProject?.id;
+    if (
+      !selectedNode ||
+      !currentWorkflow ||
+      !projectId ||
+      !this.canExecuteSelectedNodeStep()
+    ) {
+      return;
+    }
+
+    this.setState({
+      pendingAction: PendingAction.RunWorkflow,
+      liveExecution: createLiveExecutionState(currentWorkflow),
+      debugExecutionId: null,
+      errorMessage: null,
+      noticeMessage: null,
+      editorModalOpen: true,
+    });
+    this.cancelLiveExecutionStream();
+    this.liveExecutionAbortController = new AbortController();
+
+    try {
+      await this.workflowClient.streamNode({
+        workflowId: currentWorkflow.id,
+        nodeId: selectedNode.id,
+        inputSource: this.readSelectedNodeExecutionInputSource(),
+        signal: this.liveExecutionAbortController.signal,
+        onEvent: (event) => {
+          this.handleWorkflowRunStreamEvent(event);
+        },
+      });
+      await this.reloadCatalog(projectId);
+      this.setState({
+        pendingAction: null,
+        liveExecution: null,
+        selection: { type: "node", id: selectedNode.id },
+        debugExecutionId: this.readCompletedLiveExecution()?.id ?? null,
+        editorModalOpen: true,
+        errorMessage: null,
+        noticeMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        pendingAction: null,
+        errorMessage: readErrorMessage(error, "Could not execute this step."),
+        noticeMessage: null,
+      });
+    } finally {
+      this.cancelLiveExecutionStream();
+      void this.refreshServerLogs();
+    }
+  }
+
+  private readSelectedNodeExecutionInputSource(): WorkflowNodeExecutionInputSourceRecord {
+    if (this.state.debugInputSourceId === "all-upstream") {
+      return {
+        kind: WorkflowNodeExecutionInputSourceKind.AllPrevious,
+      };
+    }
+
+    if (this.state.debugInputSourceId.startsWith("node:")) {
+      return {
+        kind: WorkflowNodeExecutionInputSourceKind.NodeOutput,
+        nodeId: this.state.debugInputSourceId.slice("node:".length),
+      };
+    }
+
+    return {
+      kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
+    };
+  }
+
   private renderNodeInspector(node: WorkflowNodeRecord): HTMLElement {
     const compatibleAssetKind = readNodeAssetKind(node.kind);
     const compatibleAssets = compatibleAssetKind
@@ -4893,7 +5105,7 @@ export class WorkflowsScreen extends Component<
       ),
       this.renderReadOnlyBadgeRow(
         node.kind,
-        node.inputPorts.length,
+        readNodeInputPorts(node).length,
         node.outputPorts.length,
       ),
       compatibleAssetKind
@@ -6101,9 +6313,12 @@ export class WorkflowsScreen extends Component<
     const sourceNode = workflow?.nodes.find(
       (node) => node.id === edge.sourceNodeId,
     );
-    const sourcePaths = sourceNode?.outputContract
-      ? readJsonSchemaPaths(sourceNode.outputContract.schema)
-      : ["$.result"];
+    const sourcePaths = [
+      LatestResponseSourcePath,
+      ...(sourceNode?.outputContract
+        ? readJsonSchemaPaths(sourceNode.outputContract.schema)
+        : ["$.result"]),
+    ];
 
     return createElement(
       "div",
@@ -6144,7 +6359,13 @@ export class WorkflowsScreen extends Component<
             (value) => {
               this.setState({ mappingSourcePath: value });
             },
-            sourcePaths.map((path) => ({ value: path, label: path })),
+            sourcePaths.map((path) => ({
+              value: path,
+              label:
+                path === LatestResponseSourcePath
+                  ? LatestResponseSourceLabel
+                  : path,
+            })),
             WorkflowScreenSelector.MappingSourcePathInput,
           ),
         ]),
@@ -6178,9 +6399,7 @@ export class WorkflowsScreen extends Component<
                     className:
                       "rounded border border-border-dark px-3 py-2 text-xs text-text-secondary",
                   },
-                  [
-                    `${entry.targetPath} ← ${entry.source.path ?? entry.source.value ?? entry.source.kind}`,
-                  ],
+                  [`${entry.targetPath} ← ${readMappingSourceLabel(entry)}`],
                 ),
               ),
             ]),
@@ -7673,12 +7892,9 @@ export class WorkflowsScreen extends Component<
                           variant: "ghost",
                           size: "sm",
                           onClick: () => {
-                            this.setState({
-                              selection: {
-                                type: "asset",
-                                id: guardrail.assetId,
-                              },
-                              compactView: CompactView.Inspector,
+                            this.openSelectionEditorModal({
+                              type: "asset",
+                              id: guardrail.assetId,
                             });
                           },
                           children: "Edit",
@@ -7931,14 +8147,8 @@ export class WorkflowsScreen extends Component<
   private shouldShowCanvas(): boolean {
     return (
       !this.state.isCompactViewport ||
-      this.state.compactView === CompactView.Canvas
+      this.state.compactView !== CompactView.Sidebar
     );
-  }
-
-  private shouldShowInspector(): boolean {
-    return this.state.isCompactViewport
-      ? this.state.compactView === CompactView.Inspector
-      : !this.state.desktopInspectorCollapsed;
   }
 
   private async hydrateState(): Promise<void> {
@@ -8000,6 +8210,25 @@ export class WorkflowsScreen extends Component<
         null)
       : null;
 
+    const nextSelection = currentWorkflow
+      ? resolveSelectionAfterReload(
+          this.state.selection,
+          currentWorkflow,
+          assets,
+          executions,
+          this.state.executionHistoryFilter,
+        )
+      : ({ type: "workflow", id: null } satisfies WorkflowSelection);
+    const debugExecutionId =
+      this.state.debugExecutionId &&
+      executions.some(
+        (execution) => execution.id === this.state.debugExecutionId,
+      )
+        ? this.state.debugExecutionId
+        : nextSelection.type === "execution"
+          ? nextSelection.id
+          : null;
+
     this.setState({
       workflows,
       assets,
@@ -8008,19 +8237,13 @@ export class WorkflowsScreen extends Component<
       draftWorkflow: currentWorkflow
         ? stripDefinitionVersionFields(currentWorkflow)
         : null,
-      selection: currentWorkflow
-        ? resolveSelectionAfterReload(
-            this.state.selection,
-            currentWorkflow,
-            assets,
-            executions,
-            this.state.executionHistoryFilter,
-          )
-        : { type: "workflow", id: null },
+      selection: nextSelection,
+      debugExecutionId,
       loadingExecutionId: null,
       dirtyWorkflow: false,
       dirtyAssetIds: [],
     });
+    this.syncExecutionRefreshPolling();
   }
 
   private async reloadAssetCatalog(
@@ -8083,9 +8306,11 @@ export class WorkflowsScreen extends Component<
       dirtyAssetIds: [],
       pendingConnection: null,
       guardrailAttachAssetId: null,
+      debugExecutionId: null,
       compactView: this.state.isCompactViewport
         ? CompactView.Canvas
         : this.state.compactView,
+      desktopSidebarCollapsed: false,
     });
     void this.refreshServerLogs();
   }
@@ -8148,10 +8373,10 @@ export class WorkflowsScreen extends Component<
     this.setState({
       pendingAction: PendingAction.RunWorkflow,
       liveExecution: createLiveExecutionState(currentWorkflow),
+      debugExecutionId: null,
       selection: { type: "workflow", id: currentWorkflow.id },
-      desktopInspectorCollapsed: false,
       compactView: this.state.isCompactViewport
-        ? CompactView.Inspector
+        ? CompactView.Canvas
         : this.state.compactView,
       errorMessage: null,
       noticeMessage: null,
@@ -8181,6 +8406,7 @@ export class WorkflowsScreen extends Component<
         noticeMessage: "Workflow run persisted in execution history.",
         errorMessage: null,
         selection: { type: "execution", id: completedExecution.id },
+        debugExecutionId: completedExecution.id,
       });
     } catch (error) {
       this.setState({
@@ -8192,6 +8418,20 @@ export class WorkflowsScreen extends Component<
       this.cancelLiveExecutionStream();
       void this.refreshServerLogs();
     }
+  }
+
+  private canRunNodeProviderTest(node: WorkflowNodeRecord): boolean {
+    const provider = node.config.provider;
+    return (
+      (node.kind === WorkflowNodeKind.AiAgent ||
+        node.kind === WorkflowNodeKind.AiProviderRun) &&
+      this.state.pendingAction === null &&
+      this.state.currentProject !== null &&
+      this.state.draftWorkflow !== null &&
+      !this.state.dirtyWorkflow &&
+      this.state.dirtyAssetIds.length === 0 &&
+      Boolean(provider?.providerId)
+    );
   }
 
   private async handleTestNodeProvider(nodeId: string): Promise<void> {
@@ -8329,7 +8569,10 @@ export class WorkflowsScreen extends Component<
     }
   }
 
-  private async handleAddNode(kind: WorkflowNodeKindValue): Promise<void> {
+  private async handleAddNode(
+    kind: WorkflowNodeKindValue,
+    position?: ConnectionPreviewPoint,
+  ): Promise<void> {
     if (!this.state.draftWorkflow || !this.state.currentProject) {
       return;
     }
@@ -8340,6 +8583,7 @@ export class WorkflowsScreen extends Component<
         assetKind,
         undefined,
         kind === WorkflowNodeKind.AssetGuardrail,
+        true,
       );
       if (!asset) {
         return;
@@ -8349,10 +8593,13 @@ export class WorkflowsScreen extends Component<
       if (!nextNode) {
         return;
       }
+      const positionedDefinition = position
+        ? moveWorkflowNode(nextDefinition, nextNode.id, position)
+        : nextDefinition;
       this.updateDraftWorkflow(
         {
-          ...nextDefinition,
-          nodes: nextDefinition.nodes.map((node) =>
+          ...positionedDefinition,
+          nodes: positionedDefinition.nodes.map((node) =>
             node.id === nextNode.id
               ? {
                   ...node,
@@ -8371,8 +8618,12 @@ export class WorkflowsScreen extends Component<
 
     const nextDefinition = addWorkflowNode(this.state.draftWorkflow, kind);
     const nextNode = nextDefinition.nodes[nextDefinition.nodes.length - 1];
+    const positionedDefinition =
+      nextNode && position
+        ? moveWorkflowNode(nextDefinition, nextNode.id, position)
+        : nextDefinition;
     this.updateDraftWorkflow(
-      nextDefinition,
+      positionedDefinition,
       nextNode ? { type: "node", id: nextNode.id } : undefined,
     );
   }
@@ -8393,6 +8644,7 @@ export class WorkflowsScreen extends Component<
     kind: WorkflowAssetKindValue,
     focusNodeId?: string,
     attachToNode = false,
+    suppressNotice = false,
   ): Promise<WorkflowAssetRecord | null> {
     if (!this.state.currentProject) {
       return null;
@@ -8432,7 +8684,9 @@ export class WorkflowsScreen extends Component<
           : { type: "asset", id: asset.id };
       this.setState({
         pendingAction: null,
-        noticeMessage: `${readAssetKindLabel(kind)} asset created.`,
+        noticeMessage: suppressNotice
+          ? this.state.noticeMessage
+          : `${readAssetKindLabel(kind)} asset created.`,
         errorMessage: null,
         selection: nextSelection,
         guardrailAttachAssetId:
@@ -8470,13 +8724,14 @@ export class WorkflowsScreen extends Component<
 
     this.setState({
       selection: { type: "execution", id: executionId },
+      debugExecutionId: executionId,
       loadingExecutionId: executionId,
       errorMessage: null,
       noticeMessage: null,
-      desktopInspectorCollapsed: false,
       compactView: this.state.isCompactViewport
-        ? CompactView.Inspector
+        ? CompactView.Canvas
         : this.state.compactView,
+      desktopSidebarCollapsed: false,
     });
 
     try {
@@ -8489,6 +8744,7 @@ export class WorkflowsScreen extends Component<
         ),
         loadingExecutionId: null,
         selection: { type: "execution", id: executionId },
+        debugExecutionId: executionId,
       });
       void this.refreshServerLogs();
     } catch (error) {
@@ -8623,18 +8879,74 @@ export class WorkflowsScreen extends Component<
     this.setState({
       selection: { type: "node", id: nodeId },
       compactView: this.state.isCompactViewport
-        ? CompactView.Inspector
+        ? CompactView.Canvas
         : this.state.compactView,
-      desktopInspectorCollapsed: false,
+      desktopSidebarCollapsed: false,
     });
   }
 
-  private handleCanvasPointerDown(event: PointerEvent): void {
-    if (!(event.target instanceof HTMLElement)) {
+  private handleCanvasDragOver(event: DragEvent): void {
+    if (!this.state.draftWorkflow || !event.dataTransfer) {
       return;
     }
 
-    if (this.connectionDragging || event.target.closest("[data-port-handle]")) {
+    if (this.readDraggedNodeKind(event.dataTransfer) === null) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  private async handleCanvasDrop(event: DragEvent): Promise<void> {
+    if (!this.state.draftWorkflow || !event.dataTransfer) {
+      return;
+    }
+
+    const kind = this.readDraggedNodeKind(event.dataTransfer);
+    if (kind === null) {
+      return;
+    }
+
+    const position = this.readCanvasPoint(event.clientX, event.clientY);
+    if (!position) {
+      return;
+    }
+
+    event.preventDefault();
+    await this.handleAddNode(kind, position);
+  }
+
+  private handleNodePaletteDragStart(
+    event: DragEvent,
+    kind: WorkflowNodeKindValue,
+  ): void {
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(WorkflowNodePaletteDragMimeType, kind);
+    event.dataTransfer.setData("text/plain", readNodeKindLabel(kind));
+  }
+
+  private readDraggedNodeKind(
+    dataTransfer: DataTransfer,
+  ): WorkflowNodeKindValue | null {
+    const value = dataTransfer.getData(WorkflowNodePaletteDragMimeType);
+    return readWorkflowNodeKindDropValue(value);
+  }
+
+  private handleCanvasPointerDown(event: PointerEvent): void {
+    if (!(event.target instanceof Element) || event.button !== 0) {
+      return;
+    }
+
+    if (
+      this.connectionDragging ||
+      event.target.closest("[data-port-handle]") ||
+      event.target.closest("button, input, textarea, select")
+    ) {
       return;
     }
 
@@ -8647,6 +8959,7 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    event.preventDefault();
     this.panning = true;
     this.panOrigin = {
       x: event.clientX,
@@ -8654,10 +8967,6 @@ export class WorkflowsScreen extends Component<
     };
     this.panViewportOrigin = { ...viewport };
     this.setState({
-      selection: {
-        type: "workflow",
-        id: this.readCurrentWorkflowRecord()?.id ?? null,
-      },
       pendingConnection: null,
       hoveredPort: null,
       hoveredEdgeId: null,
@@ -8885,7 +9194,6 @@ export class WorkflowsScreen extends Component<
       hoveredPort: null,
       hoveredEdgeId: null,
       connectionPreviewPoint: null,
-      noticeMessage: "Connection added.",
       errorMessage: null,
     });
   }
@@ -9007,17 +9315,23 @@ export class WorkflowsScreen extends Component<
 
   private handleRemoveSelectedNode(): void {
     const selectedNode = this.readSelectedNode();
-    if (!selectedNode || !this.state.draftWorkflow) {
+    if (!selectedNode) {
       return;
     }
 
-    const nextDefinition = removeWorkflowNode(
-      this.state.draftWorkflow,
-      selectedNode.id,
-    );
+    this.handleRemoveNode(selectedNode.id);
+  }
+
+  private handleRemoveNode(nodeId: string): void {
+    if (!this.state.draftWorkflow) {
+      return;
+    }
+
+    const nextDefinition = removeWorkflowNode(this.state.draftWorkflow, nodeId);
+    this.setState({ editorModalOpen: false });
     this.updateDraftWorkflow(nextDefinition, {
       type: "workflow",
-      id: this.readCurrentWorkflowRecord()?.id ?? null,
+      id: null,
     });
   }
 
@@ -9144,6 +9458,7 @@ export class WorkflowsScreen extends Component<
         ? this.state.dirtyAssetIds
         : [...this.state.dirtyAssetIds, assetId],
       selection: { type: "asset", id: assetId },
+      desktopSidebarCollapsed: false,
     });
   }
 
@@ -9438,7 +9753,8 @@ export class WorkflowsScreen extends Component<
     }
 
     const node = workflow.nodes.find((entry) => entry.id === nodeId);
-    if (!node || node.inputPorts.length === 0) {
+    const inputPorts = node ? readNodeInputPorts(node) : [];
+    if (!node || inputPorts.length === 0) {
       return null;
     }
 
@@ -9453,11 +9769,11 @@ export class WorkflowsScreen extends Component<
     }
 
     const relativeY = clientY - nodeRect.top;
-    const nearestPort = node.inputPorts.reduce<{
+    const nearestPort = inputPorts.reduce<{
       portId: string;
       distance: number;
     } | null>((closest, port, index) => {
-      const portY = readPortOffset(index, node.inputPorts.length) + 10;
+      const portY = readPortOffset(index, inputPorts.length) + 10;
       const distance = Math.abs(relativeY - portY);
       if (!closest || distance < closest.distance) {
         return {
@@ -9657,6 +9973,12 @@ export class WorkflowsScreen extends Component<
   };
 
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (this.state.editorModalOpen && event.key === "Escape") {
+      event.preventDefault();
+      this.closeSelectionEditorModal();
+      return;
+    }
+
     if (this.state.executionNodeModal) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -9826,6 +10148,7 @@ export class WorkflowsScreen extends Component<
 
     if (event.type === WorkflowRunStreamEventType.WorkflowStarted) {
       this.setState({
+        pendingAction: null,
         liveExecution: {
           ...currentLiveExecution,
           workflowRunId: event.workflowRunId,
@@ -9967,11 +10290,13 @@ export class WorkflowsScreen extends Component<
           this.state.executions,
           event.execution,
         ),
+        debugExecutionId: event.execution.id,
       });
       return;
     }
 
     this.setState({
+      pendingAction: null,
       liveExecution: {
         ...currentLiveExecution,
         workflowRunId: event.workflowRunId,
@@ -9982,6 +10307,7 @@ export class WorkflowsScreen extends Component<
       executions: event.execution
         ? upsertExecutionRecord(this.state.executions, event.execution)
         : this.state.executions,
+      debugExecutionId: event.execution?.id ?? this.state.debugExecutionId,
     });
   }
 
@@ -9999,6 +10325,42 @@ export class WorkflowsScreen extends Component<
       this.liveExecutionAbortController.abort();
       this.liveExecutionAbortController = null;
     }
+  }
+
+  private syncExecutionRefreshPolling(): void {
+    const hasActiveExecution = this.state.executions.some(
+      (execution) =>
+        execution.status === "queued" || execution.status === "running",
+    );
+    if (!hasActiveExecution) {
+      this.stopExecutionRefreshPolling();
+      return;
+    }
+
+    if (this.executionRefreshIntervalId !== null) {
+      return;
+    }
+
+    this.executionRefreshIntervalId = window.setInterval(() => {
+      const projectId = this.state.currentProject?.id;
+      if (
+        !projectId ||
+        this.state.pendingAction === PendingAction.RunWorkflow
+      ) {
+        return;
+      }
+
+      void this.reloadCatalog(projectId);
+    }, ExecutionRefreshIntervalMs);
+  }
+
+  private stopExecutionRefreshPolling(): void {
+    if (this.executionRefreshIntervalId === null) {
+      return;
+    }
+
+    window.clearInterval(this.executionRefreshIntervalId);
+    this.executionRefreshIntervalId = null;
   }
 }
 
@@ -10074,13 +10436,48 @@ const readNodePaletteDescription = (kind: WorkflowNodeKindValue): string => {
   return "Logic helper node for the workflow graph.";
 };
 
+const readWorkflowNodeKindDropValue = (
+  value: string,
+): WorkflowNodeKindValue | null =>
+  readNodeKindsForPalette().find((kind) => kind === value) ?? null;
+
+const readNodeInputPorts = (
+  node: WorkflowNodeRecord,
+): WorkflowNodeRecord["inputPorts"] => {
+  if (node.kind !== WorkflowNodeKind.LogicMerge) {
+    return node.inputPorts;
+  }
+
+  return [
+    {
+      id: "input",
+      name: "Input",
+      acceptsMany: true,
+    },
+  ];
+};
+
+const readMappingSourceLabel = (entry: EdgeMappingEntryRecord): string => {
+  if (entry.source.kind === "literal") {
+    return String(entry.source.value ?? "Literal");
+  }
+
+  if (entry.source.kind === "context_value") {
+    return entry.source.path ?? "Workflow context";
+  }
+
+  if (!entry.source.path || entry.source.path === LatestResponseSourcePath) {
+    return LatestResponseSourceLabel;
+  }
+
+  return entry.source.path;
+};
+
 const readPortOffset = (index: number, total: number): number => {
   const safeTotal = Math.max(total, 1);
-  const spacing = 44;
-  const start = 60;
-  return (
-    start + Math.max(0, Math.floor((3 - safeTotal) * 10)) + index * spacing
-  );
+  const spacing = 22;
+  const start = 30;
+  return start + Math.max(0, Math.floor((3 - safeTotal) * 6)) + index * spacing;
 };
 
 const readPortAnchorPoint = (
@@ -10089,7 +10486,10 @@ const readPortAnchorPoint = (
   index: number,
   total: number,
 ): ConnectionPreviewPoint => ({
-  x: side === "output" ? node.position.x + node.width + 4 : node.position.x - 4,
+  x:
+    side === "output"
+      ? node.position.x + WorkflowNodeVisualWidth - 12
+      : node.position.x + 12,
   y: node.position.y + readPortOffset(index, total) + 10,
 });
 
@@ -10102,14 +10502,13 @@ const readHoveredInputAnchorPoint = (
     return null;
   }
 
-  const index = node.inputPorts.findIndex(
-    (port) => port.id === hoveredPort.portId,
-  );
+  const inputPorts = readNodeInputPorts(node);
+  const index = inputPorts.findIndex((port) => port.id === hoveredPort.portId);
   if (index < 0) {
     return null;
   }
 
-  return readPortAnchorPoint(node, "input", index, node.inputPorts.length);
+  return readPortAnchorPoint(node, "input", index, inputPorts.length);
 };
 
 const readEdgeCurvePath = (
@@ -10119,6 +10518,31 @@ const readEdgeCurvePath = (
   const delta = Math.max(96, Math.abs(target.x - source.x) / 2);
   return `M ${source.x} ${source.y} C ${source.x + delta} ${source.y}, ${target.x - delta} ${target.y}, ${target.x} ${target.y}`;
 };
+
+const readEdgeDirectionCenter = (
+  source: ConnectionPreviewPoint,
+  target: ConnectionPreviewPoint,
+): ConnectionPreviewPoint => ({
+  x: Number(((source.x + target.x) / 2).toFixed(2)),
+  y: Number(((source.y + target.y) / 2).toFixed(2)),
+});
+
+const readEdgeDirectionAngle = (
+  source: ConnectionPreviewPoint,
+  target: ConnectionPreviewPoint,
+): number =>
+  Number(
+    (
+      (Math.atan2(target.y - source.y, target.x - source.x) * 180) /
+      Math.PI
+    ).toFixed(2),
+  );
+
+const readEdgeDirectionArrowPath = (
+  center: ConnectionPreviewPoint,
+  size: number,
+): string =>
+  `M ${center.x + size} ${center.y} L ${center.x - size} ${center.y - size * 0.72} L ${center.x - size * 0.45} ${center.y} L ${center.x - size} ${center.y + size * 0.72} Z`;
 
 const readEdgeActionPoint = (
   source: ConnectionPreviewPoint,
@@ -10166,7 +10590,7 @@ const edgeDeletePointOverlapsNode = (
     const left = node.position.x - EdgeDeleteNodeAvoidancePadding - halfButton;
     const right =
       node.position.x +
-      node.width +
+      WorkflowNodeVisualWidth +
       EdgeDeleteNodeAvoidancePadding +
       halfButton;
     const top = node.position.y - EdgeDeleteNodeAvoidancePadding - halfButton;
@@ -10205,6 +10629,119 @@ const createPendingLiveNodeRunState = (): LiveNodeRunState => ({
   guardrailFindings: [],
 });
 
+const DebugTableMaximumRows = 50;
+
+const readWorkflowDebugBadgeStatus = (
+  tone: WorkflowDebugStatusTone,
+): "info" | "success" | "warning" | "running" | "failed" => {
+  if (tone === "success") {
+    return "success";
+  }
+
+  if (tone === "warning") {
+    return "warning";
+  }
+
+  if (tone === "failed") {
+    return "failed";
+  }
+
+  if (tone === "running") {
+    return "running";
+  }
+
+  return "info";
+};
+
+const readWorkflowDebugStatusLabel = (
+  tone: WorkflowDebugStatusTone,
+): string => {
+  if (tone === "success") {
+    return "Succeeded";
+  }
+
+  if (tone === "warning") {
+    return "Warning";
+  }
+
+  if (tone === "failed") {
+    return "Failed";
+  }
+
+  if (tone === "running") {
+    return "Running";
+  }
+
+  return "Queued";
+};
+
+const readWorkflowDebugDotClassName = (
+  tone: WorkflowDebugStatusTone,
+): string => {
+  if (tone === "success") {
+    return "bg-emerald-400";
+  }
+
+  if (tone === "warning") {
+    return "bg-amber-300";
+  }
+
+  if (tone === "failed") {
+    return "bg-rose-400";
+  }
+
+  if (tone === "running") {
+    return "bg-sky-300";
+  }
+
+  return "bg-slate-500";
+};
+
+const readExecutionHistoryAccentClassName = (
+  execution: WorkflowExecutionRecord,
+): string => {
+  if (execution.status === "failed" || execution.errorsCount > 0) {
+    return "bg-[#ff5c5c]";
+  }
+
+  if (
+    execution.status === "running" ||
+    execution.status === "awaiting_review" ||
+    execution.status === "canceled" ||
+    execution.warningsCount > 0
+  ) {
+    return "bg-[#f7c948]";
+  }
+
+  return "bg-[#72dd9b]";
+};
+
+const readWorkflowDebugTableColumns = (
+  rows: ReadonlyArray<unknown>,
+): ReadonlyArray<string> => {
+  const columns = new Set<string>();
+
+  for (const row of rows.slice(0, DebugTableMaximumRows)) {
+    if (row && typeof row === "object" && !Array.isArray(row)) {
+      for (const key of Object.keys(row)) {
+        columns.add(key);
+      }
+    }
+  }
+
+  return [...columns].slice(0, 8);
+};
+
+const readWorkflowDebugTableCell = (row: unknown, column: string): string => {
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return formatOutputSnapshot(row);
+  }
+
+  return (
+    summarizeOutputSnapshot((row as Record<string, unknown>)[column]) ?? ""
+  );
+};
+
 const readNodeRunToneClassName = (
   status: "idle" | "running" | "completed" | "warn" | "failed",
 ): string => {
@@ -10225,6 +10762,11 @@ const readNodeRunToneClassName = (
   }
 
   return "border-border-dark";
+};
+
+const readNodeRunCountLabel = (label: string): string => {
+  const match = label.match(/\d+/u);
+  return match?.[0] ?? "1";
 };
 
 const readNodeRunAccentClassName = (
@@ -10409,7 +10951,12 @@ const upsertExecutionRecord = (
 
 const readCanvasBackgroundStyle = (
   viewport: WorkflowViewportRecord,
+  executionView: boolean,
 ): string => {
+  if (executionView) {
+    return "background-color:#202020;background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 2px,transparent 2px,transparent 10px);";
+  }
+
   const gridSize = Math.max(14, Math.round(24 * viewport.zoom));
   const offsetX = Math.round(viewport.x % gridSize);
   const offsetY = Math.round(viewport.y % gridSize);
@@ -10823,6 +11370,21 @@ const formatTimestamp = (value: string): string => {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 };
 
+const formatExecutionHistoryTitle = (value: string): string => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
 const formatDuration = (value?: number): string => {
   if (value === undefined || Number.isNaN(value) || value < 0) {
     return "n/a";
@@ -10842,98 +11404,6 @@ const formatDuration = (value?: number): string => {
 };
 
 const formatEuro = (value: number): string => `€${value.toFixed(4)}`;
-
-type WorkflowExecutionStatus = WorkflowExecutionRecord["status"];
-
-type WorkflowExecutionStatusCounts = Record<WorkflowExecutionStatus, number>;
-
-const OptionalWorkflowExecutionStatuses = [
-  "running",
-  "awaiting_review",
-  "canceled",
-] as const satisfies ReadonlyArray<WorkflowExecutionStatus>;
-
-const createWorkflowExecutionStatusCounts =
-  (): WorkflowExecutionStatusCounts => ({
-    completed: 0,
-    failed: 0,
-    running: 0,
-    awaiting_review: 0,
-    canceled: 0,
-  });
-
-const readExecutionSnapshotSummary = (
-  executions: ReadonlyArray<WorkflowExecutionRecord>,
-) => {
-  const statusCounts = createWorkflowExecutionStatusCounts();
-
-  for (const execution of executions) {
-    statusCounts[execution.status] += 1;
-  }
-
-  return {
-    latestExecution: executions[0] ?? null,
-    statusDistributionLabel: readExecutionStatusDistributionLabel(statusCounts),
-  };
-};
-
-const readExecutionAggregateSummary = (
-  executions: ReadonlyArray<WorkflowExecutionRecord>,
-) =>
-  executions.reduce(
-    (summary, execution) => ({
-      runCount: summary.runCount + 1,
-      totalCostEur: summary.totalCostEur + execution.totals.estimatedCostEur,
-      totalTokens: summary.totalTokens + execution.totals.totalTokens,
-      warningCount: summary.warningCount + execution.warningsCount,
-      errorCount: summary.errorCount + execution.errorsCount,
-    }),
-    {
-      runCount: 0,
-      totalCostEur: 0,
-      totalTokens: 0,
-      warningCount: 0,
-      errorCount: 0,
-    },
-  );
-
-const readExecutionAttentionSummary = (
-  executions: ReadonlyArray<WorkflowExecutionRecord>,
-) => {
-  const attentionRuns = executions.filter((execution) =>
-    readExecutionNeedsAttention(execution),
-  );
-
-  return {
-    attentionRunCount: attentionRuns.length,
-    failedRunCount: executions.filter(
-      (execution) => execution.status === "failed",
-    ).length,
-    alertedRunCount: executions.filter((execution) =>
-      readExecutionHasAlerts(execution),
-    ).length,
-    recentAttentionRuns: attentionRuns.slice(0, 4),
-    remainingAttentionRunCount: Math.max(0, attentionRuns.length - 4),
-  };
-};
-
-const readExecutionStatusDistributionLabel = (
-  statusCounts: WorkflowExecutionStatusCounts,
-): string =>
-  [
-    readExecutionStatusCountLabel("completed", statusCounts.completed),
-    readExecutionStatusCountLabel("failed", statusCounts.failed),
-    ...OptionalWorkflowExecutionStatuses.flatMap((status) =>
-      statusCounts[status] > 0
-        ? [readExecutionStatusCountLabel(status, statusCounts[status])]
-        : [],
-    ),
-  ].join(" · ");
-
-const readExecutionStatusCountLabel = (
-  status: WorkflowExecutionStatus,
-  count: number,
-): string => `${formatSelectOptionLabel(status)} ${count.toString()}`;
 
 const readExecutionLabel = (
   execution: Pick<WorkflowExecutionRecord, "id">,
@@ -10963,20 +11433,6 @@ const readFilteredExecutions = (
   }
 
   return executions;
-};
-
-const readExecutionFilterEmptyTitle = (
-  filter: ExecutionHistoryFilter,
-): string => {
-  if (filter === ExecutionHistoryFilter.Failed) {
-    return "No failed persisted runs";
-  }
-
-  if (filter === ExecutionHistoryFilter.Attention) {
-    return "No attention runs in persisted history";
-  }
-
-  return "No persisted runs";
 };
 
 const readExecutionFilterEmptyDescription = (
@@ -11022,7 +11478,7 @@ const readExecutionBadgeStatus = (
     return "failed";
   }
 
-  if (status === "awaiting_review") {
+  if (status === "awaiting_review" || status === "queued") {
     return "warning";
   }
 
@@ -11128,7 +11584,7 @@ const readWorkflowFitViewport = (
     (current, node) => ({
       minX: Math.min(current.minX, node.position.x),
       minY: Math.min(current.minY, node.position.y),
-      maxX: Math.max(current.maxX, node.position.x + node.width),
+      maxX: Math.max(current.maxX, node.position.x + WorkflowNodeVisualWidth),
       maxY: Math.max(
         current.maxY,
         node.position.y + WorkflowNodeApproximateHeight,

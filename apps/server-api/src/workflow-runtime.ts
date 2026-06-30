@@ -18,6 +18,7 @@ import type {
   WorkflowAssetRecord,
   WorkflowDefinitionRecord,
   WorkflowExecutionRecord,
+  WorkflowNodeExecutionInputSourceRecord,
 } from "../../../packages/shared/src/workflows";
 import type { WorkspaceState } from "./workspace-state";
 
@@ -37,6 +38,13 @@ export type WorkflowRuntimeService = {
   runWorkflow: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  }) => Promise<WorkflowExecutionRecord>;
+  runNode: (input: {
+    definition: WorkflowDefinitionRecord;
+    assets: ReadonlyArray<WorkflowAssetRecord>;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
   testProviderNode: (input: {
@@ -75,6 +83,21 @@ export const createWorkflowRuntimeService = (input: {
     runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
+      ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+    });
+
+  const runNode = async (request: {
+    definition: WorkflowDefinitionRecord;
+    assets: ReadonlyArray<WorkflowAssetRecord>;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  }): Promise<WorkflowExecutionRecord> =>
+    runtime.runNode({
+      definition: request.definition,
+      assets: request.assets,
+      nodeId: request.nodeId,
+      inputSource: request.inputSource,
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
 
@@ -144,6 +167,7 @@ export const createWorkflowRuntimeService = (input: {
 
   return {
     runWorkflow,
+    runNode,
     testProviderNode,
   };
 };

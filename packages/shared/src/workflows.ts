@@ -59,6 +59,7 @@ export type WorkflowAssetScope =
   (typeof WorkflowAssetScope)[keyof typeof WorkflowAssetScope];
 
 export const WorkflowExecutionStatus = {
+  Queued: "queued",
   Running: "running",
   Completed: "completed",
   Failed: "failed",
@@ -68,6 +69,27 @@ export const WorkflowExecutionStatus = {
 
 export type WorkflowExecutionStatus =
   (typeof WorkflowExecutionStatus)[keyof typeof WorkflowExecutionStatus];
+
+export const WorkflowNodeExecutionInputSourceKind = {
+  LastUpstream: "last-upstream",
+  NodeOutput: "node-output",
+  AllPrevious: "all-previous",
+} as const;
+
+export type WorkflowNodeExecutionInputSourceKind =
+  (typeof WorkflowNodeExecutionInputSourceKind)[keyof typeof WorkflowNodeExecutionInputSourceKind];
+
+export type WorkflowNodeExecutionInputSourceRecord =
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.LastUpstream;
+    }
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.NodeOutput;
+      nodeId: string;
+    }
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.AllPrevious;
+    };
 
 export type WorkflowTriggerRecord = {
   kind: WorkflowTriggerKind;

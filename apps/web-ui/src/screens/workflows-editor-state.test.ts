@@ -136,6 +136,27 @@ describe("workflows editor state", () => {
     expect(duplicated.edges).toHaveLength(1);
   });
 
+  it("creates merge nodes with one input port that accepts many upstream connections", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Merge inputs",
+    });
+    const withMerge = addWorkflowNode(
+      definition,
+      WorkflowNodeKind.LogicMerge,
+      () => "merge-node",
+    );
+    const mergeNode = withMerge.nodes.find((node) => node.id === "merge-node");
+
+    expect(mergeNode?.inputPorts).toEqual([
+      {
+        id: "input",
+        name: "Input",
+        acceptsMany: true,
+      },
+    ]);
+  });
+
   it("keeps multiple incoming edges when the target port accepts many", () => {
     const definition = createEmptyWorkflowDefinition({
       projectId: "project-1",

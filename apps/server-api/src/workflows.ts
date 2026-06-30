@@ -10,6 +10,8 @@ import {
   type WorkflowAssetRecord,
   type WorkflowDefinitionRecord,
   type WorkflowExecutionRecord,
+  WorkflowNodeExecutionInputSourceKind,
+  type WorkflowNodeExecutionInputSourceRecord,
   WorkflowNodeKind,
 } from "../../../packages/shared/src/workflows";
 import { ErrorMessage, HttpStatus } from "./constants";
@@ -307,6 +309,56 @@ export const executeWorkflowExecutionRun = async (
   return ok(dependencies.catalog.upsertExecution(execution));
 };
 
+export const executeWorkflowNodeExecutionRun = async (
+  input: {
+    workflowId: string;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    runNode: (input: {
+      definition: WorkflowDefinitionRecord;
+      assets: ReadonlyArray<WorkflowAssetRecord>;
+      nodeId: string;
+      inputSource: WorkflowNodeExecutionInputSourceRecord;
+      onEvent?: (event: WorkflowRuntimeEvent) => void;
+    }) => Promise<WorkflowExecutionRecord>;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  },
+): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  const node = workflow.nodes.find(
+    (candidate) => candidate.id === input.nodeId,
+  );
+  if (!node) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  const assets = dependencies.catalog.listAssets({
+    workspaceId: workflow.workspaceId,
+    projectId: workflow.projectId,
+  });
+  const execution = await dependencies.runNode({
+    definition: workflow,
+    assets,
+    nodeId: input.nodeId,
+    inputSource: input.inputSource,
+    ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
+  });
+  return ok(dependencies.catalog.upsertExecution(execution));
+};
+
 export const executeWorkflowNodeProviderTest = async (
   input: {
     workflowId: string;
@@ -558,6 +610,48 @@ export const parseWorkflowExecutionRunRequest = (
 ): Result<{ workflowId: string }, ApiError> =>
   parseSingleIdentifierRequest(value, "workflowId");
 
+export const parseWorkflowNodeExecutionRunRequest = (
+  value: unknown,
+): Result<
+  {
+    workflowId: string;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId,
+  );
+  const nodeId = readRequiredString(
+    value,
+    "nodeId",
+    ErrorMessage.MissingNodeId,
+  );
+  const inputSource = parseWorkflowNodeExecutionInputSource(
+    value["inputSource"],
+  );
+  if (
+    workflowId.type === ResultType.Err ||
+    nodeId.type === ResultType.Err ||
+    inputSource.type === ResultType.Err
+  ) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    nodeId: nodeId.value,
+    inputSource: inputSource.value,
+  });
+};
+
 export const parseWorkflowNodeProviderTestRequest = (
   value: unknown,
 ): Result<{ workflowId: string; nodeId: string }, ApiError> => {
@@ -622,6 +716,50 @@ const parseSingleIdentifierRequest = <TKey extends string>(
   return ok({
     [key]: identifier.value,
   } as { [key in TKey]: string });
+};
+
+const parseWorkflowNodeExecutionInputSource = (
+  value: unknown,
+): Result<WorkflowNodeExecutionInputSourceRecord, ApiError> => {
+  if (value === undefined) {
+    return ok({
+      kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
+    });
+  }
+
+  if (!isRecord(value) || typeof value["kind"] !== "string") {
+    return invalidBody();
+  }
+
+  if (value["kind"] === WorkflowNodeExecutionInputSourceKind.LastUpstream) {
+    return ok({
+      kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
+    });
+  }
+
+  if (value["kind"] === WorkflowNodeExecutionInputSourceKind.AllPrevious) {
+    return ok({
+      kind: WorkflowNodeExecutionInputSourceKind.AllPrevious,
+    });
+  }
+
+  if (value["kind"] !== WorkflowNodeExecutionInputSourceKind.NodeOutput) {
+    return invalidBody();
+  }
+
+  const nodeId = readRequiredString(
+    value,
+    "nodeId",
+    ErrorMessage.MissingNodeId,
+  );
+  if (nodeId.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    kind: WorkflowNodeExecutionInputSourceKind.NodeOutput,
+    nodeId: nodeId.value,
+  });
 };
 
 const invalidBody = <T>(): Result<T, ApiError> =>

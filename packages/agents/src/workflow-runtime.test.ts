@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  WorkflowExecutionStatus,
   WorkflowNodeKind,
+  WorkflowNodeExecutionInputSourceKind,
   WorkflowReasoningLevel,
   WorkflowRecordStatus,
   WorkflowTriggerKind,
@@ -221,6 +223,78 @@ describe("workflow runtime", () => {
       ),
     ).toBe(true);
   });
+
+  it("runs only required upstream context before the selected node", async () => {
+    const providerCalls: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerCalls.push(request.node.id);
+        return {
+          outputText: `Output from ${request.node.id}`,
+        };
+      },
+    });
+
+    const execution = await runtime.runNode({
+      definition: createBranchedWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      nodeId: "node-provider-target",
+      inputSource: {
+        kind: WorkflowNodeExecutionInputSourceKind.NodeOutput,
+        nodeId: "node-provider-left",
+      },
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(providerCalls).toEqual([
+      "node-provider-left",
+      "node-provider-target",
+    ]);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-left",
+      "node-provider-target",
+    ]);
+    expect(execution.nodeRuns).not.toContainEqual(
+      expect.objectContaining({ nodeId: "node-provider-right" }),
+    );
+  });
+
+  it("uses all previous node outputs as the selected node input when requested", async () => {
+    const providerPrompts: Array<{ nodeId: string; prompt: string }> = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push({
+          nodeId: request.node.id,
+          prompt: request.prompt,
+        });
+        return {
+          outputText: `Output from ${request.node.id}`,
+        };
+      },
+    });
+
+    await runtime.runNode({
+      definition: createBranchedWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      nodeId: "node-provider-target",
+      inputSource: {
+        kind: WorkflowNodeExecutionInputSourceKind.AllPrevious,
+      },
+    });
+
+    const targetPrompt = providerPrompts.find(
+      (entry) => entry.nodeId === "node-provider-target",
+    )?.prompt;
+
+    expect(targetPrompt).toContain("node-provider-left");
+    expect(targetPrompt).toContain("node-provider-right");
+    expect(targetPrompt).toContain("Output from node-provider-left");
+    expect(targetPrompt).toContain("Output from node-provider-right");
+  });
 });
 
 const isEventOfType = <TType extends string>(
@@ -304,6 +378,47 @@ const createWorkflowDefinitionRecord = (
     createEdgeRecord("edge-3", "node-provider-1", "node-provider-2"),
   ],
 });
+
+const createBranchedWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-trigger",
+        kind: WorkflowNodeKind.TriggerManual,
+      }),
+      createNodeRecord({
+        id: "node-prompt",
+        kind: WorkflowNodeKind.AssetPrompt,
+        assetId: "asset-prompt",
+      }),
+      createNodeRecord({
+        id: "node-provider-left",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-left", "gpt-left"),
+        prompt: "Left branch.",
+      }),
+      createNodeRecord({
+        id: "node-provider-right",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-right", "gpt-right"),
+        prompt: "Right branch.",
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-target", "gpt-target"),
+        prompt: "Merge selected input.",
+      }),
+    ],
+    edges: [
+      createEdgeRecord("edge-1", "node-trigger", "node-prompt"),
+      createEdgeRecord("edge-2", "node-prompt", "node-provider-left"),
+      createEdgeRecord("edge-3", "node-prompt", "node-provider-right"),
+      createEdgeRecord("edge-4", "node-provider-left", "node-provider-target"),
+      createEdgeRecord("edge-5", "node-provider-right", "node-provider-target"),
+    ],
+  });
 
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",

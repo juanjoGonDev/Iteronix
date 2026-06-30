@@ -3043,3 +3043,165 @@
   - **PLAN.md**: nueva sección `Feature backlog (ideas sin milestone asignado)` con subsección `Prompt Versioning` y 5 checkboxes.
 - Next:
   - null (no hay siguiente paso concreto; backlog está pendiente de priorización).
+
+### 2026-06-29 23:31 (Europe/Madrid) — Workflows Canvas UI State Fixes
+
+- Summary:
+  - Hardened the Workflows canvas UI around multi-output readability, connection direction, modal delete behavior, node cursors, and collapsed sidebar state synchronization.
+- Decisions:
+  - Keep node deletion immediate from the editor modal but close the modal and clear the concrete selection afterward so the workflow inspector does not appear as a misleading fallback.
+  - Keep the left activity rail as the source of section navigation and always expand the sidebar when a section or canvas selection needs the panel to be visible.
+- Changes:
+  - Added output labels for nodes with multiple output ports and a small midpoint direction arrow on each edge.
+  - Replaced the node delete text button with an icon-only destructive action.
+  - Fixed node delete to close the modal instead of reopening/defaulting to the workflow editor.
+  - Updated node cursor affordances to pointer on hover and grabbing while dragging.
+  - Clipped activity rail icons and made rail section clicks auto-expand the hidden sidebar.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+- Issues/Risks:
+  - A first parallel pnpm gate attempt raced dependency linking and removed the hoisted `@modelcontextprotocol/sdk` link; restored the local junction and reran all gates sequentially successfully.
+- Next:
+  - Continue visual QA on Workflows only if more canvas interaction defects appear.
+
+### 2026-06-30 00:08 (Europe/Madrid) — Workflows Palette Drag And Merge Input UX
+
+- Summary:
+  - Refined Workflows canvas interactions: quiet node/connection creation, n8n-like drag-create from the node palette, merge nodes with one multi-input socket, and mapping controls that can use the latest upstream response or a specific output path.
+- Decisions:
+  - Creation actions should update draft state silently; reserve toast notices for save/run/delete and error-worthy events.
+  - Merge nodes expose one `Input` port with `acceptsMany: true`; runtime already waits for incoming upstream outputs before executing the merge node.
+  - Keep explicit source references per incoming edge, but add `Latest response` as the default-friendly full-output mapping option.
+- Changes:
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to support native drag/drop from the node palette to canvas coordinates, suppress creation toasts, add latest-response mapping labels, and normalize rendered merge input ports for existing draft nodes.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.ts` so new merge nodes have one multi-input port.
+  - Added a regression test in `apps/web-ui/src/screens/workflows-editor-state.test.ts` for the one-port merge contract.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+- Issues/Risks:
+  - Existing saved merge nodes with old `input-a`/`input-b` ports are normalized visually in the UI; persisted cleanup can be added later if needed.
+- Next:
+  - Browser QA the Workflows canvas drag-create path and input mapping modal using a real workflow with multiple upstream node outputs.
+
+### 2026-06-30 01:05 (Europe/Madrid) — Workflows Node Hover Toolbar
+
+- Summary:
+  - Added an n8n-like hover toolbar above workflow nodes so node actions are available directly on hover without reopening the old right-side inspector pattern.
+- Decisions:
+  - Use CSS group-hover and ocus-within instead of persisted hover state so the toolbar disappears naturally when leaving the node or toolbar area.
+  - Keep the run action disabled for unsupported, dirty, or unsaved nodes; no dead UI is introduced for nodes that cannot run a provider smoke test.
+- Changes:
+  - Updated pps/web-ui/src/screens/Workflows.ts with a compact node hover toolbar, reusable toolbar button renderer, node-specific delete handling, and provider-test eligibility checks.
+- Commands:
+  - pnpm lint PASS
+  - pnpm typecheck PASS
+  - pnpm test PASS
+  - pnpm build PASS
+- Issues/Risks:
+  - The hover toolbar includes run, edit, delete, and settings; a true activate/deactivate action is not implemented because the workflow node model does not yet expose a disabled-state contract.
+- Next:
+  - Browser QA hover enter/leave, toolbar focus behavior, and each toolbar action on representative workflow node kinds.
+
+### 2026-06-30 01:10 (Europe/Madrid) — Workflows Hover Toolbar Hit Area Fix
+
+- Summary:
+  - Fixed the node hover toolbar interaction gap so users can move from a workflow node to the floating toolbar without the menu disappearing first.
+- Decisions:
+  - Keep CSS-driven hover behavior, but wrap the toolbar in a transparent hover bridge that extends from the node to the toolbar.
+- Changes:
+  - Updated pps/web-ui/src/screens/Workflows.ts so the toolbar hit area spans the vertical gap between the node and the controls while preserving pointer event isolation for canvas dragging.
+- Commands:
+  - pnpm lint PASS
+  - pnpm typecheck PASS
+  - pnpm test PASS
+  - pnpm build PASS
+- Issues/Risks:
+  - Browser QA is still recommended for exact pointer feel on dense node layouts.
+- Next:
+  - Validate hover enter/leave and toolbar button clicks in the real Workflows canvas.
+
+### 2026-06-30 15:13 (Europe/Madrid) — Workflows n8n Execution Debug UX
+
+- Summary:
+  - Added the first n8n-like node debug experience: node editing now opens with INPUT, parameters, and OUTPUT panes; panels support Schema/Table/JSON views, item counts, previous-output source selection, live step execution state, and canvas edge item-count labels.
+- Decisions:
+  - Reuse the existing workflow SSE run path for Execute step in this slice, focusing the selected node and keeping the modal open instead of adding an unbacked per-node runtime endpoint.
+  - Keep normal progress silent with no toast noise; errors still surface through the existing error state.
+  - Add `queued` to the shared execution status contract so persisted queued runs can be rendered when the backend starts storing them, while live client-side queued/running rows are shown immediately.
+- Changes:
+  - Added `apps/web-ui/src/screens/workflows-debug-state.ts` and tests for item counts, schema rows, status tones, and previous-output source building.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with 3-panel node debug modal, Execute step, input source selector, Schema/Table/JSON renderers, canvas edge item labels, and queued/running live history row.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.ts`, `packages/shared/src/workflows.ts`, and `packages/shared/src/workflows.test.ts` for queued execution status support.
+- Commands:
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS
+  - `pnpm build` PASS
+- Issues/Risks:
+  - Execute step currently runs the saved workflow through the existing stream and focuses the selected node; a true backend run-single-node endpoint is still a future runtime slice.
+  - Pre-existing unrelated working-tree changes remain in `.atl/skill-registry.md`, `History.ts`, `pnpm-workspace.yaml`, and `ui-spec/screens/workflow/spec.html`.
+- Next:
+  - Add a server-side execute-node endpoint if strict single-node runtime isolation is required.
+
+### 2026-06-30 17:18 (Europe/Madrid) — Workflows Execute Node Endpoint and History Fix
+
+- Summary:
+  - Added a real server-side partial workflow node execution path and wired the Workflows node modal Execute step action to it instead of running the full workflow.
+  - Fixed the Workflows execution history panel rendering bug where rows were hidden because the UI passed nested arrays into the component renderer.
+- Decisions:
+  - `runNode` executes only the selected node plus the required upstream closure for the chosen input source.
+  - Input source is now an explicit typed contract: last upstream, a specific previous node output, or all previous outputs.
+  - Keep existing workflow runtime/provider resolution so custom/OpenAI-compatible local providers work through the same server path as full workflow runs.
+- Changes:
+  - Added shared input source contract in `packages/shared/src/workflows.ts` and mirrored it in the web editor state types.
+  - Added `WorkflowRuntime.runNode` in `packages/agents/src/workflow-runtime.ts` with upstream selection and input override handling.
+  - Added `executeWorkflowNodeExecutionRun` and request parsing in `apps/server-api/src/workflows.ts`.
+  - Added `/workflows/executions/run-node` and `/workflows/executions/stream-node` routes in `apps/server-api/src/server.ts`.
+  - Added `runNode` and `streamNode` to `apps/web-ui/src/shared/workflow-client.ts`.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` so Execute step calls `streamNode`, keeps the modal open, and sends the selected input source.
+  - Fixed history row rendering by flattening live and persisted execution row arrays before passing children to `createElement`.
+- Commands:
+  - `pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts --passWithNoTests` initially failed for missing `runNode`, then PASS after implementation.
+  - `pnpm exec vitest run apps/server-api/src/workflows.test.ts --passWithNoTests` initially failed for missing node execution API, then PASS after implementation.
+  - `pnpm lint` PASS
+  - `pnpm typecheck` PASS
+  - `pnpm test` PASS (66 files, 261 tests)
+  - `pnpm build` PASS
+- Issues/Risks:
+  - No browser screenshot QA was run in this turn; runtime/API/client contracts and full gates are green.
+  - Existing unrelated working-tree changes remain in `.atl/skill-registry.md`, `apps/web-ui/src/screens/History.ts`, `pnpm-workspace.yaml`, and `ui-spec/screens/workflow/spec.html`.
+- Next:
+  - Browser QA Execute step with a real custom provider and verify selected input source changes the prompt/result as expected.
+
+### 2026-06-30 22:51 (Europe/Madrid) — Workflows Live History and Node Modal Bugfixes
+
+- Summary:
+  - Fixed Workflows debug modal selection so opening a node while inspecting a historic execution keeps that execution's node outputs instead of falling back to the latest run.
+  - Enabled double-click on workflow nodes by wiring the component event layer to native `dblclick` events.
+  - Persisted runtime progress snapshots during workflow/node SSE streams so queued/running executions, active node states, partial outputs, and edge item counts can be reloaded through the history API while a run is still active.
+- Decisions:
+  - Track a dedicated `debugExecutionId` separately from the UI selection so canvas/node modal selection changes do not lose the historic execution context.
+  - Use lightweight catalog polling for queued/running executions after reload; live in-tab execution remains SSE-backed.
+  - Unlock run buttons when terminal stream events arrive, instead of waiting only for the transport promise to settle.
+- Changes:
+  - Updated `apps/web-ui/src/screens/workflows-debug-state.ts` and tests with historic execution selection logic.
+  - Updated `apps/web-ui/src/shared/Component.ts` and tests to support `onDblClick`/`onDoubleClick`.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` with `debugExecutionId`, double-click modal opening, active execution polling, and terminal-event run unlocks.
+  - Updated `apps/server-api/src/server.ts` to upsert running execution snapshots from workflow runtime SSE events.
+- Commands:
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts apps/web-ui/src/shared/Component.test.ts --passWithNoTests` failed first for missing implementation, then PASS.
+  - `pnpm typecheck` PASS
+  - `pnpm lint` PASS
+  - `pnpm test` PASS (66 files, 263 tests)
+  - `pnpm build` PASS
+- Issues/Risks:
+  - Browser screenshot QA was not run in this turn; live reload behavior is implemented through persisted in-memory catalog snapshots plus API polling.
+  - Existing unrelated working-tree changes remain in `.atl/skill-registry.md`, `apps/web-ui/src/screens/History.ts`, `pnpm-workspace.yaml`, and `ui-spec/screens/workflow/spec.html`.
+- Next:
+  - Browser QA a long-running workflow: reload during execution, select the running history row, and verify node modal outputs update as polling refreshes the execution record.

@@ -3,6 +3,7 @@ import {
   WorkflowAssetKind,
   WorkflowAssetScope,
   WorkflowExecutionStatus,
+  WorkflowNodeExecutionInputSourceKind,
   WorkflowNodeKind,
   WorkflowRecordStatus,
   WorkflowTriggerKind,
@@ -25,6 +26,7 @@ import {
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
   executeWorkflowExecutionRun,
+  executeWorkflowNodeExecutionRun,
   executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
   parseWorkflowAssetUpsertRequest,
@@ -34,6 +36,7 @@ import {
   parseWorkflowExecutionGetRequest,
   parseWorkflowExecutionListRequest,
   parseWorkflowExecutionRunRequest,
+  parseWorkflowNodeExecutionRunRequest,
   parseWorkflowNodeProviderTestRequest,
 } from "./workflows";
 
@@ -321,6 +324,60 @@ describe("workflow api contracts", () => {
     }
   });
 
+  it("runs and persists a partial node execution", async () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    catalog.upsertWorkflow({
+      ...createWorkflowDefinitionInput(),
+      id: "workflow-1",
+      projectId: "project-1",
+      nodes: [createProviderRunNodeRecord()],
+    });
+
+    const result = await executeWorkflowNodeExecutionRun(
+      {
+        workflowId: "workflow-1",
+        nodeId: "node-1",
+        inputSource: {
+          kind: WorkflowNodeExecutionInputSourceKind.AllPrevious,
+        },
+      },
+      {
+        catalog,
+        runNode: async ({ definition, nodeId, inputSource }) => ({
+          id: "execution-node-1",
+          workflowId: definition.id,
+          projectId: definition.projectId,
+          triggerKind: WorkflowTriggerKind.Manual,
+          status: WorkflowExecutionStatus.Completed,
+          startedAt: BaseTime,
+          finishedAt: "2026-05-06T18:01:00.000Z",
+          durationMs: 60000,
+          warningsCount: 0,
+          errorsCount: 0,
+          totals: {
+            promptTokens: 2,
+            completionTokens: 3,
+            totalTokens: 5,
+            estimatedCostEur: 0.01,
+            latencyMs: 1000,
+          },
+          contextSessionId: `${nodeId}-${inputSource.kind}`,
+          nodeRuns: [],
+        }),
+      },
+    );
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type === ResultType.Ok) {
+      expect(catalog.getExecution("execution-node-1")?.workflowId).toBe(
+        "workflow-1",
+      );
+      expect(result.value.contextSessionId).toBe("node-1-all-previous");
+    }
+  });
+
   it("tests a workflow node provider and updates provider continuity metadata", async () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
@@ -394,6 +451,16 @@ describe("workflow api contracts", () => {
     expect(
       parseWorkflowExecutionRunRequest({
         workflowId: "workflow-1",
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowNodeExecutionRunRequest({
+        workflowId: "workflow-1",
+        nodeId: "node-1",
+        inputSource: {
+          kind: WorkflowNodeExecutionInputSourceKind.NodeOutput,
+          nodeId: "node-upstream",
+        },
       }).type,
     ).toBe(ResultType.Ok);
     expect(

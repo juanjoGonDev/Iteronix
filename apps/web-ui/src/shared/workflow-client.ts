@@ -8,6 +8,7 @@ import type {
   WorkflowDefinitionUpsertInput,
   WorkflowExecutionRecord,
   WorkflowGuardrailFindingRecord,
+  WorkflowNodeExecutionInputSourceRecord,
   WorkflowNodeKind,
   WorkflowProviderSelectionRecord,
   WorkflowUsageTotalsRecord,
@@ -28,6 +29,8 @@ const EndpointPath = {
   ExecutionsDelete: "/workflows/executions/delete",
   ExecutionsRun: "/workflows/executions/run",
   ExecutionsStream: "/workflows/executions/stream",
+  ExecutionsRunNode: "/workflows/executions/run-node",
+  ExecutionsStreamNode: "/workflows/executions/stream-node",
   ProvidersTest: "/workflows/providers/test",
 } as const;
 
@@ -160,6 +163,18 @@ export type WorkflowClient = {
   }) => Promise<WorkflowExecutionRecord>;
   streamWorkflow: (input: {
     workflowId: string;
+    signal?: AbortSignal;
+    onEvent: (event: WorkflowRunStreamEvent) => void;
+  }) => Promise<void>;
+  runNode: (input: {
+    workflowId: string;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+  }) => Promise<WorkflowExecutionRecord>;
+  streamNode: (input: {
+    workflowId: string;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
     signal?: AbortSignal;
     onEvent: (event: WorkflowRunStreamEvent) => void;
   }) => Promise<void>;
@@ -304,6 +319,40 @@ export const createWorkflowClient = (): WorkflowClient => ({
       },
     });
   },
+  runNode: (input) =>
+    requestJson({
+      path: EndpointPath.ExecutionsRunNode,
+      body: {
+        workflowId: input.workflowId,
+        nodeId: input.nodeId,
+        inputSource: input.inputSource,
+      },
+      parse: parseWorkflowExecutionResponse,
+    }),
+  streamNode: async (input) => {
+    let buffer = "";
+
+    await streamText({
+      path: readWorkflowNodeStreamPath(input),
+      ...(input.signal ? { signal: input.signal } : {}),
+      onChunk: (chunk) => {
+        buffer += chunk;
+        let boundaryIndex = buffer.indexOf("\n\n");
+
+        while (boundaryIndex >= 0) {
+          const rawBlock = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + 2);
+          const decoded = decodeServerSentEvents(`${rawBlock}\n\n`);
+
+          for (const event of decoded) {
+            input.onEvent(parseWorkflowRunStreamEvent(event.event, event.data));
+          }
+
+          boundaryIndex = buffer.indexOf("\n\n");
+        }
+      },
+    });
+  },
   testNodeProvider: (input) =>
     requestJson({
       path: EndpointPath.ProvidersTest,
@@ -370,6 +419,23 @@ const parseWorkflowExecutionResponse = (
   parseWorkflowExecutionRecord(
     readRequiredRecord(value, "workflowExecutionResponse", "execution"),
   );
+
+const readWorkflowNodeStreamPath = (input: {
+  workflowId: string;
+  nodeId: string;
+  inputSource: WorkflowNodeExecutionInputSourceRecord;
+}): string => {
+  const params = new URLSearchParams({
+    workflowId: input.workflowId,
+    nodeId: input.nodeId,
+    inputSourceKind: input.inputSource.kind,
+  });
+  if ("nodeId" in input.inputSource) {
+    params.set("sourceNodeId", input.inputSource.nodeId);
+  }
+
+  return `${EndpointPath.ExecutionsStreamNode}?${params.toString()}`;
+};
 
 export const parseWorkflowNodeProviderTestResponse = (
   value: unknown,

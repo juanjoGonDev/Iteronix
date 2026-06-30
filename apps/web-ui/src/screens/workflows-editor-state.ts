@@ -32,6 +32,27 @@ export const WorkflowRecordStatus = {
 export type WorkflowRecordStatus =
   (typeof WorkflowRecordStatus)[keyof typeof WorkflowRecordStatus];
 
+export const WorkflowNodeExecutionInputSourceKind = {
+  LastUpstream: "last-upstream",
+  NodeOutput: "node-output",
+  AllPrevious: "all-previous",
+} as const;
+
+export type WorkflowNodeExecutionInputSourceKind =
+  (typeof WorkflowNodeExecutionInputSourceKind)[keyof typeof WorkflowNodeExecutionInputSourceKind];
+
+export type WorkflowNodeExecutionInputSourceRecord =
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.LastUpstream;
+    }
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.NodeOutput;
+      nodeId: string;
+    }
+  | {
+      kind: typeof WorkflowNodeExecutionInputSourceKind.AllPrevious;
+    };
+
 export const WorkflowAssetKind = {
   Prompt: "prompt",
   Instruction: "instruction",
@@ -425,7 +446,13 @@ export type WorkflowExecutionRecord = {
   workflowId: string;
   projectId: string;
   triggerKind: WorkflowTriggerKind;
-  status: "running" | "completed" | "failed" | "awaiting_review" | "canceled";
+  status:
+    | "queued"
+    | "running"
+    | "completed"
+    | "failed"
+    | "awaiting_review"
+    | "canceled";
   startedAt: string;
   finishedAt?: string;
   durationMs?: number;
@@ -1382,10 +1409,7 @@ const readNodeTemplate = (
     return {
       label: "Merge",
       config: {},
-      inputPorts: [
-        createPort("input-a", "Input A", true),
-        createPort("input-b", "Input B", true),
-      ],
+      inputPorts: [createPort("input", "Input", true)],
       outputPorts: [createPort("output", "Merged", true)],
     };
   }
