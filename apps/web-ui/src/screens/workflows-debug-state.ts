@@ -15,6 +15,20 @@ export type WorkflowDebugOutputMap = ReadonlyMap<string, unknown>;
 
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
+export type WorkflowStepExecutionAvailability = {
+  disabled: boolean;
+  label: "Execute step" | "Executing";
+};
+
+export type WorkflowRunControlState = {
+  disabled: boolean;
+  icon: "play_arrow" | "pause";
+  label: "Run" | "Pause";
+  mode: "run" | "pause";
+  title?: string | undefined;
+  variant: "secondary" | "danger";
+};
+
 export type WorkflowDebugInputSource = {
   id: string;
   label: string;
@@ -59,6 +73,89 @@ export const readExecutionRefreshPollingAction = (input: {
 
   return input.isPolling ? "keep" : "start";
 };
+
+export const selectWorkflowCanvasExecution = <
+  TExecution extends WorkflowCanvasExecutionLike,
+>(input: {
+  workflowId: string;
+  liveExecutionId: string | null;
+  selectedExecutionId: string | null;
+  executions: ReadonlyArray<TExecution>;
+}): TExecution | null =>
+  readExecutionById(
+    input.executions,
+    input.workflowId,
+    input.liveExecutionId,
+  ) ??
+  readExecutionById(
+    input.executions,
+    input.workflowId,
+    input.selectedExecutionId,
+  ) ??
+  readActiveWorkflowExecution(input.executions, input.workflowId);
+
+export const readWorkflowStepExecutionAvailability = (input: {
+  hasNodeSelection: boolean;
+  hasCurrentProject: boolean;
+  hasCurrentWorkflow: boolean;
+  hasDirtyWorkflow: boolean;
+  dirtyAssetCount: number;
+  hasPendingAction: boolean;
+  hasActiveExecution: boolean;
+}): WorkflowStepExecutionAvailability => {
+  if (input.hasActiveExecution) {
+    return {
+      disabled: true,
+      label: "Executing",
+    };
+  }
+
+  return {
+    disabled:
+      !input.hasNodeSelection ||
+      !input.hasCurrentProject ||
+      !input.hasCurrentWorkflow ||
+      input.hasDirtyWorkflow ||
+      input.dirtyAssetCount > 0 ||
+      input.hasPendingAction,
+    label: "Execute step",
+  };
+};
+
+export const readWorkflowRunControlState = (input: {
+  hasCurrentWorkflow: boolean;
+  hasPendingAction: boolean;
+  hasUnsavedChanges: boolean;
+  hasActiveExecution: boolean;
+  canPauseLiveExecution: boolean;
+}): WorkflowRunControlState => {
+  if (input.hasActiveExecution) {
+    return {
+      disabled: !input.canPauseLiveExecution,
+      icon: "pause",
+      label: "Pause",
+      mode: "pause",
+      title: input.canPauseLiveExecution ? undefined : PausedServerRunTitle,
+      variant: "danger",
+    };
+  }
+
+  return {
+    disabled:
+      !input.hasCurrentWorkflow ||
+      input.hasPendingAction ||
+      input.hasUnsavedChanges,
+    icon: "play_arrow",
+    label: "Run",
+    mode: "run",
+    title: undefined,
+    variant: "secondary",
+  };
+};
+
+export const readWorkflowExecutionIsActive = (
+  status: WorkflowExecutionRecord["status"] | "running" | null | undefined,
+): boolean => status === "queued" || status === "running";
 
 export const readWorkflowDebugStatusTone = (input: {
   status?: WorkflowNodeExecutionRecord["status"] | "pending" | "warn";
@@ -189,6 +286,11 @@ type WorkflowDebugExecutionLike = Pick<
   "id" | "workflowId"
 >;
 
+type WorkflowCanvasExecutionLike = Pick<
+  WorkflowExecutionRecord,
+  "id" | "workflowId" | "status" | "startedAt"
+>;
+
 const readExecutionById = <TExecution extends WorkflowDebugExecutionLike>(
   executions: ReadonlyArray<TExecution>,
   workflowId: string,
@@ -205,6 +307,21 @@ const readExecutionById = <TExecution extends WorkflowDebugExecutionLike>(
     ) ?? null
   );
 };
+
+const readActiveWorkflowExecution = <
+  TExecution extends WorkflowCanvasExecutionLike,
+>(
+  executions: ReadonlyArray<TExecution>,
+  workflowId: string,
+): TExecution | null =>
+  executions
+    .filter(
+      (execution) =>
+        execution.workflowId === workflowId &&
+        readWorkflowExecutionIsActive(execution.status),
+    )
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ??
+  null;
 
 const readSchemaEntries = (
   value: unknown,
@@ -244,6 +361,8 @@ const readSchemaEntries = (
 
 const MaximumSchemaDepth = 4;
 const NodeModalPointerDetailThreshold = 2;
+const PausedServerRunTitle =
+  "This run is active on the server. Pause is available only for the live stream in this tab.";
 
 const readValueType = (value: unknown): string => {
   if (value === null) {

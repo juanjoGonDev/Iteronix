@@ -6,6 +6,10 @@ import {
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
   readExecutionRefreshPollingAction,
+  readWorkflowExecutionIsActive,
+  readWorkflowRunControlState,
+  readWorkflowStepExecutionAvailability,
+  selectWorkflowCanvasExecution,
   shouldOpenNodeModalFromPointerDetail,
   selectWorkflowDebugExecution,
 } from "./workflows-debug-state.js";
@@ -115,6 +119,106 @@ describe("workflows debug state", () => {
         isPolling: true,
       }),
     ).toBe("keep");
+  });
+
+  it("keeps active running execution visuals after returning to editor mode", () => {
+    const selected = selectWorkflowCanvasExecution({
+      workflowId: "workflow-1",
+      liveExecutionId: null,
+      selectedExecutionId: null,
+      executions: [
+        {
+          id: "historic-run",
+          workflowId: "workflow-1",
+          status: "completed",
+          startedAt: "2026-06-30T10:00:00.000Z",
+        },
+        {
+          id: "running-run",
+          workflowId: "workflow-1",
+          status: "running",
+          startedAt: "2026-06-30T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(selected?.id).toBe("running-run");
+  });
+
+  it("keeps selected historic execution visuals while inspecting history", () => {
+    const selected = selectWorkflowCanvasExecution({
+      workflowId: "workflow-1",
+      liveExecutionId: null,
+      selectedExecutionId: "historic-run",
+      executions: [
+        {
+          id: "historic-run",
+          workflowId: "workflow-1",
+          status: "completed",
+          startedAt: "2026-06-30T10:00:00.000Z",
+        },
+        {
+          id: "running-run",
+          workflowId: "workflow-1",
+          status: "running",
+          startedAt: "2026-06-30T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(selected?.id).toBe("historic-run");
+  });
+
+  it("disables step execution while a workflow execution is active", () => {
+    expect(
+      readWorkflowStepExecutionAvailability({
+        hasNodeSelection: true,
+        hasCurrentProject: true,
+        hasCurrentWorkflow: true,
+        hasDirtyWorkflow: false,
+        dirtyAssetCount: 0,
+        hasPendingAction: false,
+        hasActiveExecution: true,
+      }),
+    ).toEqual({
+      disabled: true,
+      label: "Executing",
+    });
+    expect(readWorkflowExecutionIsActive("running")).toBe(true);
+    expect(readWorkflowExecutionIsActive("queued")).toBe(true);
+    expect(readWorkflowExecutionIsActive("completed")).toBe(false);
+  });
+
+  it("turns the global run button into pause while execution is active", () => {
+    expect(
+      readWorkflowRunControlState({
+        hasCurrentWorkflow: true,
+        hasPendingAction: false,
+        hasUnsavedChanges: false,
+        hasActiveExecution: true,
+        canPauseLiveExecution: true,
+      }),
+    ).toEqual({
+      disabled: false,
+      icon: "pause",
+      label: "Pause",
+      mode: "pause",
+      title: undefined,
+      variant: "danger",
+    });
+    expect(
+      readWorkflowRunControlState({
+        hasCurrentWorkflow: true,
+        hasPendingAction: false,
+        hasUnsavedChanges: false,
+        hasActiveExecution: true,
+        canPauseLiveExecution: false,
+      }),
+    ).toMatchObject({
+      disabled: true,
+      label: "Pause",
+      mode: "pause",
+    });
   });
 
   it("creates a compact schema tree with item counts", () => {

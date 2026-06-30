@@ -3232,3 +3232,27 @@
   - Workspace saves happen more often during long executions; they are serialized through one queue to avoid overlapping writes.
 - Next
   - If more n8n parity is needed, add server-side subscription/resume APIs for execution stream reattachment rather than only polling persisted snapshots.
+
+### 2026-07-01 00:13 (Europe/Madrid) — Workflows Execution Control Sync
+
+- Summary
+  - Fixed Workflows execution control desync after inspecting history and returning to edit mode.
+- Decisions
+  - Canvas/node visuals now prefer the selected historical execution while inspecting history, but fall back to the active queued/running execution when returning to editor mode.
+  - The global Run button becomes a Pause button while an execution is active; pause is enabled only for the live stream owned by the current tab.
+  - Step execution and per-node/provider run controls are disabled while any queued/running execution exists for the current workflow.
+- Changes
+  - Added pure Workflows debug-state helpers for canvas execution selection, active execution detection, step availability, and global run/pause control state.
+  - Updated `Workflows.ts` to use those helpers for node visuals, Execute step, node hover play, provider test, and the toolbar run/pause control.
+  - Abort errors from pausing the local live stream no longer surface as workflow run failures.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first for missing helper contracts, then passed after implementation.
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts apps/web-ui/src/shared/Component.test.ts --passWithNoTests`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks
+  - The Pause control can only abort the live SSE stream owned by the current browser tab; server-side cancel/resume remains a separate runtime capability.
+- Next
+  - Add a real server-side execution cancel/pause endpoint if workflow interruption must work after reload or from another tab.
