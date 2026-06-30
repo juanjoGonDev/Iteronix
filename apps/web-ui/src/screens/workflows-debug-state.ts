@@ -13,6 +13,8 @@ export type WorkflowDebugStatusTone =
 
 export type WorkflowDebugOutputMap = ReadonlyMap<string, unknown>;
 
+export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
+
 export type WorkflowDebugInputSource = {
   id: string;
   label: string;
@@ -42,6 +44,20 @@ export const readWorkflowDebugItemCount = (value: unknown): number => {
 export const readWorkflowDebugItemLabel = (value: unknown): string => {
   const count = readWorkflowDebugItemCount(value);
   return `${count.toString()} item${count === 1 ? "" : "s"}`;
+};
+
+export const shouldOpenNodeModalFromPointerDetail = (detail: number): boolean =>
+  detail >= NodeModalPointerDetailThreshold;
+
+export const readExecutionRefreshPollingAction = (input: {
+  autoRefreshEnabled: boolean;
+  isPolling: boolean;
+}): ExecutionRefreshPollingAction => {
+  if (!input.autoRefreshEnabled) {
+    return input.isPolling ? "stop" : "keep";
+  }
+
+  return input.isPolling ? "keep" : "start";
 };
 
 export const readWorkflowDebugStatusTone = (input: {
@@ -227,6 +243,7 @@ const readSchemaEntries = (
 };
 
 const MaximumSchemaDepth = 4;
+const NodeModalPointerDetailThreshold = 2;
 
 const readValueType = (value: unknown): string => {
   if (value === null) {

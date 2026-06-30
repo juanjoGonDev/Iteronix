@@ -3205,3 +3205,30 @@
   - Existing unrelated working-tree changes remain in `.atl/skill-registry.md`, `apps/web-ui/src/screens/History.ts`, `pnpm-workspace.yaml`, and `ui-spec/screens/workflow/spec.html`.
 - Next:
   - Browser QA a long-running workflow: reload during execution, select the running history row, and verify node modal outputs update as polling refreshes the execution record.
+
+### 2026-06-30 23:45 (Europe/Madrid) — Workflows Live Execution Refresh
+
+- Summary
+  - Fixed Workflows node double-click modal opening, execution history auto-refresh, and live execution persistence during SSE streaming.
+- Decisions
+  - Kept the existing modal-first/n8n-like workflow architecture; no right sidebar was reintroduced.
+  - Auto-refresh now polls while enabled instead of depending on an already-present active execution row.
+  - Runtime progress events now schedule serialized workspace saves so queued/running rows survive web reloads.
+  - SSE writes and close calls are guarded after browser disconnects so background progress persistence is not interrupted by response write failures.
+- Changes
+  - Added OpenSpec SDD change `fix-workflow-live-execution-refresh` with proposal, spec, design, tasks, and verification report.
+  - Added pure Workflows debug helpers and tests for pointer double-click detection and polling policy.
+  - Bound the execution history Auto refresh checkbox to state and polling behavior.
+  - Open node editor modal on pointer double-click before drag state begins in edit mode; historical/live execution mode still opens the execution node modal.
+  - Persist workflow runtime progress snapshots during full workflow and execute-node SSE streams.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` (red, then green)
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts apps/web-ui/src/shared/Component.test.ts apps/server-api/src/workflows.test.ts --passWithNoTests`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks
+  - Workspace saves happen more often during long executions; they are serialized through one queue to avoid overlapping writes.
+- Next
+  - If more n8n parity is needed, add server-side subscription/resume APIs for execution stream reattachment rather than only polling persisted snapshots.

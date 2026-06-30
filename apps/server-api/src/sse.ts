@@ -23,15 +23,22 @@ export const createSseStream = (res: ServerResponse): SseStream => {
   res.setHeader(HeaderName.ContentType, MimeType.EventStream);
   res.setHeader(HeaderName.CacheControl, HeaderValue.NoCache);
   res.setHeader(HeaderName.Connection, HeaderValue.KeepAlive);
-  res.write("\n");
+  writeSsePayload(res, "\n");
 
   const send = (event: SseEvent): void => {
-    const payload = formatSseEvent(event);
-    res.write(payload);
+    writeSsePayload(res, formatSseEvent(event));
   };
 
   const close = (): void => {
-    res.end();
+    if (isResponseClosed(res)) {
+      return;
+    }
+
+    try {
+      res.end();
+    } catch {
+      return;
+    }
   };
 
   return {
@@ -53,3 +60,18 @@ const formatSseEvent = (event: SseEvent): string => {
 
   return `${lines.join("\n")}\n`;
 };
+
+const writeSsePayload = (res: ServerResponse, payload: string): void => {
+  if (isResponseClosed(res)) {
+    return;
+  }
+
+  try {
+    res.write(payload);
+  } catch {
+    return;
+  }
+};
+
+const isResponseClosed = (res: ServerResponse): boolean =>
+  res.writableEnded || res.destroyed;

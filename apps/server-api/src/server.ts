@@ -4708,6 +4708,7 @@ const handleWorkflowExecutionStream = async (
   }
 
   const stream = createSseStream(res);
+  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
 
   try {
     const result = await executeWorkflowExecutionRun(
@@ -4716,7 +4717,9 @@ const handleWorkflowExecutionStream = async (
         catalog: workflowCatalog,
         runWorkflow: workflowRuntime.runWorkflow,
         onEvent: (event) => {
-          persistWorkflowRuntimeProgress(workflowCatalog, event);
+          if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
+            progressSaves.schedule();
+          }
           stream.send({
             event: readWorkflowStreamEventName(event),
             data: event,
@@ -4739,6 +4742,7 @@ const handleWorkflowExecutionStream = async (
       return;
     }
 
+    await progressSaves.flush();
     await workspacePersistence.saveCurrent();
   } catch (error) {
     stream.send({
@@ -4753,6 +4757,7 @@ const handleWorkflowExecutionStream = async (
       },
     });
   } finally {
+    await progressSaves.flush();
     stream.close();
   }
 };
@@ -4773,13 +4778,16 @@ const handleWorkflowNodeExecutionStream = async (
   }
 
   const stream = createSseStream(res);
+  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
 
   try {
     const result = await executeWorkflowNodeExecutionRun(parsed.value, {
       catalog: workflowCatalog,
       runNode: workflowRuntime.runNode,
       onEvent: (event) => {
-        persistWorkflowRuntimeProgress(workflowCatalog, event);
+        if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
+          progressSaves.schedule();
+        }
         stream.send({
           event: readWorkflowStreamEventName(event),
           data: event,
@@ -4801,6 +4809,7 @@ const handleWorkflowNodeExecutionStream = async (
       return;
     }
 
+    await progressSaves.flush();
     await workspacePersistence.saveCurrent();
   } catch (error) {
     stream.send({
@@ -4817,6 +4826,7 @@ const handleWorkflowNodeExecutionStream = async (
       },
     });
   } finally {
+    await progressSaves.flush();
     stream.close();
   }
 };
@@ -4871,32 +4881,60 @@ const handleWorkflowNodeProviderTest = async (
 const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string =>
   event.type;
 
+const createWorkspaceSaveScheduler = (
+  workspacePersistence: WorkspacePersistence,
+): {
+  schedule: () => void;
+  flush: () => Promise<void>;
+} => {
+  let saveQueue: Promise<void> = Promise.resolve();
+
+  const schedule = (): void => {
+    saveQueue = saveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await workspacePersistence.saveCurrent();
+      });
+    void saveQueue.catch(() => undefined);
+  };
+
+  const flush = async (): Promise<void> => {
+    await saveQueue.catch(() => undefined);
+  };
+
+  return {
+    schedule,
+    flush,
+  };
+};
+
 const persistWorkflowRuntimeProgress = (
   workflowCatalog: WorkflowCatalogStore,
   event: WorkflowRuntimeEvent,
-): void => {
+): boolean => {
   if (event.type === WorkflowRuntimeEventType.WorkflowCompleted) {
     workflowCatalog.upsertExecution(event.execution);
-    return;
+    return true;
   }
 
   if (event.type === WorkflowRuntimeEventType.WorkflowFailed) {
     workflowCatalog.upsertExecution(event.execution);
-    return;
+    return true;
   }
 
   const workflow = workflowCatalog.getWorkflow(event.workflowId);
   if (!workflow) {
-    return;
+    return false;
   }
 
   const current = workflowCatalog.getExecution(event.workflowRunId);
   const next = createWorkflowProgressExecution(workflow, current, event);
   if (!next) {
-    return;
+    return false;
   }
 
   workflowCatalog.upsertExecution(next);
+  return true;
 };
 
 const createWorkflowProgressExecution = (

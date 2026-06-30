@@ -26,10 +26,12 @@ import type { ProjectRecord } from "../shared/workbench-types.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
   buildWorkflowDebugInputSources,
+  readExecutionRefreshPollingAction,
   readWorkflowDebugItemLabel,
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
   selectWorkflowDebugExecution,
+  shouldOpenNodeModalFromPointerDetail,
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
@@ -507,6 +509,7 @@ interface WorkflowsScreenState {
   serverLogs: ReadonlyArray<ServerLogEntry>;
   workflowLogsFilter: WorkflowLogsFilter;
   executionHistoryFilter: ExecutionHistoryFilter;
+  executionAutoRefreshEnabled: boolean;
   draftWorkflow: WorkflowDefinitionUpsertInput | null;
   selection: WorkflowSelection;
   activeSidebarSection: SidebarSection;
@@ -571,6 +574,7 @@ export class WorkflowsScreen extends Component<
       serverLogs: [],
       workflowLogsFilter: WorkflowLogsFilter.Errors,
       executionHistoryFilter: ExecutionHistoryFilter.All,
+      executionAutoRefreshEnabled: true,
       draftWorkflow: null,
       selection: { type: "workflow", id: null },
       activeSidebarSection: SidebarSection.Workflows,
@@ -1506,8 +1510,9 @@ export class WorkflowsScreen extends Component<
               [
                 createElement("input", {
                   type: "checkbox",
-                  checked: true,
-                  disabled: true,
+                  checked: this.state.executionAutoRefreshEnabled,
+                  onChange: (event: Event) =>
+                    this.handleExecutionAutoRefreshChange(event),
                   className:
                     "h-4 w-4 rounded border-[#ff6d00] bg-[#ff6d00] accent-[#ff6d00]",
                 }),
@@ -8829,6 +8834,17 @@ export class WorkflowsScreen extends Component<
     });
   }
 
+  private handleExecutionAutoRefreshChange(event: Event): void {
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+
+    this.setState({
+      executionAutoRefreshEnabled: event.target.checked,
+    });
+    this.syncExecutionRefreshPolling();
+  }
+
   private handleNodePointerDown(event: PointerEvent, nodeId: string): void {
     if (!(event.target instanceof HTMLElement)) {
       return;
@@ -8844,6 +8860,13 @@ export class WorkflowsScreen extends Component<
       this.state.liveExecution !== null
     ) {
       this.openExecutionNodeModal(nodeId);
+      return;
+    }
+
+    if (shouldOpenNodeModalFromPointerDetail(event.detail)) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.openSelectionEditorModal({ type: "node", id: nodeId });
       return;
     }
 
@@ -10328,16 +10351,17 @@ export class WorkflowsScreen extends Component<
   }
 
   private syncExecutionRefreshPolling(): void {
-    const hasActiveExecution = this.state.executions.some(
-      (execution) =>
-        execution.status === "queued" || execution.status === "running",
-    );
-    if (!hasActiveExecution) {
+    const action = readExecutionRefreshPollingAction({
+      autoRefreshEnabled: this.state.executionAutoRefreshEnabled,
+      isPolling: this.executionRefreshIntervalId !== null,
+    });
+
+    if (action === "stop") {
       this.stopExecutionRefreshPolling();
       return;
     }
 
-    if (this.executionRefreshIntervalId !== null) {
+    if (action === "keep") {
       return;
     }
 

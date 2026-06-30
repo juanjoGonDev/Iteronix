@@ -5,6 +5,8 @@ import {
   readWorkflowDebugItemLabel,
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
+  readExecutionRefreshPollingAction,
+  shouldOpenNodeModalFromPointerDetail,
   selectWorkflowDebugExecution,
 } from "./workflows-debug-state.js";
 import {
@@ -87,6 +89,32 @@ describe("workflows debug state", () => {
     });
 
     expect(selected?.id).toBe("old-run");
+  });
+
+  it("detects node double-clicks from pointer detail before drag starts", () => {
+    expect(shouldOpenNodeModalFromPointerDetail(1)).toBe(false);
+    expect(shouldOpenNodeModalFromPointerDetail(2)).toBe(true);
+  });
+
+  it("keeps execution auto-refresh polling enabled when the toggle is on", () => {
+    expect(
+      readExecutionRefreshPollingAction({
+        autoRefreshEnabled: true,
+        isPolling: false,
+      }),
+    ).toBe("start");
+    expect(
+      readExecutionRefreshPollingAction({
+        autoRefreshEnabled: false,
+        isPolling: true,
+      }),
+    ).toBe("stop");
+    expect(
+      readExecutionRefreshPollingAction({
+        autoRefreshEnabled: true,
+        isPolling: true,
+      }),
+    ).toBe("keep");
   });
 
   it("creates a compact schema tree with item counts", () => {
