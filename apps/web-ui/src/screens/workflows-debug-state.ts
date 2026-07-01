@@ -29,6 +29,12 @@ export type WorkflowRunControlState = {
   variant: "secondary" | "danger";
 };
 
+export type WorkflowDraftReloadState<TDraft> = {
+  draftWorkflow: TDraft | null;
+  dirtyWorkflow: boolean;
+  dirtyAssetIds: ReadonlyArray<string>;
+};
+
 export type WorkflowDebugInputSource = {
   id: string;
   label: string;
@@ -62,6 +68,28 @@ export const readWorkflowDebugItemLabel = (value: unknown): string => {
 
 export const shouldOpenNodeModalFromPointerDetail = (detail: number): boolean =>
   detail >= NodeModalPointerDetailThreshold;
+
+export const shouldOpenNodeModalFromPointerSequence = (input: {
+  nodeId: string;
+  eventDetail: number;
+  eventTime: number;
+  previousNodeId: string | null;
+  previousEventTime: number | null;
+}): boolean => {
+  if (shouldOpenNodeModalFromPointerDetail(input.eventDetail)) {
+    return true;
+  }
+
+  if (
+    input.previousNodeId !== input.nodeId ||
+    input.previousEventTime === null
+  ) {
+    return false;
+  }
+
+  const elapsed = input.eventTime - input.previousEventTime;
+  return elapsed >= 0 && elapsed <= NodeModalPointerSequenceWindowMs;
+};
 
 export const readExecutionRefreshPollingAction = (input: {
   autoRefreshEnabled: boolean;
@@ -276,6 +304,40 @@ export const selectWorkflowDebugExecution = <
   ) ??
   null;
 
+export const selectWorkflowDraftAfterCatalogReload = <
+  TDraft extends { id?: string },
+  TWorkflow extends { id: string },
+>(input: {
+  currentDraftWorkflow: TDraft | null;
+  currentWorkflow: TWorkflow | null;
+  hasDirtyWorkflow: boolean;
+  dirtyAssetIds: ReadonlyArray<string>;
+  toDraftWorkflow: (workflow: TWorkflow) => TDraft;
+}): WorkflowDraftReloadState<TDraft> => {
+  const shouldKeepLocalDraft =
+    input.hasDirtyWorkflow &&
+    input.currentDraftWorkflow !== null &&
+    input.currentDraftWorkflow.id !== undefined &&
+    (input.currentWorkflow === null ||
+      input.currentWorkflow.id === input.currentDraftWorkflow.id);
+
+  if (shouldKeepLocalDraft) {
+    return {
+      draftWorkflow: input.currentDraftWorkflow,
+      dirtyWorkflow: true,
+      dirtyAssetIds: input.dirtyAssetIds,
+    };
+  }
+
+  return {
+    draftWorkflow: input.currentWorkflow
+      ? input.toDraftWorkflow(input.currentWorkflow)
+      : null,
+    dirtyWorkflow: false,
+    dirtyAssetIds: [],
+  };
+};
+
 type WorkflowDefinitionInputLike = Pick<
   WorkflowDefinitionRecord,
   "nodes" | "edges"
@@ -361,6 +423,7 @@ const readSchemaEntries = (
 
 const MaximumSchemaDepth = 4;
 const NodeModalPointerDetailThreshold = 2;
+const NodeModalPointerSequenceWindowMs = 500;
 const PausedServerRunTitle =
   "This run is active on the server. Pause is available only for the live stream in this tab.";
 

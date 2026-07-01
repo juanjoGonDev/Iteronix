@@ -10,7 +10,9 @@ import {
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
   selectWorkflowCanvasExecution,
+  selectWorkflowDraftAfterCatalogReload,
   shouldOpenNodeModalFromPointerDetail,
+  shouldOpenNodeModalFromPointerSequence,
   selectWorkflowDebugExecution,
 } from "./workflows-debug-state.js";
 import {
@@ -98,6 +100,77 @@ describe("workflows debug state", () => {
   it("detects node double-clicks from pointer detail before drag starts", () => {
     expect(shouldOpenNodeModalFromPointerDetail(1)).toBe(false);
     expect(shouldOpenNodeModalFromPointerDetail(2)).toBe(true);
+  });
+
+  it("detects node double-clicks from repeated pointer downs when detail is unavailable", () => {
+    expect(
+      shouldOpenNodeModalFromPointerSequence({
+        nodeId: "node-1",
+        eventDetail: 0,
+        eventTime: 1_200,
+        previousNodeId: "node-1",
+        previousEventTime: 1_000,
+      }),
+    ).toBe(true);
+    expect(
+      shouldOpenNodeModalFromPointerSequence({
+        nodeId: "node-2",
+        eventDetail: 0,
+        eventTime: 1_200,
+        previousNodeId: "node-1",
+        previousEventTime: 1_000,
+      }),
+    ).toBe(false);
+    expect(
+      shouldOpenNodeModalFromPointerSequence({
+        nodeId: "node-1",
+        eventDetail: 0,
+        eventTime: 1_800,
+        previousNodeId: "node-1",
+        previousEventTime: 1_000,
+      }),
+    ).toBe(false);
+  });
+
+  it("preserves dirty canvas edits while execution auto-refresh reloads catalog data", () => {
+    const serverWorkflow = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Saved",
+    });
+    const savedWorkflow = { ...serverWorkflow, id: "workflow-1" };
+    const dirtyWorkflow = {
+      ...savedWorkflow,
+      name: "Unsaved local edit",
+    };
+
+    const result = selectWorkflowDraftAfterCatalogReload({
+      currentDraftWorkflow: dirtyWorkflow,
+      currentWorkflow: savedWorkflow,
+      hasDirtyWorkflow: true,
+      dirtyAssetIds: [],
+      toDraftWorkflow: (workflow) => workflow,
+    });
+
+    expect(result.draftWorkflow?.name).toBe("Unsaved local edit");
+    expect(result.dirtyWorkflow).toBe(true);
+  });
+
+  it("accepts the server workflow after catalog reload when the local draft is clean", () => {
+    const serverWorkflow = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Server update",
+    });
+
+    const result = selectWorkflowDraftAfterCatalogReload({
+      currentDraftWorkflow: null,
+      currentWorkflow: { ...serverWorkflow, id: "workflow-1" },
+      hasDirtyWorkflow: false,
+      dirtyAssetIds: [],
+      toDraftWorkflow: (workflow) => workflow,
+    });
+
+    expect(result.draftWorkflow?.name).toBe("Server update");
+    expect(result.dirtyWorkflow).toBe(false);
   });
 
   it("keeps execution auto-refresh polling enabled when the toggle is on", () => {

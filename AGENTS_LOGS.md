@@ -3256,3 +3256,26 @@
   - The Pause control can only abort the live SSE stream owned by the current browser tab; server-side cancel/resume remains a separate runtime capability.
 - Next
   - Add a real server-side execution cancel/pause endpoint if workflow interruption must work after reload or from another tab.
+
+### 2026-07-01 10:11 (Europe/Madrid) — Workflows Canvas Edit Stability
+
+- Summary
+  - Fixed Workflows node double-click modal opening when native pointer detail is unavailable and stopped auto-refresh catalog reloads from replacing dirty canvas edits.
+- Decisions
+  - Detect node double-clicks from repeated pointerdown events on the same node within a short window, not only from `event.detail` or native `dblclick`.
+  - Preserve the dirty local draft during execution/history auto-refresh reloads so runtime status hydration updates do not reset node moves or newly added nodes.
+  - Explicit save/create/run completion reloads can still accept the server workflow snapshot and clear dirty state.
+- Changes
+  - Added pure Workflows debug-state helpers and tests for pointer-sequence double-click detection and catalog reload draft preservation.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to use the pointer sequence helper and to preserve dirty drafts during auto-refresh catalog reloads.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first for missing helper contracts, then passed after implementation.
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts apps/web-ui/src/shared/Component.test.ts --passWithNoTests` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (66 files, 272 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser screenshot QA was not run; behavior is covered by pure state tests and full quality gates.
+- Next
+  - Add server-side cancel/pause if executions must be interruptible after reload or from another tab.

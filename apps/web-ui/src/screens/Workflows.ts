@@ -35,7 +35,8 @@ import {
   readWorkflowStepExecutionAvailability,
   selectWorkflowCanvasExecution,
   selectWorkflowDebugExecution,
-  shouldOpenNodeModalFromPointerDetail,
+  selectWorkflowDraftAfterCatalogReload,
+  shouldOpenNodeModalFromPointerSequence,
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
@@ -565,6 +566,8 @@ export class WorkflowsScreen extends Component<
   private spacePanPressed = false;
   private panOrigin: { x: number; y: number } | null = null;
   private panViewportOrigin: WorkflowViewportRecord | null = null;
+  private lastNodePointerDown: { nodeId: string; eventTime: number } | null =
+    null;
   private liveExecutionAbortController: AbortController | null = null;
   private executionRefreshIntervalId: number | null = null;
 
@@ -8273,6 +8276,7 @@ export class WorkflowsScreen extends Component<
   private async reloadCatalog(
     projectId: string,
     workspaceState = this.state.workspaceState,
+    options: { preserveLocalDraft?: boolean } = {},
   ): Promise<void> {
     const workspaceId = readWorkspaceId(
       workspaceState,
@@ -8312,19 +8316,28 @@ export class WorkflowsScreen extends Component<
           ? nextSelection.id
           : null;
 
+    const shouldPreserveLocalDraft = options.preserveLocalDraft ?? true;
+    const draftState = selectWorkflowDraftAfterCatalogReload({
+      currentDraftWorkflow: shouldPreserveLocalDraft
+        ? this.state.draftWorkflow
+        : null,
+      currentWorkflow,
+      hasDirtyWorkflow: shouldPreserveLocalDraft && this.state.dirtyWorkflow,
+      dirtyAssetIds: shouldPreserveLocalDraft ? this.state.dirtyAssetIds : [],
+      toDraftWorkflow: stripDefinitionVersionFields,
+    });
+
     this.setState({
       workflows,
       assets,
       assetUsages,
       executions,
-      draftWorkflow: currentWorkflow
-        ? stripDefinitionVersionFields(currentWorkflow)
-        : null,
+      draftWorkflow: draftState.draftWorkflow,
       selection: nextSelection,
       debugExecutionId,
       loadingExecutionId: null,
-      dirtyWorkflow: false,
-      dirtyAssetIds: [],
+      dirtyWorkflow: draftState.dirtyWorkflow,
+      dirtyAssetIds: draftState.dirtyAssetIds,
     });
     this.syncExecutionRefreshPolling();
   }
@@ -8422,7 +8435,9 @@ export class WorkflowsScreen extends Component<
           name: `Workflow ${this.state.workflows.length + 1}`,
         }),
       });
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadCatalog(this.state.currentProject.id, undefined, {
+        preserveLocalDraft: false,
+      });
       this.handleSelectWorkflow(created.id);
       this.setState({
         pendingAction: null,
@@ -8481,7 +8496,9 @@ export class WorkflowsScreen extends Component<
           "Workflow stream finished without a persisted execution.",
         );
       }
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadCatalog(this.state.currentProject.id, undefined, {
+        preserveLocalDraft: false,
+      });
       await this.handleSelectExecution(completedExecution.id);
       this.setState({
         pendingAction: null,
@@ -8615,7 +8632,9 @@ export class WorkflowsScreen extends Component<
         projectId: this.state.currentProject.id,
         definition: this.state.draftWorkflow,
       });
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadCatalog(this.state.currentProject.id, undefined, {
+        preserveLocalDraft: false,
+      });
       this.handleSelectWorkflow(saved.id);
       this.setState({
         pendingAction: null,
@@ -8966,9 +8985,24 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    if (shouldOpenNodeModalFromPointerDetail(event.detail)) {
+    const shouldOpenEditor = shouldOpenNodeModalFromPointerSequence({
+      nodeId,
+      eventDetail: event.detail,
+      eventTime: event.timeStamp,
+      previousNodeId: this.lastNodePointerDown?.nodeId ?? null,
+      previousEventTime: this.lastNodePointerDown?.eventTime ?? null,
+    });
+    this.lastNodePointerDown = {
+      nodeId,
+      eventTime: event.timeStamp,
+    };
+
+    if (shouldOpenEditor) {
       event.preventDefault();
       event.stopPropagation();
+      this.draggingNodeId = null;
+      this.dragPointerOffset = null;
+      this.lastNodePointerDown = null;
       this.openSelectionEditorModal({ type: "node", id: nodeId });
       return;
     }
