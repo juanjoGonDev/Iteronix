@@ -27,6 +27,7 @@ export type ToastKind = "success" | "error";
 const GlobalToastViewportId = "iteronix-global-toast-viewport";
 const GlobalToastDismissMs = 4500;
 const activeToastKeys = new Set<string>();
+const renderedNoticeToastKeys = new Set<string>();
 
 export interface PageTabItem {
   id: string;
@@ -91,13 +92,19 @@ export class PageIntro extends Component<PageIntroProps> {
 export class PageNoticeStack extends Component<PageNoticeStackProps> {
   override render(): HTMLElement {
     const { errorMessage = null, noticeMessage = null } = this.props;
+    const nextNoticeToastKeys = new Set<string>();
 
     if (errorMessage) {
-      showGlobalToast("error", errorMessage);
+      showPageNoticeToast("error", errorMessage, nextNoticeToastKeys);
     }
 
     if (noticeMessage) {
-      showGlobalToast("success", noticeMessage);
+      showPageNoticeToast("success", noticeMessage, nextNoticeToastKeys);
+    }
+
+    renderedNoticeToastKeys.clear();
+    for (const toastKey of nextNoticeToastKeys) {
+      renderedNoticeToastKeys.add(toastKey);
     }
 
     return createElement("div", {
@@ -183,7 +190,7 @@ export const readToastClassName = (kind: ToastKind): string =>
   );
 
 export const readToastViewportClassName = (): string =>
-  "pointer-events-none fixed right-5 top-20 z-50 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3";
+  "pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3";
 
 export const showGlobalToast = (kind: ToastKind, message: string): void => {
   const trimmedMessage = message.trim();
@@ -195,7 +202,7 @@ export const showGlobalToast = (kind: ToastKind, message: string): void => {
     return;
   }
 
-  const toastKey = `${kind}:${trimmedMessage}`;
+  const toastKey = readToastKey(kind, trimmedMessage);
   if (activeToastKeys.has(toastKey)) {
     return;
   }
@@ -223,9 +230,32 @@ const joinClasses = (...values: ReadonlyArray<string>): string =>
     .filter((value) => value.length > 0)
     .join(" ");
 
+const showPageNoticeToast = (
+  kind: ToastKind,
+  message: string,
+  nextNoticeToastKeys: Set<string>,
+): void => {
+  const trimmedMessage = message.trim();
+  if (trimmedMessage.length === 0) {
+    return;
+  }
+
+  const toastKey = readToastKey(kind, trimmedMessage);
+  nextNoticeToastKeys.add(toastKey);
+  if (renderedNoticeToastKeys.has(toastKey)) {
+    return;
+  }
+
+  showGlobalToast(kind, trimmedMessage);
+};
+
+const readToastKey = (kind: ToastKind, message: string): string =>
+  `${kind}:${message}`;
+
 const ensureGlobalToastViewport = (): HTMLElement => {
   const existingViewport = document.getElementById(GlobalToastViewportId);
   if (existingViewport instanceof HTMLElement) {
+    existingViewport.className = readToastViewportClassName();
     return existingViewport;
   }
 

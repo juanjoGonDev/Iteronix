@@ -38,9 +38,12 @@ describe("PageScaffold", () => {
     expect(readPageIntroDescriptionClassName()).toContain("text-slate-600");
   });
 
-  it("uses solid toast surfaces with close controls instead of inline translucent alerts", () => {
+  it("uses solid toast surfaces with close controls in the bottom-right viewport", () => {
     expect(readToastViewportClassName()).toContain("fixed");
     expect(readToastViewportClassName()).toContain("z-50");
+    expect(readToastViewportClassName()).toContain("right-5");
+    expect(readToastViewportClassName()).toContain("bottom-5");
+    expect(readToastViewportClassName()).not.toContain("top-20");
     expect(readToastClassName("success")).toContain("bg-emerald-50");
     expect(readToastClassName("error")).toContain("bg-rose-50");
     expect(readToastClassName("success")).not.toContain("/10");
@@ -56,6 +59,33 @@ describe("PageScaffold", () => {
 
     expect(recorded).toContain("attr:data-notice-stack=global-toast-adapter");
     expect(recorded).not.toContain("text:A project root path is required.");
+  });
+
+  it("emits each unchanged notice only once until it is cleared", () => {
+    const recorded = renderWithFakeBrowser(() => {
+      new PageNoticeStack({
+        errorMessage: null,
+        noticeMessage: "Workflow saved to the server workspace.",
+      }).render();
+      new PageNoticeStack({
+        errorMessage: null,
+        noticeMessage: "Workflow saved to the server workspace.",
+      }).render();
+      new PageNoticeStack({
+        errorMessage: null,
+        noticeMessage: null,
+      }).render();
+      new PageNoticeStack({
+        errorMessage: null,
+        noticeMessage: "Workflow saved to the server workspace.",
+      }).render();
+    });
+
+    expect(
+      recorded.filter(
+        (entry) => entry === "text:Workflow saved to the server workspace.",
+      ),
+    ).toHaveLength(2);
   });
 });
 
@@ -118,6 +148,104 @@ const renderWithFakeDocument = (callback: () => void): string[] => {
       Object.defineProperty(globalThis, "HTMLElement", {
         configurable: true,
         value: originalHtmlElement,
+      });
+    }
+  }
+
+  return recorded;
+};
+
+const renderWithFakeBrowser = (callback: () => void): string[] => {
+  const recorded = renderWithFakeDocumentAndWindow(callback);
+  return recorded;
+};
+
+const renderWithFakeDocumentAndWindow = (callback: () => void): string[] => {
+  const recorded: string[] = [];
+  const originalDocument = globalThis.document;
+  const originalHtmlElement = globalThis.HTMLElement;
+  const originalWindow = globalThis.window;
+
+  class FakeHtmlElement {
+    className = "";
+    dataset: Record<string, string> = {};
+    id = "";
+    textContent = "";
+
+    appendChild(child: unknown): void {
+      const textContent = readNodeTextContent(child);
+      if (textContent !== null) {
+        recorded.push(`text:${textContent}`);
+      }
+    }
+
+    addEventListener(eventName: string, _listener: EventListener): void {
+      recorded.push(`listener:${eventName}`);
+    }
+
+    setAttribute(key: string, value: string): void {
+      recorded.push(`attr:${key}=${value}`);
+    }
+
+    remove(): void {
+      recorded.push("remove");
+    }
+  }
+
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      body: new FakeHtmlElement(),
+      getElementById: () => null,
+      createElement: () => new FakeHtmlElement(),
+      createTextNode: (value: string) => ({
+        nodeType: 3,
+        textContent: value,
+      }),
+    },
+  });
+  Object.defineProperty(globalThis, "HTMLElement", {
+    configurable: true,
+    value: FakeHtmlElement,
+  });
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      clearTimeout: (_id: number) => undefined,
+      setTimeout: (callback: () => void, _timeout: number) => {
+        callback();
+        return 1;
+      },
+    },
+  });
+
+  try {
+    callback();
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, "document");
+    } else {
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: originalDocument,
+      });
+    }
+
+    if (originalHtmlElement === undefined) {
+      Reflect.deleteProperty(globalThis, "HTMLElement");
+    } else {
+      Object.defineProperty(globalThis, "HTMLElement", {
+        configurable: true,
+        value: originalHtmlElement,
+      });
+    }
+
+    if (originalWindow === undefined) {
+      Reflect.deleteProperty(globalThis, "window");
+    } else {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
       });
     }
   }

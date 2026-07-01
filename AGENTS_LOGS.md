@@ -3279,3 +3279,25 @@
   - Browser screenshot QA was not run; behavior is covered by pure state tests and full quality gates.
 - Next
   - Add server-side cancel/pause if executions must be interruptible after reload or from another tab.
+
+### 2026-07-01 10:50 (Europe/Madrid) — Global Toast Deduplication and Placement
+
+- Summary
+  - Fixed repeated global toast notifications by emitting unchanged page notices only once until the notice state is cleared.
+  - Moved the global toast viewport from the top-right to the bottom-right.
+- Decisions
+  - Keep `PageNoticeStack` as the global adapter, but track the last rendered notice keys separately from active DOM toasts so a persisted state message does not reappear after auto-dismiss on later renders.
+  - Keep direct `showGlobalToast` behavior unchanged for explicit future callers; deduplication is scoped to page notice props.
+- Changes
+  - Updated `apps/web-ui/src/components/PageScaffold.ts` with page-notice dedupe and bottom-right viewport class.
+  - Added PageScaffold tests for bottom-right placement and no repeated toast emissions until notice clear.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/components/PageScaffold.test.ts --passWithNoTests` failed first for top-right placement and repeated notice behavior, then passed after implementation.
+  - `pnpm lint` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (66 files, 273 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Pre-existing repo-wide prettier hook blockers may still affect normal pre-push; current task files pass project gates.
+- Next
+  - Browser QA: trigger a save notice, wait for auto-dismiss, interact with the page, and confirm the same toast does not reappear unless the notice is cleared and emitted again.
