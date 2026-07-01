@@ -26,6 +26,12 @@ export type WorkflowNodeHoverRunControlState = {
   title: string;
 };
 
+export type WorkflowNodeStepLaunchSource = "hover" | "modal";
+
+export type WorkflowNodeStepLaunchState = {
+  editorModalOpen: boolean;
+};
+
 export type WorkflowRunControlState = {
   disabled: boolean;
   icon: "play_arrow" | "stop";
@@ -192,6 +198,12 @@ export const readWorkflowNodeHoverRunControlState = (input: {
         : "Execute workflow up to this node",
   };
 };
+
+export const readWorkflowNodeStepLaunchState = (
+  source: WorkflowNodeStepLaunchSource,
+): WorkflowNodeStepLaunchState => ({
+  editorModalOpen: source === "modal",
+});
 
 export const readWorkflowRunControlState = (input: {
   hasCurrentWorkflow: boolean;

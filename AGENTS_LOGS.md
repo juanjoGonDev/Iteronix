@@ -3440,3 +3440,24 @@
   - Browser QA was not run; behavior is covered by unit state tests and full gates.
 - Next
   - Browser QA: hover a node, click play, confirm the modal opens and live execution runs only up to that node.
+
+### 2026-07-01 22:12 (Europe/Madrid) — Workflows Hover Run Modal State
+
+- Summary
+  - Fixed node hover Run so it executes the node step on the canvas without opening the editor modal.
+- Decisions
+  - Modal Execute step keeps the modal open; hover Run uses the same stream execution path but keeps `editorModalOpen` false.
+  - Added a pure launch-source helper to prevent future regressions between hover and modal behavior.
+- Changes
+  - Added `readWorkflowNodeStepLaunchState` with regression coverage.
+  - Passed launch source from hover and modal callers into `handleExecuteNodeStep`.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 284 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser QA was not run; behavior is covered by state regression tests and full gates.
+- Next
+  - Browser QA: hover a node, click play, verify no modal opens and canvas execution status updates.

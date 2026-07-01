@@ -32,6 +32,7 @@ import {
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
   readWorkflowNodeHoverRunControlState,
+  readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
   selectWorkflowCanvasExecution,
@@ -2403,7 +2404,7 @@ export class WorkflowsScreen extends Component<
               title: runControl.title,
               disabled: runControl.disabled,
               onClick: () => {
-                void this.handleExecuteNodeStep(node.id);
+                void this.handleExecuteNodeStep(node.id, "hover");
               },
             }),
             this.renderNodeHoverToolbarButton({
@@ -5148,15 +5149,19 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    await this.handleExecuteNodeStep(selectedNode.id);
+    await this.handleExecuteNodeStep(selectedNode.id, "modal");
   }
 
-  private async handleExecuteNodeStep(nodeId: string): Promise<void> {
+  private async handleExecuteNodeStep(
+    nodeId: string,
+    source: "hover" | "modal",
+  ): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const projectId = this.state.currentProject?.id;
     const targetNode = currentWorkflow?.nodes.find(
       (node) => node.id === nodeId,
     );
+    const launchState = readWorkflowNodeStepLaunchState(source);
     if (
       !targetNode ||
       !currentWorkflow ||
@@ -5172,7 +5177,7 @@ export class WorkflowsScreen extends Component<
       debugExecutionId: null,
       errorMessage: null,
       noticeMessage: null,
-      editorModalOpen: true,
+      editorModalOpen: launchState.editorModalOpen,
       selection: { type: "node", id: targetNode.id },
     });
     this.cancelLiveExecutionStream();
@@ -5194,7 +5199,7 @@ export class WorkflowsScreen extends Component<
         liveExecution: null,
         selection: { type: "node", id: targetNode.id },
         debugExecutionId: this.readCompletedLiveExecution()?.id ?? null,
-        editorModalOpen: true,
+        editorModalOpen: launchState.editorModalOpen,
         errorMessage: null,
         noticeMessage: null,
       });

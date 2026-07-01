@@ -8,6 +8,7 @@ import {
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
   readWorkflowNodeHoverRunControlState,
+  readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
@@ -300,6 +301,15 @@ describe("workflows debug state", () => {
       disabled: false,
       icon: "play_arrow",
       title: "Execute workflow up to this node",
+    });
+  });
+
+  it("keeps hover node execution on the canvas without opening the editor modal", () => {
+    expect(readWorkflowNodeStepLaunchState("hover")).toEqual({
+      editorModalOpen: false,
+    });
+    expect(readWorkflowNodeStepLaunchState("modal")).toEqual({
+      editorModalOpen: true,
     });
   });
 
