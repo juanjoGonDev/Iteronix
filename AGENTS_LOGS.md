@@ -3369,3 +3369,28 @@
   - Browser screenshot QA was not run; behavior is covered by unit tests and full gates.
 - Next
   - Browser QA: open a prompt output contract, test a regex pattern, save/reload, and verify prompt/guardrail execution policies persist through the server.
+
+### 2026-07-01 16:22 (Europe/Madrid) — Workflows Regex Clean State and Provider Timeout
+
+- Summary
+  - Made the Workflows regex tester open with no default flags or sample text and prevented empty regex patterns from producing zero-width match noise.
+  - Added a timeout to OpenAI-compatible/custom provider requests so a lost or hung local provider fails the workflow instead of leaving it running indefinitely.
+- Decisions
+  - Treat an empty regex pattern as a valid, clean, non-evaluated state with zero matches.
+  - Use a 5-minute default timeout for OpenAI-compatible provider calls, matching the workflow asset timeout default, with test override support for deterministic unit coverage.
+  - Keep timeout enforcement inside the provider adapter so full workflow and execute-step paths share the same failure behavior.
+- Changes
+  - Updated `apps/web-ui/src/screens/Workflows.ts` regex tester defaults.
+  - Updated `apps/web-ui/src/screens/workflows-editor-state.ts` empty-pattern evaluation behavior.
+  - Updated `packages/adapters/src/openai-compatible/provider.ts` to abort hung requests and surface a typed timeout error message.
+  - Added regression coverage in `apps/web-ui/src/screens/workflows-editor-state.test.ts` and `apps/server-api/src/workflow-runtime.test.ts`.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts apps/server-api/src/workflow-runtime.test.ts --passWithNoTests` failed first, then PASS after implementation.
+  - `pnpm lint` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (66 files, 280 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Existing persisted executions that were already stuck before this fix are not retroactively repaired; new hung provider calls fail after the timeout.
+- Next
+  - Add a maintenance/reconciliation pass if the app should automatically mark old pre-fix running executions as failed on startup.

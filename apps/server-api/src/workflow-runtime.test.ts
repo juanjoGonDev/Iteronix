@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createOpenAiCompatibleProvider } from "../../../packages/adapters/src/openai-compatible/provider";
 
 describe("workflow runtime provider adapters", () => {
@@ -71,5 +71,44 @@ describe("workflow runtime provider adapters", () => {
         totalTokens: 18,
       },
     });
+  });
+
+  it("fails openai-compatible requests when the provider stops responding", async () => {
+    vi.useFakeTimers();
+    try {
+      const requestTimeoutMs = 25;
+      const provider = createOpenAiCompatibleProvider({
+        baseUrl: "http://127.0.0.1:3001",
+        apiKey: "secret-token",
+        requestTimeoutMs,
+        fetchImplementation: async (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => {
+                reject(
+                  new DOMException("The operation was aborted.", "AbortError"),
+                );
+              },
+              { once: true },
+            );
+          }),
+      });
+
+      const runPromise = expect(
+        provider.run({
+          modelId: "gpt-4.1",
+          input: "Say hello",
+          temperature: 0.2,
+        }),
+      ).rejects.toThrow(
+        "OpenAI-compatible provider request timed out after 25ms.",
+      );
+      await vi.advanceTimersByTimeAsync(requestTimeoutMs);
+
+      await runPromise;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

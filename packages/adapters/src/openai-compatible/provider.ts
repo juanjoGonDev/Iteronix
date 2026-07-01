@@ -14,6 +14,7 @@ export type OpenAiCompatibleProviderConfig = {
   baseUrl: string;
   apiKey: string;
   fetchImplementation?: typeof fetch;
+  requestTimeoutMs?: number;
   models?: ReadonlyArray<LLMModel>;
 };
 
@@ -36,6 +37,11 @@ type OpenAiCompatibleResponse = {
 };
 
 const DefaultChatCompletionsPath = "/v1/chat/completions";
+const MillisecondsPerSecond = 1_000;
+const SecondsPerMinute = 60;
+const DefaultRequestTimeoutMinutes = 5;
+const DefaultRequestTimeoutMs =
+  DefaultRequestTimeoutMinutes * SecondsPerMinute * MillisecondsPerSecond;
 
 export const openAiCompatibleCapabilities: LLMProviderCapabilities = {
   streaming: false,
@@ -87,44 +93,82 @@ const runOpenAiCompatibleRequest = async (
   request: LLMRunRequest,
 ): Promise<LLMRunResult> => {
   const fetchImplementation = config.fetchImplementation ?? fetch;
-  const response = await fetchImplementation(
-    buildChatCompletionsUrl(config.baseUrl),
+  const timeoutMs = normalizeRequestTimeoutMs(config.requestTimeoutMs);
+  const abortController = new AbortController();
+  let requestTimedOut = false;
+  const timeout = setTimeout(() => {
+    requestTimedOut = true;
+    abortController.abort();
+  }, timeoutMs);
+  try {
+    const response = await fetchOpenAiCompatibleResponse({
+      fetchImplementation,
+      config,
+      request,
+      abortController,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `OpenAI-compatible provider request failed with status ${response.status.toString()}.`,
+      );
+    }
+
+    const payload = (await response.json()) as OpenAiCompatibleResponse;
+    return {
+      message: readMessageContent(payload),
+      ...(payload.usage
+        ? {
+            usage: {
+              inputTokens: payload.usage.prompt_tokens ?? 0,
+              outputTokens: payload.usage.completion_tokens ?? 0,
+              totalTokens: payload.usage.total_tokens ?? 0,
+            },
+          }
+        : {}),
+    };
+  } catch (error) {
+    if (requestTimedOut) {
+      throw new Error(
+        `OpenAI-compatible provider request timed out after ${timeoutMs.toString()}ms.`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const fetchOpenAiCompatibleResponse = async (input: {
+  fetchImplementation: typeof fetch;
+  config: OpenAiCompatibleProviderConfig;
+  request: LLMRunRequest;
+  abortController: AbortController;
+}): Promise<Response> => {
+  return await input.fetchImplementation(
+    buildChatCompletionsUrl(input.config.baseUrl),
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${input.config.apiKey}`,
         "Content-Type": "application/json",
       },
+      signal: input.abortController.signal,
       body: JSON.stringify({
-        model: request.modelId,
-        messages: buildMessages(request),
-        ...(request.temperature !== undefined
-          ? { temperature: request.temperature }
+        model: input.request.modelId,
+        messages: buildMessages(input.request),
+        ...(input.request.temperature !== undefined
+          ? { temperature: input.request.temperature }
           : {}),
       }),
     },
   );
-
-  if (!response.ok) {
-    throw new Error(
-      `OpenAI-compatible provider request failed with status ${response.status.toString()}.`,
-    );
-  }
-
-  const payload = (await response.json()) as OpenAiCompatibleResponse;
-  return {
-    message: readMessageContent(payload),
-    ...(payload.usage
-      ? {
-          usage: {
-            inputTokens: payload.usage.prompt_tokens ?? 0,
-            outputTokens: payload.usage.completion_tokens ?? 0,
-            totalTokens: payload.usage.total_tokens ?? 0,
-          },
-        }
-      : {}),
-  };
 };
+
+const normalizeRequestTimeoutMs = (value: number | undefined): number =>
+  value !== undefined && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : DefaultRequestTimeoutMs;
 
 const buildChatCompletionsUrl = (baseUrl: string): string => {
   const normalized = baseUrl.trim().replace(/\/+$/u, "");

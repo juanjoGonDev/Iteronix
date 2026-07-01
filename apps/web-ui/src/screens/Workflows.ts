@@ -278,9 +278,8 @@ const LatestResponseSourcePath = "$";
 const LatestResponseSourceLabel = "Latest response";
 const ExecutionRefreshIntervalMs = 1_500;
 const WorkflowAssetTimeoutMinuteMs = 60_000;
-const DefaultRegexTesterFlags = "gm";
-const DefaultPatternRegexTestText = "hola\nque\nhaces";
-const DefaultGuardrailRegexTestText = "sample output\nanother sample";
+const DefaultRegexTesterFlags = "";
+const DefaultRegexTesterTestText = "";
 const InspectorInputClassName =
   "w-full rounded-md border border-border-dark bg-[#0e141b] px-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-primary focus:ring-1 focus:ring-primary/40";
 const InspectorTextInputClassName = `h-10 ${InspectorInputClassName}`;
@@ -7405,7 +7404,7 @@ export class WorkflowsScreen extends Component<
               title: input.title,
               pattern: input.value,
               flags: DefaultRegexTesterFlags,
-              testText: DefaultPatternRegexTestText,
+              testText: DefaultRegexTesterTestText,
             }),
           children: "Test",
           dataset: {
@@ -8109,7 +8108,7 @@ export class WorkflowsScreen extends Component<
                   title: "Guardrail regex",
                   pattern: this.state.guardrailValidationValue,
                   flags: DefaultRegexTesterFlags,
-                  testText: DefaultGuardrailRegexTestText,
+                  testText: DefaultRegexTesterTestText,
                 }),
               children: "Test",
               dataset: {

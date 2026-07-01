@@ -592,6 +592,16 @@ export const evaluateWorkflowRegex = (input: {
   testText: string;
 }): WorkflowRegexEvaluationResult => {
   const flags = normalizeWorkflowRegexFlags(input.flags);
+  if (input.pattern.length === 0) {
+    return {
+      valid: true,
+      pattern: input.pattern,
+      flags,
+      matches: [],
+      truncated: false,
+    };
+  }
+
   const evaluationFlags = normalizeWorkflowRegexFlags(
     flags.includes(WorkflowRegexGlobalFlag)
       ? flags

@@ -148,6 +148,22 @@ describe("workflows editor state", () => {
     expect(zeroWidth.matches).toHaveLength(2);
   });
 
+  it("keeps an empty regex evaluation clean", () => {
+    const result = evaluateWorkflowRegex({
+      pattern: "",
+      flags: "",
+      testText: "",
+    });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      throw new Error("Expected empty regex evaluation to be valid.");
+    }
+    expect(result.flags).toBe("");
+    expect(result.matches).toEqual([]);
+    expect(result.truncated).toBe(false);
+  });
+
   it("returns a typed regex error for invalid patterns", () => {
     const result = evaluateWorkflowRegex({
       pattern: "(missing",
