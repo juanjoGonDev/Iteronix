@@ -20,6 +20,25 @@ import {
 const BaseTime = "2026-05-16T18:00:00.000Z";
 
 describe("workflow runtime", () => {
+  it("emits the manual trigger execution date as node output", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async () => ({
+        outputText: "Provider output",
+      }),
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+    });
+
+    expect(execution.nodeRuns[0]?.nodeId).toBe("node-trigger");
+    expect(execution.nodeRuns[0]?.outputSnapshot).toEqual({
+      executedAt: "2026-05-16T18:00:01.000Z",
+    });
+  });
+
   it("keeps server-owned continuity between provider nodes", async () => {
     const providerCalls: Array<{
       nodeId: string;

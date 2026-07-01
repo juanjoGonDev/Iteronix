@@ -309,6 +309,7 @@ export const createWorkflowRuntime = (input: {
           assetsById,
           workflowRunId,
           definition: request.definition,
+          nodeStartedAt,
           now,
           runProviderNode: input.runProviderNode,
           ...(request.signal ? { signal: request.signal } : {}),
@@ -438,6 +439,7 @@ const executeWorkflowNode = async (input: {
   assetsById: Map<string, WorkflowAssetRecord>;
   workflowRunId: string;
   definition: WorkflowDefinitionRecord;
+  nodeStartedAt: string;
   now: () => Date;
   runProviderNode: (
     request: WorkflowProviderRunRequest,
@@ -453,8 +455,24 @@ const executeWorkflowNode = async (input: {
   failedByGuardrail: boolean;
   provider?: WorkflowProviderSelectionRecord;
 }> => {
+  if (input.node.kind === WorkflowNodeKind.TriggerManual) {
+    const outputSnapshot = createTriggerExecutionOutput(input.nodeStartedAt);
+    return {
+      envelope: appendEnvelopeOutput(input.envelope, {
+        nodeId: input.node.id,
+        outputSnapshot,
+        message: "",
+        citations: [],
+        guardrailFindings: [],
+      }),
+      outputSnapshot,
+      alerts: [],
+      guardrailFindings: [],
+      failedByGuardrail: false,
+    };
+  }
+
   if (
-    input.node.kind === WorkflowNodeKind.TriggerManual ||
     input.node.kind === WorkflowNodeKind.LogicCondition ||
     input.node.kind === WorkflowNodeKind.LogicMerge ||
     input.node.kind === WorkflowNodeKind.TerminalResponse
@@ -571,6 +589,12 @@ const executeWorkflowNode = async (input: {
     `Workflow node kind ${input.node.kind} is not supported in 06.6`,
   );
 };
+
+const createTriggerExecutionOutput = (
+  executedAt: string,
+): Record<"executedAt", string> => ({
+  executedAt,
+});
 
 const buildProviderPrompt = (
   node: WorkflowNodeRecord,

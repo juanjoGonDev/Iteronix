@@ -3523,3 +3523,24 @@
   - Browser screenshot QA was not run; this is a focused layout-only correction.
 - Next
   - Browser QA: open a node modal and verify the side icons sit on the modal edges at left/right center.
+
+### 2026-07-02 00:47 (Europe/Madrid) — Workflows Trigger Execution Date
+
+- Summary
+  - Manual workflow trigger nodes now emit their execution timestamp as structured node output.
+- Decisions
+  - Use an ISO `executedAt` field based on the trigger node start time, preserving deterministic runtime tests.
+  - Keep the trigger output out of conversational messages while still storing it in workflow variables/artifacts for downstream use.
+- Changes
+  - Added a runtime regression test for trigger output timestamp.
+  - Added trigger-specific output creation in the workflow runtime.
+- Commands
+  - `pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm lint` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (66 files, 287 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser QA was not run; behavior is covered at runtime level and should surface automatically in existing node output panels.
+- Next
+  - Browser QA: run a workflow and verify the Manual trigger node output shows `executedAt` in the node modal/history.
