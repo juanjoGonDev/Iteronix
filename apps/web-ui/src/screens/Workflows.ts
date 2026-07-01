@@ -36,6 +36,7 @@ import {
   selectWorkflowCanvasExecution,
   selectWorkflowDebugExecution,
   selectWorkflowDraftAfterCatalogReload,
+  shouldApplyWorkflowExecutionsRefresh,
   shouldOpenNodeModalFromPointerSequence,
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
@@ -8342,6 +8343,33 @@ export class WorkflowsScreen extends Component<
     this.syncExecutionRefreshPolling();
   }
 
+  private async reloadExecutionCatalog(projectId: string): Promise<void> {
+    const executions = await this.workflowClient.listExecutions({ projectId });
+    if (
+      !shouldApplyWorkflowExecutionsRefresh(this.state.executions, executions)
+    ) {
+      return;
+    }
+
+    this.setState({
+      executions,
+      debugExecutionId:
+        this.state.debugExecutionId &&
+        executions.some(
+          (execution) => execution.id === this.state.debugExecutionId,
+        )
+          ? this.state.debugExecutionId
+          : null,
+      loadingExecutionId:
+        this.state.loadingExecutionId &&
+        executions.some(
+          (execution) => execution.id === this.state.loadingExecutionId,
+        )
+          ? this.state.loadingExecutionId
+          : null,
+    });
+  }
+
   private async reloadAssetCatalog(
     projectId: string,
     workspaceState = this.state.workspaceState,
@@ -10511,7 +10539,7 @@ export class WorkflowsScreen extends Component<
         return;
       }
 
-      void this.reloadCatalog(projectId);
+      void this.reloadExecutionCatalog(projectId);
     }, ExecutionRefreshIntervalMs);
   }
 

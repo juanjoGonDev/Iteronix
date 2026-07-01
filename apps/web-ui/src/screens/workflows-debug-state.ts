@@ -102,6 +102,13 @@ export const readExecutionRefreshPollingAction = (input: {
   return input.isPolling ? "keep" : "start";
 };
 
+export const shouldApplyWorkflowExecutionsRefresh = (
+  currentExecutions: ReadonlyArray<unknown>,
+  nextExecutions: ReadonlyArray<unknown>,
+): boolean =>
+  serializeExecutionRefreshSnapshot(currentExecutions) !==
+  serializeExecutionRefreshSnapshot(nextExecutions);
+
 export const selectWorkflowCanvasExecution = <
   TExecution extends WorkflowCanvasExecutionLike,
 >(input: {
@@ -369,6 +376,10 @@ const readExecutionById = <TExecution extends WorkflowDebugExecutionLike>(
     ) ?? null
   );
 };
+
+const serializeExecutionRefreshSnapshot = (
+  executions: ReadonlyArray<unknown>,
+): string => JSON.stringify(executions);
 
 const readActiveWorkflowExecution = <
   TExecution extends WorkflowCanvasExecutionLike,

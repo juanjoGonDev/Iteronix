@@ -3301,3 +3301,24 @@
   - Pre-existing repo-wide prettier hook blockers may still affect normal pre-push; current task files pass project gates.
 - Next
   - Browser QA: trigger a save notice, wait for auto-dismiss, interact with the page, and confirm the same toast does not reappear unless the notice is cleared and emitted again.
+
+### 2026-07-01 12:05 (Europe/Madrid) — Workflows Modal Refresh Stability
+
+- Summary
+  - Stopped Workflows execution auto-refresh from reloading the full catalog while edit/result modals are open.
+- Decisions
+  - Execution polling now refreshes only persisted executions and skips `setState` when the execution catalog snapshot is unchanged.
+- Changes
+  - Added `shouldApplyWorkflowExecutionsRefresh` with tests.
+  - Added `reloadExecutionCatalog` and routed polling through it instead of `reloadCatalog`.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests`
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts apps/web-ui/src/components/PageScaffold.test.ts --passWithNoTests`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks
+  - Necessary execution changes still update Workflows state; this is intentional so running/status data remains live.
+- Next
+  - Browser QA: keep an edit modal open through polling intervals and verify focus/content only changes when execution data changes.

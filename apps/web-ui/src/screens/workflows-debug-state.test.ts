@@ -9,6 +9,7 @@ import {
   readWorkflowExecutionIsActive,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
+  shouldApplyWorkflowExecutionsRefresh,
   selectWorkflowCanvasExecution,
   selectWorkflowDraftAfterCatalogReload,
   shouldOpenNodeModalFromPointerDetail,
@@ -192,6 +193,27 @@ describe("workflows debug state", () => {
         isPolling: true,
       }),
     ).toBe("keep");
+  });
+
+  it("skips execution auto-refresh updates when the execution catalog did not change", () => {
+    const current = [
+      {
+        id: "run-1",
+        workflowId: "workflow-1",
+        status: "running",
+        startedAt: "2026-07-01T10:00:00.000Z",
+        nodeRuns: [],
+      },
+    ];
+
+    expect(shouldApplyWorkflowExecutionsRefresh(current, [...current])).toBe(
+      false,
+    );
+    expect(
+      shouldApplyWorkflowExecutionsRefresh(current, [
+        { ...current[0], status: "completed" },
+      ]),
+    ).toBe(true);
   });
 
   it("keeps active running execution visuals after returning to editor mode", () => {
