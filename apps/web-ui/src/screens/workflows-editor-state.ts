@@ -172,6 +172,37 @@ type AttachedGuardrailRecord = {
   enabled: boolean;
 };
 
+export const JsonSchemaStringFormat = {
+  Email: "email",
+  Url: "url",
+  Uuid: "uuid",
+  Nif: "nif",
+  Date: "date",
+  DateTime: "date-time",
+  Time: "time",
+  Duration: "duration",
+  Year: "year",
+  YearMonth: "year-month",
+  MonthDay: "month-day",
+  DateEu: "date-eu",
+  DateUs: "date-us",
+  DateEuDash: "date-eu-dash",
+  DateUsDash: "date-us-dash",
+  DateSlash: "date-slash",
+  DateDot: "date-dot",
+  DateCompact: "date-compact",
+  Rfc2822: "rfc-2822",
+  UnixSeconds: "unix-seconds",
+  UnixMilliseconds: "unix-milliseconds",
+} as const;
+
+export type JsonSchemaStringFormat =
+  (typeof JsonSchemaStringFormat)[keyof typeof JsonSchemaStringFormat];
+
+const JsonSchemaStringFormatValues: ReadonlyArray<string> = Object.values(
+  JsonSchemaStringFormat,
+);
+
 export type JsonSchemaNodeRecord = {
   type: "object" | "string" | "number" | "integer" | "boolean" | "array";
   title?: string;
@@ -181,7 +212,7 @@ export type JsonSchemaNodeRecord = {
   items?: JsonSchemaNodeRecord;
   enum?: ReadonlyArray<string>;
   nullable?: boolean;
-  format?: "email" | "url" | "uuid" | "nif";
+  format?: JsonSchemaStringFormat;
   minLength?: number;
   maxLength?: number;
   pattern?: string;
@@ -210,7 +241,7 @@ export type JsonContractProviderSchemaRecord =
     }
   | {
       t: "s" | "n" | "i" | "b";
-      f?: "email" | "url" | "uuid" | "nif";
+      f?: JsonSchemaStringFormat;
       min?: number;
       max?: number;
       re?: string;
@@ -1919,17 +1950,8 @@ const buildJsonSchemaZodExpressionCore = (
     if (schema.pattern) {
       stringExpression = `${stringExpression}.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`;
     }
-    if (schema.format === "email") {
-      stringExpression = `${stringExpression}.email()`;
-    }
-    if (schema.format === "url") {
-      stringExpression = `${stringExpression}.url()`;
-    }
-    if (schema.format === "uuid") {
-      stringExpression = `${stringExpression}.uuid()`;
-    }
-    if (schema.format === "nif") {
-      stringExpression = `${stringExpression}.regex(/^(?:\\\\d{8}|[XYZ]\\\\d{7})[A-Z]$/iu)`;
+    if (schema.format) {
+      stringExpression = `${stringExpression}${readJsonSchemaStringFormatZodSuffix(schema.format)}`;
     }
     if (schema.enum && schema.enum.length > 0) {
       stringExpression = `${stringExpression}.refine((value) => ${JSON.stringify(schema.enum)}.includes(value))`;
@@ -1960,6 +1982,109 @@ const buildJsonSchemaZodExpressionCore = (
   }
 
   return "z.boolean()";
+};
+
+const readJsonSchemaStringFormatZodSuffix = (
+  format: JsonSchemaStringFormat,
+): string => {
+  if (format === JsonSchemaStringFormat.Email) {
+    return ".email()";
+  }
+
+  if (format === JsonSchemaStringFormat.Url) {
+    return ".url()";
+  }
+
+  if (format === JsonSchemaStringFormat.Uuid) {
+    return ".uuid()";
+  }
+
+  if (format === JsonSchemaStringFormat.Nif) {
+    return ".regex(/^(?:\\d{8}|[XYZ]\\d{7})[A-Z]$/iu)";
+  }
+
+  return `.refine((value) => ${readJsonSchemaStringFormatPredicate(format)}, { message: ${JSON.stringify(format)} })`;
+};
+
+const readJsonSchemaStringFormatPredicate = (
+  format: JsonSchemaStringFormat,
+): string => {
+  if (format === JsonSchemaStringFormat.Date) {
+    return readDatePartsPredicate("^(\\d{4})-(\\d{2})-(\\d{2})$", 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.DateTime) {
+    return `(() => { const match = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,9})?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$/u); if (!match) { return false; } const year = Number(match[1]); const month = Number(match[2]); const day = Number(match[3]); const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day && !Number.isNaN(Date.parse(value)); })()`;
+  }
+
+  if (format === JsonSchemaStringFormat.Time) {
+    return "/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,9})?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)?$/u.test(value)";
+  }
+
+  if (format === JsonSchemaStringFormat.Duration) {
+    return "/^P(?=\\d|T\\d)(?:\\d+Y)?(?:\\d+M)?(?:\\d+W)?(?:\\d+D)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?)?$/u.test(value)";
+  }
+
+  if (format === JsonSchemaStringFormat.Year) {
+    return "/^\\d{4}$/u.test(value)";
+  }
+
+  if (format === JsonSchemaStringFormat.YearMonth) {
+    return "/^\\d{4}-(?:0[1-9]|1[0-2])$/u.test(value)";
+  }
+
+  if (format === JsonSchemaStringFormat.MonthDay) {
+    return readDatePartsPredicate("^(\\d{2})-(\\d{2})$", null, 1, 2, 2000);
+  }
+
+  if (format === JsonSchemaStringFormat.DateEu) {
+    return readDatePartsPredicate("^(\\d{2})/(\\d{2})/(\\d{4})$", 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateUs) {
+    return readDatePartsPredicate("^(\\d{2})/(\\d{2})/(\\d{4})$", 3, 1, 2);
+  }
+
+  if (format === JsonSchemaStringFormat.DateEuDash) {
+    return readDatePartsPredicate("^(\\d{2})-(\\d{2})-(\\d{4})$", 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateUsDash) {
+    return readDatePartsPredicate("^(\\d{2})-(\\d{2})-(\\d{4})$", 3, 1, 2);
+  }
+
+  if (format === JsonSchemaStringFormat.DateSlash) {
+    return readDatePartsPredicate("^(\\d{4})/(\\d{2})/(\\d{2})$", 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.DateDot) {
+    return readDatePartsPredicate("^(\\d{2})\\.(\\d{2})\\.(\\d{4})$", 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateCompact) {
+    return readDatePartsPredicate("^(\\d{4})(\\d{2})(\\d{2})$", 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.Rfc2822) {
+    return "/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \\d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \\d{4} (?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d GMT$/u.test(value) && !Number.isNaN(Date.parse(value))";
+  }
+
+  if (format === JsonSchemaStringFormat.UnixSeconds) {
+    return "/^\\d{10}$/u.test(value) && Number.isFinite(Number(value))";
+  }
+
+  return "/^\\d{13}$/u.test(value) && Number.isFinite(Number(value))";
+};
+
+const readDatePartsPredicate = (
+  pattern: string,
+  yearIndex: number | null,
+  monthIndex: number,
+  dayIndex: number,
+  fallbackYear?: number,
+): string => {
+  const escapedPattern = pattern.replaceAll("/", "\\/");
+  return `(() => { const match = value.match(/${escapedPattern}/u); if (!match) { return false; } const year = ${yearIndex === null ? (fallbackYear?.toString() ?? "2000") : `Number(match[${yearIndex.toString()}])`}; const month = Number(match[${monthIndex.toString()}]); const day = Number(match[${dayIndex.toString()}]); const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day; })()`;
 };
 
 const validateJsonSchemaValue = (
@@ -2077,32 +2202,181 @@ const validateJsonSchemaStringValue = (
     return [`${prefix} must be one of: ${schema.enum.join(", ")}.`];
   }
 
-  if (schema.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) {
-    return [`${prefix} must be a valid email.`];
-  }
-
-  if (schema.format === "url") {
-    try {
-      void new URL(value);
-    } catch {
-      return [`${prefix} must be a valid url.`];
-    }
-  }
-
-  if (
-    schema.format === "uuid" &&
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-      value,
-    )
-  ) {
-    return [`${prefix} must be a valid uuid.`];
-  }
-
-  if (schema.format === "nif" && !/^(?:\d{8}|[XYZ]\d{7})[A-Z]$/iu.test(value)) {
-    return [`${prefix} must be a valid nif.`];
+  const formatIssue = validateJsonSchemaStringFormat(
+    schema.format,
+    value,
+    prefix,
+  );
+  if (formatIssue) {
+    return [formatIssue];
   }
 
   return [];
+};
+
+const validateJsonSchemaStringFormat = (
+  format: JsonSchemaStringFormat | undefined,
+  value: string,
+  prefix: string,
+): string | null => {
+  if (!format) {
+    return null;
+  }
+
+  if (format === JsonSchemaStringFormat.Email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)
+      ? null
+      : `${prefix} must be a valid email.`;
+  }
+
+  if (format === JsonSchemaStringFormat.Url) {
+    return isValidUrl(value) ? null : `${prefix} must be a valid url.`;
+  }
+
+  if (format === JsonSchemaStringFormat.Uuid) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value,
+    )
+      ? null
+      : `${prefix} must be a valid uuid.`;
+  }
+
+  if (format === JsonSchemaStringFormat.Nif) {
+    return /^(?:\d{8}|[XYZ]\d{7})[A-Z]$/iu.test(value)
+      ? null
+      : `${prefix} must be a valid nif.`;
+  }
+
+  return isValidDateLikeFormat(format, value)
+    ? null
+    : `${prefix} must match ${format}.`;
+};
+
+const isValidUrl = (value: string): boolean => {
+  try {
+    void new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isValidDateLikeFormat = (
+  format: JsonSchemaStringFormat,
+  value: string,
+): boolean => {
+  if (format === JsonSchemaStringFormat.Date) {
+    return isValidDateParts(value, /^(\d{4})-(\d{2})-(\d{2})$/u, 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.DateTime) {
+    const match = value.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,9})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u,
+    );
+    return (
+      match !== null &&
+      isValidDateParts(
+        `${match[1]}-${match[2]}-${match[3]}`,
+        /^(\d{4})-(\d{2})-(\d{2})$/u,
+        1,
+        2,
+        3,
+      ) &&
+      !Number.isNaN(Date.parse(value))
+    );
+  }
+
+  if (format === JsonSchemaStringFormat.Time) {
+    return /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,9})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/u.test(
+      value,
+    );
+  }
+
+  if (format === JsonSchemaStringFormat.Duration) {
+    return /^P(?=\d|T\d)(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/u.test(
+      value,
+    );
+  }
+
+  if (format === JsonSchemaStringFormat.Year) {
+    return /^\d{4}$/u.test(value);
+  }
+
+  if (format === JsonSchemaStringFormat.YearMonth) {
+    return /^\d{4}-(?:0[1-9]|1[0-2])$/u.test(value);
+  }
+
+  if (format === JsonSchemaStringFormat.MonthDay) {
+    return isValidDateParts(value, /^(\d{2})-(\d{2})$/u, null, 1, 2, 2000);
+  }
+
+  if (format === JsonSchemaStringFormat.DateEu) {
+    return isValidDateParts(value, /^(\d{2})\/(\d{2})\/(\d{4})$/u, 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateUs) {
+    return isValidDateParts(value, /^(\d{2})\/(\d{2})\/(\d{4})$/u, 3, 1, 2);
+  }
+
+  if (format === JsonSchemaStringFormat.DateEuDash) {
+    return isValidDateParts(value, /^(\d{2})-(\d{2})-(\d{4})$/u, 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateUsDash) {
+    return isValidDateParts(value, /^(\d{2})-(\d{2})-(\d{4})$/u, 3, 1, 2);
+  }
+
+  if (format === JsonSchemaStringFormat.DateSlash) {
+    return isValidDateParts(value, /^(\d{4})\/(\d{2})\/(\d{2})$/u, 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.DateDot) {
+    return isValidDateParts(value, /^(\d{2})\.(\d{2})\.(\d{4})$/u, 3, 2, 1);
+  }
+
+  if (format === JsonSchemaStringFormat.DateCompact) {
+    return isValidDateParts(value, /^(\d{4})(\d{2})(\d{2})$/u, 1, 2, 3);
+  }
+
+  if (format === JsonSchemaStringFormat.Rfc2822) {
+    return (
+      /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d GMT$/u.test(
+        value,
+      ) && !Number.isNaN(Date.parse(value))
+    );
+  }
+
+  if (format === JsonSchemaStringFormat.UnixSeconds) {
+    return /^\d{10}$/u.test(value) && Number.isFinite(Number(value));
+  }
+
+  return /^\d{13}$/u.test(value) && Number.isFinite(Number(value));
+};
+
+const isValidDateParts = (
+  value: string,
+  pattern: RegExp,
+  yearIndex: number | null,
+  monthIndex: number,
+  dayIndex: number,
+  fallbackYear?: number,
+): boolean => {
+  const match = value.match(pattern);
+  if (!match) {
+    return false;
+  }
+
+  const year =
+    yearIndex === null ? (fallbackYear ?? 2000) : Number(match[yearIndex]);
+  const month = Number(match[monthIndex]);
+  const day = Number(match[dayIndex]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 };
 
 const validateJsonSchemaNumberValue = (
@@ -2135,6 +2409,11 @@ const validateJsonSchemaNumberValue = (
 
 const isRecordValue = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isJsonSchemaStringFormat = (
+  value: unknown,
+): value is JsonSchemaStringFormat =>
+  typeof value === "string" && JsonSchemaStringFormatValues.includes(value);
 
 const readJsonSchemaNodeDocument = (
   value: unknown,
@@ -2188,12 +2467,7 @@ const readJsonSchemaNodeDocument = (
     baseNode.nullable = value["nullable"];
   }
 
-  if (
-    value["format"] === "email" ||
-    value["format"] === "url" ||
-    value["format"] === "uuid" ||
-    value["format"] === "nif"
-  ) {
+  if (isJsonSchemaStringFormat(value["format"])) {
     baseNode.format = value["format"];
   }
 

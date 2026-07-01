@@ -569,6 +569,90 @@ describe("workflows editor state", () => {
     });
   });
 
+  it("supports date string formats with runtime validation and provider serialization", () => {
+    const prompt = createWorkflowAssetDraft({
+      kind: WorkflowAssetKind.Prompt,
+      projectId: "project-1",
+      idFactory: createSequentialIdFactory("date-contract"),
+    });
+    const contract = prompt.outputContract;
+    if (!contract) {
+      throw new Error("Expected prompt assets to include an output contract.");
+    }
+
+    let schema = renameJsonSchemaProperty(
+      contract.schema,
+      [],
+      "result",
+      "invoiceDate",
+    );
+    schema = updateJsonSchemaNode(schema, ["invoiceDate"], (node) => ({
+      ...node,
+      format: "date-eu",
+    }));
+    schema = upsertJsonSchemaProperty(schema, [], {
+      name: "scheduledAt",
+      node: {
+        ...createJsonSchemaNode("string"),
+        format: "date-time",
+      },
+      required: true,
+    });
+
+    const dateContract = {
+      ...contract,
+      schema,
+    };
+    const compiledSchema = compileJsonContractSchema(dateContract);
+    const providerSchema = serializeJsonContractForProvider(dateContract);
+    const buildZodSchema = new Function(
+      "z",
+      `return ${compiledSchema.zodExpression};`,
+    ) as (input: typeof z) => {
+      safeParse: (value: unknown) => { success: boolean };
+    };
+    const zodSchema = buildZodSchema(z);
+
+    expect(
+      safeParseJsonContractValue(dateContract, {
+        invoiceDate: "31/12/2026",
+        scheduledAt: "2026-12-31T23:59:59Z",
+      }).success,
+    ).toBe(true);
+    expect(
+      safeParseJsonContractValue(dateContract, {
+        invoiceDate: "02/30/2026",
+        scheduledAt: "2026-12-31T23:59:59Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      safeParseJsonContractValue(dateContract, {
+        invoiceDate: "31/12/2026",
+        scheduledAt: "2026-02-30T23:59:59Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      zodSchema.safeParse({
+        invoiceDate: "31/12/2026",
+        scheduledAt: "2026-12-31T23:59:59Z",
+      }).success,
+    ).toBe(true);
+    expect(
+      zodSchema.safeParse({
+        invoiceDate: "31/12/2026",
+        scheduledAt: "2026-02-30T23:59:59Z",
+      }).success,
+    ).toBe(false);
+    expect(compiledSchema.zodExpression).toContain("date-eu");
+    expect(providerSchema).toEqual({
+      t: "o",
+      p: {
+        invoiceDate: { t: "s", r: 1, f: "date-eu" },
+        scheduledAt: { t: "s", r: 1, f: "date-time" },
+      },
+    });
+  });
+
   it("keeps nested required flags in sync when properties are renamed or removed", () => {
     let schema = createJsonSchemaNode("object");
     schema = upsertJsonSchemaProperty(schema, [], {

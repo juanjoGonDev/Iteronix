@@ -55,6 +55,7 @@ import {
   WorkflowRecordStatus,
   WorkflowVerbosity,
   JsonSchemaItemsSegment,
+  JsonSchemaStringFormat,
   addWorkflowNode,
   addWorkflowEdgeMappingEntry,
   addWorkflowGuardrailValidation,
@@ -461,6 +462,13 @@ type OutputContractEditorSelectorSet = {
   propertyMaxPrefix: string;
   propertyPatternPrefix: string;
 };
+
+type ContractSelectOption =
+  | string
+  | {
+      label: string;
+      options: ReadonlyArray<string>;
+    };
 
 const NodeOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
   nameInput: WorkflowScreenSelector.OutputContractNameInput,
@@ -7105,6 +7113,7 @@ export class WorkflowsScreen extends Component<
             }));
           },
           `${input.selectors.propertyFormatPrefix}${propertyToken}`,
+          readJsonSchemaFormatLabel,
         ),
         this.renderContractNumberField(
           "Min length",
@@ -7257,9 +7266,10 @@ export class WorkflowsScreen extends Component<
 
   private renderContractInlineSelect(input: {
     value: string;
-    options: ReadonlyArray<string>;
+    options: ReadonlyArray<ContractSelectOption>;
     onChange: (value: string) => void;
     testId: string;
+    formatOptionLabel?: (value: string) => string;
   }): HTMLElement {
     return createElement("div", { className: "relative min-w-[128px]" }, [
       createElement(
@@ -7276,9 +7286,10 @@ export class WorkflowsScreen extends Component<
           },
         },
         input.options.map((option) =>
-          createElement("option", { value: option }, [
-            formatSelectOptionLabel(option),
-          ]),
+          renderContractSelectOption(
+            option,
+            input.formatOptionLabel ?? formatSelectOptionLabel,
+          ),
         ),
       ),
       createElement(
@@ -7346,9 +7357,10 @@ export class WorkflowsScreen extends Component<
   private renderContractSelectField(
     label: string,
     value: string,
-    options: ReadonlyArray<string>,
+    options: ReadonlyArray<ContractSelectOption>,
     onChange: (value: string) => void,
     testId: string,
+    formatOptionLabel?: (value: string) => string,
   ): HTMLElement {
     return createElement("label", { className: "flex flex-col gap-2" }, [
       createElement("span", { className: "text-xs font-medium text-white" }, [
@@ -7359,6 +7371,7 @@ export class WorkflowsScreen extends Component<
         options,
         onChange,
         testId,
+        ...(formatOptionLabel ? { formatOptionLabel } : {}),
       }),
     ]);
   }
@@ -11319,27 +11332,150 @@ const readJsonSchemaType = (value: string): JsonSchemaNodeRecord["type"] => {
   return "string";
 };
 
-const readJsonSchemaFormats = (): ReadonlyArray<string> => [
-  "",
-  "email",
-  "url",
-  "uuid",
-  "nif",
+const readJsonSchemaFormats = (): ReadonlyArray<ContractSelectOption> => [
+  {
+    label: "General",
+    options: [
+      "",
+      JsonSchemaStringFormat.Email,
+      JsonSchemaStringFormat.Url,
+      JsonSchemaStringFormat.Uuid,
+      JsonSchemaStringFormat.Nif,
+    ],
+  },
+  {
+    label: "Dates",
+    options: [
+      JsonSchemaStringFormat.Date,
+      JsonSchemaStringFormat.DateTime,
+      JsonSchemaStringFormat.Time,
+      JsonSchemaStringFormat.Duration,
+      JsonSchemaStringFormat.Year,
+      JsonSchemaStringFormat.YearMonth,
+      JsonSchemaStringFormat.MonthDay,
+      JsonSchemaStringFormat.DateEu,
+      JsonSchemaStringFormat.DateUs,
+      JsonSchemaStringFormat.DateEuDash,
+      JsonSchemaStringFormat.DateUsDash,
+      JsonSchemaStringFormat.DateSlash,
+      JsonSchemaStringFormat.DateDot,
+      JsonSchemaStringFormat.DateCompact,
+      JsonSchemaStringFormat.Rfc2822,
+      JsonSchemaStringFormat.UnixSeconds,
+      JsonSchemaStringFormat.UnixMilliseconds,
+    ],
+  },
 ];
 
 const readJsonSchemaFormat = (
   value: string,
 ): JsonSchemaNodeRecord["format"] | undefined => {
-  if (
-    value === "email" ||
-    value === "url" ||
-    value === "uuid" ||
-    value === "nif"
-  ) {
-    return value;
+  for (const format of Object.values(JsonSchemaStringFormat)) {
+    if (format === value) {
+      return format;
+    }
   }
 
   return undefined;
+};
+
+const readJsonSchemaFormatLabel = (value: string): string => {
+  if (value.length === 0) {
+    return "None";
+  }
+
+  if (value === JsonSchemaStringFormat.Date) {
+    return "Date · YYYY-MM-DD";
+  }
+
+  if (value === JsonSchemaStringFormat.DateTime) {
+    return "Date-time · ISO 8601 / RFC 3339";
+  }
+
+  if (value === JsonSchemaStringFormat.Time) {
+    return "Time · HH:mm[:ss]";
+  }
+
+  if (value === JsonSchemaStringFormat.Duration) {
+    return "Duration · ISO 8601";
+  }
+
+  if (value === JsonSchemaStringFormat.Year) {
+    return "Year · YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.YearMonth) {
+    return "Year month · YYYY-MM";
+  }
+
+  if (value === JsonSchemaStringFormat.MonthDay) {
+    return "Month day · MM-DD";
+  }
+
+  if (value === JsonSchemaStringFormat.DateEu) {
+    return "Date EU · DD/MM/YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.DateUs) {
+    return "Date US · MM/DD/YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.DateEuDash) {
+    return "Date EU · DD-MM-YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.DateUsDash) {
+    return "Date US · MM-DD-YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.DateSlash) {
+    return "Date · YYYY/MM/DD";
+  }
+
+  if (value === JsonSchemaStringFormat.DateDot) {
+    return "Date · DD.MM.YYYY";
+  }
+
+  if (value === JsonSchemaStringFormat.DateCompact) {
+    return "Date compact · YYYYMMDD";
+  }
+
+  if (value === JsonSchemaStringFormat.Rfc2822) {
+    return "Date-time · RFC 2822";
+  }
+
+  if (value === JsonSchemaStringFormat.UnixSeconds) {
+    return "Unix timestamp · seconds";
+  }
+
+  if (value === JsonSchemaStringFormat.UnixMilliseconds) {
+    return "Unix timestamp · milliseconds";
+  }
+
+  return formatSelectOptionLabel(value);
+};
+
+const renderContractSelectOption = (
+  option: ContractSelectOption,
+  formatOptionLabel: (value: string) => string,
+): HTMLElement => {
+  if (typeof option === "string") {
+    return createElement("option", { value: option }, [
+      formatOptionLabel(option),
+    ]);
+  }
+
+  return createElement(
+    "optgroup",
+    {
+      label: option.label,
+    },
+    option.options.map((nestedOption) =>
+      createElement("option", { value: nestedOption }, [
+        formatOptionLabel(nestedOption),
+      ]),
+    ),
+  );
 };
 
 const readGuardrailValidationKinds =

@@ -3322,3 +3322,27 @@
   - Necessary execution changes still update Workflows state; this is intentional so running/status data remains live.
 - Next
   - Browser QA: keep an edit modal open through polling intervals and verify focus/content only changes when execution data changes.
+
+### 2026-07-01 12:27 (Europe/Madrid) — Workflows Date Output Formats
+
+- Summary
+  - Added grouped date/time output-contract formats to the Workflows visual schema editor.
+- Decisions
+  - Kept dates as string formats in the JSON output contract instead of adding a non-JSON primitive type.
+  - Grouped format options into General and Dates in the visual editor.
+  - Date formats are validated by the browser-safe runtime parser and by generated Zod-compatible expressions.
+- Changes
+  - Added `JsonSchemaStringFormat` constants and expanded compact provider serialization to support date formats.
+  - Added internal validation for ISO date/date-time, time, duration, year, year-month, month-day, EU/US dates, slash/dot/compact dates, RFC 2822, and Unix timestamp strings.
+  - Updated the format selector to render grouped options with human-readable date examples.
+  - Added regression tests for date runtime validation, generated Zod validation, and provider serialization.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts --passWithNoTests`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Issues/Risks
+  - Dates remain JSON strings with explicit formats; numeric/date object primitives are intentionally not introduced in this slice.
+- Next
+  - Browser QA: open the Output contract editor, select several date formats from the Dates group, save/reload, and verify Raw JSON keeps the selected format.
