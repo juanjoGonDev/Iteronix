@@ -38,6 +38,7 @@ export type WorkflowRuntimeService = {
   runWorkflow: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
   runNode: (input: {
@@ -45,6 +46,7 @@ export type WorkflowRuntimeService = {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
   testProviderNode: (input: {
@@ -78,11 +80,13 @@ export const createWorkflowRuntimeService = (input: {
   const runWorkflow = async (request: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
     runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
+      ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
 
@@ -91,6 +95,7 @@ export const createWorkflowRuntimeService = (input: {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
     runtime.runNode({
@@ -98,6 +103,7 @@ export const createWorkflowRuntimeService = (input: {
       assets: request.assets,
       nodeId: request.nodeId,
       inputSource: request.inputSource,
+      ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
 
@@ -181,6 +187,7 @@ const executeProviderNode = async (
     modelId: request.provider.modelId || profile.modelId,
     input: request.prompt,
     temperature: request.provider.temperature,
+    ...(request.signal ? { signal: request.signal } : {}),
   });
   return collectProviderResult(result);
 };

@@ -96,6 +96,11 @@ const runOpenAiCompatibleRequest = async (
   const timeoutMs = normalizeRequestTimeoutMs(config.requestTimeoutMs);
   const abortController = new AbortController();
   let requestTimedOut = false;
+  const abortFromRequest = (): void => abortController.abort();
+  if (request.signal?.aborted) {
+    abortController.abort();
+  }
+  request.signal?.addEventListener("abort", abortFromRequest, { once: true });
   const timeout = setTimeout(() => {
     requestTimedOut = true;
     abortController.abort();
@@ -133,9 +138,13 @@ const runOpenAiCompatibleRequest = async (
         `OpenAI-compatible provider request timed out after ${timeoutMs.toString()}ms.`,
       );
     }
+    if (request.signal?.aborted) {
+      throw new Error("OpenAI-compatible provider request canceled.");
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
+    request.signal?.removeEventListener("abort", abortFromRequest);
   }
 };
 

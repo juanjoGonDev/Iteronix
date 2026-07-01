@@ -156,6 +156,7 @@ import {
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
+  executeWorkflowExecutionCancel,
   executeWorkflowNodeExecutionRun,
   executeWorkflowExecutionRun,
   executeWorkflowNodeProviderTest,
@@ -171,6 +172,7 @@ import {
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
   parseWorkflowExecutionListRequest,
+  parseWorkflowExecutionCancelRequest,
   parseWorkflowNodeExecutionRunRequest,
   parseWorkflowExecutionRunRequest,
   parseWorkflowNodeProviderTestRequest,
@@ -206,6 +208,12 @@ import {
 } from "../../web-ui/src/shared/logger-core";
 
 const responseErrorLogMap = new WeakMap<ServerResponse, string>();
+
+type ActiveWorkflowExecutionRegistry = {
+  register: (executionId: string, controller: AbortController) => void;
+  cancel: (executionId: string) => void;
+  delete: (executionId: string) => void;
+};
 
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
@@ -272,6 +280,7 @@ export const startServer = async (): Promise<void> => {
   const workflowRuntime = createWorkflowRuntimeService({
     readWorkspaceState: () => workspacePersistence.read(),
   });
+  const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
   const commandRunner = createCommandRunnerAdapter();
   const qualityGateCatalog = createDefaultQualityGateCatalog();
   const git = createGitCliAdapter();
@@ -296,6 +305,7 @@ export const startServer = async (): Promise<void> => {
       qualityGateCatalog,
       aiWorkbench,
       workflowRuntime,
+      activeWorkflowExecutions,
       git,
       workspacePersistence,
       workflowCatalog,
@@ -422,6 +432,7 @@ const handleRequest = async (
   qualityGateCatalog: QualityGateCatalog,
   aiWorkbench: AiWorkbenchService,
   workflowRuntime: WorkflowRuntimeService,
+  activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   git: GitRepository,
   workspacePersistence: WorkspacePersistence,
   workflowCatalog: WorkflowCatalogStore,
@@ -870,6 +881,22 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.WorkflowExecutionsCancel) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowExecutionCancel(
+      req,
+      res,
+      workflowCatalog,
+      activeWorkflowExecutions,
+      workspacePersistence,
+    );
+    return;
+  }
+
   if (path === RoutePath.WorkflowExecutionsRun) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -914,6 +941,7 @@ const handleRequest = async (
       url,
       workflowCatalog,
       workflowRuntime,
+      activeWorkflowExecutions,
       workspacePersistence,
     );
     return;
@@ -930,6 +958,7 @@ const handleRequest = async (
       url,
       workflowCatalog,
       workflowRuntime,
+      activeWorkflowExecutions,
       workspacePersistence,
     );
     return;
@@ -4622,6 +4651,41 @@ const handleWorkflowExecutionDelete = async (
   });
 };
 
+const handleWorkflowExecutionCancel = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowExecutionCancelRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowExecutionCancel(parsed.value, {
+    catalog: workflowCatalog,
+    now: () => new Date(),
+    cancelActiveExecution: activeWorkflowExecutions.cancel,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    execution: result.value,
+  });
+};
+
 const handleWorkflowExecutionRun = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -4696,6 +4760,7 @@ const handleWorkflowExecutionStream = async (
   url: URL,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
+  activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
@@ -4709,6 +4774,8 @@ const handleWorkflowExecutionStream = async (
 
   const stream = createSseStream(res);
   const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const executionAbortController = new AbortController();
+  let workflowRunId: string | null = null;
 
   try {
     const result = await executeWorkflowExecutionRun(
@@ -4716,7 +4783,15 @@ const handleWorkflowExecutionStream = async (
       {
         catalog: workflowCatalog,
         runWorkflow: workflowRuntime.runWorkflow,
+        signal: executionAbortController.signal,
         onEvent: (event) => {
+          if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
+            workflowRunId = event.workflowRunId;
+            activeWorkflowExecutions.register(
+              event.workflowRunId,
+              executionAbortController,
+            );
+          }
           if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
             progressSaves.schedule();
           }
@@ -4757,6 +4832,9 @@ const handleWorkflowExecutionStream = async (
       },
     });
   } finally {
+    if (workflowRunId) {
+      activeWorkflowExecutions.delete(workflowRunId);
+    }
     await progressSaves.flush();
     stream.close();
   }
@@ -4767,6 +4845,7 @@ const handleWorkflowNodeExecutionStream = async (
   url: URL,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
+  activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
   const parsed = parseWorkflowNodeExecutionRunRequest(
@@ -4779,12 +4858,22 @@ const handleWorkflowNodeExecutionStream = async (
 
   const stream = createSseStream(res);
   const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const executionAbortController = new AbortController();
+  let workflowRunId: string | null = null;
 
   try {
     const result = await executeWorkflowNodeExecutionRun(parsed.value, {
       catalog: workflowCatalog,
       runNode: workflowRuntime.runNode,
+      signal: executionAbortController.signal,
       onEvent: (event) => {
+        if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
+          workflowRunId = event.workflowRunId;
+          activeWorkflowExecutions.register(
+            event.workflowRunId,
+            executionAbortController,
+          );
+        }
         if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
           progressSaves.schedule();
         }
@@ -4826,6 +4915,9 @@ const handleWorkflowNodeExecutionStream = async (
       },
     });
   } finally {
+    if (workflowRunId) {
+      activeWorkflowExecutions.delete(workflowRunId);
+    }
     await progressSaves.flush();
     stream.close();
   }
@@ -4880,6 +4972,32 @@ const handleWorkflowNodeProviderTest = async (
 
 const readWorkflowStreamEventName = (event: WorkflowRuntimeEvent): string =>
   event.type;
+
+const createActiveWorkflowExecutionRegistry =
+  (): ActiveWorkflowExecutionRegistry => {
+    const controllers = new Map<string, AbortController>();
+
+    const register = (
+      executionId: string,
+      controller: AbortController,
+    ): void => {
+      controllers.set(executionId, controller);
+    };
+
+    const cancel = (executionId: string): void => {
+      controllers.get(executionId)?.abort();
+    };
+
+    const deleteExecution = (executionId: string): void => {
+      controllers.delete(executionId);
+    };
+
+    return {
+      register,
+      cancel,
+      delete: deleteExecution,
+    };
+  };
 
 const createWorkspaceSaveScheduler = (
   workspacePersistence: WorkspacePersistence,

@@ -71,6 +71,7 @@ export const RoutePath = {
   WorkflowExecutionsList: "/workflows/executions/list",
   WorkflowExecutionsGet: "/workflows/executions/get",
   WorkflowExecutionsDelete: "/workflows/executions/delete",
+  WorkflowExecutionsCancel: "/workflows/executions/cancel",
   WorkflowExecutionsRun: "/workflows/executions/run",
   WorkflowExecutionsStream: "/workflows/executions/stream",
   WorkflowExecutionsRunNode: "/workflows/executions/run-node",

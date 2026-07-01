@@ -27,6 +27,7 @@ const EndpointPath = {
   ExecutionsList: "/workflows/executions/list",
   ExecutionsGet: "/workflows/executions/get",
   ExecutionsDelete: "/workflows/executions/delete",
+  ExecutionsCancel: "/workflows/executions/cancel",
   ExecutionsRun: "/workflows/executions/run",
   ExecutionsStream: "/workflows/executions/stream",
   ExecutionsRunNode: "/workflows/executions/run-node",
@@ -158,6 +159,9 @@ export type WorkflowClient = {
   deleteExecution: (input: {
     executionId: string;
   }) => Promise<WorkflowExecutionRecord>;
+  cancelExecution: (input: {
+    executionId: string;
+  }) => Promise<WorkflowExecutionRecord>;
   runWorkflow: (input: {
     workflowId: string;
   }) => Promise<WorkflowExecutionRecord>;
@@ -282,6 +286,14 @@ export const createWorkflowClient = (): WorkflowClient => ({
   deleteExecution: (input) =>
     requestJson({
       path: EndpointPath.ExecutionsDelete,
+      body: {
+        executionId: input.executionId,
+      },
+      parse: parseWorkflowExecutionResponse,
+    }),
+  cancelExecution: (input) =>
+    requestJson({
+      path: EndpointPath.ExecutionsCancel,
       body: {
         executionId: input.executionId,
       },

@@ -284,20 +284,20 @@ describe("workflows debug state", () => {
     expect(readWorkflowExecutionIsActive("completed")).toBe(false);
   });
 
-  it("turns the global run button into pause while execution is active", () => {
+  it("turns the global run button into stop while execution is active", () => {
     expect(
       readWorkflowRunControlState({
         hasCurrentWorkflow: true,
         hasPendingAction: false,
         hasUnsavedChanges: false,
         hasActiveExecution: true,
-        canPauseLiveExecution: true,
+        canStopActiveExecution: true,
       }),
     ).toEqual({
       disabled: false,
-      icon: "pause",
-      label: "Pause",
-      mode: "pause",
+      icon: "stop",
+      label: "Stop",
+      mode: "stop",
       title: undefined,
       variant: "danger",
     });
@@ -307,12 +307,12 @@ describe("workflows debug state", () => {
         hasPendingAction: false,
         hasUnsavedChanges: false,
         hasActiveExecution: true,
-        canPauseLiveExecution: false,
+        canStopActiveExecution: false,
       }),
     ).toMatchObject({
       disabled: true,
-      label: "Pause",
-      mode: "pause",
+      label: "Stop",
+      mode: "stop",
     });
   });
 

@@ -224,6 +224,35 @@ describe("workflow runtime", () => {
     ).toBe(true);
   });
 
+  it("cancels a running provider execution when the runtime signal aborts", async () => {
+    const abortController = new AbortController();
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) =>
+        new Promise<never>((_resolve, reject) => {
+          request.signal?.addEventListener(
+            "abort",
+            () => {
+              reject(new Error("Provider request canceled."));
+            },
+            { once: true },
+          );
+          abortController.abort();
+        }),
+    });
+
+    const executionPromise = runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      signal: abortController.signal,
+    });
+    const execution = await executionPromise;
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Canceled);
+    expect(execution.nodeRuns.at(-1)?.status).toBe("skipped");
+    expect(execution.nodeRuns.at(-1)?.alerts[0]?.level).toBe("info");
+  });
+
   it("runs only required upstream context before the selected node", async () => {
     const providerCalls: string[] = [];
     const runtime = createWorkflowRuntime({

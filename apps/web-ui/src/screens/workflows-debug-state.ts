@@ -22,9 +22,9 @@ export type WorkflowStepExecutionAvailability = {
 
 export type WorkflowRunControlState = {
   disabled: boolean;
-  icon: "play_arrow" | "pause";
-  label: "Run" | "Pause";
-  mode: "run" | "pause";
+  icon: "play_arrow" | "stop";
+  label: "Run" | "Stop";
+  mode: "run" | "stop";
   title?: string | undefined;
   variant: "secondary" | "danger";
 };
@@ -162,15 +162,15 @@ export const readWorkflowRunControlState = (input: {
   hasPendingAction: boolean;
   hasUnsavedChanges: boolean;
   hasActiveExecution: boolean;
-  canPauseLiveExecution: boolean;
+  canStopActiveExecution: boolean;
 }): WorkflowRunControlState => {
   if (input.hasActiveExecution) {
     return {
-      disabled: !input.canPauseLiveExecution,
-      icon: "pause",
-      label: "Pause",
-      mode: "pause",
-      title: input.canPauseLiveExecution ? undefined : PausedServerRunTitle,
+      disabled: !input.canStopActiveExecution,
+      icon: "stop",
+      label: "Stop",
+      mode: "stop",
+      title: input.canStopActiveExecution ? undefined : StoppedServerRunTitle,
       variant: "danger",
     };
   }
@@ -435,8 +435,8 @@ const readSchemaEntries = (
 const MaximumSchemaDepth = 4;
 const NodeModalPointerDetailThreshold = 2;
 const NodeModalPointerSequenceWindowMs = 500;
-const PausedServerRunTitle =
-  "This run is active on the server. Pause is available only for the live stream in this tab.";
+const StoppedServerRunTitle =
+  "This run is active, but no execution id is available to stop it yet.";
 
 const readValueType = (value: unknown): string => {
   if (value === null) {

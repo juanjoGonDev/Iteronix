@@ -3394,3 +3394,28 @@
   - Existing persisted executions that were already stuck before this fix are not retroactively repaired; new hung provider calls fail after the timeout.
 - Next
   - Add a maintenance/reconciliation pass if the app should automatically mark old pre-fix running executions as failed on startup.
+
+### 2026-07-01 16:45 (Europe/Madrid) — Workflows Stop Execution Cancellation
+
+- Summary
+  - Replaced the active workflow control from Pause to Stop with a stop icon and real cancellation semantics.
+  - Added a server-side workflow execution cancel endpoint that marks running/queued executions as canceled in persisted history.
+- Decisions
+  - Stop is server-side cancellation, not a local SSE pause; history status becomes `canceled` and running node records are closed as `skipped` with an info alert.
+  - Active SSE executions are registered with an AbortController by execution id so the cancel endpoint can abort the runtime/provider request.
+  - Runtime cancellation is represented as a final workflow-failed stream event carrying an execution with status `canceled`, preserving the existing SSE event contract.
+- Changes
+  - Added `/workflows/executions/cancel` route, request parser and workflow client method.
+  - Threaded `AbortSignal` from workflow SSE handlers through runtime service, workflow runtime, LLM request, and OpenAI-compatible provider fetch.
+  - Updated Workflows toolbar state to show `Stop`/`stop` while running and call the cancel endpoint.
+  - Added tests for stop button state, execution cancel persistence, and runtime abort-to-canceled behavior.
+- Commands
+  - `pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts apps/web-ui/src/screens/workflows-debug-state.test.ts apps/server-api/src/workflows.test.ts --passWithNoTests` failed first, then PASS after implementation.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 282 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - CLI providers that do not yet honor AbortSignal may still require provider-specific process kill support for hard termination; custom/OpenAI-compatible fetch-based providers now abort.
+- Next
+  - Add provider-specific AbortSignal support to CLI adapters if hard stop is required for codex-cli/opencode-cli workflow nodes.

@@ -25,6 +25,7 @@ import {
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
+  executeWorkflowExecutionCancel,
   executeWorkflowExecutionRun,
   executeWorkflowNodeExecutionRun,
   executeWorkflowNodeProviderTest,
@@ -35,6 +36,7 @@ import {
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
   parseWorkflowExecutionListRequest,
+  parseWorkflowExecutionCancelRequest,
   parseWorkflowExecutionRunRequest,
   parseWorkflowNodeExecutionRunRequest,
   parseWorkflowNodeProviderTestRequest,
@@ -378,6 +380,67 @@ describe("workflow api contracts", () => {
     }
   });
 
+  it("cancels a running workflow execution and persists the history state", () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    const execution = catalog.upsertExecution({
+      id: "execution-running",
+      workflowId: "workflow-1",
+      projectId: "project-1",
+      triggerKind: WorkflowTriggerKind.Manual,
+      status: WorkflowExecutionStatus.Running,
+      startedAt: BaseTime,
+      warningsCount: 0,
+      errorsCount: 0,
+      totals: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        estimatedCostEur: 0,
+        latencyMs: 0,
+      },
+      contextSessionId: "context-1",
+      nodeRuns: [
+        {
+          id: "node-run-1",
+          nodeId: "node-1",
+          nodeKind: WorkflowNodeKind.AiProviderRun,
+          status: "running",
+          startedAt: BaseTime,
+          alerts: [],
+          guardrailFindings: [],
+        },
+      ],
+    });
+    const canceledIds: string[] = [];
+
+    const result = executeWorkflowExecutionCancel(
+      {
+        executionId: execution.id,
+      },
+      {
+        catalog,
+        now: () => new Date("2026-05-06T18:01:00.000Z"),
+        cancelActiveExecution: (executionId) => {
+          canceledIds.push(executionId);
+        },
+      },
+    );
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type !== ResultType.Ok) {
+      throw new Error("Expected workflow execution cancel to succeed.");
+    }
+    expect(canceledIds).toEqual(["execution-running"]);
+    expect(result.value.status).toBe(WorkflowExecutionStatus.Canceled);
+    expect(result.value.finishedAt).toBe("2026-05-06T18:01:00.000Z");
+    expect(result.value.nodeRuns[0]?.status).toBe("skipped");
+    expect(catalog.getExecution("execution-running")?.status).toBe(
+      WorkflowExecutionStatus.Canceled,
+    );
+  });
+
   it("tests a workflow node provider and updates provider continuity metadata", async () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
@@ -440,6 +503,11 @@ describe("workflow api contracts", () => {
     ).toBe(ResultType.Ok);
     expect(
       parseWorkflowExecutionGetRequest({
+        executionId: "execution-1",
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowExecutionCancelRequest({
         executionId: "execution-1",
       }).type,
     ).toBe(ResultType.Ok);

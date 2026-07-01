@@ -730,7 +730,9 @@ export class WorkflowsScreen extends Component<
       hasPendingAction: this.state.pendingAction !== null,
       hasUnsavedChanges,
       hasActiveExecution,
-      canPauseLiveExecution: this.liveExecutionAbortController !== null,
+      canStopActiveExecution: currentWorkflow
+        ? this.readWorkflowActiveExecutionId(currentWorkflow.id) !== null
+        : false,
     });
 
     return createElement(
@@ -850,8 +852,8 @@ export class WorkflowsScreen extends Component<
               size: "sm",
               disabled: runControl.disabled,
               onClick: () => {
-                if (runControl.mode === "pause") {
-                  this.handlePauseWorkflowExecution();
+                if (runControl.mode === "stop") {
+                  void this.handleStopWorkflowExecution();
                   return;
                 }
 
@@ -2383,7 +2385,7 @@ export class WorkflowsScreen extends Component<
       ? this.readWorkflowHasActiveExecution(workflowId)
       : false;
     const runTitle = workflowIsRunning
-      ? "Workflow is running. Use global Pause before running a node."
+      ? "Workflow is running. Use global Stop before running a node."
       : canRunProviderTest
         ? "Run provider test"
         : "Run is available for saved AI/provider nodes";
@@ -5071,18 +5073,24 @@ export class WorkflowsScreen extends Component<
   }
 
   private readWorkflowHasActiveExecution(workflowId: string): boolean {
+    return this.readWorkflowActiveExecutionId(workflowId) !== null;
+  }
+
+  private readWorkflowActiveExecutionId(workflowId: string): string | null {
     const liveStatus =
       this.state.liveExecution?.workflowId === workflowId
         ? this.state.liveExecution.status
         : null;
     if (readWorkflowExecutionIsActive(liveStatus)) {
-      return true;
+      return this.state.liveExecution?.workflowRunId ?? null;
     }
 
-    return this.state.executions.some(
-      (execution) =>
-        execution.workflowId === workflowId &&
-        readWorkflowExecutionIsActive(execution.status),
+    return (
+      this.state.executions.find(
+        (execution) =>
+          execution.workflowId === workflowId &&
+          readWorkflowExecutionIsActive(execution.status),
+      )?.id ?? null
     );
   }
 
@@ -9157,22 +9165,62 @@ export class WorkflowsScreen extends Component<
     }
   }
 
-  private handlePauseWorkflowExecution(): void {
-    const workflowId = this.state.liveExecution?.workflowId;
+  private async handleStopWorkflowExecution(): Promise<void> {
+    const workflowId =
+      this.state.liveExecution?.workflowId ?? this.state.draftWorkflow?.id;
+    const executionId = workflowId
+      ? this.readWorkflowActiveExecutionId(workflowId)
+      : null;
     const selectionUpdate: Partial<WorkflowsScreenState> = workflowId
       ? {
           selection: { type: "workflow", id: workflowId },
         }
       : {};
-    this.cancelLiveExecutionStream();
+    if (!executionId) {
+      this.cancelLiveExecutionStream();
+      this.setState({
+        ...selectionUpdate,
+        pendingAction: null,
+        liveExecution: null,
+        errorMessage: null,
+        noticeMessage: null,
+      });
+      return;
+    }
+
     this.setState({
-      ...selectionUpdate,
-      pendingAction: null,
-      liveExecution: null,
+      pendingAction: PendingAction.RunWorkflow,
+      noticeMessage: null,
       errorMessage: null,
-      noticeMessage:
-        "Live stream paused. Auto refresh will keep the execution history in sync.",
     });
+    try {
+      const execution = await this.workflowClient.cancelExecution({
+        executionId,
+      });
+      this.cancelLiveExecutionStream();
+      this.setState({
+        ...selectionUpdate,
+        pendingAction: null,
+        liveExecution: null,
+        executions: upsertExecutionRecord(this.state.executions, execution),
+        debugExecutionId: execution.id,
+        selection: { type: "execution", id: execution.id },
+        errorMessage: null,
+        noticeMessage: null,
+      });
+      if (this.state.currentProject) {
+        void this.reloadExecutionCatalog(this.state.currentProject.id);
+      }
+    } catch (error) {
+      this.cancelLiveExecutionStream();
+      this.setState({
+        ...selectionUpdate,
+        pendingAction: null,
+        liveExecution: null,
+        errorMessage: readErrorMessage(error, "Could not stop the workflow."),
+        noticeMessage: null,
+      });
+    }
   }
 
   private canRunNodeProviderTest(node: WorkflowNodeRecord): boolean {

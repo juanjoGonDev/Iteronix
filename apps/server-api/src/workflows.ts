@@ -10,6 +10,7 @@ import {
   type WorkflowAssetRecord,
   type WorkflowDefinitionRecord,
   type WorkflowExecutionRecord,
+  WorkflowExecutionStatus,
   WorkflowNodeExecutionInputSourceKind,
   type WorkflowNodeExecutionInputSourceRecord,
   WorkflowNodeKind,
@@ -17,6 +18,9 @@ import {
 import { ErrorMessage, HttpStatus } from "./constants";
 import type { ProjectStore } from "./projects";
 import { ResultType, err, ok, type Result } from "./result";
+
+const WorkflowCancelAlertId = "workflow-execution-canceled";
+const WorkflowCancelAlertMessage = "Workflow execution stopped by user.";
 
 export type ApiError = {
   status: number;
@@ -275,6 +279,66 @@ export const executeWorkflowExecutionDelete = (
   return ok(execution);
 };
 
+export const executeWorkflowExecutionCancel = (
+  input: {
+    executionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    now: () => Date;
+    cancelActiveExecution?: (executionId: string) => void;
+  },
+): Result<WorkflowExecutionRecord, ApiError> => {
+  const execution = dependencies.catalog.getExecution(input.executionId);
+  if (!execution) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  if (!readWorkflowExecutionIsActive(execution.status)) {
+    return ok(execution);
+  }
+
+  dependencies.cancelActiveExecution?.(execution.id);
+  const finishedAt = dependencies.now().toISOString();
+  return ok(
+    dependencies.catalog.upsertExecution({
+      ...execution,
+      status: WorkflowExecutionStatus.Canceled,
+      finishedAt,
+      durationMs: readWorkflowExecutionDurationMs(
+        execution.startedAt,
+        finishedAt,
+      ),
+      nodeRuns: execution.nodeRuns.map((nodeRun) =>
+        nodeRun.status === "running"
+          ? {
+              ...nodeRun,
+              status: "skipped",
+              finishedAt,
+              durationMs: readWorkflowExecutionDurationMs(
+                nodeRun.startedAt,
+                finishedAt,
+              ),
+              alerts: [
+                ...nodeRun.alerts,
+                {
+                  id: `${WorkflowCancelAlertId}:${nodeRun.id}`,
+                  level: "info",
+                  source: "system",
+                  message: WorkflowCancelAlertMessage,
+                  createdAt: finishedAt,
+                },
+              ],
+            }
+          : nodeRun,
+      ),
+    }),
+  );
+};
+
 export const executeWorkflowExecutionRun = async (
   input: {
     workflowId: string;
@@ -284,8 +348,10 @@ export const executeWorkflowExecutionRun = async (
     runWorkflow: (input: {
       definition: WorkflowDefinitionRecord;
       assets: ReadonlyArray<WorkflowAssetRecord>;
+      signal?: AbortSignal;
       onEvent?: (event: WorkflowRuntimeEvent) => void;
     }) => Promise<WorkflowExecutionRecord>;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   },
 ): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
@@ -304,6 +370,7 @@ export const executeWorkflowExecutionRun = async (
   const execution = await dependencies.runWorkflow({
     definition: workflow,
     assets,
+    ...(dependencies.signal ? { signal: dependencies.signal } : {}),
     ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
   });
   return ok(dependencies.catalog.upsertExecution(execution));
@@ -322,8 +389,10 @@ export const executeWorkflowNodeExecutionRun = async (
       assets: ReadonlyArray<WorkflowAssetRecord>;
       nodeId: string;
       inputSource: WorkflowNodeExecutionInputSourceRecord;
+      signal?: AbortSignal;
       onEvent?: (event: WorkflowRuntimeEvent) => void;
     }) => Promise<WorkflowExecutionRecord>;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   },
 ): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
@@ -354,6 +423,7 @@ export const executeWorkflowNodeExecutionRun = async (
     assets,
     nodeId: input.nodeId,
     inputSource: input.inputSource,
+    ...(dependencies.signal ? { signal: dependencies.signal } : {}),
     ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
   });
   return ok(dependencies.catalog.upsertExecution(execution));
@@ -605,6 +675,11 @@ export const parseWorkflowExecutionDeleteRequest = (
 ): Result<{ executionId: string }, ApiError> =>
   parseSingleIdentifierRequest(value, "executionId");
 
+export const parseWorkflowExecutionCancelRequest = (
+  value: unknown,
+): Result<{ executionId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "executionId");
+
 export const parseWorkflowExecutionRunRequest = (
   value: unknown,
 ): Result<{ workflowId: string }, ApiError> =>
@@ -699,6 +774,18 @@ const parseProjectRequest = (
     projectId: projectId.value,
   });
 };
+
+const readWorkflowExecutionIsActive = (
+  status: WorkflowExecutionRecord["status"],
+): boolean =>
+  status === WorkflowExecutionStatus.Queued ||
+  status === WorkflowExecutionStatus.Running;
+
+const readWorkflowExecutionDurationMs = (
+  startedAt: string,
+  finishedAt: string,
+): number =>
+  Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime());
 
 const parseSingleIdentifierRequest = <TKey extends string>(
   value: unknown,

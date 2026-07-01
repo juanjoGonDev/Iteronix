@@ -34,6 +34,7 @@ export type WorkflowProviderRunRequest = {
   provider: WorkflowProviderSelectionRecord;
   envelope: WorkflowContextEnvelope;
   prompt: string;
+  signal?: AbortSignal;
 };
 
 export type WorkflowProviderRunResult = {
@@ -125,6 +126,7 @@ export type WorkflowRuntime = {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
     contextSessionId?: string;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
   runNode: (input: {
@@ -133,6 +135,7 @@ export type WorkflowRuntime = {
     nodeId: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
     contextSessionId?: string;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
 };
@@ -149,6 +152,7 @@ export const createWorkflowRuntime = (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
     contextSessionId?: string;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
     runWorkflowNodes({
@@ -161,6 +165,7 @@ export const createWorkflowRuntime = (input: {
       ...(request.contextSessionId
         ? { contextSessionId: request.contextSessionId }
         : {}),
+      ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
 
@@ -170,6 +175,7 @@ export const createWorkflowRuntime = (input: {
     nodeId: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
     contextSessionId?: string;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> => {
     const targetNode = request.definition.nodes.find(
@@ -194,6 +200,7 @@ export const createWorkflowRuntime = (input: {
       ...(request.contextSessionId
         ? { contextSessionId: request.contextSessionId }
         : {}),
+      ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
   };
@@ -205,6 +212,7 @@ export const createWorkflowRuntime = (input: {
     targetNodeId?: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
     contextSessionId?: string;
+    signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> => {
     const workflowRunId = randomUUID();
@@ -229,6 +237,11 @@ export const createWorkflowRuntime = (input: {
     });
 
     for (const node of request.nodes) {
+      if (request.signal?.aborted) {
+        status = WorkflowExecutionStatus.Canceled;
+        break;
+      }
+
       const nodeStartedAt = now().toISOString();
       request.onEvent?.({
         type: WorkflowRuntimeEventType.NodeStarted,
@@ -298,6 +311,7 @@ export const createWorkflowRuntime = (input: {
           definition: request.definition,
           now,
           runProviderNode: input.runProviderNode,
+          ...(request.signal ? { signal: request.signal } : {}),
           ...(request.onEvent ? { onEvent: request.onEvent } : {}),
         });
         outputs.set(node.id, result.outputSnapshot);
@@ -340,30 +354,39 @@ export const createWorkflowRuntime = (input: {
         const message =
           error instanceof Error ? error.message : "Workflow node failed";
         const nodeFinishedAt = now().toISOString();
+        const canceled = request.signal?.aborted === true;
         const nodeRun = createNodeRunRecord({
           node,
           startedAt: nodeStartedAt,
           finishedAt: nodeFinishedAt,
-          status: "failed",
-          alerts: [createRuntimeAlert(message)],
+          status: canceled ? "skipped" : "failed",
+          alerts: [
+            canceled
+              ? createRuntimeCancelAlert(message)
+              : createRuntimeAlert(message),
+          ],
           guardrailFindings: [],
           outputSnapshot: {
             error: message,
           },
         });
         nodeRuns.push(nodeRun);
-        request.onEvent?.({
-          type: WorkflowRuntimeEventType.NodeFailed,
-          workflowId: request.definition.id,
-          workflowRunId,
-          nodeId: node.id,
-          nodeKind: node.kind,
-          label: node.label,
-          startedAt: nodeStartedAt,
-          finishedAt: nodeFinishedAt,
-          message,
-        });
-        status = WorkflowExecutionStatus.Failed;
+        if (!canceled) {
+          request.onEvent?.({
+            type: WorkflowRuntimeEventType.NodeFailed,
+            workflowId: request.definition.id,
+            workflowRunId,
+            nodeId: node.id,
+            nodeKind: node.kind,
+            label: node.label,
+            startedAt: nodeStartedAt,
+            finishedAt: nodeFinishedAt,
+            message,
+          });
+        }
+        status = canceled
+          ? WorkflowExecutionStatus.Canceled
+          : WorkflowExecutionStatus.Failed;
         break;
       }
     }
@@ -390,7 +413,8 @@ export const createWorkflowRuntime = (input: {
     };
     request.onEvent?.({
       type:
-        execution.status === WorkflowExecutionStatus.Failed
+        execution.status === WorkflowExecutionStatus.Failed ||
+        execution.status === WorkflowExecutionStatus.Canceled
           ? WorkflowRuntimeEventType.WorkflowFailed
           : WorkflowRuntimeEventType.WorkflowCompleted,
       workflowId: execution.workflowId,
@@ -418,6 +442,7 @@ const executeWorkflowNode = async (input: {
   runProviderNode: (
     request: WorkflowProviderRunRequest,
   ) => Promise<WorkflowProviderRunResult>;
+  signal?: AbortSignal;
   onEvent?: (event: WorkflowRuntimeEvent) => void;
 }): Promise<{
   envelope: WorkflowContextEnvelope;
@@ -497,6 +522,7 @@ const executeWorkflowNode = async (input: {
       provider,
       envelope: input.envelope,
       prompt,
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     const outputSnapshot =
       providerResult.outputSnapshot ?? providerResult.outputText;
@@ -1092,6 +1118,14 @@ const readEnvelopeMessage = (value: unknown): string => {
 const createRuntimeAlert = (message: string): WorkflowAlertRecord => ({
   id: randomUUID(),
   level: "error",
+  source: "system",
+  message,
+  createdAt: new Date().toISOString(),
+});
+
+const createRuntimeCancelAlert = (message: string): WorkflowAlertRecord => ({
+  id: randomUUID(),
+  level: "info",
   source: "system",
   message,
   createdAt: new Date().toISOString(),

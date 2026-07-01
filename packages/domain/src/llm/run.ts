@@ -17,6 +17,7 @@ export type LLMRunRequest = {
   temperature?: number;
   maxTokens?: number;
   jsonSchema?: unknown;
+  signal?: AbortSignal;
 };
 
 export type LLMRunResponse = {
