@@ -3461,3 +3461,24 @@
   - Browser QA was not run; behavior is covered by state regression tests and full gates.
 - Next
   - Browser QA: hover a node, click play, verify no modal opens and canvas execution status updates.
+
+### 2026-07-01 23:16 (Europe/Madrid) — Workflows Execution Node Modal Unification
+
+- Summary
+  - Replaced the separate persisted/live execution node modal path with the standard node editor/debug modal.
+- Decisions
+  - Executed node openings now select the node, preserve the execution id in `debugExecutionId`, and open the same 3-panel modal used by edit mode.
+  - The old execution-specific visual modal is no longer used by history/live node Open actions.
+- Changes
+  - Added `readWorkflowExecutionNodeOpenState` with failing-first regression coverage.
+  - Updated `openExecutionNodeModal` to open the standard node modal with hydrated execution data.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 285 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser QA was not run; visual parity should be checked manually against the edit-mode screenshot.
+- Next
+  - Browser QA: open a node from a persisted execution and verify it uses the same 3-panel modal as edit mode with historical input/output data.

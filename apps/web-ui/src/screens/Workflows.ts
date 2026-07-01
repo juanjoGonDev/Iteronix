@@ -28,6 +28,7 @@ import {
   buildWorkflowDebugInputSources,
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
+  readWorkflowExecutionNodeOpenState,
   readWorkflowDebugItemLabel,
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
@@ -4137,24 +4138,22 @@ export class WorkflowsScreen extends Component<
 
   private openExecutionNodeModal(nodeId: string): void {
     if (this.state.selection.type === "execution") {
-      this.setState({
-        executionNodeModal: {
-          mode: "execution",
+      this.setState(
+        readWorkflowExecutionNodeOpenState({
           executionId: this.state.selection.id,
           nodeId,
-        },
-      });
+        }),
+      );
       return;
     }
 
     if (this.state.liveExecution) {
-      this.setState({
-        executionNodeModal: {
-          mode: "live",
+      this.setState(
+        readWorkflowExecutionNodeOpenState({
           executionId: this.state.liveExecution.workflowRunId,
           nodeId,
-        },
-      });
+        }),
+      );
     }
   }
 

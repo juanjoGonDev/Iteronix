@@ -8,6 +8,7 @@ import {
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
   readWorkflowNodeHoverRunControlState,
+  readWorkflowExecutionNodeOpenState,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
@@ -310,6 +311,20 @@ describe("workflows debug state", () => {
     });
     expect(readWorkflowNodeStepLaunchState("modal")).toEqual({
       editorModalOpen: true,
+    });
+  });
+
+  it("opens executed nodes in the standard node editor modal", () => {
+    expect(
+      readWorkflowExecutionNodeOpenState({
+        executionId: "run-1",
+        nodeId: "node-1",
+      }),
+    ).toEqual({
+      debugExecutionId: "run-1",
+      editorModalOpen: true,
+      executionNodeModal: null,
+      selection: { type: "node", id: "node-1" },
     });
   });
 

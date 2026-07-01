@@ -32,6 +32,13 @@ export type WorkflowNodeStepLaunchState = {
   editorModalOpen: boolean;
 };
 
+export type WorkflowExecutionNodeOpenState = {
+  debugExecutionId: string | null;
+  editorModalOpen: true;
+  executionNodeModal: null;
+  selection: { type: "node"; id: string };
+};
+
 export type WorkflowRunControlState = {
   disabled: boolean;
   icon: "play_arrow" | "stop";
@@ -203,6 +210,16 @@ export const readWorkflowNodeStepLaunchState = (
   source: WorkflowNodeStepLaunchSource,
 ): WorkflowNodeStepLaunchState => ({
   editorModalOpen: source === "modal",
+});
+
+export const readWorkflowExecutionNodeOpenState = (input: {
+  executionId: string | null;
+  nodeId: string;
+}): WorkflowExecutionNodeOpenState => ({
+  debugExecutionId: input.executionId,
+  editorModalOpen: true,
+  executionNodeModal: null,
+  selection: { type: "node", id: input.nodeId },
 });
 
 export const readWorkflowRunControlState = (input: {
