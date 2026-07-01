@@ -3504,3 +3504,22 @@
   - Browser screenshot QA was not run; behavior is covered by pure state tests and full gates.
 - Next
   - Browser QA: open a middle workflow node, use both side modal navigation buttons, execute the navigated node, and verify historical/live outputs stay tied to the selected run.
+
+### 2026-07-01 23:56 (Europe/Madrid) — Workflows Node Modal Navigation Placement
+
+- Summary
+  - Repositioned the Workflows node modal previous/next navigation controls so they are anchored to the actual left and right modal edges instead of the viewport edges.
+- Decisions
+  - Keep the controls inside the modal section with `relative` positioning so they follow the modal width across node and non-node modal sizes.
+- Changes
+  - Updated `apps/web-ui/src/screens/Workflows.ts` modal structure and side button positioning.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 286 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser screenshot QA was not run; this is a focused layout-only correction.
+- Next
+  - Browser QA: open a node modal and verify the side icons sit on the modal edges at left/right center.

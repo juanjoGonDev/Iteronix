@@ -2921,15 +2921,15 @@ export class WorkflowsScreen extends Component<
         onClick: () => this.closeSelectionEditorModal(),
       },
       [
-        this.renderNodeModalNavigationButton("previous"),
         createElement(
           "section",
           {
-            className: `flex h-full max-h-[min(900px,calc(100vh-40px))] w-full ${this.state.selection.type === "node" ? "max-w-[1560px]" : "max-w-[980px]"} flex-col overflow-hidden rounded-lg border border-border-dark bg-[#11161d] shadow-xl`,
+            className: `flex h-full max-h-[min(900px,calc(100vh-40px))] w-full ${this.state.selection.type === "node" ? "max-w-[1560px]" : "max-w-[980px]"} flex-col overflow-hidden rounded-lg border border-border-dark relative bg-[#11161d] shadow-xl`,
             onClick: (event: Event) => event.stopPropagation(),
             "data-testid": WorkflowScreenSelector.InspectorPanel,
           },
           [
+            this.renderNodeModalNavigationButton("previous"),
             createElement(
               "div",
               {
@@ -3014,9 +3014,9 @@ export class WorkflowsScreen extends Component<
               },
               [this.renderInspectorBody()],
             ),
+            this.renderNodeModalNavigationButton("next"),
           ],
         ),
-        this.renderNodeModalNavigationButton("next"),
       ],
     );
   }
@@ -3046,7 +3046,7 @@ export class WorkflowsScreen extends Component<
       return "";
     }
 
-    const sideClassName = direction === "previous" ? "left-3" : "right-3";
+    const sideClassName = direction === "previous" ? "left-0" : "right-0";
     const testId =
       direction === "previous"
         ? WorkflowScreenSelector.NodeModalPrevious
