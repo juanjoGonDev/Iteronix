@@ -3419,3 +3419,24 @@
   - CLI providers that do not yet honor AbortSignal may still require provider-specific process kill support for hard termination; custom/OpenAI-compatible fetch-based providers now abort.
 - Next
   - Add provider-specific AbortSignal support to CLI adapters if hard stop is required for codex-cli/opencode-cli workflow nodes.
+
+### 2026-07-01 21:07 (Europe/Madrid) — Workflows Node Hover Run Step
+
+- Summary
+  - Fixed the node hover toolbar play action so it executes the workflow up to the hovered node instead of running the provider smoke test.
+- Decisions
+  - Reused the existing execute-step stream path and modal live debug UX for hover runs.
+  - Kept the provider smoke test available only from the provider configuration section.
+- Changes
+  - Added a pure hover run-control state helper and regression coverage.
+  - Changed hover play to select the node, open the node modal, and call the same `streamNode` execution path as Execute step.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 283 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser QA was not run; behavior is covered by unit state tests and full gates.
+- Next
+  - Browser QA: hover a node, click play, confirm the modal opens and live execution runs only up to that node.

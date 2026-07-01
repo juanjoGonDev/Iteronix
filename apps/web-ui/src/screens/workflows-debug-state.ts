@@ -20,6 +20,12 @@ export type WorkflowStepExecutionAvailability = {
   label: "Execute step" | "Executing";
 };
 
+export type WorkflowNodeHoverRunControlState = {
+  disabled: boolean;
+  icon: "hourglass_top" | "play_arrow";
+  title: string;
+};
+
 export type WorkflowRunControlState = {
   disabled: boolean;
   icon: "play_arrow" | "stop";
@@ -154,6 +160,36 @@ export const readWorkflowStepExecutionAvailability = (input: {
       input.dirtyAssetCount > 0 ||
       input.hasPendingAction,
     label: "Execute step",
+  };
+};
+
+export const readWorkflowNodeHoverRunControlState = (input: {
+  hasTargetNode: boolean;
+  hasCurrentProject: boolean;
+  hasCurrentWorkflow: boolean;
+  hasDirtyWorkflow: boolean;
+  dirtyAssetCount: number;
+  hasPendingAction: boolean;
+  hasActiveExecution: boolean;
+}): WorkflowNodeHoverRunControlState => {
+  const availability = readWorkflowStepExecutionAvailability({
+    hasNodeSelection: input.hasTargetNode,
+    hasCurrentProject: input.hasCurrentProject,
+    hasCurrentWorkflow: input.hasCurrentWorkflow,
+    hasDirtyWorkflow: input.hasDirtyWorkflow,
+    dirtyAssetCount: input.dirtyAssetCount,
+    hasPendingAction: input.hasPendingAction,
+    hasActiveExecution: input.hasActiveExecution,
+  });
+
+  return {
+    disabled: availability.disabled,
+    icon: input.hasActiveExecution ? "hourglass_top" : "play_arrow",
+    title: input.hasActiveExecution
+      ? "Workflow is running. Use global Stop before running a node."
+      : availability.disabled
+        ? "Save workflow changes before running this node."
+        : "Execute workflow up to this node",
   };
 };
 

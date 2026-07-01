@@ -7,6 +7,7 @@ import {
   readWorkflowDebugStatusTone,
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
+  readWorkflowNodeHoverRunControlState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
@@ -282,6 +283,24 @@ describe("workflows debug state", () => {
     expect(readWorkflowExecutionIsActive("running")).toBe(true);
     expect(readWorkflowExecutionIsActive("queued")).toBe(true);
     expect(readWorkflowExecutionIsActive("completed")).toBe(false);
+  });
+
+  it("exposes hover node run as execute-step instead of provider smoke test", () => {
+    expect(
+      readWorkflowNodeHoverRunControlState({
+        hasTargetNode: true,
+        hasCurrentProject: true,
+        hasCurrentWorkflow: true,
+        hasDirtyWorkflow: false,
+        dirtyAssetCount: 0,
+        hasPendingAction: false,
+        hasActiveExecution: false,
+      }),
+    ).toEqual({
+      disabled: false,
+      icon: "play_arrow",
+      title: "Execute workflow up to this node",
+    });
   });
 
   it("turns the global run button into stop while execution is active", () => {

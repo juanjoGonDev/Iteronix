@@ -31,6 +31,7 @@ import {
   readWorkflowDebugItemLabel,
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
+  readWorkflowNodeHoverRunControlState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
   selectWorkflowCanvasExecution,
@@ -2379,16 +2380,7 @@ export class WorkflowsScreen extends Component<
   }
 
   private renderNodeHoverToolbar(node: WorkflowNodeRecord): HTMLElement {
-    const canRunProviderTest = this.canRunNodeProviderTest(node);
-    const workflowId = this.state.draftWorkflow?.id ?? null;
-    const workflowIsRunning = workflowId
-      ? this.readWorkflowHasActiveExecution(workflowId)
-      : false;
-    const runTitle = workflowIsRunning
-      ? "Workflow is running. Use global Stop before running a node."
-      : canRunProviderTest
-        ? "Run provider test"
-        : "Run is available for saved AI/provider nodes";
+    const runControl = this.readNodeHoverRunControlState(node.id);
 
     return createElement(
       "div",
@@ -2407,11 +2399,11 @@ export class WorkflowsScreen extends Component<
           },
           [
             this.renderNodeHoverToolbarButton({
-              icon: workflowIsRunning ? "hourglass_top" : "play_arrow",
-              title: runTitle,
-              disabled: workflowIsRunning || !canRunProviderTest,
+              icon: runControl.icon,
+              title: runControl.title,
+              disabled: runControl.disabled,
               onClick: () => {
-                void this.handleTestNodeProvider(node.id);
+                void this.handleExecuteNodeStep(node.id);
               },
             }),
             this.renderNodeHoverToolbarButton({
@@ -2474,6 +2466,26 @@ export class WorkflowsScreen extends Component<
         ),
       ],
     );
+  }
+
+  private readNodeHoverRunControlState(nodeId: string): {
+    disabled: boolean;
+    icon: "hourglass_top" | "play_arrow";
+    title: string;
+  } {
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    return readWorkflowNodeHoverRunControlState({
+      hasTargetNode:
+        currentWorkflow?.nodes.some((node) => node.id === nodeId) ?? false,
+      hasCurrentProject: this.state.currentProject !== null,
+      hasCurrentWorkflow: currentWorkflow !== null,
+      hasDirtyWorkflow: this.state.dirtyWorkflow,
+      dirtyAssetCount: this.state.dirtyAssetIds.length,
+      hasPendingAction: this.state.pendingAction !== null,
+      hasActiveExecution: currentWorkflow
+        ? this.readWorkflowHasActiveExecution(currentWorkflow.id)
+        : false,
+    });
   }
 
   private renderNodeOutputPortLabel(
@@ -5115,10 +5127,6 @@ export class WorkflowsScreen extends Component<
     return entries;
   }
 
-  private canExecuteSelectedNodeStep(): boolean {
-    return !this.readSelectedNodeStepExecutionAvailability().disabled;
-  }
-
   private readSelectedNodeStepExecutionAvailability(): WorkflowStepExecutionAvailability {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     return readWorkflowStepExecutionAvailability({
@@ -5136,13 +5144,24 @@ export class WorkflowsScreen extends Component<
 
   private async handleExecuteSelectedNodeStep(): Promise<void> {
     const selectedNode = this.readSelectedNode();
+    if (!selectedNode) {
+      return;
+    }
+
+    await this.handleExecuteNodeStep(selectedNode.id);
+  }
+
+  private async handleExecuteNodeStep(nodeId: string): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const projectId = this.state.currentProject?.id;
+    const targetNode = currentWorkflow?.nodes.find(
+      (node) => node.id === nodeId,
+    );
     if (
-      !selectedNode ||
+      !targetNode ||
       !currentWorkflow ||
       !projectId ||
-      !this.canExecuteSelectedNodeStep()
+      this.readNodeHoverRunControlState(nodeId).disabled
     ) {
       return;
     }
@@ -5154,6 +5173,7 @@ export class WorkflowsScreen extends Component<
       errorMessage: null,
       noticeMessage: null,
       editorModalOpen: true,
+      selection: { type: "node", id: targetNode.id },
     });
     this.cancelLiveExecutionStream();
     this.liveExecutionAbortController = new AbortController();
@@ -5161,7 +5181,7 @@ export class WorkflowsScreen extends Component<
     try {
       await this.workflowClient.streamNode({
         workflowId: currentWorkflow.id,
-        nodeId: selectedNode.id,
+        nodeId: targetNode.id,
         inputSource: this.readSelectedNodeExecutionInputSource(),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
@@ -5172,7 +5192,7 @@ export class WorkflowsScreen extends Component<
       this.setState({
         pendingAction: null,
         liveExecution: null,
-        selection: { type: "node", id: selectedNode.id },
+        selection: { type: "node", id: targetNode.id },
         debugExecutionId: this.readCompletedLiveExecution()?.id ?? null,
         editorModalOpen: true,
         errorMessage: null,
@@ -9221,23 +9241,6 @@ export class WorkflowsScreen extends Component<
         noticeMessage: null,
       });
     }
-  }
-
-  private canRunNodeProviderTest(node: WorkflowNodeRecord): boolean {
-    const provider = node.config.provider;
-    const workflowId = this.state.draftWorkflow?.id ?? null;
-    return (
-      (node.kind === WorkflowNodeKind.AiAgent ||
-        node.kind === WorkflowNodeKind.AiProviderRun) &&
-      this.state.pendingAction === null &&
-      this.state.currentProject !== null &&
-      this.state.draftWorkflow !== null &&
-      workflowId !== null &&
-      !this.readWorkflowHasActiveExecution(workflowId) &&
-      !this.state.dirtyWorkflow &&
-      this.state.dirtyAssetIds.length === 0 &&
-      Boolean(provider?.providerId)
-    );
   }
 
   private async handleTestNodeProvider(nodeId: string): Promise<void> {
