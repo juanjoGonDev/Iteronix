@@ -33,6 +33,7 @@ import {
   readWorkflowDebugSchemaEntries,
   readWorkflowDebugStatusTone,
   readWorkflowNodeHoverRunControlState,
+  readWorkflowNodeModalNavigationState,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
@@ -262,6 +263,8 @@ const WorkflowScreenSelector = {
   AssetCreatePrefix: "workflows-asset-create-",
   AssetCardPrefix: "workflows-asset-card-",
   NodeCardPrefix: "workflows-node-card-",
+  NodeModalPrevious: "workflows-node-modal-previous",
+  NodeModalNext: "workflows-node-modal-next",
   InspectorEmpty: "workflows-inspector-empty",
   CompactSidebar: "workflows-compact-sidebar",
   CompactCanvas: "workflows-compact-canvas",
@@ -2918,6 +2921,7 @@ export class WorkflowsScreen extends Component<
         onClick: () => this.closeSelectionEditorModal(),
       },
       [
+        this.renderNodeModalNavigationButton("previous"),
         createElement(
           "section",
           {
@@ -3012,8 +3016,72 @@ export class WorkflowsScreen extends Component<
             ),
           ],
         ),
+        this.renderNodeModalNavigationButton("next"),
       ],
     );
+  }
+
+  private renderNodeModalNavigationButton(
+    direction: "previous" | "next",
+  ): HTMLElement | string {
+    if (this.state.selection.type !== "node" || !this.state.draftWorkflow) {
+      return "";
+    }
+
+    const navigationState = readWorkflowNodeModalNavigationState({
+      workflow: this.state.draftWorkflow,
+      nodeId: this.state.selection.id,
+      executionId:
+        this.readWorkflowDebugExecution()?.id ?? this.state.debugExecutionId,
+    });
+    const targetNodeId =
+      direction === "previous"
+        ? navigationState.previousNodeId
+        : navigationState.nextNodeId;
+    const targetNode = this.state.draftWorkflow.nodes.find(
+      (node) => node.id === targetNodeId,
+    );
+
+    if (!targetNode) {
+      return "";
+    }
+
+    const sideClassName = direction === "previous" ? "left-3" : "right-3";
+    const testId =
+      direction === "previous"
+        ? WorkflowScreenSelector.NodeModalPrevious
+        : WorkflowScreenSelector.NodeModalNext;
+    const titlePrefix = direction === "previous" ? "previous" : "next";
+
+    return createElement(
+      "button",
+      {
+        type: "button",
+        className: `${sideClassName} absolute top-1/2 z-[51] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md border border-border-dark bg-[#151b23] text-slate-200 shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-colors hover:border-primary/60 hover:bg-[#202833] hover:text-white`,
+        title: `Open ${titlePrefix} node: ${targetNode.label}`,
+        "data-testid": testId,
+        onClick: (event: Event) => {
+          event.stopPropagation();
+          this.openNodeEditorModal(targetNode.id);
+        },
+      },
+      [
+        createElement(
+          "span",
+          { className: "material-symbols-outlined text-[21px]" },
+          [readNodeIcon(targetNode.kind)],
+        ),
+      ],
+    );
+  }
+
+  private openNodeEditorModal(nodeId: string): void {
+    this.setState({
+      selection: { type: "node", id: nodeId },
+      editorModalOpen: true,
+      executionNodeModal: null,
+      debugInputSourceId: "last-upstream",
+    });
   }
 
   private renderInspectorBody(): HTMLElement {

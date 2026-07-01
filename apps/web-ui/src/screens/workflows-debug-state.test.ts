@@ -9,6 +9,7 @@ import {
   readWorkflowExecutionIsActive,
   readWorkflowNodeHoverRunControlState,
   readWorkflowExecutionNodeOpenState,
+  readWorkflowNodeModalNavigationState,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
@@ -20,8 +21,10 @@ import {
   selectWorkflowDebugExecution,
 } from "./workflows-debug-state.js";
 import {
+  addWorkflowNode,
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
+  WorkflowNodeKind,
 } from "./workflows-editor-state.js";
 
 describe("workflows debug state", () => {
@@ -325,6 +328,60 @@ describe("workflows debug state", () => {
       editorModalOpen: true,
       executionNodeModal: null,
       selection: { type: "node", id: "node-1" },
+    });
+  });
+
+  it("finds connected modal neighbors and keeps the active run when navigating", () => {
+    const definition = addWorkflowNode(
+      createEmptyWorkflowDefinition({
+        projectId: "project-1",
+        name: "Debug",
+      }),
+      WorkflowNodeKind.AiAgent,
+      () => "node-next",
+    );
+    const sourceNode = definition.nodes[0];
+    const targetNode = definition.nodes[1];
+    const nextNode = definition.nodes.find((node) => node.id === "node-next");
+
+    if (!sourceNode || !targetNode || !nextNode) {
+      throw new Error("Expected workflow nodes.");
+    }
+
+    const upstreamConnected = connectWorkflowNodes(definition, {
+      sourceNodeId: sourceNode.id,
+      sourcePortId: sourceNode.outputPorts[0]?.id ?? "",
+      targetNodeId: targetNode.id,
+      targetPortId: targetNode.inputPorts[0]?.id ?? "",
+    });
+    const fullyConnected = connectWorkflowNodes(upstreamConnected, {
+      sourceNodeId: targetNode.id,
+      sourcePortId: targetNode.outputPorts[0]?.id ?? "",
+      targetNodeId: nextNode.id,
+      targetPortId: nextNode.inputPorts[0]?.id ?? "",
+    });
+
+    expect(
+      readWorkflowNodeModalNavigationState({
+        workflow: fullyConnected,
+        nodeId: targetNode.id,
+        executionId: "run-1",
+      }),
+    ).toEqual({
+      previousNodeId: sourceNode.id,
+      nextNodeId: nextNode.id,
+      previousOpenState: {
+        debugExecutionId: "run-1",
+        editorModalOpen: true,
+        executionNodeModal: null,
+        selection: { type: "node", id: sourceNode.id },
+      },
+      nextOpenState: {
+        debugExecutionId: "run-1",
+        editorModalOpen: true,
+        executionNodeModal: null,
+        selection: { type: "node", id: nextNode.id },
+      },
     });
   });
 

@@ -3482,3 +3482,25 @@
   - Browser QA was not run; visual parity should be checked manually against the edit-mode screenshot.
 - Next
   - Browser QA: open a node from a persisted execution and verify it uses the same 3-panel modal as edit mode with historical input/output data.
+
+### 2026-07-01 23:49 (Europe/Madrid) — Workflows Node Modal Neighbor Navigation
+
+- Summary
+  - Added n8n-like side navigation controls to the Workflows node editor/debug modal for directly opening connected upstream and downstream node modals.
+  - Preserved the active or selected execution context while navigating so input/output debug data and Execute step target follow the newly selected node.
+- Decisions
+  - Use the existing standard three-panel node modal for neighbor navigation; do not reintroduce a separate result modal or right sidebar inspector.
+  - Reset the selected input source to the default last-upstream mode when changing nodes so Execute step launches with a valid source for the new node.
+- Changes
+  - Added a pure `readWorkflowNodeModalNavigationState` helper with regression coverage.
+  - Added left/right floating node-icon buttons to the node modal in `apps/web-ui/src/screens/Workflows.ts`.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm lint` PASS.
+  - `pnpm test` PASS (66 files, 286 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser screenshot QA was not run; behavior is covered by pure state tests and full gates.
+- Next
+  - Browser QA: open a middle workflow node, use both side modal navigation buttons, execute the navigated node, and verify historical/live outputs stay tied to the selected run.

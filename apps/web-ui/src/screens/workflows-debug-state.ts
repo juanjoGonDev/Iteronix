@@ -39,6 +39,13 @@ export type WorkflowExecutionNodeOpenState = {
   selection: { type: "node"; id: string };
 };
 
+export type WorkflowNodeModalNavigationState = {
+  previousNodeId: string | null;
+  nextNodeId: string | null;
+  previousOpenState: WorkflowExecutionNodeOpenState | null;
+  nextOpenState: WorkflowExecutionNodeOpenState | null;
+};
+
 export type WorkflowRunControlState = {
   disabled: boolean;
   icon: "play_arrow" | "stop";
@@ -221,6 +228,38 @@ export const readWorkflowExecutionNodeOpenState = (input: {
   executionNodeModal: null,
   selection: { type: "node", id: input.nodeId },
 });
+
+export const readWorkflowNodeModalNavigationState = (input: {
+  workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike;
+  nodeId: string;
+  executionId: string | null;
+}): WorkflowNodeModalNavigationState => {
+  const previousNodeId =
+    input.workflow.edges.find((edge) => edge.targetNodeId === input.nodeId)
+      ?.sourceNodeId ?? null;
+  const nextNodeId =
+    input.workflow.edges.find((edge) => edge.sourceNodeId === input.nodeId)
+      ?.targetNodeId ?? null;
+
+  return {
+    previousNodeId,
+    nextNodeId,
+    previousOpenState:
+      previousNodeId === null
+        ? null
+        : readWorkflowExecutionNodeOpenState({
+            executionId: input.executionId,
+            nodeId: previousNodeId,
+          }),
+    nextOpenState:
+      nextNodeId === null
+        ? null
+        : readWorkflowExecutionNodeOpenState({
+            executionId: input.executionId,
+            nodeId: nextNodeId,
+          }),
+  };
+};
 
 export const readWorkflowRunControlState = (input: {
   hasCurrentWorkflow: boolean;
