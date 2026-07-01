@@ -108,6 +108,11 @@ export type WorkflowExecutionPolicyRecord = {
   allowManualCheckpointResume: boolean;
 };
 
+export type WorkflowAssetExecutionPolicyRecord = {
+  maxRetries: number;
+  timeoutMs: number;
+};
+
 export type WorkflowContextPolicyRecord = {
   language: string;
   carryMessagesLimit: number;
@@ -355,6 +360,7 @@ export type WorkflowAssetRecord = {
   language: string;
   version: number;
   tags: ReadonlyArray<string>;
+  executionPolicy?: WorkflowAssetExecutionPolicyRecord;
   outputContract?: JsonOutputContractRecord;
   guardrail?: GuardrailDefinitionRecord;
   createdAt: string;

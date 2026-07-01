@@ -3346,3 +3346,26 @@
   - Dates remain JSON strings with explicit formats; numeric/date object primitives are intentionally not introduced in this slice.
 - Next
   - Browser QA: open the Output contract editor, select several date formats from the Dates group, save/reload, and verify Raw JSON keeps the selected format.
+
+### 2026-07-01 15:25 (Europe/Madrid) — Workflows Regex Tester and Asset Execution Policy
+
+- Summary
+  - Added a Workflows regex tester modal for JSON output-contract patterns and guardrail regex validations.
+  - Added prompt and guardrail asset execution policy controls with defaults of 3 retries and 5 minutes.
+- Decisions
+  - Kept regex constraints in the existing JSON schema `pattern` field and added an evaluator instead of creating a non-JSON schema type.
+  - Stored retry/timeout as asset-level execution policy for reusable prompt and guardrail assets.
+- Changes
+  - Added pure regex evaluation and execution-policy normalization helpers with unit tests.
+  - Added modal UI for regex pattern, flags, test text, match rows, capture groups and quick reference.
+  - Added max retry and timeout-minute controls to prompt/guardrail asset editors.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts --passWithNoTests` failed first for missing helper contracts, then passed after implementation.
+  - `pnpm lint` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (66 files, 278 tests).
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser screenshot QA was not run; behavior is covered by unit tests and full gates.
+- Next
+  - Browser QA: open a prompt output contract, test a regex pattern, save/reload, and verify prompt/guardrail execution policies persist through the server.

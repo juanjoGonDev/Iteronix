@@ -14,9 +14,11 @@ import {
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   createWorkflowOutputContractField,
+  evaluateWorkflowRegex,
   createJsonSchemaNode,
   formatJsonOutputContractDocument,
   insertWorkflowExpressionVariable,
+  normalizeWorkflowAssetExecutionPolicy,
   removeJsonSchemaProperty,
   renameJsonSchemaProperty,
   readJsonContractValidation,
@@ -38,6 +40,8 @@ import {
   upsertJsonSchemaProperty,
   WorkflowExpressionSegmentKind,
   WorkflowExpressionVariableKind,
+  WorkflowAssetDefaultMaxRetries,
+  WorkflowAssetDefaultTimeoutMs,
 } from "./workflows-editor-state.js";
 
 describe("workflows editor state", () => {
@@ -72,6 +76,90 @@ describe("workflows editor state", () => {
       "string",
     );
     expect(guardrail.guardrail?.validations).toHaveLength(1);
+    expect(prompt.executionPolicy).toEqual({
+      maxRetries: WorkflowAssetDefaultMaxRetries,
+      timeoutMs: WorkflowAssetDefaultTimeoutMs,
+    });
+    expect(guardrail.executionPolicy).toEqual({
+      maxRetries: WorkflowAssetDefaultMaxRetries,
+      timeoutMs: WorkflowAssetDefaultTimeoutMs,
+    });
+  });
+
+  it("normalizes prompt and guardrail execution policy values", () => {
+    expect(
+      normalizeWorkflowAssetExecutionPolicy({
+        maxRetries: -10,
+        timeoutMs: 0,
+      }),
+    ).toEqual({
+      maxRetries: 0,
+      timeoutMs: 1_000,
+    });
+    expect(
+      normalizeWorkflowAssetExecutionPolicy({
+        maxRetries: 15,
+        timeoutMs: 999_999_999,
+      }),
+    ).toEqual({
+      maxRetries: 10,
+      timeoutMs: 86_400_000,
+    });
+    expect(normalizeWorkflowAssetExecutionPolicy(undefined)).toEqual({
+      maxRetries: WorkflowAssetDefaultMaxRetries,
+      timeoutMs: WorkflowAssetDefaultTimeoutMs,
+    });
+  });
+
+  it("evaluates regex matches with captures and zero-width safety", () => {
+    const result = evaluateWorkflowRegex({
+      pattern: "^(.*(a))",
+      flags: "gm",
+      testText: "hola\nque\nhaces",
+    });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      throw new Error("Expected regex evaluation to be valid.");
+    }
+    expect(result.matches).toHaveLength(2);
+    expect(result.matches[0]).toMatchObject({
+      index: 0,
+      endIndex: 4,
+      text: "hola",
+      groups: ["hola", "a"],
+    });
+    expect(result.matches[1]).toMatchObject({
+      index: 9,
+      endIndex: 11,
+      text: "ha",
+      groups: ["ha", "a"],
+    });
+
+    const zeroWidth = evaluateWorkflowRegex({
+      pattern: "^",
+      flags: "gm",
+      testText: "a\nb",
+    });
+    expect(zeroWidth.valid).toBe(true);
+    if (!zeroWidth.valid) {
+      throw new Error("Expected zero-width regex evaluation to be valid.");
+    }
+    expect(zeroWidth.matches).toHaveLength(2);
+  });
+
+  it("returns a typed regex error for invalid patterns", () => {
+    const result = evaluateWorkflowRegex({
+      pattern: "(missing",
+      flags: "g",
+      testText: "value",
+    });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) {
+      throw new Error("Expected regex evaluation to fail.");
+    }
+    expect(result.error).toContain("Invalid regular expression");
   });
 
   it("moves nodes, connects ports, and prevents duplicate edges", () => {

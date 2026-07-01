@@ -65,9 +65,11 @@ import {
   createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   detachGuardrailFromNode,
+  evaluateWorkflowRegex,
   formatJsonOutputContractDocument,
   insertWorkflowExpressionVariable,
   moveWorkflowNode,
+  normalizeWorkflowAssetExecutionPolicy,
   parseJsonOutputContractDocument,
   readJsonSchemaPaths,
   readAssetKindLabel,
@@ -93,6 +95,8 @@ import {
   upsertJsonSchemaProperty,
   isWorkflowViewportOnlyChange,
   WorkflowExpressionVariableKind,
+  WorkflowAssetDefaultMaxRetries,
+  WorkflowAssetDefaultTimeoutMs,
   type EdgeMappingEntryRecord,
   type GuardrailValidationRecord,
   type JsonOutputContractRecord,
@@ -100,6 +104,7 @@ import {
   type WorkflowAlertRecord,
   type WorkflowAssetKind as WorkflowAssetKindValue,
   type WorkflowAssetRecord,
+  type WorkflowAssetExecutionPolicyRecord,
   type WorkflowAssetScope as WorkflowAssetScopeValue,
   type WorkflowAssetUsageRecord,
   type WorkflowAssetUpsertInput,
@@ -113,6 +118,7 @@ import {
   type WorkflowNodeKind as WorkflowNodeKindValue,
   type WorkflowNodeRecord,
   type WorkflowProviderSelectionRecord,
+  type WorkflowRegexMatchRecord,
   type WorkflowViewportRecord,
 } from "./workflows-editor-state.js";
 
@@ -189,6 +195,8 @@ const WorkflowScreenSelector = {
   OutputContractPropertyMaxPrefix: "workflows-output-contract-property-max-",
   OutputContractPropertyPatternPrefix:
     "workflows-output-contract-property-pattern-",
+  OutputContractPropertyRegexTestPrefix:
+    "workflows-output-contract-property-regex-test-",
   AssetOutputContractNameInput: "workflows-asset-output-contract-name-input",
   AssetOutputContractAddField: "workflows-asset-output-contract-add-field",
   AssetOutputContractStatus: "workflows-asset-output-contract-status",
@@ -210,6 +218,10 @@ const WorkflowScreenSelector = {
     "workflows-asset-output-contract-property-max-",
   AssetOutputContractPropertyPatternPrefix:
     "workflows-asset-output-contract-property-pattern-",
+  AssetOutputContractPropertyRegexTestPrefix:
+    "workflows-asset-output-contract-property-regex-test-",
+  AssetMaxRetriesInput: "workflows-asset-max-retries-input",
+  AssetTimeoutMinutesInput: "workflows-asset-timeout-minutes-input",
   MappingTargetPathInput: "workflows-mapping-target-path-input",
   MappingSourcePathInput: "workflows-mapping-source-path-input",
   MappingAddEntry: "workflows-mapping-add-entry",
@@ -221,6 +233,8 @@ const WorkflowScreenSelector = {
   GuardrailValidationTargetSelect:
     "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
+  GuardrailValidationValueInput: "workflows-guardrail-validation-value-input",
+  GuardrailValidationRegexTest: "workflows-guardrail-validation-regex-test",
   GuardrailValidationMessageInput:
     "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
@@ -236,6 +250,10 @@ const WorkflowScreenSelector = {
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   DeepEditorClose: "workflows-deep-editor-close",
   DeepEditorApplyRawJson: "workflows-deep-editor-apply-raw-json",
+  RegexTesterModal: "workflows-regex-tester-modal",
+  RegexTesterPatternInput: "workflows-regex-tester-pattern-input",
+  RegexTesterFlagsInput: "workflows-regex-tester-flags-input",
+  RegexTesterTextInput: "workflows-regex-tester-text-input",
   VariableTokenPrefix: "workflows-variable-token-",
   NodePalettePrefix: "workflows-node-palette-",
   AssetCreatePrefix: "workflows-asset-create-",
@@ -259,6 +277,10 @@ const WorkflowNodePaletteDragMimeType = "application/x-iteronix-workflow-node";
 const LatestResponseSourcePath = "$";
 const LatestResponseSourceLabel = "Latest response";
 const ExecutionRefreshIntervalMs = 1_500;
+const WorkflowAssetTimeoutMinuteMs = 60_000;
+const DefaultRegexTesterFlags = "gm";
+const DefaultPatternRegexTestText = "hola\nque\nhaces";
+const DefaultGuardrailRegexTestText = "sample output\nanother sample";
 const InspectorInputClassName =
   "w-full rounded-md border border-border-dark bg-[#0e141b] px-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-primary focus:ring-1 focus:ring-primary/40";
 const InspectorTextInputClassName = `h-10 ${InspectorInputClassName}`;
@@ -363,6 +385,13 @@ type DeepEditorState = {
   sampleSelectionEnd: number;
 };
 
+type RegexTesterState = {
+  title: string;
+  pattern: string;
+  flags: string;
+  testText: string;
+};
+
 type LiveNodeRunState = {
   status: "pending" | "running" | "completed" | "warn" | "failed";
   startedAt?: string;
@@ -461,6 +490,7 @@ type OutputContractEditorSelectorSet = {
   propertyMinPrefix: string;
   propertyMaxPrefix: string;
   propertyPatternPrefix: string;
+  propertyRegexTestPrefix: string;
 };
 
 type ContractSelectOption =
@@ -488,6 +518,8 @@ const NodeOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
   propertyMaxPrefix: WorkflowScreenSelector.OutputContractPropertyMaxPrefix,
   propertyPatternPrefix:
     WorkflowScreenSelector.OutputContractPropertyPatternPrefix,
+  propertyRegexTestPrefix:
+    WorkflowScreenSelector.OutputContractPropertyRegexTestPrefix,
 };
 
 const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
@@ -512,6 +544,8 @@ const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
     WorkflowScreenSelector.AssetOutputContractPropertyMaxPrefix,
   propertyPatternPrefix:
     WorkflowScreenSelector.AssetOutputContractPropertyPatternPrefix,
+  propertyRegexTestPrefix:
+    WorkflowScreenSelector.AssetOutputContractPropertyRegexTestPrefix,
 };
 
 interface WorkflowsScreenState {
@@ -548,8 +582,10 @@ interface WorkflowsScreenState {
   guardrailValidationKind: GuardrailValidationKindValue;
   guardrailValidationTarget: GuardrailValidationTargetValue;
   guardrailValidationPath: string;
+  guardrailValidationValue: string;
   guardrailValidationMessage: string;
   deepEditor: DeepEditorState | null;
+  regexTester: RegexTesterState | null;
   editorModalOpen: boolean;
   debugInputTab: WorkflowDebugPanelTab;
   debugOutputTab: WorkflowDebugPanelTab;
@@ -615,8 +651,10 @@ export class WorkflowsScreen extends Component<
       guardrailValidationKind: "field_exists",
       guardrailValidationTarget: "output",
       guardrailValidationPath: "$.result",
+      guardrailValidationValue: "",
       guardrailValidationMessage: "Expected $.result to be present.",
       deepEditor: null,
+      regexTester: null,
       editorModalOpen: false,
       debugInputTab: "json",
       debugOutputTab: "json",
@@ -670,6 +708,7 @@ export class WorkflowsScreen extends Component<
         this.renderSurface(),
         this.state.editorModalOpen ? this.renderSelectionEditorModal() : "",
         this.state.deepEditor ? this.renderDeepEditorModal() : "",
+        this.state.regexTester ? this.renderRegexTesterModal() : "",
         this.state.executionNodeModal ? this.renderExecutionNodeModal() : "",
       ],
     );
@@ -5389,6 +5428,32 @@ export class WorkflowsScreen extends Component<
     });
   }
 
+  private openRegexTester(input: RegexTesterState): void {
+    this.setState({
+      regexTester: input,
+      errorMessage: null,
+    });
+  }
+
+  private patchRegexTester(patch: Partial<RegexTesterState>): void {
+    if (!this.state.regexTester) {
+      return;
+    }
+
+    this.setState({
+      regexTester: {
+        ...this.state.regexTester,
+        ...patch,
+      },
+    });
+  }
+
+  private closeRegexTester(): void {
+    this.setState({
+      regexTester: null,
+    });
+  }
+
   private renderDeepEditorModal(): HTMLElement {
     const deepEditor = this.state.deepEditor;
     if (!deepEditor) {
@@ -6540,6 +6605,10 @@ export class WorkflowsScreen extends Component<
           body: value,
         }));
       }),
+      asset.kind === WorkflowAssetKind.Prompt ||
+      asset.kind === WorkflowAssetKind.Guardrail
+        ? this.renderAssetExecutionPolicyEditor(asset)
+        : "",
       asset.kind !== WorkflowAssetKind.Guardrail
         ? this.renderQuickEditorCard({
             title: "Deep editor",
@@ -6648,6 +6717,59 @@ export class WorkflowsScreen extends Component<
         ],
       ),
     ]);
+  }
+
+  private renderAssetExecutionPolicyEditor(
+    asset: WorkflowAssetRecord,
+  ): HTMLElement {
+    const policy = normalizeWorkflowAssetExecutionPolicy(asset.executionPolicy);
+
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Execution policy",
+        ]),
+        createElement(
+          "p",
+          { className: "mt-1 text-xs leading-5 text-text-secondary" },
+          [
+            `Defaults: ${WorkflowAssetDefaultMaxRetries.toString()} retries and ${formatTimeoutMinutes(WorkflowAssetDefaultTimeoutMs)} timeout.`,
+          ],
+        ),
+        createElement("div", { className: "mt-3 grid gap-3 sm:grid-cols-2" }, [
+          this.renderContractNumberField(
+            "Max retries",
+            policy.maxRetries,
+            (value) => {
+              this.patchAssetExecutionPolicy(asset.id, {
+                maxRetries: value ?? WorkflowAssetDefaultMaxRetries,
+              });
+            },
+            WorkflowScreenSelector.AssetMaxRetriesInput,
+          ),
+          this.renderContractNumberField(
+            "Timeout minutes",
+            Math.round(policy.timeoutMs / WorkflowAssetTimeoutMinuteMs),
+            (value) => {
+              this.patchAssetExecutionPolicy(asset.id, {
+                timeoutMs:
+                  (value ??
+                    Math.round(
+                      WorkflowAssetDefaultTimeoutMs /
+                        WorkflowAssetTimeoutMinuteMs,
+                    )) * WorkflowAssetTimeoutMinuteMs,
+              });
+            },
+            WorkflowScreenSelector.AssetTimeoutMinutesInput,
+          ),
+        ]),
+      ],
+    );
   }
 
   private renderOutputContractEditor(input: {
@@ -7145,10 +7267,9 @@ export class WorkflowsScreen extends Component<
           },
           `${input.selectors.propertyMaxPrefix}${propertyToken}`,
         ),
-        this.renderContractTextField(
-          "Pattern",
-          input.schema.pattern ?? "",
-          (value) => {
+        this.renderRegexPatternField({
+          value: input.schema.pattern ?? "",
+          onCommit: (value) => {
             input.onChangeContract((current) => ({
               ...current,
               schema: updateJsonSchemaNode(current.schema, input.path, (node) =>
@@ -7158,8 +7279,10 @@ export class WorkflowsScreen extends Component<
               ),
             }));
           },
-          `${input.selectors.propertyPatternPrefix}${propertyToken}`,
-        ),
+          fieldTestId: `${input.selectors.propertyPatternPrefix}${propertyToken}`,
+          buttonTestId: `${input.selectors.propertyRegexTestPrefix}${propertyToken}`,
+          title: `Pattern · ${readContractPathLabel(input.path)}`,
+        }),
       ]);
     }
 
@@ -7242,6 +7365,430 @@ export class WorkflowsScreen extends Component<
     ]);
   }
 
+  private renderRegexPatternField(input: {
+    value: string;
+    onCommit: (value: string) => void;
+    fieldTestId: string;
+    buttonTestId: string;
+    title: string;
+  }): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-1" }, [
+      createElement("span", { className: "text-xs text-text-secondary" }, [
+        "Pattern",
+      ]),
+      createElement("div", { className: "flex gap-2" }, [
+        createElement("input", {
+          type: "text",
+          value: input.value,
+          className: InspectorTextInputClassName,
+          "data-testid": input.fieldTestId,
+          placeholder: "^[A-Z]{3}-\\d+$",
+          onBlur: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLInputElement) {
+              input.onCommit(target.value);
+            }
+          },
+          onChange: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLInputElement) {
+              input.onCommit(target.value);
+            }
+          },
+        }),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          className: "h-10 shrink-0",
+          onClick: () =>
+            this.openRegexTester({
+              title: input.title,
+              pattern: input.value,
+              flags: DefaultRegexTesterFlags,
+              testText: DefaultPatternRegexTestText,
+            }),
+          children: "Test",
+          dataset: {
+            testid: input.buttonTestId,
+          },
+        }),
+      ]),
+    ]);
+  }
+
+  private renderRegexTesterModal(): HTMLElement {
+    const tester = this.state.regexTester;
+    if (!tester) {
+      return createElement("div");
+    }
+
+    const result = evaluateWorkflowRegex({
+      pattern: tester.pattern,
+      flags: tester.flags,
+      testText: tester.testText,
+    });
+
+    return createElement(
+      "div",
+      {
+        className: "fixed inset-0 z-[60] bg-black/75 p-3 md:p-6",
+        onClick: () => this.closeRegexTester(),
+        "data-testid": WorkflowScreenSelector.RegexTesterModal,
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "mx-auto flex h-full w-full max-w-[1280px] flex-col overflow-hidden rounded-xl border border-border-dark bg-[#0f141a] shadow-2xl",
+            onClick: (event: Event) => event.stopPropagation(),
+          },
+          [
+            createElement(
+              "div",
+              {
+                className:
+                  "flex items-center justify-between border-b border-border-dark px-4 py-3",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement(
+                    "p",
+                    { className: "truncate text-sm font-semibold text-white" },
+                    [tester.title],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "truncate text-xs text-text-secondary" },
+                    [
+                      "Regex evaluator with live matches, capture groups, and schema-friendly JavaScript flags.",
+                    ],
+                  ),
+                ]),
+                createElement(IconButton, {
+                  icon: "close",
+                  tooltip: "Close regex tester",
+                  onClick: () => this.closeRegexTester(),
+                }),
+              ],
+            ),
+            createElement(
+              "div",
+              {
+                className:
+                  "grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_380px]",
+              },
+              [
+                createElement(
+                  "section",
+                  { className: "min-h-0 overflow-y-auto p-4" },
+                  [
+                    createElement(
+                      "div",
+                      {
+                        className:
+                          "rounded-lg border border-border-dark bg-[#11161d] px-4 py-3",
+                      },
+                      [
+                        createElement(
+                          "div",
+                          {
+                            className:
+                              "grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]",
+                          },
+                          [
+                            this.renderRegexModalField(
+                              "Regular expression",
+                              tester.pattern,
+                              WorkflowScreenSelector.RegexTesterPatternInput,
+                              (value) =>
+                                this.patchRegexTester({ pattern: value }),
+                            ),
+                            this.renderRegexModalField(
+                              "Flags",
+                              tester.flags,
+                              WorkflowScreenSelector.RegexTesterFlagsInput,
+                              (value) =>
+                                this.patchRegexTester({ flags: value }),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    createElement(
+                      "label",
+                      { className: "mt-4 flex flex-col gap-2" },
+                      [
+                        createElement(
+                          "span",
+                          {
+                            className:
+                              "text-xs font-semibold uppercase tracking-wide text-text-secondary",
+                          },
+                          ["Test string"],
+                        ),
+                        createElement("textarea", {
+                          className:
+                            "min-h-[420px] w-full resize-y rounded-lg border border-border-dark bg-[#0d1117] px-4 py-3 font-mono text-sm leading-6 text-white outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/40",
+                          value: tester.testText,
+                          onInput: (event: Event) => {
+                            const target = event.target;
+                            if (target instanceof HTMLTextAreaElement) {
+                              this.patchRegexTester({
+                                testText: target.value,
+                              });
+                            }
+                          },
+                          "data-testid":
+                            WorkflowScreenSelector.RegexTesterTextInput,
+                        }),
+                      ],
+                    ),
+                  ],
+                ),
+                createElement(
+                  "aside",
+                  {
+                    className:
+                      "min-h-0 overflow-y-auto border-t border-border-dark bg-[#121820] p-4 lg:border-l lg:border-t-0",
+                  },
+                  [
+                    this.renderRegexEvaluationSummary(result),
+                    this.renderRegexMatches(result),
+                    this.renderRegexQuickReference(),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderRegexModalField(
+    label: string,
+    value: string,
+    testId: string,
+    onInput: (value: string) => void,
+  ): HTMLElement {
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement(
+        "span",
+        {
+          className:
+            "text-xs font-semibold uppercase tracking-wide text-text-secondary",
+        },
+        [label],
+      ),
+      createElement("input", {
+        type: "text",
+        value,
+        className: InspectorTextInputClassName,
+        onInput: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            onInput(target.value);
+          }
+        },
+        "data-testid": testId,
+      }),
+    ]);
+  }
+
+  private renderRegexEvaluationSummary(
+    result: ReturnType<typeof evaluateWorkflowRegex>,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-lg border border-border-dark bg-[#0f1318] px-4 py-3",
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex items-center justify-between gap-3" },
+          [
+            createElement("div", { className: "min-w-0" }, [
+              createElement(
+                "p",
+                { className: "text-sm font-medium text-white" },
+                ["Evaluation"],
+              ),
+              createElement(
+                "p",
+                { className: "mt-1 text-xs text-text-secondary" },
+                [
+                  result.valid
+                    ? `${result.matches.length.toString()} matches${result.truncated ? " · truncated" : ""}`
+                    : result.error,
+                ],
+              ),
+            ]),
+            createElement(
+              StatusBadge,
+              { status: result.valid ? "success" : "failed" },
+              [result.valid ? "Valid" : "Invalid"],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderRegexMatches(
+    result: ReturnType<typeof evaluateWorkflowRegex>,
+  ): HTMLElement {
+    if (!result.valid) {
+      return createElement(
+        "div",
+        {
+          className:
+            "mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-100",
+        },
+        [result.error],
+      );
+    }
+
+    return createElement(
+      "div",
+      {
+        className:
+          "mt-4 rounded-lg border border-border-dark bg-[#0f1318] px-4 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Match information",
+        ]),
+        result.matches.length === 0
+          ? createElement(
+              "p",
+              { className: "mt-3 text-xs text-text-secondary" },
+              ["No matches for this test string."],
+            )
+          : createElement(
+              "div",
+              { className: "mt-3 flex flex-col gap-2" },
+              result.matches.map((match, index) =>
+                this.renderRegexMatchRow(match, index),
+              ),
+            ),
+      ],
+    );
+  }
+
+  private renderRegexMatchRow(
+    match: WorkflowRegexMatchRecord,
+    index: number,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-md border border-border-dark bg-[#151a20] px-3 py-2",
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex items-center justify-between gap-3" },
+          [
+            createElement(
+              "span",
+              { className: "text-xs font-medium text-white" },
+              [`Match ${(index + 1).toString()}`],
+            ),
+            createElement(
+              "span",
+              { className: "font-mono text-[11px] text-text-secondary" },
+              [`${match.index.toString()}–${match.endIndex.toString()}`],
+            ),
+          ],
+        ),
+        createElement(
+          "pre",
+          {
+            className:
+              "mt-2 overflow-x-auto rounded bg-[#0d1117] px-2 py-2 font-mono text-[11px] text-slate-200",
+          },
+          [match.text.length > 0 ? match.text : "empty string"],
+        ),
+        match.groups.length > 0
+          ? createElement(
+              "div",
+              { className: "mt-2 flex flex-col gap-1" },
+              match.groups.map((group, groupIndex) =>
+                createElement(
+                  "div",
+                  {
+                    key: `${match.index.toString()}-${groupIndex.toString()}`,
+                    className:
+                      "flex items-center justify-between gap-2 text-[11px]",
+                  },
+                  [
+                    createElement(
+                      "span",
+                      { className: "text-text-secondary" },
+                      [`Group ${(groupIndex + 1).toString()}`],
+                    ),
+                    createElement("code", { className: "text-amber-100" }, [
+                      group.length > 0 ? group : "empty",
+                    ]),
+                  ],
+                ),
+              ),
+            )
+          : "",
+      ],
+    );
+  }
+
+  private renderRegexQuickReference(): HTMLElement {
+    const entries = [
+      ["^ / $", "Line anchors"],
+      [".", "Any character except line breaks"],
+      ["\\d / \\w / \\s", "Digit, word, whitespace"],
+      ["[abc] / [^abc]", "Character set / negated set"],
+      ["(group)", "Capturing group"],
+      ["(?:group)", "Non-capturing group"],
+      ["(?=x) / (?!x)", "Lookahead assertions"],
+      ["* + ? {n,m}", "Quantifiers"],
+    ] as const;
+
+    return createElement(
+      "div",
+      {
+        className:
+          "mt-4 rounded-lg border border-border-dark bg-[#0f1318] px-4 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Quick reference",
+        ]),
+        createElement(
+          "div",
+          { className: "mt-3 flex flex-col gap-2" },
+          entries.map(([token, description]) =>
+            createElement(
+              "div",
+              {
+                key: token,
+                className:
+                  "flex items-center justify-between gap-3 rounded-md border border-border-dark bg-[#151a20] px-3 py-2 text-xs",
+              },
+              [
+                createElement("code", { className: "text-primary" }, [token]),
+                createElement("span", { className: "text-text-secondary" }, [
+                  description,
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   private renderContractInlineInput(input: {
     value: string;
     onCommit: (value: string) => void;
@@ -7300,24 +7847,6 @@ export class WorkflowsScreen extends Component<
         },
         ["▾"],
       ),
-    ]);
-  }
-
-  private renderContractTextField(
-    label: string,
-    value: string,
-    onCommit: (value: string) => void,
-    testId: string,
-  ): HTMLElement {
-    return createElement("label", { className: "flex flex-col gap-2" }, [
-      createElement("span", { className: "text-xs font-medium text-white" }, [
-        label,
-      ]),
-      this.renderContractInlineInput({
-        value,
-        onCommit,
-        testId,
-      }),
     ]);
   }
 
@@ -7503,6 +8032,7 @@ export class WorkflowsScreen extends Component<
             },
             WorkflowScreenSelector.GuardrailValidationPathInput,
           ),
+          this.renderGuardrailValidationValueField(),
           this.renderInspectorField(
             "Message",
             this.state.guardrailValidationMessage,
@@ -7540,6 +8070,55 @@ export class WorkflowsScreen extends Component<
         ]),
       ],
     );
+  }
+
+  private renderGuardrailValidationValueField(): HTMLElement {
+    const label =
+      this.state.guardrailValidationKind === "regex" ? "Regex" : "Value";
+
+    return createElement("label", { className: "flex flex-col gap-1" }, [
+      createElement("span", { className: "text-xs text-text-secondary" }, [
+        label,
+      ]),
+      createElement("div", { className: "flex gap-2" }, [
+        createElement("input", {
+          type: "text",
+          value: this.state.guardrailValidationValue,
+          className: InspectorTextInputClassName,
+          "data-testid": WorkflowScreenSelector.GuardrailValidationValueInput,
+          onBlur: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLInputElement) {
+              this.setState({ guardrailValidationValue: target.value });
+            }
+          },
+          onChange: (event: Event) => {
+            const target = event.target;
+            if (target instanceof HTMLInputElement) {
+              this.setState({ guardrailValidationValue: target.value });
+            }
+          },
+        }),
+        this.state.guardrailValidationKind === "regex"
+          ? createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              className: "h-10 shrink-0",
+              onClick: () =>
+                this.openRegexTester({
+                  title: "Guardrail regex",
+                  pattern: this.state.guardrailValidationValue,
+                  flags: DefaultRegexTesterFlags,
+                  testText: DefaultGuardrailRegexTestText,
+                }),
+              children: "Test",
+              dataset: {
+                testid: WorkflowScreenSelector.GuardrailValidationRegexTest,
+              },
+            })
+          : "",
+      ]),
+    ]);
   }
 
   private renderGuardrailValidationRow(
@@ -7580,6 +8159,16 @@ export class WorkflowsScreen extends Component<
         createElement("p", { className: "mt-2 text-xs text-text-secondary" }, [
           validation.message,
         ]),
+        validation.value !== undefined
+          ? createElement(
+              "code",
+              {
+                className:
+                  "mt-2 block rounded bg-[#0d1117] px-2 py-2 text-[11px] text-amber-100",
+              },
+              [String(validation.value)],
+            )
+          : "",
       ],
     );
   }
@@ -7599,6 +8188,10 @@ export class WorkflowsScreen extends Component<
           body: value,
         }));
       }),
+      asset.kind === WorkflowAssetKind.Prompt ||
+      asset.kind === WorkflowAssetKind.Guardrail
+        ? this.renderAssetExecutionPolicyEditor(asset)
+        : "",
       asset.outputContract
         ? this.renderOutputContractEditor({
             title: "Asset output contract",
@@ -9481,6 +10074,10 @@ export class WorkflowsScreen extends Component<
                 kind: this.state.guardrailValidationKind,
                 target: this.state.guardrailValidationTarget,
                 path: this.state.guardrailValidationPath.trim(),
+                ...readGuardrailValidationValue(
+                  this.state.guardrailValidationKind,
+                  this.state.guardrailValidationValue,
+                ),
                 message: this.state.guardrailValidationMessage.trim(),
               }
             : entry,
@@ -9673,6 +10270,19 @@ export class WorkflowsScreen extends Component<
     }
 
     this.updateAssetDraft(assetId, update(current));
+  }
+
+  private patchAssetExecutionPolicy(
+    assetId: string,
+    patch: Partial<WorkflowAssetExecutionPolicyRecord>,
+  ): void {
+    this.patchAsset(assetId, (asset) => ({
+      ...asset,
+      executionPolicy: normalizeWorkflowAssetExecutionPolicy({
+        ...normalizeWorkflowAssetExecutionPolicy(asset.executionPolicy),
+        ...patch,
+      }),
+    }));
   }
 
   private patchGuardrailAsset(
@@ -11240,6 +11850,13 @@ const stripAssetVersionFields = (
   body: asset.body,
   language: asset.language,
   tags: asset.tags,
+  ...(asset.executionPolicy
+    ? {
+        executionPolicy: normalizeWorkflowAssetExecutionPolicy(
+          asset.executionPolicy,
+        ),
+      }
+    : {}),
   ...(asset.outputContract ? { outputContract: asset.outputContract } : {}),
   ...(asset.guardrail ? { guardrail: asset.guardrail } : {}),
   ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {}),
@@ -11508,6 +12125,32 @@ const readGuardrailValidationKind = (
   return "field_exists";
 };
 
+const readGuardrailValidationValue = (
+  kind: GuardrailValidationKindValue,
+  value: string,
+): { value?: string | number | boolean } => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return {};
+  }
+
+  if (kind === "number_gte" || kind === "number_lte") {
+    const numericValue = Number(trimmed);
+    return Number.isFinite(numericValue) ? { value: numericValue } : {};
+  }
+
+  if (
+    kind === "regex" ||
+    kind === "contains" ||
+    kind === "not_contains" ||
+    kind === "field_equals"
+  ) {
+    return { value: trimmed };
+  }
+
+  return {};
+};
+
 const readGuardrailValidationTargets =
   (): ReadonlyArray<GuardrailValidationTargetValue> => [
     "input",
@@ -11683,6 +12326,18 @@ const toContractPathToken = (path: ReadonlyArray<string>): string =>
         )
         .join("__")
         .replace(/[^a-zA-Z0-9_-]+/gu, "-");
+
+const readContractPathLabel = (path: ReadonlyArray<string>): string =>
+  path.length === 0
+    ? "$"
+    : `$.${path
+        .map((segment) =>
+          segment === JsonSchemaItemsSegment ? "items[]" : segment,
+        )
+        .join(".")}`;
+
+const formatTimeoutMinutes = (timeoutMs: number): string =>
+  `${Math.round(timeoutMs / WorkflowAssetTimeoutMinuteMs).toString()} min`;
 
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" &&

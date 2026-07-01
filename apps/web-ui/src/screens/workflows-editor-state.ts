@@ -372,6 +372,11 @@ type WorkflowExecutionPolicyRecord = {
   allowManualCheckpointResume: boolean;
 };
 
+export type WorkflowAssetExecutionPolicyRecord = {
+  maxRetries: number;
+  timeoutMs: number;
+};
+
 type WorkflowContextPolicyRecord = {
   language: string;
   carryMessagesLimit: number;
@@ -410,6 +415,7 @@ export type WorkflowAssetRecord = {
   language: string;
   version: number;
   tags: ReadonlyArray<string>;
+  executionPolicy?: WorkflowAssetExecutionPolicyRecord;
   outputContract?: JsonOutputContractRecord;
   guardrail?: GuardrailDefinitionRecord;
   createdAt: string;
@@ -524,8 +530,106 @@ const DefaultReasoningLevel = WorkflowReasoningLevel.Medium;
 const DefaultVerbosity = WorkflowVerbosity.Medium;
 const DefaultTemperature = 0.2;
 const GuardrailValidationLimit = 4;
+export const WorkflowAssetDefaultMaxRetries = 3;
+const WorkflowAssetMinimumMaxRetries = 0;
+const WorkflowAssetMaximumMaxRetries = 10;
+const MillisecondsPerSecond = 1_000;
+const SecondsPerMinute = 60;
+const MinutesPerDay = 1_440;
+const WorkflowAssetDefaultTimeoutMinutes = 5;
+export const WorkflowAssetDefaultTimeoutMs =
+  WorkflowAssetDefaultTimeoutMinutes * SecondsPerMinute * MillisecondsPerSecond;
+const WorkflowAssetMinimumTimeoutMs = MillisecondsPerSecond;
+const WorkflowAssetMaximumTimeoutMs =
+  MinutesPerDay * SecondsPerMinute * MillisecondsPerSecond;
+const WorkflowRegexEvaluationMaxMatches = 100;
+const WorkflowRegexGlobalFlag = "g";
+const WorkflowRegexFlagOrder = ["d", "g", "i", "m", "s", "u", "v", "y"];
+
+export type WorkflowRegexMatchRecord = {
+  index: number;
+  endIndex: number;
+  text: string;
+  groups: ReadonlyArray<string>;
+  namedGroups: Readonly<Record<string, string>>;
+};
+
+export type WorkflowRegexEvaluationResult =
+  | {
+      valid: true;
+      pattern: string;
+      flags: string;
+      matches: ReadonlyArray<WorkflowRegexMatchRecord>;
+      truncated: boolean;
+    }
+  | {
+      valid: false;
+      pattern: string;
+      flags: string;
+      error: string;
+    };
 
 export const readDefaultWorkflowWorkspaceId = (): string => DefaultWorkspaceId;
+
+export const normalizeWorkflowAssetExecutionPolicy = (
+  value: WorkflowAssetExecutionPolicyRecord | undefined,
+): WorkflowAssetExecutionPolicyRecord => ({
+  maxRetries: clampInteger(
+    value?.maxRetries ?? WorkflowAssetDefaultMaxRetries,
+    WorkflowAssetMinimumMaxRetries,
+    WorkflowAssetMaximumMaxRetries,
+  ),
+  timeoutMs: clampInteger(
+    value?.timeoutMs ?? WorkflowAssetDefaultTimeoutMs,
+    WorkflowAssetMinimumTimeoutMs,
+    WorkflowAssetMaximumTimeoutMs,
+  ),
+});
+
+export const evaluateWorkflowRegex = (input: {
+  pattern: string;
+  flags: string;
+  testText: string;
+}): WorkflowRegexEvaluationResult => {
+  const flags = normalizeWorkflowRegexFlags(input.flags);
+  const evaluationFlags = normalizeWorkflowRegexFlags(
+    flags.includes(WorkflowRegexGlobalFlag)
+      ? flags
+      : `${flags}${WorkflowRegexGlobalFlag}`,
+  );
+
+  try {
+    const regex = new RegExp(input.pattern, evaluationFlags);
+    const matches: WorkflowRegexMatchRecord[] = [];
+    let match = regex.exec(input.testText);
+
+    while (match && matches.length < WorkflowRegexEvaluationMaxMatches) {
+      matches.push(readWorkflowRegexMatch(match));
+
+      if (match[0]?.length === 0) {
+        regex.lastIndex += 1;
+      }
+
+      match = regex.exec(input.testText);
+    }
+
+    return {
+      valid: true,
+      pattern: input.pattern,
+      flags: evaluationFlags,
+      matches,
+      truncated: match !== null,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      pattern: input.pattern,
+      flags: evaluationFlags,
+      error:
+        error instanceof Error ? error.message : "Invalid regular expression.",
+    };
+  }
+};
 
 export const createEmptyWorkflowDefinition = (input: {
   workspaceId?: string;
@@ -590,6 +694,13 @@ export const createWorkflowAssetDraft = (input: {
 
   if (
     input.kind === WorkflowAssetKind.Prompt ||
+    input.kind === WorkflowAssetKind.Guardrail
+  ) {
+    draft.executionPolicy = normalizeWorkflowAssetExecutionPolicy(undefined);
+  }
+
+  if (
+    input.kind === WorkflowAssetKind.Prompt ||
     input.kind === WorkflowAssetKind.Instruction
   ) {
     draft.outputContract = createDefaultOutputContract(
@@ -618,6 +729,29 @@ export const createWorkflowAssetDraft = (input: {
   void timestamp;
   return draft;
 };
+
+const clampInteger = (
+  value: number,
+  minimum: number,
+  maximum: number,
+): number => Math.max(minimum, Math.min(maximum, Math.trunc(value)));
+
+const normalizeWorkflowRegexFlags = (flags: string): string => {
+  const uniqueFlags = new Set(flags.split(""));
+  return WorkflowRegexFlagOrder.filter((flag) => uniqueFlags.has(flag)).join(
+    "",
+  );
+};
+
+const readWorkflowRegexMatch = (
+  match: RegExpExecArray,
+): WorkflowRegexMatchRecord => ({
+  index: match.index,
+  endIndex: match.index + (match[0]?.length ?? 0),
+  text: match[0] ?? "",
+  groups: match.slice(1).map((group) => group ?? ""),
+  namedGroups: match.groups ? { ...match.groups } : {},
+});
 
 const createWorkflowNodeRecord = (
   kind: WorkflowNodeKind,
@@ -1345,6 +1479,13 @@ const stripAssetPersistenceFields = (
   body: asset.body,
   language: asset.language,
   tags: asset.tags,
+  ...(asset.executionPolicy
+    ? {
+        executionPolicy: normalizeWorkflowAssetExecutionPolicy(
+          asset.executionPolicy,
+        ),
+      }
+    : {}),
   ...(asset.outputContract ? { outputContract: asset.outputContract } : {}),
   ...(asset.guardrail ? { guardrail: asset.guardrail } : {}),
   ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {}),
