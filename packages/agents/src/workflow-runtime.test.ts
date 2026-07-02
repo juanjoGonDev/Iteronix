@@ -40,6 +40,46 @@ describe("workflow runtime", () => {
     });
   });
 
+  it("reuses seeded upstream node outputs when running a single step", async () => {
+    const providerCalls: Array<{ nodeId: string; prompt: string }> = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerCalls.push({
+          nodeId: request.node.id,
+          prompt: request.prompt,
+        });
+        return {
+          outputText: `Fresh output from ${request.node.id}.`,
+        };
+      },
+    });
+
+    const execution = await runtime.runNode({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      nodeId: "node-provider-2",
+      inputSource: {
+        kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
+      },
+      seedNodeOutputs: {
+        "node-prompt": "Pinned prompt text",
+        "node-provider-1": "Pinned provider text",
+      },
+    });
+
+    expect(providerCalls.map((call) => call.nodeId)).toEqual([
+      "node-provider-2",
+    ]);
+    expect(providerCalls[0]?.prompt).toContain("Pinned provider text");
+    expect(providerCalls[0]?.prompt).not.toContain(
+      "Fresh output from node-provider-1",
+    );
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-provider-2",
+    ]);
+  });
+
   it("keeps server-owned continuity between provider nodes", async () => {
     const providerCalls: Array<{
       nodeId: string;

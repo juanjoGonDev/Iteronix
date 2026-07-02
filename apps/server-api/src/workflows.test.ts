@@ -531,6 +531,23 @@ describe("workflow api contracts", () => {
         },
       }).type,
     ).toBe(ResultType.Ok);
+    const nodeRunWithSeeds = parseWorkflowNodeExecutionRunRequest({
+      workflowId: "workflow-1",
+      nodeId: "node-1",
+      inputSource: {
+        kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
+      },
+      seedNodeOutputs: {
+        "node-upstream": { result: "cached" },
+      },
+    });
+    expect(nodeRunWithSeeds.type).toBe(ResultType.Ok);
+    if (nodeRunWithSeeds.type === ResultType.Ok) {
+      expect(nodeRunWithSeeds.value.seedNodeOutputs).toEqual({
+        "node-upstream": { result: "cached" },
+      });
+    }
+
     expect(
       parseWorkflowNodeProviderTestRequest({
         workflowId: "workflow-1",

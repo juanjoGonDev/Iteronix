@@ -174,11 +174,13 @@ export type WorkflowClient = {
     workflowId: string;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   }) => Promise<WorkflowExecutionRecord>;
   streamNode: (input: {
     workflowId: string;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent: (event: WorkflowRunStreamEvent) => void;
   }) => Promise<void>;
@@ -338,6 +340,9 @@ export const createWorkflowClient = (): WorkflowClient => ({
         workflowId: input.workflowId,
         nodeId: input.nodeId,
         inputSource: input.inputSource,
+        ...(input.seedNodeOutputs
+          ? { seedNodeOutputs: input.seedNodeOutputs }
+          : {}),
       },
       parse: parseWorkflowExecutionResponse,
     }),
@@ -436,6 +441,7 @@ const readWorkflowNodeStreamPath = (input: {
   workflowId: string;
   nodeId: string;
   inputSource: WorkflowNodeExecutionInputSourceRecord;
+  seedNodeOutputs?: Readonly<Record<string, unknown>>;
 }): string => {
   const params = new URLSearchParams({
     workflowId: input.workflowId,
@@ -444,6 +450,9 @@ const readWorkflowNodeStreamPath = (input: {
   });
   if ("nodeId" in input.inputSource) {
     params.set("sourceNodeId", input.inputSource.nodeId);
+  }
+  if (input.seedNodeOutputs) {
+    params.set("seedNodeOutputs", JSON.stringify(input.seedNodeOutputs));
   }
 
   return `${EndpointPath.ExecutionsStreamNode}?${params.toString()}`;

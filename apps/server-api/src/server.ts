@@ -4928,6 +4928,9 @@ const readWorkflowNodeExecutionStreamRequest = (
 ): Record<string, unknown> => {
   const inputSourceKind = url.searchParams.get(QueryParam.InputSourceKind);
   const sourceNodeId = url.searchParams.get(QueryParam.SourceNodeId);
+  const seedNodeOutputs = readJsonQueryParam(
+    url.searchParams.get(QueryParam.SeedNodeOutputs),
+  );
   return {
     workflowId: url.searchParams.get(QueryParam.WorkflowId),
     nodeId: url.searchParams.get(QueryParam.NodeId),
@@ -4935,7 +4938,20 @@ const readWorkflowNodeExecutionStreamRequest = (
       kind: inputSourceKind,
       ...(sourceNodeId ? { nodeId: sourceNodeId } : {}),
     },
+    ...(seedNodeOutputs ? { seedNodeOutputs } : {}),
   };
+};
+
+const readJsonQueryParam = (value: string | null): unknown => {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
 };
 
 const handleWorkflowNodeProviderTest = async (

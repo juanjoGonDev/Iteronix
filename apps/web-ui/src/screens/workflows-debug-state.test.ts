@@ -12,6 +12,8 @@ import {
   readWorkflowNodeModalNavigationState,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
+  readWorkflowPinnedOutputAction,
+  readWorkflowStepSeedOutputs,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
   selectWorkflowCanvasExecution,
@@ -87,6 +89,76 @@ describe("workflows debug state", () => {
       sourceNode.label,
     ]);
     expect(sources[0]?.detail).toContain("1 item");
+  });
+
+  it("builds reusable step seed outputs from previous runs and one pinned output", () => {
+    const definition = addWorkflowNode(
+      createEmptyWorkflowDefinition({
+        projectId: "project-1",
+        name: "Debug",
+      }),
+      WorkflowNodeKind.AiAgent,
+      () => "node-target",
+    );
+    const connected = connectWorkflowNodes(definition, {
+      sourceNodeId: definition.nodes[0]?.id ?? "",
+      sourcePortId: definition.nodes[0]?.outputPorts[0]?.id ?? "",
+      targetNodeId: "node-target",
+      targetPortId:
+        definition.nodes.find((node) => node.id === "node-target")
+          ?.inputPorts[0]?.id ?? "",
+    });
+
+    const seeds = readWorkflowStepSeedOutputs({
+      workflow: connected,
+      executionOutputs: new Map<string, unknown>([
+        [connected.nodes[0]?.id ?? "", { result: "cached" }],
+        ["node-target", { result: "old target" }],
+      ]),
+      pinnedOutput: {
+        workflowId: "workflow-1",
+        nodeId: connected.nodes[0]?.id ?? "",
+        outputSnapshot: { result: "pinned" },
+      },
+      workflowId: "workflow-1",
+      targetNodeId: "node-target",
+    });
+
+    expect(seeds).toEqual({
+      [connected.nodes[0]?.id ?? ""]: { result: "pinned" },
+    });
+  });
+
+  it("requires confirmation before replacing another pinned step output", () => {
+    expect(
+      readWorkflowPinnedOutputAction({
+        currentPinnedOutput: null,
+        nextNodeId: "node-a",
+        hasOutput: true,
+      }),
+    ).toBe("pin");
+    expect(
+      readWorkflowPinnedOutputAction({
+        currentPinnedOutput: {
+          workflowId: "workflow-1",
+          nodeId: "node-a",
+          outputSnapshot: "cached",
+        },
+        nextNodeId: "node-b",
+        hasOutput: true,
+      }),
+    ).toBe("confirm-overwrite");
+    expect(
+      readWorkflowPinnedOutputAction({
+        currentPinnedOutput: {
+          workflowId: "workflow-1",
+          nodeId: "node-a",
+          outputSnapshot: "cached",
+        },
+        nextNodeId: "node-a",
+        hasOutput: true,
+      }),
+    ).toBe("unpin");
   });
 
   it("keeps a selected historical execution when the node modal changes selection", () => {

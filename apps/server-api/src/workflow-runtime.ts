@@ -46,6 +46,7 @@ export type WorkflowRuntimeService = {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
@@ -95,6 +96,7 @@ export const createWorkflowRuntimeService = (input: {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
@@ -103,6 +105,9 @@ export const createWorkflowRuntimeService = (input: {
       assets: request.assets,
       nodeId: request.nodeId,
       inputSource: request.inputSource,
+      ...(request.seedNodeOutputs
+        ? { seedNodeOutputs: request.seedNodeOutputs }
+        : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });

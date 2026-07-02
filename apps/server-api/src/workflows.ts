@@ -381,6 +381,7 @@ export const executeWorkflowNodeExecutionRun = async (
     workflowId: string;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
@@ -389,6 +390,7 @@ export const executeWorkflowNodeExecutionRun = async (
       assets: ReadonlyArray<WorkflowAssetRecord>;
       nodeId: string;
       inputSource: WorkflowNodeExecutionInputSourceRecord;
+      seedNodeOutputs?: Readonly<Record<string, unknown>>;
       signal?: AbortSignal;
       onEvent?: (event: WorkflowRuntimeEvent) => void;
     }) => Promise<WorkflowExecutionRecord>;
@@ -423,6 +425,9 @@ export const executeWorkflowNodeExecutionRun = async (
     assets,
     nodeId: input.nodeId,
     inputSource: input.inputSource,
+    ...(input.seedNodeOutputs
+      ? { seedNodeOutputs: input.seedNodeOutputs }
+      : {}),
     ...(dependencies.signal ? { signal: dependencies.signal } : {}),
     ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
   });
@@ -692,6 +697,7 @@ export const parseWorkflowNodeExecutionRunRequest = (
     workflowId: string;
     nodeId: string;
     inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   },
   ApiError
 > => {
@@ -712,10 +718,14 @@ export const parseWorkflowNodeExecutionRunRequest = (
   const inputSource = parseWorkflowNodeExecutionInputSource(
     value["inputSource"],
   );
+  const seedNodeOutputs = parseWorkflowSeedNodeOutputs(
+    value["seedNodeOutputs"],
+  );
   if (
     workflowId.type === ResultType.Err ||
     nodeId.type === ResultType.Err ||
-    inputSource.type === ResultType.Err
+    inputSource.type === ResultType.Err ||
+    seedNodeOutputs.type === ResultType.Err
   ) {
     return invalidBody();
   }
@@ -724,6 +734,9 @@ export const parseWorkflowNodeExecutionRunRequest = (
     workflowId: workflowId.value,
     nodeId: nodeId.value,
     inputSource: inputSource.value,
+    ...(seedNodeOutputs.value
+      ? { seedNodeOutputs: seedNodeOutputs.value }
+      : {}),
   });
 };
 
@@ -803,6 +816,20 @@ const parseSingleIdentifierRequest = <TKey extends string>(
   return ok({
     [key]: identifier.value,
   } as { [key in TKey]: string });
+};
+
+const parseWorkflowSeedNodeOutputs = (
+  value: unknown,
+): Result<Readonly<Record<string, unknown>> | undefined, ApiError> => {
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  return ok(value);
 };
 
 const parseWorkflowNodeExecutionInputSource = (

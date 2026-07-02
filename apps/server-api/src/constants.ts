@@ -217,6 +217,7 @@ export const QueryParam = {
   NodeId: "nodeId",
   InputSourceKind: "inputSourceKind",
   SourceNodeId: "sourceNodeId",
+  SeedNodeOutputs: "seedNodeOutputs",
 } as const;
 
 export const HistoryField = {

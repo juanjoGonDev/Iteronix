@@ -139,6 +139,7 @@ export type WorkflowRuntime = {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -179,6 +180,7 @@ export const createWorkflowRuntime = (input: {
     assets: ReadonlyArray<WorkflowAssetRecord>;
     nodeId: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -198,10 +200,14 @@ export const createWorkflowRuntime = (input: {
         nodeId: request.nodeId,
         inputSource:
           request.inputSource ?? DefaultWorkflowNodeExecutionInputSource,
+        seedNodeIds: Object.keys(request.seedNodeOutputs ?? {}),
       }),
       targetNodeId: request.nodeId,
       inputSource:
         request.inputSource ?? DefaultWorkflowNodeExecutionInputSource,
+      ...(request.seedNodeOutputs
+        ? { seedNodeOutputs: request.seedNodeOutputs }
+        : {}),
       ...(request.contextSessionId
         ? { contextSessionId: request.contextSessionId }
         : {}),
@@ -216,6 +222,7 @@ export const createWorkflowRuntime = (input: {
     nodes: ReadonlyArray<WorkflowNodeRecord>;
     targetNodeId?: string;
     inputSource?: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -226,13 +233,20 @@ export const createWorkflowRuntime = (input: {
     const assetsById = new Map(
       request.assets.map((asset) => [asset.id, asset] as const),
     );
-    const outputs = new Map<string, unknown>();
+    const seededOutputs = new Map<string, unknown>(
+      Object.entries(request.seedNodeOutputs ?? {}),
+    );
+    const outputs = new Map<string, unknown>(seededOutputs);
     const nodeRuns: WorkflowNodeExecutionRecord[] = [];
-    let envelope = createInitialEnvelope({
-      definition: request.definition,
-      workflowRunId,
-      contextSessionId,
-    });
+    let envelope = seedEnvelopeOutputs(
+      createInitialEnvelope({
+        definition: request.definition,
+        workflowRunId,
+        contextSessionId,
+      }),
+      request.definition,
+      seededOutputs,
+    );
     let status: WorkflowExecutionStatus = WorkflowExecutionStatus.Completed;
     request.onEvent?.({
       type: WorkflowRuntimeEventType.WorkflowStarted,
@@ -994,6 +1008,30 @@ const createInitialEnvelope = (input: {
   messages: [],
 });
 
+const seedEnvelopeOutputs = (
+  envelope: WorkflowContextEnvelope,
+  definition: WorkflowDefinitionRecord,
+  outputs: ReadonlyMap<string, unknown>,
+): WorkflowContextEnvelope => {
+  let current = envelope;
+  for (const node of sortWorkflowNodes(definition.nodes, definition.edges)) {
+    const outputSnapshot = outputs.get(node.id);
+    if (outputSnapshot === undefined) {
+      continue;
+    }
+
+    current = appendEnvelopeOutput(current, {
+      nodeId: node.id,
+      outputSnapshot,
+      message: readEnvelopeMessage(outputSnapshot),
+      citations: [],
+      guardrailFindings: [],
+    });
+  }
+
+  return current;
+};
+
 const readNodeInput = (
   targetNodeId: string,
   edges: ReadonlyArray<WorkflowEdgeRecord>,
@@ -1095,21 +1133,24 @@ const selectNodeExecutionNodes = (input: {
   definition: WorkflowDefinitionRecord;
   nodeId: string;
   inputSource: WorkflowNodeExecutionInputSourceRecord;
+  seedNodeIds?: ReadonlyArray<string>;
 }): ReadonlyArray<WorkflowNodeRecord> => {
   const sourceNodeIds = readRequiredSourceNodeIds(input);
   const selectedNodeIds = new Set<string>([input.nodeId]);
+  const seedNodeIds = new Set(input.seedNodeIds ?? []);
   for (const sourceNodeId of sourceNodeIds) {
     collectAncestorNodeIds(
       sourceNodeId,
       input.definition.edges,
       selectedNodeIds,
+      seedNodeIds,
     );
   }
 
   return sortWorkflowNodes(
     input.definition.nodes,
     input.definition.edges,
-  ).filter((node) => selectedNodeIds.has(node.id));
+  ).filter((node) => selectedNodeIds.has(node.id) && !seedNodeIds.has(node.id));
 };
 
 const readRequiredSourceNodeIds = (input: {
@@ -1132,16 +1173,26 @@ const collectAncestorNodeIds = (
   nodeId: string,
   edges: ReadonlyArray<WorkflowEdgeRecord>,
   selectedNodeIds: Set<string>,
+  seedNodeIds: ReadonlySet<string>,
 ): void => {
   if (selectedNodeIds.has(nodeId)) {
     return;
   }
 
   selectedNodeIds.add(nodeId);
+  if (seedNodeIds.has(nodeId)) {
+    return;
+  }
+
   for (const edge of edges.filter(
     (candidate) => candidate.targetNodeId === nodeId,
   )) {
-    collectAncestorNodeIds(edge.sourceNodeId, edges, selectedNodeIds);
+    collectAncestorNodeIds(
+      edge.sourceNodeId,
+      edges,
+      selectedNodeIds,
+      seedNodeIds,
+    );
   }
 };
 

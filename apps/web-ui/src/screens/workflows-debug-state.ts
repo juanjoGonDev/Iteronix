@@ -13,6 +13,18 @@ export type WorkflowDebugStatusTone =
 
 export type WorkflowDebugOutputMap = ReadonlyMap<string, unknown>;
 
+export type WorkflowPinnedTestOutput = {
+  workflowId: string;
+  nodeId: string;
+  outputSnapshot: unknown;
+};
+
+export type WorkflowPinnedOutputAction =
+  | "pin"
+  | "unpin"
+  | "confirm-overwrite"
+  | "disabled";
+
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
 export type WorkflowStepExecutionAvailability = {
@@ -90,6 +102,51 @@ export const readWorkflowDebugItemCount = (value: unknown): number => {
 export const readWorkflowDebugItemLabel = (value: unknown): string => {
   const count = readWorkflowDebugItemCount(value);
   return `${count.toString()} item${count === 1 ? "" : "s"}`;
+};
+
+export const readWorkflowStepSeedOutputs = (input: {
+  workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike;
+  executionOutputs: WorkflowDebugOutputMap;
+  pinnedOutput: WorkflowPinnedTestOutput | null;
+  workflowId: string;
+  targetNodeId: string;
+}): Readonly<Record<string, unknown>> => {
+  const upstreamNodeIds = collectWorkflowUpstreamNodeIds(
+    input.workflow,
+    input.targetNodeId,
+  );
+  const entries = new Map<string, unknown>();
+  for (const [nodeId, output] of input.executionOutputs.entries()) {
+    if (upstreamNodeIds.has(nodeId) && output !== undefined) {
+      entries.set(nodeId, output);
+    }
+  }
+
+  if (
+    input.pinnedOutput !== null &&
+    input.pinnedOutput.workflowId === input.workflowId &&
+    upstreamNodeIds.has(input.pinnedOutput.nodeId)
+  ) {
+    entries.set(input.pinnedOutput.nodeId, input.pinnedOutput.outputSnapshot);
+  }
+
+  return Object.fromEntries(entries.entries());
+};
+
+export const readWorkflowPinnedOutputAction = (input: {
+  currentPinnedOutput: WorkflowPinnedTestOutput | null;
+  nextNodeId: string;
+  hasOutput: boolean;
+}): WorkflowPinnedOutputAction => {
+  if (!input.hasOutput) {
+    return "disabled";
+  }
+
+  if (input.currentPinnedOutput?.nodeId === input.nextNodeId) {
+    return "unpin";
+  }
+
+  return input.currentPinnedOutput ? "confirm-overwrite" : "pin";
 };
 
 export const shouldOpenNodeModalFromPointerDetail = (detail: number): boolean =>
@@ -463,6 +520,36 @@ type WorkflowCanvasExecutionLike = Pick<
   WorkflowExecutionRecord,
   "id" | "workflowId" | "status" | "startedAt"
 >;
+
+const collectWorkflowUpstreamNodeIds = (
+  workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike,
+  nodeId: string,
+): ReadonlySet<string> => {
+  const upstreamNodeIds = new Set<string>();
+  collectWorkflowUpstreamNodeIdsInto(workflow, nodeId, upstreamNodeIds);
+  return upstreamNodeIds;
+};
+
+const collectWorkflowUpstreamNodeIdsInto = (
+  workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike,
+  nodeId: string,
+  upstreamNodeIds: Set<string>,
+): void => {
+  for (const edge of workflow.edges.filter(
+    (candidate) => candidate.targetNodeId === nodeId,
+  )) {
+    if (upstreamNodeIds.has(edge.sourceNodeId)) {
+      continue;
+    }
+
+    upstreamNodeIds.add(edge.sourceNodeId);
+    collectWorkflowUpstreamNodeIdsInto(
+      workflow,
+      edge.sourceNodeId,
+      upstreamNodeIds,
+    );
+  }
+};
 
 const readExecutionById = <TExecution extends WorkflowDebugExecutionLike>(
   executions: ReadonlyArray<TExecution>,

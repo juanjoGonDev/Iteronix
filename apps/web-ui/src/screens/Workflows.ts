@@ -34,6 +34,8 @@ import {
   readWorkflowDebugStatusTone,
   readWorkflowNodeHoverRunControlState,
   readWorkflowNodeModalNavigationState,
+  readWorkflowPinnedOutputAction,
+  readWorkflowStepSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
@@ -45,6 +47,7 @@ import {
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
+  type WorkflowPinnedTestOutput,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
 import {
@@ -598,6 +601,7 @@ interface WorkflowsScreenState {
   debugInputSourceId: string;
   debugExecutionId: string | null;
   liveExecution: LiveExecutionState | null;
+  pinnedTestOutput: WorkflowPinnedTestOutput | null;
   executionNodeModal: ExecutionNodeModalState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
@@ -668,6 +672,7 @@ export class WorkflowsScreen extends Component<
       debugExecutionId: null,
       executionNodeModal: null,
       liveExecution: null,
+      pinnedTestOutput: null,
       errorMessage: null,
       noticeMessage: null,
     });
@@ -4820,10 +4825,60 @@ export class WorkflowsScreen extends Component<
           statusTone: context.statusTone,
           itemLabel: readWorkflowDebugItemLabel(context.outputValue),
           emptyMessage: "Execute this step to inspect the current node output.",
-          selector: "",
+          selector: this.renderPinnedOutputControl(context),
         }),
       ],
     );
+  }
+
+  private renderPinnedOutputControl(
+    context: WorkflowNodeDebugContext,
+  ): HTMLElement {
+    const action = readWorkflowPinnedOutputAction({
+      currentPinnedOutput: this.state.pinnedTestOutput,
+      nextNodeId: context.node.id,
+      hasOutput: context.outputValue !== undefined,
+    });
+    const active = action === "unpin";
+
+    return createElement(IconButton, {
+      icon: "push_pin",
+      tooltip: active ? "Unpin test output" : "Pin output as test response",
+      disabled: action === "disabled",
+      ...(active
+        ? { className: "border-primary/60 bg-primary/15 text-primary" }
+        : {}),
+      onClick: () => this.handleTogglePinnedTestOutput(context, action),
+    });
+  }
+
+  private handleTogglePinnedTestOutput(
+    context: WorkflowNodeDebugContext,
+    action: ReturnType<typeof readWorkflowPinnedOutputAction>,
+  ): void {
+    if (action === "disabled") {
+      return;
+    }
+
+    if (action === "unpin") {
+      this.setState({ pinnedTestOutput: null });
+      return;
+    }
+
+    if (
+      action === "confirm-overwrite" &&
+      !window.confirm("Replace the currently pinned test output?")
+    ) {
+      return;
+    }
+
+    this.setState({
+      pinnedTestOutput: {
+        workflowId: context.workflow.id ?? "",
+        nodeId: context.node.id,
+        outputSnapshot: context.outputValue,
+      },
+    });
   }
 
   private renderWorkflowDebugInputSelector(
@@ -5256,6 +5311,10 @@ export class WorkflowsScreen extends Component<
         workflowId: currentWorkflow.id,
         nodeId: targetNode.id,
         inputSource: this.readSelectedNodeExecutionInputSource(),
+        seedNodeOutputs: this.readSelectedNodeSeedOutputs(
+          currentWorkflow.id,
+          targetNode.id,
+        ),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
           this.handleWorkflowRunStreamEvent(event);
@@ -5285,6 +5344,21 @@ export class WorkflowsScreen extends Component<
       this.cancelLiveExecutionStream();
       void this.refreshServerLogs();
     }
+  }
+
+  private readSelectedNodeSeedOutputs(
+    workflowId: string,
+    targetNodeId: string,
+  ): Readonly<Record<string, unknown>> {
+    return readWorkflowStepSeedOutputs({
+      workflow: this.state.draftWorkflow ?? { nodes: [], edges: [] },
+      executionOutputs: this.readWorkflowDebugOutputMap(
+        this.readWorkflowDebugExecution(),
+      ),
+      pinnedOutput: this.state.pinnedTestOutput,
+      workflowId,
+      targetNodeId,
+    });
   }
 
   private readSelectedNodeExecutionInputSource(): WorkflowNodeExecutionInputSourceRecord {

@@ -3586,3 +3586,23 @@
   - Validation currently covers the shared workflow schema shape; UI-only advanced string formats are not yet represented in `packages/shared/src/workflows.ts`.
 - Next
   - If UI-only JSON schema formats should be enforced server-side too, move those format fields/types into `packages/shared` and extend the Zod builder accordingly.
+
+### 2026-07-02 21:12 (Europe/Madrid) — Workflows Manual Step Test Outputs
+
+- Summary
+  - Added n8n-like manual step reuse of existing upstream outputs and a single pinned test output for node debug runs.
+- Decisions
+  - Full workflow Run ignores seeded outputs and always executes the saved graph normally.
+  - Manual Execute step sends only upstream cached/pinned node outputs to the server so required ancestors can be skipped while the selected node still executes.
+  - Only one pinned test output is active at a time; replacing another pin requires explicit confirmation.
+- Changes
+  - Added runtime seed output support to packages/agents/src/workflow-runtime.ts.
+  - Threaded seedNodeOutputs through server run-node/SSE requests and the web workflow client.
+  - Added a push-pin control to the Workflows node modal output panel.
+- Commands
+  - pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts apps/web-ui/src/screens/workflows-debug-state.test.ts apps/server-api/src/workflows.test.ts --passWithNoTests failed first, then PASS.
+  - pnpm typecheck failed first on exact optional UI props, then PASS.
+- Issues/Risks
+  - Browser visual QA not yet run; behavior is covered by runtime/API/UI state tests.
+- Next
+  - Browser QA: pin a node output, execute a downstream node, verify the upstream node is not re-run, then run the full workflow and verify all nodes execute normally.
