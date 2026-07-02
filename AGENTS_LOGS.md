@@ -3565,3 +3565,24 @@
   - Browser QA was not run; behavior is covered by state/runtime regressions and full quality gates.
 - Next
   - Browser QA: open a downstream node after Manual trigger and verify `Manual trigger · $.executedAt` appears under previous outputs and can be inserted/mapped.
+
+### 2026-07-02 16:53 (Europe/Madrid) — Workflows JSON Contract Retry Runtime
+
+- Summary
+  - Provider and agent workflow nodes with an output contract now receive the expected JSON contract in their prompt, validate provider output server-side with Zod, and retry with validation feedback until the workflow retry limit is exhausted.
+- Decisions
+  - Use `definition.executionPolicy.maxNodeRetries + 1` as the maximum provider attempts for contract repair.
+  - Persist successful contracted provider output as parsed JSON, not raw text, so downstream nodes can map nested fields and array indexes.
+  - Extend runtime path resolution to support bracket array indexes such as `$.items[0].name`.
+- Changes
+  - Added contract prompt rendering, JSON parsing, Zod schema construction from workflow JSON schema, retry feedback, and parsed output persistence in `packages/agents/src/workflow-runtime.ts`.
+  - Added regression coverage for contract retry/repair and nested array-index downstream mappings.
+- Commands
+  - `pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm format:check` failed first on formatting, then PASS after Prettier.
+  - `pnpm quality` failed first on a strict symbol-to-string path formatting issue, then PASS.
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Validation currently covers the shared workflow schema shape; UI-only advanced string formats are not yet represented in `packages/shared/src/workflows.ts`.
+- Next
+  - If UI-only JSON schema formats should be enforced server-side too, move those format fields/types into `packages/shared` and extend the Zod builder accordingly.

@@ -10,6 +10,7 @@ import {
   type WorkflowAssetRecord,
   type WorkflowContextEnvelope,
   type WorkflowDefinitionRecord,
+  type JsonOutputContractRecord,
   type WorkflowProviderSelectionRecord,
 } from "../../shared/src/workflows";
 import {
@@ -367,6 +368,60 @@ describe("workflow runtime", () => {
       '"triggeredAt": "2026-05-16T18:00:01.000Z"',
     );
   });
+
+  it("retries provider output with contract feedback until JSON validates", async () => {
+    const providerPrompts: string[] = [];
+    const providerOutputs = ['{"wrong":1}', '{"result":"Valid result"}'];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push(request.prompt);
+        return {
+          outputText: providerOutputs.shift() ?? '{"result":"Fallback"}',
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createJsonContractWorkflowDefinitionRecord(),
+      assets: [],
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(providerPrompts).toHaveLength(2);
+    expect(providerPrompts[0]).toContain("Expected JSON output contract");
+    expect(providerPrompts[1]).toContain(
+      "Previous JSON output failed validation",
+    );
+    expect(execution.nodeRuns.at(-1)?.outputSnapshot).toEqual({
+      result: "Valid result",
+    });
+  });
+
+  it("maps validated provider JSON through nested and array-index paths", async () => {
+    const providerPrompts: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push(request.prompt);
+        return {
+          outputText:
+            request.node.id === "node-provider-source"
+              ? '{"items":[{"name":"First item"}],"meta":{"total":1}}'
+              : '{"result":"Done"}',
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createNestedJsonMappingWorkflowDefinitionRecord(),
+      assets: [],
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(providerPrompts.at(-1)).toContain('"firstName": "First item"');
+    expect(providerPrompts.at(-1)).toContain('"total": 1');
+  });
 });
 
 const isEventOfType = <TType extends string>(
@@ -531,6 +586,72 @@ const createTriggerMetadataMappingDefinition =
     ],
   });
 
+const createJsonContractWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-1",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return a result.",
+        outputContract: createResultOutputContract(),
+      }),
+    ],
+    edges: [],
+  });
+
+const createNestedJsonMappingWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-source",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return items.",
+        outputContract: createItemsOutputContract(),
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-2", "gpt-2"),
+        prompt: "Use selected fields.",
+        outputContract: createResultOutputContract(),
+      }),
+    ],
+    edges: [
+      {
+        ...createEdgeRecord(
+          "edge-provider-json",
+          "node-provider-source",
+          "node-provider-target",
+        ),
+        mapping: {
+          mode: "object" as const,
+          entries: [
+            {
+              targetPath: "$.firstName",
+              source: {
+                kind: "node_output" as const,
+                nodeId: "node-provider-source",
+                path: "$.items[0].name",
+              },
+            },
+            {
+              targetPath: "$.total",
+              source: {
+                kind: "node_output" as const,
+                nodeId: "node-provider-source",
+                path: "$.meta.total",
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",
   workspaceId: "workspace-1",
@@ -590,6 +711,7 @@ const createNodeRecord = (input: {
   assetId?: string;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
+  outputContract?: JsonOutputContractRecord;
   attachedGuardrails?: ReadonlyArray<{
     assetId: string;
     order: number;
@@ -613,6 +735,57 @@ const createNodeRecord = (input: {
   inputPorts: [],
   outputPorts: [],
   attachedGuardrails: input.attachedGuardrails ?? [],
+  ...(input.outputContract ? { outputContract: input.outputContract } : {}),
+});
+
+const createResultOutputContract = (): JsonOutputContractRecord => ({
+  id: "contract-result",
+  name: "Result contract",
+  schemaVersion: 1,
+  rootType: "object",
+  schema: {
+    type: "object",
+    required: ["result"],
+    properties: {
+      result: {
+        type: "string",
+      },
+    },
+  },
+});
+
+const createItemsOutputContract = (): JsonOutputContractRecord => ({
+  id: "contract-items",
+  name: "Items contract",
+  schemaVersion: 1,
+  rootType: "object",
+  schema: {
+    type: "object",
+    required: ["items", "meta"],
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["name"],
+          properties: {
+            name: {
+              type: "string",
+            },
+          },
+        },
+      },
+      meta: {
+        type: "object",
+        required: ["total"],
+        properties: {
+          total: {
+            type: "number",
+          },
+        },
+      },
+    },
+  },
 });
 
 const createProviderSelection = (

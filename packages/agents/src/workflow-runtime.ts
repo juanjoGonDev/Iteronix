@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { z, type ZodType } from "zod";
 import {
   WorkflowGuardrailOperator,
   WorkflowGuardrailSeverity,
@@ -13,6 +14,8 @@ import {
   type WorkflowEdgeRecord,
   type WorkflowExecutionRecord,
   type WorkflowGuardrailFindingRecord,
+  type JsonOutputContractRecord,
+  type JsonSchemaNodeRecord,
   type WorkflowNodeExecutionRecord,
   type WorkflowNodeExecutionInputSourceRecord,
   type WorkflowNodeRecord,
@@ -22,6 +25,8 @@ import {
 
 const DefaultSummaryLength = 240;
 const PromptSectionSeparator = "\n\n";
+const JsonContractPromptTitle = "Expected JSON output contract";
+const JsonContractRetryTitle = "Previous JSON output failed validation";
 const DefaultWorkflowNodeExecutionInputSource = {
   kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
 } satisfies WorkflowNodeExecutionInputSourceRecord;
@@ -527,48 +532,41 @@ const executeWorkflowNode = async (input: {
       );
     }
 
-    const prompt = buildProviderPrompt(
-      input.node,
-      input.inputValue,
-      input.envelope,
-    );
-    const providerResult = await input.runProviderNode({
-      workflowId: input.definition.id,
+    const providerRun = await runProviderWithOutputContract({
+      definition: input.definition,
       workflowRunId: input.workflowRunId,
-      projectId: input.definition.projectId,
       node: input.node,
       provider,
+      inputValue: input.inputValue,
       envelope: input.envelope,
-      prompt,
+      runProviderNode: input.runProviderNode,
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    const outputSnapshot =
-      providerResult.outputSnapshot ?? providerResult.outputText;
-    if (providerResult.outputText.trim().length > 0) {
+    if (providerRun.result.outputText.trim().length > 0) {
       input.onEvent?.({
         type: WorkflowRuntimeEventType.NodeDelta,
         workflowId: input.definition.id,
         workflowRunId: input.workflowRunId,
         nodeId: input.node.id,
-        delta: providerResult.outputText,
+        delta: providerRun.result.outputText,
         emittedAt: input.now().toISOString(),
       });
     }
     const guardrailFindings = evaluateNodeGuardrails({
       node: input.node,
       inputValue: input.inputValue,
-      outputSnapshot,
+      outputSnapshot: providerRun.outputSnapshot,
       envelope: input.envelope,
       assetsById: input.assetsById,
     });
     const nextEnvelope = appendEnvelopeOutput(input.envelope, {
       nodeId: input.node.id,
-      outputSnapshot,
-      message: providerResult.outputText,
-      citations: providerResult.citations ?? [],
+      outputSnapshot: providerRun.outputSnapshot,
+      message: providerRun.result.outputText,
+      citations: providerRun.result.citations ?? [],
       guardrailFindings,
     });
-    const usage = normalizeUsage(providerResult.usage);
+    const usage = normalizeUsage(providerRun.result.usage);
     const guardrailAlerts = createGuardrailAlerts(guardrailFindings, input.now);
     const failedByGuardrail = guardrailFindings.some(
       (finding) => finding.severity === WorkflowGuardrailSeverity.Error,
@@ -576,8 +574,8 @@ const executeWorkflowNode = async (input: {
 
     return {
       envelope: nextEnvelope,
-      outputSnapshot,
-      alerts: [...(providerResult.alerts ?? []), ...guardrailAlerts],
+      outputSnapshot: providerRun.outputSnapshot,
+      alerts: [...(providerRun.result.alerts ?? []), ...guardrailAlerts],
       guardrailFindings,
       failedByGuardrail,
       provider,
@@ -590,6 +588,57 @@ const executeWorkflowNode = async (input: {
   );
 };
 
+const runProviderWithOutputContract = async (input: {
+  definition: WorkflowDefinitionRecord;
+  workflowRunId: string;
+  node: WorkflowNodeRecord;
+  provider: WorkflowProviderSelectionRecord;
+  inputValue: unknown;
+  envelope: WorkflowContextEnvelope;
+  runProviderNode: (
+    request: WorkflowProviderRunRequest,
+  ) => Promise<WorkflowProviderRunResult>;
+  signal?: AbortSignal;
+}): Promise<{
+  result: WorkflowProviderRunResult;
+  outputSnapshot: unknown;
+}> => {
+  const maxAttempts = input.definition.executionPolicy.maxNodeRetries + 1;
+  let feedback: string | undefined;
+  let lastValidationMessage = "";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const prompt = buildProviderPrompt(
+      input.node,
+      input.inputValue,
+      input.envelope,
+      feedback,
+    );
+    const providerResult = await input.runProviderNode({
+      workflowId: input.definition.id,
+      workflowRunId: input.workflowRunId,
+      projectId: input.definition.projectId,
+      node: input.node,
+      provider: input.provider,
+      envelope: input.envelope,
+      prompt,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const parsed = parseProviderOutput(providerResult, input.node);
+    if (parsed.valid) {
+      return {
+        result: providerResult,
+        outputSnapshot: parsed.outputSnapshot,
+      };
+    }
+
+    lastValidationMessage = parsed.message;
+    feedback = buildJsonContractRetryFeedback(parsed.message);
+  }
+
+  throw new Error(lastValidationMessage);
+};
+
 const createTriggerExecutionOutput = (
   executedAt: string,
 ): Record<"executedAt", string> => ({
@@ -600,11 +649,20 @@ const buildProviderPrompt = (
   node: WorkflowNodeRecord,
   inputValue: unknown,
   envelope: WorkflowContextEnvelope,
+  retryFeedback?: string,
 ): string => {
   const sections: string[] = [];
   const prompt = node.config.prompt?.trim();
   if (prompt) {
     sections.push(prompt);
+  }
+
+  if (node.outputContract) {
+    sections.push(renderJsonContractForProvider(node.outputContract));
+  }
+
+  if (retryFeedback) {
+    sections.push(retryFeedback);
   }
 
   const continuity = renderEnvelopeForProvider(envelope);
@@ -618,6 +676,175 @@ const buildProviderPrompt = (
   }
 
   return sections.join(PromptSectionSeparator);
+};
+
+const parseProviderOutput = (
+  providerResult: WorkflowProviderRunResult,
+  node: WorkflowNodeRecord,
+):
+  | {
+      valid: true;
+      outputSnapshot: unknown;
+    }
+  | {
+      valid: false;
+      message: string;
+    } => {
+  if (!node.outputContract) {
+    return {
+      valid: true,
+      outputSnapshot:
+        providerResult.outputSnapshot ?? providerResult.outputText,
+    };
+  }
+
+  const jsonValue = readProviderJsonOutput(providerResult);
+  if (!jsonValue.valid) {
+    return jsonValue;
+  }
+
+  const validation = validateJsonOutputContract(
+    node.outputContract,
+    jsonValue.value,
+  );
+  return validation.valid
+    ? {
+        valid: true,
+        outputSnapshot: validation.value,
+      }
+    : validation;
+};
+
+const readProviderJsonOutput = (
+  providerResult: WorkflowProviderRunResult,
+):
+  | {
+      valid: true;
+      value: unknown;
+    }
+  | {
+      valid: false;
+      message: string;
+    } => {
+  if (providerResult.outputSnapshot !== undefined) {
+    return {
+      valid: true,
+      value: providerResult.outputSnapshot,
+    };
+  }
+
+  try {
+    return {
+      valid: true,
+      value: JSON.parse(providerResult.outputText),
+    };
+  } catch {
+    return {
+      valid: false,
+      message: "Provider output is not valid JSON.",
+    };
+  }
+};
+
+const validateJsonOutputContract = (
+  contract: JsonOutputContractRecord,
+  value: unknown,
+):
+  | {
+      valid: true;
+      value: unknown;
+    }
+  | {
+      valid: false;
+      message: string;
+    } => {
+  const schema = buildJsonSchemaZodType(contract.schema);
+  const result = schema.safeParse(value);
+  return result.success
+    ? {
+        valid: true,
+        value: result.data,
+      }
+    : {
+        valid: false,
+        message: result.error.issues
+          .map((issue) => `${formatZodIssuePath(issue.path)}: ${issue.message}`)
+          .join(" "),
+      };
+};
+
+const renderJsonContractForProvider = (
+  contract: JsonOutputContractRecord,
+): string =>
+  [
+    JsonContractPromptTitle,
+    "Return only a JSON value that satisfies this contract. Do not wrap it in markdown.",
+    JSON.stringify(contract.schema, null, 2),
+  ].join("\n");
+
+const buildJsonContractRetryFeedback = (message: string): string =>
+  [
+    JsonContractRetryTitle,
+    message,
+    "Return corrected JSON only, using the expected contract exactly.",
+  ].join("\n");
+
+const buildJsonSchemaZodType = (
+  schema: JsonSchemaNodeRecord,
+): ZodType<unknown> => {
+  const baseType = buildJsonSchemaZodTypeCore(schema);
+  return schema.nullable ? baseType.nullable() : baseType;
+};
+
+const buildJsonSchemaZodTypeCore = (
+  schema: JsonSchemaNodeRecord,
+): ZodType<unknown> => {
+  if (schema.type === "object") {
+    const required = new Set(schema.required ?? []);
+    const shape: Record<string, ZodType<unknown>> = {};
+    for (const [key, value] of Object.entries(schema.properties ?? {})) {
+      const propertyType = buildJsonSchemaZodType(value);
+      shape[key] = required.has(key) ? propertyType : propertyType.optional();
+    }
+
+    return z.object(shape);
+  }
+
+  if (schema.type === "array") {
+    return z.array(buildJsonSchemaZodType(schema.items ?? { type: "string" }));
+  }
+
+  if (schema.type === "integer") {
+    return z.number().int();
+  }
+
+  if (schema.type === "number") {
+    return z.number();
+  }
+
+  if (schema.type === "boolean") {
+    return z.boolean();
+  }
+
+  if (schema.enum && schema.enum.length > 0) {
+    return z.string().refine((value) => schema.enum?.includes(value) === true);
+  }
+
+  return z.string();
+};
+
+const formatZodIssuePath = (path: ReadonlyArray<PropertyKey>): string => {
+  if (path.length === 0) {
+    return "$";
+  }
+
+  return `$${path
+    .map((segment) =>
+      typeof segment === "number"
+        ? `[${segment.toString()}]`
+        : `.${String(segment)}`,
+    )
+    .join("")}`;
 };
 
 const renderEnvelopeForProvider = (
@@ -947,6 +1174,7 @@ const normalizeTargetPath = (value?: string): ReadonlyArray<string> => {
   return value
     .replace(/^\$\./u, "")
     .replace(/^\$/u, "")
+    .replace(/\[(\d+)\]/gu, ".$1")
     .split(".")
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
@@ -958,6 +1186,16 @@ const readPathValue = (
 ): unknown => {
   let current = value;
   for (const segment of path) {
+    if (Array.isArray(current)) {
+      const index = Number.parseInt(segment, 10);
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+        return undefined;
+      }
+
+      current = current[index];
+      continue;
+    }
+
     if (!isRecord(current) || !(segment in current)) {
       return undefined;
     }
