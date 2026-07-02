@@ -343,6 +343,30 @@ describe("workflow runtime", () => {
     expect(targetPrompt).toContain("Output from node-provider-left");
     expect(targetPrompt).toContain("Output from node-provider-right");
   });
+
+  it("maps manual trigger execution date into downstream provider input", async () => {
+    const providerPrompts: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push(request.prompt);
+        return {
+          outputText: "Provider output",
+        };
+      },
+    });
+    const definition = createTriggerMetadataMappingDefinition();
+
+    const execution = await runtime.runDefinition({
+      definition,
+      assets: [],
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(providerPrompts[0]).toContain(
+      '"triggeredAt": "2026-05-16T18:00:01.000Z"',
+    );
+  });
 });
 
 const isEventOfType = <TType extends string>(
@@ -465,6 +489,45 @@ const createBranchedWorkflowDefinitionRecord =
       createEdgeRecord("edge-3", "node-prompt", "node-provider-right"),
       createEdgeRecord("edge-4", "node-provider-left", "node-provider-target"),
       createEdgeRecord("edge-5", "node-provider-right", "node-provider-target"),
+    ],
+  });
+
+const createTriggerMetadataMappingDefinition =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-trigger",
+        kind: WorkflowNodeKind.TriggerManual,
+      }),
+      createNodeRecord({
+        id: "node-provider-1",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Use trigger metadata.",
+      }),
+    ],
+    edges: [
+      {
+        ...createEdgeRecord(
+          "edge-trigger-provider",
+          "node-trigger",
+          "node-provider-1",
+        ),
+        mapping: {
+          mode: "object" as const,
+          entries: [
+            {
+              targetPath: "$.triggeredAt",
+              source: {
+                kind: "node_output" as const,
+                nodeId: "node-trigger",
+                path: "$.executedAt",
+              },
+            },
+          ],
+        },
+      },
     ],
   });
 

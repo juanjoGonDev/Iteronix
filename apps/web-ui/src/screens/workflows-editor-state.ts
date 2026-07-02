@@ -1125,6 +1125,20 @@ export const readJsonSchemaPaths = (
   return paths.length > 0 ? paths : ["$"];
 };
 
+export const readWorkflowNodeSelectableOutputPaths = (
+  node: WorkflowNodeRecord,
+): ReadonlyArray<string> => {
+  if (node.outputContract) {
+    return readJsonSchemaPaths(node.outputContract.schema);
+  }
+
+  if (node.kind === WorkflowNodeKind.TriggerManual) {
+    return ["$.executedAt"];
+  }
+
+  return [];
+};
+
 export const compileJsonContractSchema = (
   contract: JsonOutputContractRecord,
 ): JsonContractCompiledSchema => {

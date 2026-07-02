@@ -3544,3 +3544,24 @@
   - Browser QA was not run; behavior is covered at runtime level and should surface automatically in existing node output panels.
 - Next
   - Browser QA: run a workflow and verify the Manual trigger node output shows `executedAt` in the node modal/history.
+
+### 2026-07-02 16:18 (Europe/Madrid) — Workflows Trigger Metadata Mapping
+
+- Summary
+  - Exposed Manual trigger execution metadata as selectable workflow variables for downstream node prompts, guardrails, and edge mappings.
+- Decisions
+  - Manual trigger nodes without an output contract now advertise the explicit `$.executedAt` path.
+  - Unsupported nodes without output contracts return no selectable global variable paths, while direct input/mapping selectors keep their existing fallback paths.
+- Changes
+  - Added `readWorkflowNodeSelectableOutputPaths` and wired it into Workflows deep editor variable groups and edge mapping selectors.
+  - Added UI regression coverage for selectable Manual trigger metadata and runtime regression coverage for resolving `$.executedAt` into downstream provider input.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts --passWithNoTests` PASS.
+  - `pnpm exec vitest run packages/agents/src/workflow-runtime.test.ts --passWithNoTests` PASS.
+  - `pnpm format:check` failed first on formatting, then PASS after Prettier.
+  - `pnpm quality` failed first on exact optional property test setup, then PASS.
+  - `pnpm build` PASS.
+- Issues/Risks
+  - Browser QA was not run; behavior is covered by state/runtime regressions and full quality gates.
+- Next
+  - Browser QA: open a downstream node after Manual trigger and verify `Manual trigger · $.executedAt` appears under previous outputs and can be inserted/mapped.

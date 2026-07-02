@@ -86,6 +86,7 @@ import {
   readNodeIcon,
   readNodeKindLabel,
   readNodeKindsForPalette,
+  readWorkflowNodeSelectableOutputPaths,
   removeWorkflowEdge,
   removeWorkflowNode,
   removeJsonSchemaProperty,
@@ -6403,11 +6404,9 @@ export class WorkflowsScreen extends Component<
     const targetNodeId = target.type === "node" ? target.id : null;
     const upstreamTokens = workflow
       ? workflow.nodes
-          .filter((node) => node.id !== targetNodeId && node.outputContract)
+          .filter((node) => node.id !== targetNodeId)
           .flatMap((node) =>
-            readJsonSchemaPaths(
-              node.outputContract?.schema ?? createJsonSchemaNode("object"),
-            ).map((path) => ({
+            readWorkflowNodeSelectableOutputPaths(node).map((path) => ({
               id: `node-${node.id}-${path}`,
               label: `${node.label} · ${path}`,
               detail: "Previous node output",
@@ -6427,9 +6426,10 @@ export class WorkflowsScreen extends Component<
               const sourceNode = workflow.nodes.find(
                 (node) => node.id === edge.sourceNodeId,
               );
-              const paths = sourceNode?.outputContract
-                ? readJsonSchemaPaths(sourceNode.outputContract.schema)
-                : ["$"];
+              const sourcePaths = sourceNode
+                ? readWorkflowNodeSelectableOutputPaths(sourceNode)
+                : [];
+              const paths = sourcePaths.length > 0 ? sourcePaths : ["$"];
               return paths.map((path) => ({
                 id: `input-${edge.id}-${path}`,
                 label: path,
@@ -6566,10 +6566,13 @@ export class WorkflowsScreen extends Component<
     const sourceNode = workflow?.nodes.find(
       (node) => node.id === edge.sourceNodeId,
     );
+    const selectableSourcePaths = sourceNode
+      ? readWorkflowNodeSelectableOutputPaths(sourceNode)
+      : [];
     const sourcePaths = [
       LatestResponseSourcePath,
-      ...(sourceNode?.outputContract
-        ? readJsonSchemaPaths(sourceNode.outputContract.schema)
+      ...(selectableSourcePaths.length > 0
+        ? selectableSourcePaths
         : ["$.result"]),
     ];
 

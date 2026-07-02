@@ -30,6 +30,7 @@ import {
   serializeWorkflowExpression,
   moveWorkflowNode,
   readNodeAssetKind,
+  readWorkflowNodeSelectableOutputPaths,
   removeWorkflowEdge,
   removeWorkflowNode,
   isWorkflowViewportOnlyChange,
@@ -842,6 +843,48 @@ describe("workflows editor state", () => {
     );
     expect(parseWorkflowExpression(inserted.value).segments).toEqual(
       inserted.expression.segments,
+    );
+  });
+
+  it("exposes manual trigger metadata as selectable output paths", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Review PR",
+    });
+    const triggerNode = definition.nodes.find(
+      (node) => node.kind === WorkflowNodeKind.TriggerManual,
+    );
+
+    if (!triggerNode) {
+      throw new Error("Expected default workflow trigger node.");
+    }
+
+    expect(readWorkflowNodeSelectableOutputPaths(triggerNode)).toEqual([
+      "$.executedAt",
+    ]);
+    const nodeWithoutOutputContract = { ...triggerNode };
+    delete nodeWithoutOutputContract.outputContract;
+
+    expect(
+      readWorkflowNodeSelectableOutputPaths({
+        ...nodeWithoutOutputContract,
+        kind: WorkflowNodeKind.AiAgent,
+      }),
+    ).toEqual([]);
+
+    const inserted = insertWorkflowExpressionVariable({
+      value: "Started at ",
+      selectionStart: 11,
+      selectionEnd: 11,
+      reference: {
+        kind: WorkflowExpressionVariableKind.NodeOutput,
+        sourceId: triggerNode.id,
+        path: "$.executedAt",
+      },
+    });
+
+    expect(inserted.value).toBe(
+      `Started at {{var|node_output|${triggerNode.id}|$.executedAt}}`,
     );
   });
 
