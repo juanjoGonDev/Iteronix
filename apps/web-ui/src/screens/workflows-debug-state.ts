@@ -25,6 +25,18 @@ export type WorkflowPinnedOutputAction =
   | "confirm-overwrite"
   | "disabled";
 
+export type WorkflowPinnedNodeVisualState = {
+  pinned: boolean;
+  tone: "normal" | "pinned";
+};
+
+export type WorkflowEditHistoryEntry<TWorkflow> = {
+  id: string;
+  label: string;
+  changedAt: string;
+  workflow: TWorkflow;
+};
+
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
 export type WorkflowStepExecutionAvailability = {
@@ -147,6 +159,35 @@ export const readWorkflowPinnedOutputAction = (input: {
   }
 
   return input.currentPinnedOutput ? "confirm-overwrite" : "pin";
+};
+
+export const readWorkflowPinnedNodeVisualState = (input: {
+  pinnedOutput: WorkflowPinnedTestOutput | null;
+  workflowId: string;
+  nodeId: string;
+}): WorkflowPinnedNodeVisualState => {
+  const pinned =
+    input.pinnedOutput !== null &&
+    input.pinnedOutput.workflowId === input.workflowId &&
+    input.pinnedOutput.nodeId === input.nodeId;
+
+  return {
+    pinned,
+    tone: pinned ? "pinned" : "normal",
+  };
+};
+
+export const parseWorkflowEditedOutputSnapshot = (value: string): unknown => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
 };
 
 export const shouldOpenNodeModalFromPointerDetail = (detail: number): boolean =>

@@ -3606,3 +3606,26 @@
   - Browser visual QA not yet run; behavior is covered by runtime/API/UI state tests.
 - Next
   - Browser QA: pin a node output, execute a downstream node, verify the upstream node is not re-run, then run the full workflow and verify all nodes execute normally.
+
+### 2026-07-02 22:36 (Europe/Madrid) — Workflows Pinned Output UX
+
+- Summary
+  - Added n8n-like pinned output visuals on workflow nodes, output panel banner, editable test outputs, and a compact node actions menu.
+  - Added a session edit-history card for workflow draft changes with quick restore.
+- Decisions
+  - Keep pinned test outputs as a manual-execution override, not as persisted execution history.
+  - Use session edit history for this UI pass; server/cloud workflow version history remains a follow-up if full Google Docs-style persistence is required.
+- Changes
+  - `apps/web-ui/src/screens/Workflows.ts` now renders purple pinned node state, pin icon, node action menu, output editor modal, and draft edit history.
+  - `apps/web-ui/src/screens/workflows-debug-state.ts` now exposes pure helpers for pinned node visual state and edited output parsing.
+  - `apps/web-ui/src/screens/workflows-debug-state.test.ts` covers pinned visual state and edited output parsing.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm format:check` failed first, then PASS after Prettier.
+  - `pnpm format:check && pnpm quality && pnpm build` PASS.
+  - `pnpm lint && pnpm typecheck && pnpm test && pnpm build` PASS.
+- Issues/Risks
+  - Browser visual QA was not run.
+  - Edit history is currently session-local and must be saved as a later server revision feature for true cloud history.
+- Next
+  - Browser QA pinned output visuals/menu/editor; then implement persisted workflow revision history if cloud restore/versioning is required.

@@ -34,7 +34,9 @@ import {
   readWorkflowDebugStatusTone,
   readWorkflowNodeHoverRunControlState,
   readWorkflowNodeModalNavigationState,
+  readWorkflowPinnedNodeVisualState,
   readWorkflowPinnedOutputAction,
+  parseWorkflowEditedOutputSnapshot,
   readWorkflowStepSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
@@ -47,6 +49,7 @@ import {
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
+  type WorkflowEditHistoryEntry,
   type WorkflowPinnedTestOutput,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
@@ -279,6 +282,8 @@ const EdgeDeleteButtonSize = 20;
 const EdgeDeleteNodeAvoidancePadding = 12;
 const WorkflowNodeVisualWidth = 104;
 const WorkflowNodeApproximateHeight = 120;
+const WorkflowNodeDuplicateOffset = 48;
+const WorkflowEditHistoryLimit = 40;
 const PortLabelSingleOutputMinimum = 2;
 const EdgeDirectionArrowSize = 7;
 const EdgeDeleteOffset = 34;
@@ -434,6 +439,11 @@ type ExecutionNodeModalState = {
   mode: "execution" | "live";
   executionId: string | null;
   nodeId: string;
+};
+
+type WorkflowOutputEditorState = {
+  nodeId: string;
+  text: string;
 };
 
 type ExecutionNodeModalContext = {
@@ -602,6 +612,11 @@ interface WorkflowsScreenState {
   debugExecutionId: string | null;
   liveExecution: LiveExecutionState | null;
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
+  outputEditor: WorkflowOutputEditorState | null;
+  nodeActionMenuId: string | null;
+  workflowEditHistory: ReadonlyArray<
+    WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
+  >;
   executionNodeModal: ExecutionNodeModalState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
@@ -673,6 +688,9 @@ export class WorkflowsScreen extends Component<
       executionNodeModal: null,
       liveExecution: null,
       pinnedTestOutput: null,
+      outputEditor: null,
+      nodeActionMenuId: null,
+      workflowEditHistory: [],
       errorMessage: null,
       noticeMessage: null,
     });
@@ -721,6 +739,7 @@ export class WorkflowsScreen extends Component<
         this.state.deepEditor ? this.renderDeepEditorModal() : "",
         this.state.regexTester ? this.renderRegexTesterModal() : "",
         this.state.executionNodeModal ? this.renderExecutionNodeModal() : "",
+        this.state.outputEditor ? this.renderOutputEditorModal() : "",
       ],
     );
   }
@@ -1620,6 +1639,7 @@ export class WorkflowsScreen extends Component<
                 ),
               ],
             ),
+            this.renderWorkflowEditHistoryCard(),
           ],
         ),
         currentWorkflow === null
@@ -1718,6 +1738,87 @@ export class WorkflowsScreen extends Component<
         ]),
       ],
     );
+  }
+
+  private renderWorkflowEditHistoryCard(): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className:
+          "mt-4 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex items-center justify-between gap-3" },
+          [
+            createElement("div", { className: "min-w-0" }, [
+              createElement(
+                "p",
+                { className: "text-sm font-medium text-white" },
+                ["Edit history"],
+              ),
+              createElement(
+                "p",
+                { className: "mt-1 text-xs text-text-secondary" },
+                ["Session changes before save, available for quick restore."],
+              ),
+            ]),
+            createElement(StatusBadge, { status: "info" }, [
+              this.state.workflowEditHistory.length.toString(),
+            ]),
+          ],
+        ),
+        this.state.workflowEditHistory.length === 0
+          ? createElement(
+              "p",
+              { className: "mt-3 text-xs text-text-secondary" },
+              ["No edits captured yet."],
+            )
+          : createElement(
+              "div",
+              {
+                className: "mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto",
+              },
+              this.state.workflowEditHistory.map((entry) =>
+                createElement(
+                  "button",
+                  {
+                    key: entry.id,
+                    type: "button",
+                    className:
+                      "rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-left text-xs transition-colors hover:border-violet-500/50 hover:bg-violet-500/10",
+                    onClick: () => this.restoreWorkflowEditHistoryEntry(entry),
+                  },
+                  [
+                    createElement(
+                      "span",
+                      { className: "block truncate text-white" },
+                      [entry.label],
+                    ),
+                    createElement(
+                      "span",
+                      { className: "mt-1 block text-text-secondary" },
+                      [formatTimestamp(entry.changedAt)],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+
+  private restoreWorkflowEditHistoryEntry(
+    entry: WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>,
+  ): void {
+    this.setState({
+      draftWorkflow: entry.workflow,
+      dirtyWorkflow: true,
+      selection: { type: "workflow", id: entry.workflow.id ?? null },
+      noticeMessage: "Workflow restored from edit history. Save to persist it.",
+      errorMessage: null,
+    });
   }
 
   private readActiveLogsRunId(): string | undefined {
@@ -2278,6 +2379,12 @@ export class WorkflowsScreen extends Component<
       this.state.hoveredPort?.side === "input" &&
       this.state.hoveredPort.nodeId === node.id;
     const nodeRunVisual = this.readNodeRunVisual(node.id);
+    const workflowId = this.state.draftWorkflow?.id ?? "";
+    const pinnedVisual = readWorkflowPinnedNodeVisualState({
+      pinnedOutput: this.state.pinnedTestOutput,
+      workflowId,
+      nodeId: node.id,
+    });
     const stateToneClassName = readNodeRunToneClassName(nodeRunVisual.status);
     const stateAccentClassName = readNodeRunAccentClassName(
       nodeRunVisual.status,
@@ -2307,7 +2414,7 @@ export class WorkflowsScreen extends Component<
         createElement(
           "div",
           {
-            className: `relative flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border bg-[#2d2d2d] transition-colors active:cursor-grabbing ${selected ? "border-[#ff8a3d] ring-1 ring-[#ff8a3d]/40" : canAcceptConnection ? "border-slate-400" : stateToneClassName} ${nodeRunVisual.status === "running" ? "animate-pulse" : ""}`,
+            className: `relative flex h-20 w-20 cursor-pointer items-center justify-center rounded-md border bg-[#2d2d2d] transition-colors active:cursor-grabbing ${pinnedVisual.pinned ? "border-violet-500 ring-2 ring-violet-500/45" : selected ? "border-[#ff8a3d] ring-1 ring-[#ff8a3d]/40" : canAcceptConnection ? "border-slate-400" : stateToneClassName} ${nodeRunVisual.status === "running" ? "animate-pulse" : ""}`,
             dataset: {
               dragHandle: node.id,
             },
@@ -2344,6 +2451,16 @@ export class WorkflowsScreen extends Component<
                       "absolute right-1.5 top-1 rounded-sm bg-[#3a3a3a] px-1.5 py-0.5 text-[10px] font-semibold text-white",
                   },
                   [readNodeRunCountLabel(nodeRunVisual.label)],
+                )
+              : "",
+            pinnedVisual.pinned
+              ? createElement(
+                  "span",
+                  {
+                    className:
+                      "material-symbols-outlined pointer-events-none absolute bottom-1.5 right-1.5 text-[16px] leading-none text-violet-300",
+                  },
+                  ["push_pin"],
                 )
               : "",
             this.renderNodeHoverToolbar(node),
@@ -2432,10 +2549,129 @@ export class WorkflowsScreen extends Component<
             this.renderNodeHoverToolbarButton({
               icon: "more_horiz",
               title: "Node settings",
-              onClick: () =>
-                this.openSelectionEditorModal({ type: "node", id: node.id }),
+              onClick: () => this.toggleNodeActionMenu(node.id),
             }),
+            this.renderNodeActionMenu(node),
           ],
+        ),
+      ],
+    );
+  }
+
+  private toggleNodeActionMenu(nodeId: string): void {
+    this.setState({
+      nodeActionMenuId: this.state.nodeActionMenuId === nodeId ? null : nodeId,
+    });
+  }
+
+  private renderNodeActionMenu(node: WorkflowNodeRecord): HTMLElement | string {
+    if (this.state.nodeActionMenuId !== node.id) {
+      return "";
+    }
+
+    const outputValue = this.readWorkflowDebugOutputMap(
+      this.readWorkflowDebugExecution(),
+    ).get(node.id);
+    const pinAction = readWorkflowPinnedOutputAction({
+      currentPinnedOutput: this.state.pinnedTestOutput,
+      nextNodeId: node.id,
+      hasOutput: outputValue !== undefined,
+    });
+
+    return createElement(
+      "div",
+      {
+        className:
+          "absolute left-full top-0 z-30 ml-2 w-56 rounded-md border border-[#3d3d3d] bg-[#202020] py-1 text-left shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+        onPointerDown: (event: Event) => event.stopPropagation(),
+        onMouseDown: (event: Event) => event.stopPropagation(),
+      },
+      [
+        this.renderNodeActionMenuItem("Open", "open_in_new", () => {
+          this.setState({ nodeActionMenuId: null });
+          this.openSelectionEditorModal({ type: "node", id: node.id });
+        }),
+        this.renderNodeActionMenuItem(
+          "Execute step",
+          "play_arrow",
+          () => {
+            this.setState({ nodeActionMenuId: null });
+            void this.handleExecuteNodeStep(node.id, "hover");
+          },
+          this.readNodeHoverRunControlState(node.id).disabled,
+        ),
+        this.renderNodeActionMenuItem(
+          "Rename",
+          "drive_file_rename_outline",
+          () => {
+            this.setState({ nodeActionMenuId: null });
+            this.handleRenameNode(node.id);
+          },
+        ),
+        this.renderNodeActionMenuItem("Duplicate", "content_copy", () => {
+          this.setState({ nodeActionMenuId: null });
+          this.handleDuplicateNode(node.id);
+        }),
+        this.renderNodeActionMenuItem(
+          pinAction === "unpin" ? "Unpin" : "Pin output",
+          "push_pin",
+          () => {
+            this.setState({ nodeActionMenuId: null });
+            this.handleTogglePinnedTestOutputForNode(
+              node.id,
+              outputValue,
+              pinAction,
+            );
+          },
+          pinAction === "disabled",
+        ),
+        this.renderNodeActionMenuItem(
+          "Deactivate",
+          "power_settings_new",
+          undefined,
+          true,
+        ),
+        this.renderNodeActionMenuItem(
+          "Delete",
+          "delete",
+          () => {
+            this.setState({ nodeActionMenuId: null });
+            this.handleRemoveNode(node.id);
+          },
+          false,
+          "danger",
+        ),
+      ],
+    );
+  }
+
+  private renderNodeActionMenuItem(
+    label: string,
+    icon: string,
+    onClick: (() => void) | undefined,
+    disabled = false,
+    tone: "default" | "danger" = "default",
+  ): HTMLElement {
+    return createElement(
+      "button",
+      {
+        type: "button",
+        disabled,
+        className: `flex w-full items-center justify-between gap-3 px-3 py-2 text-xs ${disabled ? "cursor-not-allowed text-slate-500" : tone === "danger" ? "text-rose-100 hover:bg-rose-950/50" : "text-slate-200 hover:bg-[#2c2c2c] hover:text-white"}`,
+        onClick: (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!disabled) {
+            onClick?.();
+          }
+        },
+      },
+      [
+        createElement("span", { className: "truncate" }, [label]),
+        createElement(
+          "span",
+          { className: "material-symbols-outlined text-[15px]" },
+          [icon],
         ),
       ],
     );
@@ -4825,7 +5061,23 @@ export class WorkflowsScreen extends Component<
           statusTone: context.statusTone,
           itemLabel: readWorkflowDebugItemLabel(context.outputValue),
           emptyMessage: "Execute this step to inspect the current node output.",
-          selector: this.renderPinnedOutputControl(context),
+          pinned:
+            this.state.pinnedTestOutput?.workflowId ===
+              (context.workflow.id ?? "") &&
+            this.state.pinnedTestOutput?.nodeId === context.node.id,
+          selector: createElement(
+            "div",
+            { className: "flex items-center gap-1" },
+            [
+              createElement(IconButton, {
+                icon: "edit",
+                tooltip: "Edit output for test runs",
+                disabled: context.outputValue === undefined,
+                onClick: () => this.openOutputEditor(context),
+              }),
+              this.renderPinnedOutputControl(context),
+            ],
+          ),
         }),
       ],
     );
@@ -4856,6 +5108,20 @@ export class WorkflowsScreen extends Component<
     context: WorkflowNodeDebugContext,
     action: ReturnType<typeof readWorkflowPinnedOutputAction>,
   ): void {
+    this.handleTogglePinnedTestOutputForNode(
+      context.node.id,
+      context.outputValue,
+      action,
+      context.workflow.id ?? "",
+    );
+  }
+
+  private handleTogglePinnedTestOutputForNode(
+    nodeId: string,
+    outputValue: unknown,
+    action: ReturnType<typeof readWorkflowPinnedOutputAction>,
+    workflowId = this.state.draftWorkflow?.id ?? "",
+  ): void {
     if (action === "disabled") {
       return;
     }
@@ -4874,11 +5140,132 @@ export class WorkflowsScreen extends Component<
 
     this.setState({
       pinnedTestOutput: {
-        workflowId: context.workflow.id ?? "",
-        nodeId: context.node.id,
-        outputSnapshot: context.outputValue,
+        workflowId,
+        nodeId,
+        outputSnapshot: outputValue,
       },
     });
+  }
+
+  private openOutputEditor(context: WorkflowNodeDebugContext): void {
+    if (context.outputValue === undefined) {
+      return;
+    }
+
+    this.setState({
+      outputEditor: {
+        nodeId: context.node.id,
+        text: formatOutputSnapshot(context.outputValue),
+      },
+    });
+  }
+
+  private closeOutputEditor(): void {
+    this.setState({ outputEditor: null });
+  }
+
+  private saveOutputEditor(): void {
+    const editor = this.state.outputEditor;
+    if (!editor) {
+      return;
+    }
+
+    const action = readWorkflowPinnedOutputAction({
+      currentPinnedOutput: this.state.pinnedTestOutput,
+      nextNodeId: editor.nodeId,
+      hasOutput: true,
+    });
+    const outputSnapshot = parseWorkflowEditedOutputSnapshot(editor.text);
+    this.handleTogglePinnedTestOutputForNode(
+      editor.nodeId,
+      outputSnapshot,
+      action === "unpin" ? "pin" : action,
+    );
+    this.setState({ outputEditor: null });
+  }
+
+  private renderOutputEditorModal(): HTMLElement {
+    const editor = this.state.outputEditor;
+    if (!editor) {
+      return createElement("div");
+    }
+
+    const node = this.state.draftWorkflow?.nodes.find(
+      (entry) => entry.id === editor.nodeId,
+    );
+
+    return createElement(
+      "div",
+      {
+        className: "fixed inset-0 z-[60] bg-black/72 p-4 md:p-8",
+        onClick: () => this.closeOutputEditor(),
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "mx-auto flex h-full max-w-[980px] flex-col overflow-hidden rounded-lg border border-border-dark bg-[#0f141a]",
+            onClick: (event: Event) => event.stopPropagation(),
+          },
+          [
+            createElement(
+              "div",
+              {
+                className:
+                  "flex items-center justify-between gap-3 border-b border-border-dark px-4 py-3",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement(
+                    "p",
+                    { className: "truncate text-sm font-semibold text-white" },
+                    [`Edit output · ${node?.label ?? editor.nodeId}`],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-1 text-xs text-text-secondary" },
+                    [
+                      "Saving stores this as the pinned test output for manual executions.",
+                    ],
+                  ),
+                ]),
+                createElement("div", { className: "flex items-center gap-2" }, [
+                  createElement(Button, {
+                    variant: "ghost",
+                    size: "sm",
+                    onClick: () => this.closeOutputEditor(),
+                    children: "Cancel",
+                  }),
+                  createElement(Button, {
+                    variant: "primary",
+                    size: "sm",
+                    onClick: () => this.saveOutputEditor(),
+                    children: "Save",
+                  }),
+                ]),
+              ],
+            ),
+            createElement("textarea", {
+              className:
+                "min-h-0 flex-1 resize-none border-0 bg-[#0d1117] px-4 py-4 font-mono text-sm leading-6 text-slate-100 outline-none",
+              value: editor.text,
+              onInput: (event: Event) => {
+                const target = event.target;
+                if (target instanceof HTMLTextAreaElement) {
+                  this.setState({
+                    outputEditor: {
+                      ...editor,
+                      text: target.value,
+                    },
+                  });
+                }
+              },
+            }),
+          ],
+        ),
+      ],
+    );
   }
 
   private renderWorkflowDebugInputSelector(
@@ -4921,6 +5308,7 @@ export class WorkflowsScreen extends Component<
     itemLabel: string;
     emptyMessage: string;
     selector: HTMLElement | string;
+    pinned?: boolean;
   }): HTMLElement {
     return createElement(
       "section",
@@ -4954,6 +5342,23 @@ export class WorkflowsScreen extends Component<
             input.selector,
           ],
         ),
+        input.pinned
+          ? createElement(
+              "div",
+              {
+                className:
+                  "flex items-center gap-2 border-b border-violet-500/50 bg-violet-500/18 px-3 py-2 text-xs text-violet-100",
+              },
+              [
+                createElement(
+                  "span",
+                  { className: "material-symbols-outlined text-[15px]" },
+                  ["push_pin"],
+                ),
+                "This output is pinned for manual test executions.",
+              ],
+            )
+          : "",
         createElement(
           "div",
           {
@@ -10373,13 +10778,26 @@ export class WorkflowsScreen extends Component<
     nextDefinition: WorkflowDefinitionUpsertInput,
     nextSelection?: WorkflowSelection,
   ): void {
+    const currentDraft = this.state.draftWorkflow;
+    const isMeaningfulChange =
+      currentDraft !== null &&
+      !isWorkflowViewportOnlyChange(currentDraft, nextDefinition) &&
+      JSON.stringify(currentDraft) !== JSON.stringify(nextDefinition);
+    const workflowEditHistory = isMeaningfulChange
+      ? [
+          createWorkflowEditHistoryEntry(currentDraft),
+          ...this.state.workflowEditHistory,
+        ].slice(0, WorkflowEditHistoryLimit)
+      : this.state.workflowEditHistory;
+
     this.setState({
       draftWorkflow: nextDefinition,
       selection: nextSelection ?? this.state.selection,
+      workflowEditHistory,
       dirtyWorkflow:
         this.state.dirtyWorkflow ||
-        !this.state.draftWorkflow ||
-        !isWorkflowViewportOnlyChange(this.state.draftWorkflow, nextDefinition),
+        !currentDraft ||
+        !isWorkflowViewportOnlyChange(currentDraft, nextDefinition),
     });
   }
 
@@ -10425,6 +10843,51 @@ export class WorkflowsScreen extends Component<
     }
 
     this.updateSelectedNode(update(current));
+  }
+
+  private handleRenameNode(nodeId: string): void {
+    const node = this.state.draftWorkflow?.nodes.find(
+      (entry) => entry.id === nodeId,
+    );
+    if (!node) {
+      return;
+    }
+
+    const nextLabel = window.prompt("Rename node", node.label);
+    if (!nextLabel || nextLabel.trim().length === 0) {
+      return;
+    }
+
+    this.patchNode(nodeId, (current) => ({
+      ...current,
+      label: nextLabel.trim(),
+    }));
+  }
+
+  private handleDuplicateNode(nodeId: string): void {
+    const workflow = this.state.draftWorkflow;
+    const node = workflow?.nodes.find((entry) => entry.id === nodeId);
+    if (!workflow || !node) {
+      return;
+    }
+
+    const nextNodeId = crypto.randomUUID();
+    const nextNode: WorkflowNodeRecord = {
+      ...node,
+      id: nextNodeId,
+      label: `${node.label} copy`,
+      position: {
+        x: node.position.x + WorkflowNodeDuplicateOffset,
+        y: node.position.y + WorkflowNodeDuplicateOffset,
+      },
+    };
+    this.updateDraftWorkflow(
+      {
+        ...workflow,
+        nodes: [...workflow.nodes, nextNode],
+      },
+      { type: "node", id: nextNodeId },
+    );
   }
 
   private updateNodeProvider(
@@ -11961,6 +12424,18 @@ const upsertExecutionRecord = (
   }
 
   return [execution, ...executions];
+};
+
+const createWorkflowEditHistoryEntry = (
+  workflow: WorkflowDefinitionUpsertInput,
+): WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput> => {
+  const changedAt = new Date().toISOString();
+  return {
+    id: `${changedAt}-${workflow.id ?? workflow.name}`,
+    label: workflow.name,
+    changedAt,
+    workflow,
+  };
 };
 
 const readCanvasBackgroundStyle = (

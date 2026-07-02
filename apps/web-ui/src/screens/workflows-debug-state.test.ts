@@ -13,6 +13,8 @@ import {
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowPinnedOutputAction,
+  readWorkflowPinnedNodeVisualState,
+  parseWorkflowEditedOutputSnapshot,
   readWorkflowStepSeedOutputs,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
@@ -159,6 +161,34 @@ describe("workflows debug state", () => {
         hasOutput: true,
       }),
     ).toBe("unpin");
+  });
+
+  it("marks pinned nodes for purple canvas rendering", () => {
+    expect(
+      readWorkflowPinnedNodeVisualState({
+        pinnedOutput: {
+          workflowId: "workflow-1",
+          nodeId: "node-a",
+          outputSnapshot: { ok: true },
+        },
+        workflowId: "workflow-1",
+        nodeId: "node-a",
+      }),
+    ).toEqual({ pinned: true, tone: "pinned" });
+    expect(
+      readWorkflowPinnedNodeVisualState({
+        pinnedOutput: null,
+        workflowId: "workflow-1",
+        nodeId: "node-a",
+      }),
+    ).toEqual({ pinned: false, tone: "normal" });
+  });
+
+  it("parses edited output snapshots as json when possible", () => {
+    expect(parseWorkflowEditedOutputSnapshot('{"ok":true}')).toEqual({
+      ok: true,
+    });
+    expect(parseWorkflowEditedOutputSnapshot("plain text")).toBe("plain text");
   });
 
   it("keeps a selected historical execution when the node modal changes selection", () => {
