@@ -3651,3 +3651,26 @@
   - Browser visual QA was not run.
 - Next
   - Add browser-level regression coverage for pin edit focus, save, reload, and purple pinned node rehydration.
+
+### 2026-07-03 12:40 (Europe/Madrid) — CI Frozen Lockfile Fix
+
+- Summary
+  - Reproduced the GitHub Actions install failure with `corepack pnpm@10.18.3 install --frozen-lockfile` and fixed the stale root lockfile importer.
+- Decisions
+  - Keep `@modelcontextprotocol/sdk` as an explicit root dependency because `packages/mcp` dynamically loads it from the root `node_modules` path.
+  - Keep `rate-limiter-flexible` and `live-server` removed because no current source/package manifest references them.
+  - Mark `@modelcontextprotocol/sdk` as an intentional dynamic dependency in Knip.
+- Changes
+  - Updated `package.json` to restore the runtime MCP SDK dependency.
+  - Regenerated `pnpm-lock.yaml` with the repository package manager version `pnpm@10.18.3`.
+  - Updated `knip.json` to ignore the dynamically loaded MCP SDK dependency.
+- Commands
+  - `$env:CI='true'; corepack pnpm@10.18.3 install --frozen-lockfile` failed first with `ERR_PNPM_OUTDATED_LOCKFILE`, then PASS.
+  - `corepack pnpm@10.18.3 exec vitest run packages/mcp/src/mcp-registry.test.ts --passWithNoTests` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` failed first on Knip unused dependency, then PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+- Issues/Risks
+  - The lockfile diff is large because it removes stale entries that no current importer references.
+- Next
+  - Monitor the next GitHub Actions run to confirm the install step now passes with frozen lockfile.

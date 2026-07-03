@@ -22,5 +22,6 @@
     "apps/web-ui/src/components/Input.ts",
     "apps/web-ui/src/shared/types.ts"
   ],
-  "ignoreBinaries": ["puppeteer", "preview"]
+  "ignoreBinaries": ["puppeteer", "preview"],
+  "ignoreDependencies": ["@modelcontextprotocol/sdk"]
 }
