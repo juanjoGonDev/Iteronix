@@ -248,6 +248,21 @@ describe("workflows debug state", () => {
     expect(selected?.id).toBe("old-run");
   });
 
+  it("does not reuse the latest persisted execution in a fresh editor session", () => {
+    const selected = selectWorkflowDebugExecution({
+      workflowId: "workflow-1",
+      activeExecutionId: null,
+      selectedExecutionId: null,
+      liveExecutionId: null,
+      executions: [
+        { id: "latest-run", workflowId: "workflow-1" },
+        { id: "older-run", workflowId: "workflow-1" },
+      ],
+    });
+
+    expect(selected).toBeNull();
+  });
+
   it("detects node double-clicks from pointer detail before drag starts", () => {
     expect(shouldOpenNodeModalFromPointerDetail(1)).toBe(false);
     expect(shouldOpenNodeModalFromPointerDetail(2)).toBe(true);

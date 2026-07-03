@@ -4504,7 +4504,7 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private handlePinExecutionNodeModalSampleOutput(): void {
+  private async handlePinExecutionNodeModalSampleOutput(): Promise<void> {
     const modal = this.state.executionNodeModal;
     const workflow = this.state.draftWorkflow;
     if (!modal || !workflow) {
@@ -4512,12 +4512,7 @@ export class WorkflowsScreen extends Component<
     }
 
     const node = workflow.nodes.find((entry) => entry.id === modal.nodeId);
-    if (!node?.outputContract) {
-      this.setState({
-        noticeMessage: null,
-        errorMessage:
-          "This node needs a JSON output contract before a response can be pinned for testing.",
-      });
+    if (!node) {
       return;
     }
 
@@ -4530,19 +4525,18 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    const nextWorkflow = updateWorkflowNodeOutputContract(
-      workflow,
-      node.id,
-      (current) => ({
-        ...current,
-        sampleOutput: outputText,
-      }),
-    );
-    this.updateDraftWorkflow(nextWorkflow, this.state.selection);
-    this.setState({
-      noticeMessage: `${node.label} sample output updated from this run.`,
-      errorMessage: null,
+    const action = readWorkflowPinnedOutputAction({
+      currentPinnedOutput: this.state.pinnedTestOutput,
+      nextNodeId: node.id,
+      hasOutput: true,
     });
+
+    await this.handleTogglePinnedTestOutputForNode(
+      node.id,
+      parseWorkflowEditedOutputSnapshot(outputText),
+      action === "unpin" ? "pin" : action,
+      workflow.id ?? "",
+    );
   }
 
   private readExecutionNodeModalOutputText(): string {
@@ -4726,8 +4720,9 @@ export class WorkflowsScreen extends Component<
                         createElement(Button, {
                           variant: context.isPinned ? "secondary" : "ghost",
                           size: "sm",
-                          onClick: () =>
-                            this.handlePinExecutionNodeModalSampleOutput(),
+                          onClick: () => {
+                            void this.handlePinExecutionNodeModalSampleOutput();
+                          },
                           children: context.isPinned
                             ? "Pinned to test"
                             : "Pin output",
@@ -5076,7 +5071,6 @@ export class WorkflowsScreen extends Component<
               createElement(IconButton, {
                 icon: "edit",
                 tooltip: "Edit output for test runs",
-                disabled: context.outputValue === undefined,
                 onClick: () => this.openOutputEditor(context),
               }),
               this.renderPinnedOutputControl(context),
@@ -5112,7 +5106,7 @@ export class WorkflowsScreen extends Component<
     context: WorkflowNodeDebugContext,
     action: ReturnType<typeof readWorkflowPinnedOutputAction>,
   ): void {
-    this.handleTogglePinnedTestOutputForNode(
+    void this.handleTogglePinnedTestOutputForNode(
       context.node.id,
       context.outputValue,
       action,
@@ -5120,18 +5114,18 @@ export class WorkflowsScreen extends Component<
     );
   }
 
-  private handleTogglePinnedTestOutputForNode(
+  private async handleTogglePinnedTestOutputForNode(
     nodeId: string,
     outputValue: unknown,
     action: ReturnType<typeof readWorkflowPinnedOutputAction>,
     workflowId = this.state.draftWorkflow?.id ?? "",
-  ): void {
+  ): Promise<void> {
     if (action === "disabled") {
       return;
     }
 
     if (action === "unpin") {
-      this.updatePinnedTestOutput(null);
+      await this.updatePinnedTestOutput(null);
       return;
     }
 
@@ -5142,36 +5136,71 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    this.updatePinnedTestOutput({
+    await this.updatePinnedTestOutput({
       workflowId,
       nodeId,
       outputSnapshot: outputValue,
     });
   }
 
-  private updatePinnedTestOutput(
+  private async updatePinnedTestOutput(
     pinnedTestOutput: WorkflowPinnedTestOutput | null,
-  ): void {
+  ): Promise<void> {
     const workflow = this.state.draftWorkflow;
-    if (workflow) {
-      this.updateDraftWorkflow(
-        writeWorkflowPinnedTestOutputToDefinition(
-          workflow,
-          pinnedTestOutput,
-          new Date().toISOString(),
-        ),
-      );
-    }
-
-    this.setState({ pinnedTestOutput });
-  }
-
-  private openOutputEditor(context: WorkflowNodeDebugContext): void {
-    if (context.outputValue === undefined) {
+    if (!workflow) {
+      this.setState({ pinnedTestOutput });
       return;
     }
 
-    const text = formatOutputSnapshot(context.outputValue);
+    const nextWorkflow = writeWorkflowPinnedTestOutputToDefinition(
+      workflow,
+      pinnedTestOutput,
+      new Date().toISOString(),
+    );
+    this.updateDraftWorkflow(nextWorkflow);
+    this.setState({ pinnedTestOutput });
+    await this.persistPinnedTestOutputWorkflow(nextWorkflow);
+  }
+
+  private async persistPinnedTestOutputWorkflow(
+    workflow: WorkflowDefinitionUpsertInput,
+  ): Promise<void> {
+    const projectId = this.state.currentProject?.id;
+    if (!projectId) {
+      return;
+    }
+
+    try {
+      const saved = await this.workflowClient.upsertDefinition({
+        projectId,
+        definition: workflow,
+      });
+      const draftWorkflow = stripDefinitionVersionFields(saved);
+      this.setState({
+        workflows: this.state.workflows.map((entry) =>
+          entry.id === saved.id ? saved : entry,
+        ),
+        draftWorkflow,
+        pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(saved),
+        dirtyWorkflow: false,
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not persist the pinned test output.",
+        ),
+        noticeMessage: null,
+      });
+    }
+  }
+
+  private openOutputEditor(context: WorkflowNodeDebugContext): void {
+    const text =
+      context.outputValue === undefined
+        ? ""
+        : formatOutputSnapshot(context.outputValue);
     this.outputEditorDraftText = text;
     this.setState({
       outputEditor: {
@@ -5186,7 +5215,7 @@ export class WorkflowsScreen extends Component<
     this.setState({ outputEditor: null });
   }
 
-  private saveOutputEditor(): void {
+  private async saveOutputEditor(): Promise<void> {
     const editor = this.state.outputEditor;
     if (!editor) {
       return;
@@ -5203,7 +5232,7 @@ export class WorkflowsScreen extends Component<
     const outputSnapshot = parseWorkflowEditedOutputSnapshot(
       outputTextarea?.value ?? this.outputEditorDraftText ?? editor.text,
     );
-    this.handleTogglePinnedTestOutputForNode(
+    await this.handleTogglePinnedTestOutputForNode(
       editor.nodeId,
       outputSnapshot,
       action === "unpin" ? "pin" : action,
@@ -5268,7 +5297,9 @@ export class WorkflowsScreen extends Component<
                   createElement(Button, {
                     variant: "primary",
                     size: "sm",
-                    onClick: () => this.saveOutputEditor(),
+                    onClick: () => {
+                      void this.saveOutputEditor();
+                    },
                     children: "Save",
                   }),
                 ]),
@@ -5616,7 +5647,9 @@ export class WorkflowsScreen extends Component<
 
     return selectWorkflowDebugExecution({
       workflowId,
-      activeExecutionId: this.state.debugExecutionId,
+      activeExecutionId:
+        this.state.debugExecutionId ??
+        this.readWorkflowActiveExecutionId(workflowId),
       selectedExecutionId:
         this.state.selection.type === "execution"
           ? this.state.selection.id
@@ -11517,7 +11550,7 @@ export class WorkflowsScreen extends Component<
 
       if (event.key.toLowerCase() === "p") {
         event.preventDefault();
-        this.handlePinExecutionNodeModalSampleOutput();
+        void this.handlePinExecutionNodeModalSampleOutput();
         return;
       }
     }

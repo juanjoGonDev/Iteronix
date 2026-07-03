@@ -562,11 +562,7 @@ export const selectWorkflowDebugExecution = <
     input.executions,
     input.workflowId,
     input.selectedExecutionId,
-  ) ??
-  input.executions.find(
-    (execution) => execution.workflowId === input.workflowId,
-  ) ??
-  null;
+  );
 
 export const selectWorkflowDraftAfterCatalogReload = <
   TDraft extends { id?: string },

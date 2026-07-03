@@ -3718,3 +3718,33 @@
   - GitHub logs for in-progress jobs are not available until completion, so diagnosis used job step state and platform-specific process lifecycle behavior.
 - Next
   - Run full quality gates, commit, push with hooks enabled, and inspect the new CI run.
+
+### 2026-07-03 18:58 (Europe/Madrid) — Workflow Pinned Output Persistence Fix
+
+- Summary
+  - Fixed the workflow node modal so editing output does not reuse stale persisted execution output after browser reload, and pinned output saves survive refresh.
+- Decisions
+  - The node editor output panel may use only current browser live/debug execution, an explicitly selected historical execution, an active running execution, or the saved pinned output.
+  - A completed historical execution must not be selected implicitly in a fresh editor session.
+  - Saving edited output or pinning from execution history persists `pinnedTestOutput` through the workflow definition API immediately, without requiring the global Save button.
+- Changes
+  - Removed the implicit latest-execution fallback from workflow debug execution selection.
+  - Allowed the output editor to open empty when there is no current output and no pin.
+  - Changed execution-history pinning to write `pinnedTestOutput` instead of node output-contract sample data.
+  - Added a regression test for fresh editor sessions not reusing latest persisted output.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+- Issues/Risks
+  - Pin save now persists the current workflow draft by API; if there are unrelated dirty workflow edits, they are persisted together with the pin.
+- Next
+  - Run full gates, commit, push with hooks enabled, and verify remote CI.
+
+### 2026-07-03 19:17 (Europe/Madrid) — Workflow Pinned Output Persistence Verification
+
+- Summary: Completed the workflow pinned output persistence fix and verified that fresh editor sessions no longer hydrate stale completed execution output unless the node has a saved pinned output.
+- Decisions: Kept completed historical executions explicit-only; active running executions remain visible through the active execution id so live runs still hydrate the modal.
+- Changes: Persisted edited/pinned node outputs through the workflow definition upsert path and changed history pinning to save pinned test output instead of contract sample output.
+- Commands: `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` PASS; `pnpm format:check` PASS; `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test` PASS; `pnpm build` PASS; `pnpm quality` PASS.
+- Issues/Risks: `apps/web-ui validate:workflows` is still obsolete for the current n8n-like modal/canvas UX because it expects removed hints/toast/sidebar behavior; not changed in this fix.
+- Next: If needed, modernize `apps/web-ui/scripts/validate-workflows.ts` as a separate E2E maintenance task.
