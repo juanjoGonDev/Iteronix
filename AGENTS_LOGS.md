@@ -3698,3 +3698,23 @@
   - Local validation is Windows, so the GitHub-hosted Ubuntu runner is still the final proof for Linux system dependencies; the failing root-only command path is removed.
 - Next
   - Monitor the next GitHub Actions run through completion.
+
+### 2026-07-03 13:05 (Europe/Madrid) — CI Browser Validation Hang Fix
+
+- Summary
+  - Investigated the GitHub CI run after fixing Puppeteer install; the Puppeteer Chrome install step passed, but `validate:source-linking` remained in progress.
+- Decisions
+  - Treat browser validation subprocess shutdown as cross-platform process-tree cleanup, not a parent-process-only kill.
+  - Keep the CI command without `--install-deps`; the hang was after install, during browser validation shutdown.
+- Changes
+  - Updated `apps/web-ui/scripts/browser-validation-runtime.ts` to start preview with ignored stdio and a detached POSIX process group.
+  - Updated POSIX shutdown to terminate the process group with SIGTERM, wait, then SIGKILL as fallback.
+  - Added a regression test proving preview child processes terminate.
+- Commands
+  - `gh run view 28655560464 --json status,conclusion,url,workflowName,jobs`
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:source-linking`
+  - `corepack pnpm@10.18.3 test -- apps/web-ui/scripts/browser-validation-runtime.test.ts`
+- Issues/Risks
+  - GitHub logs for in-progress jobs are not available until completion, so diagnosis used job step state and platform-specific process lifecycle behavior.
+- Next
+  - Run full quality gates, commit, push with hooks enabled, and inspect the new CI run.

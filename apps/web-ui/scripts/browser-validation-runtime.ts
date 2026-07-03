@@ -12,6 +12,11 @@ const ScreenshotArtifact = {
   Extension: ".png",
 } as const;
 
+const ProcessStop = {
+  GraceMs: 1000,
+  ForceMs: 1000,
+} as const;
+
 export type WaitForConditionInput = {
   timeoutMs: number;
   intervalMs: number;
@@ -91,7 +96,8 @@ export const assertBrowserValidationBuildOutput = async (
 export const startPreviewServer = (projectRoot: string): ChildProcess =>
   spawn("pnpm", ["preview"], {
     cwd: projectRoot,
-    stdio: "pipe",
+    detached: process.platform !== "win32",
+    stdio: "ignore",
     shell: process.platform === "win32",
   });
 
@@ -151,12 +157,64 @@ export const stopProcess = async (child: ChildProcess): Promise<void> => {
     return;
   }
 
-  child.kill("SIGTERM");
-  await delay(250);
+  await stopPosixProcessGroup(child);
 };
 
 export const delay = async (ms: number): Promise<void> => {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
+  });
+};
+
+const stopPosixProcessGroup = async (child: ChildProcess): Promise<void> => {
+  const pid = child.pid;
+
+  if (pid === undefined) {
+    return;
+  }
+
+  sendPosixSignal(pid, "SIGTERM");
+
+  const exited = await waitForProcessExit(child, ProcessStop.GraceMs);
+  if (exited) {
+    return;
+  }
+
+  sendPosixSignal(pid, "SIGKILL");
+  await waitForProcessExit(child, ProcessStop.ForceMs);
+};
+
+const sendPosixSignal = (pid: number, signal: NodeJS.Signals): void => {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      return;
+    }
+  }
+};
+
+const waitForProcessExit = async (
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> => {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return true;
+  }
+
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => {
+      child.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+
+    const onExit = (): void => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+
+    child.once("exit", onExit);
   });
 };
