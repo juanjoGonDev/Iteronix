@@ -23,7 +23,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -C apps/web-ui exec puppeteer browsers install chrome --install-deps
+      - run: pnpm -C apps/web-ui exec puppeteer browsers install chrome
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

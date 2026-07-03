@@ -3674,3 +3674,27 @@
   - The lockfile diff is large because it removes stale entries that no current importer references.
 - Next
   - Monitor the next GitHub Actions run to confirm the install step now passes with frozen lockfile.
+
+### 2026-07-03 12:48 (Europe/Madrid) — CI Puppeteer Install Fix
+
+- Summary
+  - Fixed the GitHub Actions Chrome install step that failed because `--install-deps` requires root privileges on Linux runners.
+- Decisions
+  - Keep Puppeteer browser installation as a normal runner user command and remove `--install-deps`; the CI browser validation scripts only need the Chrome binary installed by Puppeteer.
+  - Validate the exact replacement command locally with `pnpm@10.18.3` before pushing.
+- Changes
+  - Updated `.github/workflows/ci.yml` to run `pnpm -C apps/web-ui exec puppeteer browsers install chrome`.
+- Commands
+  - `corepack pnpm@10.18.3 -C apps/web-ui exec puppeteer browsers install chrome` PASS.
+  - `corepack pnpm@10.18.3 lint` PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 test` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:source-linking` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:quality-gates` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:git-workspace` PASS.
+  - `corepack pnpm@10.18.3 eval:min` PASS.
+- Issues/Risks
+  - Local validation is Windows, so the GitHub-hosted Ubuntu runner is still the final proof for Linux system dependencies; the failing root-only command path is removed.
+- Next
+  - Monitor the next GitHub Actions run through completion.
