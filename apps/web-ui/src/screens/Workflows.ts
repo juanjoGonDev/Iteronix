@@ -37,6 +37,8 @@ import {
   readWorkflowPinnedNodeVisualState,
   readWorkflowPinnedOutputAction,
   parseWorkflowEditedOutputSnapshot,
+  readWorkflowPinnedTestOutputFromDefinition,
+  writeWorkflowPinnedTestOutputToDefinition,
   readWorkflowStepSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
@@ -254,6 +256,7 @@ const WorkflowScreenSelector = {
   DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
   DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
+  OutputEditorTextarea: "workflows-output-editor-textarea",
   DeepEditorTabPrompt: "workflows-deep-editor-tab-prompt",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
   DeepEditorTabPreview: "workflows-deep-editor-tab-preview",
@@ -640,6 +643,7 @@ export class WorkflowsScreen extends Component<
     null;
   private liveExecutionAbortController: AbortController | null = null;
   private executionRefreshIntervalId: number | null = null;
+  private outputEditorDraftText: string | null = null;
 
   constructor(props: ComponentProps = {}) {
     super(props, {
@@ -5127,7 +5131,7 @@ export class WorkflowsScreen extends Component<
     }
 
     if (action === "unpin") {
-      this.setState({ pinnedTestOutput: null });
+      this.updatePinnedTestOutput(null);
       return;
     }
 
@@ -5138,13 +5142,28 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    this.setState({
-      pinnedTestOutput: {
-        workflowId,
-        nodeId,
-        outputSnapshot: outputValue,
-      },
+    this.updatePinnedTestOutput({
+      workflowId,
+      nodeId,
+      outputSnapshot: outputValue,
     });
+  }
+
+  private updatePinnedTestOutput(
+    pinnedTestOutput: WorkflowPinnedTestOutput | null,
+  ): void {
+    const workflow = this.state.draftWorkflow;
+    if (workflow) {
+      this.updateDraftWorkflow(
+        writeWorkflowPinnedTestOutputToDefinition(
+          workflow,
+          pinnedTestOutput,
+          new Date().toISOString(),
+        ),
+      );
+    }
+
+    this.setState({ pinnedTestOutput });
   }
 
   private openOutputEditor(context: WorkflowNodeDebugContext): void {
@@ -5152,15 +5171,18 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    const text = formatOutputSnapshot(context.outputValue);
+    this.outputEditorDraftText = text;
     this.setState({
       outputEditor: {
         nodeId: context.node.id,
-        text: formatOutputSnapshot(context.outputValue),
+        text,
       },
     });
   }
 
   private closeOutputEditor(): void {
+    this.outputEditorDraftText = null;
     this.setState({ outputEditor: null });
   }
 
@@ -5170,17 +5192,23 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    const outputTextarea = document.querySelector<HTMLTextAreaElement>(
+      `[data-testid="${WorkflowScreenSelector.OutputEditorTextarea}"]`,
+    );
     const action = readWorkflowPinnedOutputAction({
       currentPinnedOutput: this.state.pinnedTestOutput,
       nextNodeId: editor.nodeId,
       hasOutput: true,
     });
-    const outputSnapshot = parseWorkflowEditedOutputSnapshot(editor.text);
+    const outputSnapshot = parseWorkflowEditedOutputSnapshot(
+      outputTextarea?.value ?? this.outputEditorDraftText ?? editor.text,
+    );
     this.handleTogglePinnedTestOutputForNode(
       editor.nodeId,
       outputSnapshot,
       action === "unpin" ? "pin" : action,
     );
+    this.outputEditorDraftText = null;
     this.setState({ outputEditor: null });
   }
 
@@ -5249,16 +5277,12 @@ export class WorkflowsScreen extends Component<
             createElement("textarea", {
               className:
                 "min-h-0 flex-1 resize-none border-0 bg-[#0d1117] px-4 py-4 font-mono text-sm leading-6 text-slate-100 outline-none",
-              value: editor.text,
+              "data-testid": WorkflowScreenSelector.OutputEditorTextarea,
+              value: this.outputEditorDraftText ?? editor.text,
               onInput: (event: Event) => {
                 const target = event.target;
                 if (target instanceof HTMLTextAreaElement) {
-                  this.setState({
-                    outputEditor: {
-                      ...editor,
-                      text: target.value,
-                    },
-                  });
+                  this.outputEditorDraftText = target.value;
                 }
               },
             }),
@@ -5546,10 +5570,16 @@ export class WorkflowsScreen extends Component<
       ) ??
       inputSources[0] ??
       null;
+    const pinnedOutputValue =
+      this.state.pinnedTestOutput?.workflowId === (workflow.id ?? "") &&
+      this.state.pinnedTestOutput.nodeId === node.id
+        ? this.state.pinnedTestOutput.outputSnapshot
+        : undefined;
     const outputValue =
       liveRun?.outputSnapshot ??
       (liveRun?.outputText.trim().length ? liveRun.outputText : undefined) ??
-      persistedRun?.outputSnapshot;
+      persistedRun?.outputSnapshot ??
+      pinnedOutputValue;
     const debugStatus = liveRun?.status ?? persistedRun?.status;
     const statusTone = readWorkflowDebugStatusTone({
       ...(debugStatus ? { status: debugStatus } : {}),
@@ -5651,6 +5681,16 @@ export class WorkflowsScreen extends Component<
       } else if (liveRun.outputText.trim().length > 0) {
         entries.set(nodeId, liveRun.outputText);
       }
+    }
+
+    if (
+      this.state.pinnedTestOutput &&
+      this.state.pinnedTestOutput.workflowId === this.state.draftWorkflow?.id
+    ) {
+      entries.set(
+        this.state.pinnedTestOutput.nodeId,
+        this.state.pinnedTestOutput.outputSnapshot,
+      );
     }
 
     return entries;
@@ -9521,6 +9561,9 @@ export class WorkflowsScreen extends Component<
       assetUsages,
       executions,
       draftWorkflow: draftState.draftWorkflow,
+      pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(
+        draftState.draftWorkflow,
+      ),
       selection: nextSelection,
       debugExecutionId,
       loadingExecutionId: null,
@@ -9611,6 +9654,7 @@ export class WorkflowsScreen extends Component<
 
     this.setState({
       draftWorkflow: stripDefinitionVersionFields(workflow),
+      pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(workflow),
       selection: { type: "workflow", id: workflow.id },
       loadingExecutionId: null,
       dirtyWorkflow: false,

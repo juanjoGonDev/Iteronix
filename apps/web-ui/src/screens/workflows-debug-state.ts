@@ -37,6 +37,10 @@ export type WorkflowEditHistoryEntry<TWorkflow> = {
   workflow: TWorkflow;
 };
 
+type WorkflowPinnedDefinitionLike = Pick<WorkflowDefinitionRecord, "nodes"> & {
+  id?: string;
+};
+
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
 export type WorkflowStepExecutionAvailability = {
@@ -189,6 +193,57 @@ export const parseWorkflowEditedOutputSnapshot = (value: string): unknown => {
     return value;
   }
 };
+
+export const readWorkflowPinnedTestOutputFromDefinition = (
+  workflow: WorkflowPinnedDefinitionLike | null,
+): WorkflowPinnedTestOutput | null => {
+  if (!workflow) {
+    return null;
+  }
+
+  const node = workflow.nodes.find(
+    (candidate) => candidate.config.pinnedTestOutput !== undefined,
+  );
+  if (!node?.config.pinnedTestOutput) {
+    return null;
+  }
+
+  return {
+    workflowId: workflow.id ?? "",
+    nodeId: node.id,
+    outputSnapshot: node.config.pinnedTestOutput.outputSnapshot,
+  };
+};
+
+export const writeWorkflowPinnedTestOutputToDefinition = <
+  TWorkflow extends WorkflowPinnedDefinitionLike,
+>(
+  workflow: TWorkflow,
+  pinnedOutput: WorkflowPinnedTestOutput | null,
+  updatedAt: string,
+): TWorkflow => ({
+  ...workflow,
+  nodes: workflow.nodes.map((node) => {
+    const nextConfig = { ...node.config };
+    delete nextConfig.pinnedTestOutput;
+
+    if (
+      pinnedOutput &&
+      pinnedOutput.workflowId === (workflow.id ?? "") &&
+      pinnedOutput.nodeId === node.id
+    ) {
+      nextConfig.pinnedTestOutput = {
+        outputSnapshot: pinnedOutput.outputSnapshot,
+        updatedAt,
+      };
+    }
+
+    return {
+      ...node,
+      config: nextConfig,
+    };
+  }),
+});
 
 export const shouldOpenNodeModalFromPointerDetail = (detail: number): boolean =>
   detail >= NodeModalPointerDetailThreshold;

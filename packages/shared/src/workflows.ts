@@ -204,6 +204,10 @@ export type WorkflowNodeConfigRecord = {
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
+  pinnedTestOutput?: {
+    outputSnapshot: unknown;
+    updatedAt: string;
+  };
   reviewPolicy?: {
     requireHumanDecision: boolean;
   };

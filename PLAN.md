@@ -661,6 +661,7 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - `apps/web-ui/scripts/validate-workflows.ts` now validates deterministic load -> inspect -> delete -> reload behavior by generating saved execution fixtures tied to the persisted workflow node ids
   - Phase `06.5A` validation pass completed on `2026-05-16` while `06.5` stays in progress pending further slices:
     - Full workspace gates passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`
+  - Pinned output persistence fix on `2026-07-03`: pinned test outputs now save into workflow node config, rehydrate after save/reload, and the output editor draft avoids rerender focus loss while typing.
     - Real browser validation passed again with `pnpm -C apps/web-ui validate:workflows`
     - Notion progress for `06.5 Execution rail, history, alerts and EUR cost observability` was refreshed without closing the phase
   - Phase `06.5A` accepted on `2026-05-16` as the first `06.5` slice, while the parent `06.5` phase stays in progress:

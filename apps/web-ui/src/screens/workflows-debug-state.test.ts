@@ -15,6 +15,8 @@ import {
   readWorkflowPinnedOutputAction,
   readWorkflowPinnedNodeVisualState,
   parseWorkflowEditedOutputSnapshot,
+  readWorkflowPinnedTestOutputFromDefinition,
+  writeWorkflowPinnedTestOutputToDefinition,
   readWorkflowStepSeedOutputs,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
@@ -189,6 +191,46 @@ describe("workflows debug state", () => {
       ok: true,
     });
     expect(parseWorkflowEditedOutputSnapshot("plain text")).toBe("plain text");
+  });
+
+  it("persists a single pinned test output in the workflow definition", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Pinned",
+    });
+    const firstNodeId = definition.nodes[0]?.id ?? "";
+    const secondNodeId = definition.nodes[1]?.id ?? "";
+    const pinned = writeWorkflowPinnedTestOutputToDefinition(
+      { ...definition, id: "workflow-1" },
+      {
+        workflowId: "workflow-1",
+        nodeId: firstNodeId,
+        outputSnapshot: { result: "first" },
+      },
+      "2026-07-03T10:00:00.000Z",
+    );
+
+    expect(readWorkflowPinnedTestOutputFromDefinition(pinned)).toEqual({
+      workflowId: "workflow-1",
+      nodeId: firstNodeId,
+      outputSnapshot: { result: "first" },
+    });
+
+    const replaced = writeWorkflowPinnedTestOutputToDefinition(
+      pinned,
+      {
+        workflowId: "workflow-1",
+        nodeId: secondNodeId,
+        outputSnapshot: { result: "second" },
+      },
+      "2026-07-03T10:01:00.000Z",
+    );
+
+    expect(replaced.nodes[0]?.config.pinnedTestOutput).toBeUndefined();
+    expect(replaced.nodes[1]?.config.pinnedTestOutput).toEqual({
+      outputSnapshot: { result: "second" },
+      updatedAt: "2026-07-03T10:01:00.000Z",
+    });
   });
 
   it("keeps a selected historical execution when the node modal changes selection", () => {

@@ -3629,3 +3629,25 @@
   - Edit history is currently session-local and must be saved as a later server revision feature for true cloud history.
 - Next
   - Browser QA pinned output visuals/menu/editor; then implement persisted workflow revision history if cloud restore/versioning is required.
+
+### 2026-07-03 12:30 (Europe/Madrid) — Workflows Pinned Output Persistence
+
+- Summary
+  - Fixed pinned test output persistence and the output editor focus loss while typing.
+- Decisions
+  - Store the active pin in the workflow node config as `pinnedTestOutput` so the existing workflow Save path persists it to the server workspace.
+  - Keep only one active pinned output in the workflow definition at a time.
+  - Keep output-editor draft text outside render state so textarea input does not re-render and lose focus on every keystroke.
+- Changes
+  - Added shared/local workflow node config support for `pinnedTestOutput`.
+  - Added pure read/write helpers for pinned output persistence in Workflows debug state.
+  - Rehydrated pinned outputs from saved workflow definitions into node visuals, previous-output selectors, and debug output maps.
+- Commands
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts packages/shared/src/workflows.test.ts --passWithNoTests; pnpm typecheck` failed first, then PASS.
+  - `pnpm format:check; pnpm lint; pnpm typecheck; pnpm test; pnpm build` failed first on formatting, then PASS after Prettier.
+- Issues/Risks
+  - Pinned output changes persist after the user saves the workflow; auto-save-on-pin remains a separate product decision.
+  - Browser visual QA was not run.
+- Next
+  - Add browser-level regression coverage for pin edit focus, save, reload, and purple pinned node rehydration.
