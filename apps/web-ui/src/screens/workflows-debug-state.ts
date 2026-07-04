@@ -152,6 +152,7 @@ export const readWorkflowStepSeedOutputs = (input: {
 export const readWorkflowPinnedOutputAction = (input: {
   currentPinnedOutput: WorkflowPinnedTestOutput | null;
   nextNodeId: string;
+  nextOutputSnapshot?: unknown;
   hasOutput: boolean;
 }): WorkflowPinnedOutputAction => {
   if (!input.hasOutput) {
@@ -159,11 +160,26 @@ export const readWorkflowPinnedOutputAction = (input: {
   }
 
   if (input.currentPinnedOutput?.nodeId === input.nextNodeId) {
+    if (
+      input.nextOutputSnapshot !== undefined &&
+      !areWorkflowOutputSnapshotsEqual(
+        input.currentPinnedOutput.outputSnapshot,
+        input.nextOutputSnapshot,
+      )
+    ) {
+      return "confirm-overwrite";
+    }
+
     return "unpin";
   }
 
   return input.currentPinnedOutput ? "confirm-overwrite" : "pin";
 };
+
+const areWorkflowOutputSnapshotsEqual = (
+  current: unknown,
+  next: unknown,
+): boolean => JSON.stringify(current) === JSON.stringify(next);
 
 export const readWorkflowPinnedNodeVisualState = (input: {
   pinnedOutput: WorkflowPinnedTestOutput | null;

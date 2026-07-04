@@ -2579,6 +2579,7 @@ export class WorkflowsScreen extends Component<
     const pinAction = readWorkflowPinnedOutputAction({
       currentPinnedOutput: this.state.pinnedTestOutput,
       nextNodeId: node.id,
+      nextOutputSnapshot: outputValue,
       hasOutput: outputValue !== undefined,
     });
 
@@ -4528,6 +4529,7 @@ export class WorkflowsScreen extends Component<
     const action = readWorkflowPinnedOutputAction({
       currentPinnedOutput: this.state.pinnedTestOutput,
       nextNodeId: node.id,
+      nextOutputSnapshot: parseWorkflowEditedOutputSnapshot(outputText),
       hasOutput: true,
     });
 

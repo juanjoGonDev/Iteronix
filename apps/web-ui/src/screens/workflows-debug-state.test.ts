@@ -165,6 +165,21 @@ describe("workflows debug state", () => {
     ).toBe("unpin");
   });
 
+  it("requires confirmation before replacing the same node with different output", () => {
+    expect(
+      readWorkflowPinnedOutputAction({
+        currentPinnedOutput: {
+          workflowId: "workflow-1",
+          nodeId: "node-a",
+          outputSnapshot: { result: "cached" },
+        },
+        nextNodeId: "node-a",
+        nextOutputSnapshot: { result: "history" },
+        hasOutput: true,
+      }),
+    ).toBe("confirm-overwrite");
+  });
+
   it("marks pinned nodes for purple canvas rendering", () => {
     expect(
       readWorkflowPinnedNodeVisualState({

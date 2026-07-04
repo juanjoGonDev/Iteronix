@@ -3748,3 +3748,27 @@
 - Commands: `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` PASS; `pnpm format:check` PASS; `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test` PASS; `pnpm build` PASS; `pnpm quality` PASS.
 - Issues/Risks: `apps/web-ui validate:workflows` is still obsolete for the current n8n-like modal/canvas UX because it expects removed hints/toast/sidebar behavior; not changed in this fix.
 - Next: If needed, modernize `apps/web-ui/scripts/validate-workflows.ts` as a separate E2E maintenance task.
+
+### 2026-07-04 17:49 (Europe/Madrid) — Workflow Browser Validation Refresh
+
+- Summary
+  - Updated the Workflows browser validator to target the current n8n-like modal workflow instead of removed connection hints, right-sidebar and toast behaviours.
+- Decisions
+  - Validate pinned test output persistence through the node modal and workflow definition API as the stable smoke path for the current UI.
+  - Require same-node pinned output replacement to confirm when the next output differs, so historical/manual outputs do not silently unpin.
+- Changes
+  - Refreshed pps/web-ui/scripts/validate-workflows.ts for modal output editing, pin persistence after reload, and current history selection smoke coverage.
+  - Added
+    extOutputSnapshot comparison to pinned output action state and regression coverage in workflows-debug-state.test.ts.
+- Commands
+  - corepack pnpm@10.18.3 -C apps/web-ui validate:workflows PASS.
+  - corepack pnpm@10.18.3 format:check PASS.
+  - corepack pnpm@10.18.3 lint PASS.
+  - corepack pnpm@10.18.3 typecheck PASS.
+  - corepack pnpm@10.18.3 test PASS.
+  - corepack pnpm@10.18.3 build PASS.
+  - corepack pnpm@10.18.3 quality PASS.
+- Issues/Risks
+  - The history smoke path verifies selection and persisted manual pin reload; direct history-output pinning still needs a focused UI follow-up.
+- Next
+  - Commit, push with hooks enabled, and monitor CI.
