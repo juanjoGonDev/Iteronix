@@ -263,6 +263,21 @@ describe("workflows debug state", () => {
     expect(selected?.id).toBe("old-run");
   });
 
+  it("keeps an explicit historical debug execution ahead of live session state", () => {
+    const selected = selectWorkflowDebugExecution({
+      workflowId: "workflow-1",
+      activeExecutionId: "history-run",
+      selectedExecutionId: null,
+      liveExecutionId: "live-run",
+      executions: [
+        { id: "live-run", workflowId: "workflow-1" },
+        { id: "history-run", workflowId: "workflow-1" },
+      ],
+    });
+
+    expect(selected?.id).toBe("history-run");
+  });
+
   it("does not reuse the latest persisted execution in a fresh editor session", () => {
     const selected = selectWorkflowDebugExecution({
       workflowId: "workflow-1",

@@ -89,6 +89,8 @@ const WorkflowSelector = {
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   OutputEditorTextarea: "workflows-output-editor-textarea",
   OutputPinControl: "workflows-output-pin-control",
+  NodeModalPrevious: "workflows-node-modal-previous",
+  NodeModalNext: "workflows-node-modal-next",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
   VariableTokenPrefix: "workflows-variable-token-",
   OutputContractAddField: "workflows-output-contract-add-field",
@@ -518,8 +520,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!savedDefinition) {
       throw new Error("Expected saved workflow definition before history QA.");
     }
+    const connectedHistoryDefinition =
+      ensureHistoryNavigationEdge(savedDefinition);
+    stubServer.state.definitions = [connectedHistoryDefinition];
     stubServer.state.executions = [
-      createPinnedOutputExecutionFixture(savedDefinition),
+      createPinnedOutputExecutionFixture(connectedHistoryDefinition),
     ];
 
     await page.reload({
@@ -543,6 +548,16 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await mouseClickByTestId(page, selectedHistoryResponseCardTestId);
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await clickByTestId(page, WorkflowSelector.NodeModalPrevious);
+    await waitForPageText(page, "2026-05-06T08:30:00.000Z");
+    await waitForMissingPageText(
+      page,
+      ValidationText.HistoryPinnedOutputNeedle,
+    );
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
+    await clickByTestId(page, WorkflowSelector.NodeModalNext);
+    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickByTestId(page, WorkflowSelector.OutputPinControl);
     await waitForPinnedDefinitionOutput(
       stubServer.state,
@@ -1426,6 +1441,48 @@ async function waitForExecutionCardSelected(
     },
   );
 }
+function ensureHistoryNavigationEdge(
+  definition: StubWorkflowDefinitionRecord,
+): StubWorkflowDefinitionRecord {
+  if (definition.edges.length > 0) {
+    return definition;
+  }
+
+  const sourceNode = definition.nodes.find(
+    (node) => node.kind === WorkflowNodeKind.TriggerManual,
+  );
+  const targetNode = definition.nodes.find(
+    (node) =>
+      node.kind === WorkflowNodeKind.TerminalResponse ||
+      node.label === "Response",
+  );
+  const sourcePort = sourceNode?.outputPorts[0];
+  const targetPort = targetNode?.inputPorts[0];
+
+  if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
+    throw new Error(
+      "Expected trigger and response ports for modal navigation.",
+    );
+  }
+
+  return {
+    ...definition,
+    edges: [
+      {
+        id: "edge-history-trigger-response",
+        sourceNodeId: sourceNode.id,
+        sourcePortId: sourcePort.id,
+        targetNodeId: targetNode.id,
+        targetPortId: targetPort.id,
+        mapping: {
+          mode: "passthrough",
+          entries: [],
+        },
+      },
+    ],
+  };
+}
+
 function createPinnedOutputExecutionFixture(
   definition: StubWorkflowDefinitionRecord,
 ): StubExecutionRecord {

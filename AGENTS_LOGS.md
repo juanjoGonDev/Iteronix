@@ -3813,3 +3813,30 @@
   - Local git tests emit expected temp-repository CRLF warnings on Windows.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-04 21:15 (Europe/Madrid) — Workflow History Modal Navigation Context
+
+- Summary
+  - Fixed Workflows debug execution selection so an explicit historical execution context stays ahead of live/session state when navigating node editor modal previous/next controls.
+- Decisions
+  - Historical execution modal context must be snapshot-isolated: selected execution output wins, and live/session/pinned output is used only when no execution snapshot is active.
+  - Browser validation now creates a deterministic trigger-to-response edge for the history fixture so modal previous/next navigation can be exercised reliably.
+- Changes
+  - `apps/web-ui/src/screens/workflows-debug-state.ts` now prioritizes explicit debug/active execution ids over live execution ids for node modal data hydration.
+  - `apps/web-ui/src/screens/Workflows.ts` now stops merging live or pinned outputs into the previous-output map while a persisted execution snapshot is selected.
+  - `apps/web-ui/scripts/validate-workflows.ts` now validates historical Response output, previous navigation to Manual trigger output, next navigation back to Response output, and absence of stale pinned/manual output.
+  - `apps/web-ui/src/screens/workflows-debug-state.test.ts` adds a regression for historical debug context beating live session state.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first on missing history edge, then PASS after fixture edge setup.
+  - `corepack pnpm@10.18.3 format:check` failed before formatting, then PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 lint` PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 test` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

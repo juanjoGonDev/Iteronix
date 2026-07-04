@@ -5722,6 +5722,10 @@ export class WorkflowsScreen extends Component<
       entries.set(nodeRun.nodeId, nodeRun.outputSnapshot);
     }
 
+    if (execution) {
+      return entries;
+    }
+
     for (const [nodeId, liveRun] of Object.entries(
       this.state.liveExecution?.nodeRuns ?? {},
     )) {

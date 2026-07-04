@@ -567,12 +567,12 @@ export const selectWorkflowDebugExecution = <
   readExecutionById(
     input.executions,
     input.workflowId,
-    input.liveExecutionId,
+    input.activeExecutionId,
   ) ??
   readExecutionById(
     input.executions,
     input.workflowId,
-    input.activeExecutionId,
+    input.liveExecutionId,
   ) ??
   readExecutionById(
     input.executions,
