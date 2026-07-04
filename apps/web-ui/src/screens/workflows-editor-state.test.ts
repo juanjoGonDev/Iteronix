@@ -30,6 +30,7 @@ import {
   serializeWorkflowExpression,
   moveWorkflowNode,
   readNodeAssetKind,
+  readWorkflowConnectedUpstreamNodeIds,
   readWorkflowNodeSelectableOutputPaths,
   removeWorkflowEdge,
   removeWorkflowNode,
@@ -886,6 +887,75 @@ describe("workflows editor state", () => {
     expect(inserted.value).toBe(
       `Started at {{var|node_output|${triggerNode.id}|$.executedAt}}`,
     );
+  });
+
+  it("scopes node output variables to connected upstream nodes", () => {
+    const definition = createEmptyWorkflowDefinition({
+      projectId: "project-1",
+      name: "Scoped variables",
+    });
+    const withPrompt = addWorkflowNode(
+      definition,
+      WorkflowNodeKind.AssetPrompt,
+      () => "prompt-node",
+    );
+    const withAgent = addWorkflowNode(
+      withPrompt,
+      WorkflowNodeKind.AiAgent,
+      () => "agent-node",
+    );
+    const triggerNode = withAgent.nodes.find(
+      (node) => node.kind === WorkflowNodeKind.TriggerManual,
+    );
+    const terminalNode = withAgent.nodes.find(
+      (node) => node.kind === WorkflowNodeKind.TerminalResponse,
+    );
+    const promptNode = withAgent.nodes.find(
+      (node) => node.id === "prompt-node",
+    );
+    const agentNode = withAgent.nodes.find((node) => node.id === "agent-node");
+
+    if (!triggerNode || !terminalNode || !promptNode || !agentNode) {
+      throw new Error("Expected workflow nodes to exist.");
+    }
+
+    const triggerToPrompt = connectWorkflowNodes(
+      withAgent,
+      {
+        sourceNodeId: triggerNode.id,
+        sourcePortId: triggerNode.outputPorts[0]?.id ?? "",
+        targetNodeId: promptNode.id,
+        targetPortId: promptNode.inputPorts[0]?.id ?? "",
+      },
+      () => "edge-trigger-prompt",
+    );
+    const promptToAgent = connectWorkflowNodes(
+      triggerToPrompt,
+      {
+        sourceNodeId: promptNode.id,
+        sourcePortId: promptNode.outputPorts[0]?.id ?? "",
+        targetNodeId: agentNode.id,
+        targetPortId: agentNode.inputPorts[0]?.id ?? "",
+      },
+      () => "edge-prompt-agent",
+    );
+    const agentToTerminal = connectWorkflowNodes(
+      promptToAgent,
+      {
+        sourceNodeId: agentNode.id,
+        sourcePortId: agentNode.outputPorts[0]?.id ?? "",
+        targetNodeId: terminalNode.id,
+        targetPortId: terminalNode.inputPorts[0]?.id ?? "",
+      },
+      () => "edge-agent-terminal",
+    );
+
+    expect(
+      readWorkflowConnectedUpstreamNodeIds(agentToTerminal, agentNode.id),
+    ).toEqual([triggerNode.id, promptNode.id]);
+    expect(
+      readWorkflowConnectedUpstreamNodeIds(agentToTerminal, promptNode.id),
+    ).toEqual([triggerNode.id]);
   });
 
   it("round-trips raw contract documents through canonical schema parsing", () => {

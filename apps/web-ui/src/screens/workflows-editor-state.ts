@@ -1143,6 +1143,37 @@ export const readWorkflowNodeSelectableOutputPaths = (
   return [];
 };
 
+export const readWorkflowConnectedUpstreamNodeIds = (
+  definition: Pick<WorkflowDefinitionRecord, "nodes" | "edges">,
+  nodeId: string,
+): ReadonlyArray<string> => {
+  const upstreamIds = new Set<string>();
+  collectWorkflowConnectedUpstreamNodeIds(definition, nodeId, upstreamIds);
+
+  return definition.nodes
+    .filter((node) => upstreamIds.has(node.id))
+    .map((node) => node.id);
+};
+
+const collectWorkflowConnectedUpstreamNodeIds = (
+  definition: Pick<WorkflowDefinitionRecord, "nodes" | "edges">,
+  nodeId: string,
+  upstreamIds: Set<string>,
+): void => {
+  for (const edge of definition.edges) {
+    if (edge.targetNodeId !== nodeId || upstreamIds.has(edge.sourceNodeId)) {
+      continue;
+    }
+
+    upstreamIds.add(edge.sourceNodeId);
+    collectWorkflowConnectedUpstreamNodeIds(
+      definition,
+      edge.sourceNodeId,
+      upstreamIds,
+    );
+  }
+};
+
 export const compileJsonContractSchema = (
   contract: JsonOutputContractRecord,
 ): JsonContractCompiledSchema => {

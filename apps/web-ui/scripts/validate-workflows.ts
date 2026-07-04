@@ -396,6 +396,7 @@ const ValidationText = {
   EditedPinnedOutputNeedle: "browser-pinned-output",
   HistoryPinnedOutputNeedle: "history-pinned-output",
   StepOutputNeedle: "step-executed-output",
+  TriggerExecutedAtToken: "$.executedAt",
   LegacyProviderError: "Workflow 06.6 supports codex-cli profiles only.",
 } as const;
 
@@ -522,6 +523,42 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!savedDefinition) {
       throw new Error("Expected saved workflow definition before history QA.");
     }
+    const definitionWithAgent = addConnectedAgentNode(savedDefinition);
+    const triggerNode = definitionWithAgent.nodes.find(
+      (node) => node.kind === WorkflowNodeKind.TriggerManual,
+    );
+    if (!triggerNode) {
+      throw new Error("Expected trigger node for executedAt variable QA.");
+    }
+    stubServer.state.definitions = [definitionWithAgent];
+
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForNodeCardCount(page, 3);
+    const agentCardTestId = await readNodeCardTestIdByText(page, "Agent step");
+    await doubleClickByTestId(page, agentCardTestId);
+    await waitForPageText(page, "Agent configuration");
+    await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
+    await waitForTestId(page, WorkflowSelector.DeepEditorModal);
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}node-${triggerNode.id}-${ValidationText.TriggerExecutedAtToken}`,
+    );
+    await clickByExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}node-${triggerNode.id}-${ValidationText.TriggerExecutedAtToken}`,
+    );
+    await waitForTextAreaToContain(
+      page,
+      WorkflowSelector.DeepEditorPromptInput,
+      `{{var|node_output|${triggerNode.id}|${ValidationText.TriggerExecutedAtToken}}}`,
+    );
+    await clickByTestId(page, WorkflowSelector.DeepEditorClose);
+    await waitForMissingTestId(page, WorkflowSelector.DeepEditorModal);
+    await clickButtonByTitle(page, "Close editor");
+    await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
+
     const connectedHistoryDefinition =
       ensureHistoryNavigationEdge(savedDefinition);
     stubServer.state.definitions = [connectedHistoryDefinition];
@@ -1230,6 +1267,23 @@ async function clickByTestId(page: Page, testId: string): Promise<void> {
   }
 }
 
+async function clickByExactTestId(page: Page, testId: string): Promise<void> {
+  const clicked = await page.evaluate((selector: string) => {
+    const element = Array.from(document.querySelectorAll("[data-testid]")).find(
+      (entry) => entry.getAttribute("data-testid") === selector,
+    );
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+    element.click();
+    return true;
+  }, testId);
+
+  if (!clicked) {
+    throw new Error(`Could not click ${testId}.`);
+  }
+}
+
 async function doubleClickByTestId(page: Page, testId: string): Promise<void> {
   const point = await readElementCenterPoint(page, testId);
   await page.mouse.click(point.x, point.y, { clickCount: 2 });
@@ -1387,6 +1441,31 @@ async function waitForTextAreaValue(
   );
 }
 
+async function waitForTextAreaToContain(
+  page: Page,
+  testId: string,
+  expectedNeedle: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const value = await page.evaluate((selector: string) => {
+        const element = document.querySelector(`[data-testid="${selector}"]`);
+        if (!(element instanceof HTMLTextAreaElement)) {
+          return null;
+        }
+        return element.value;
+      }, testId);
+
+      return value?.includes(expectedNeedle) ?? false;
+    },
+    `textarea ${testId} contains ${expectedNeedle}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function waitForPageText(page: Page, text: string): Promise<void> {
   await waitForCondition(
     async () => {
@@ -1477,6 +1556,24 @@ async function waitForTestId(page: Page, testId: string): Promise<void> {
       const exists = await page.evaluate((selector: string) => {
         const element = document.querySelector(`[data-testid="${selector}"]`);
         return element instanceof Element;
+      }, testId);
+      return exists;
+    },
+    `test id "${testId}"`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForExactTestId(page: Page, testId: string): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const exists = await page.evaluate((selector: string) => {
+        return Array.from(document.querySelectorAll("[data-testid]")).some(
+          (entry) => entry.getAttribute("data-testid") === selector,
+        );
       }, testId);
       return exists;
     },
@@ -1619,6 +1716,85 @@ function ensureHistoryNavigationEdge(
         sourceNodeId: sourceNode.id,
         sourcePortId: sourcePort.id,
         targetNodeId: targetNode.id,
+        targetPortId: targetPort.id,
+        mapping: {
+          mode: "passthrough",
+          entries: [],
+        },
+      },
+    ],
+  };
+}
+
+function addConnectedAgentNode(
+  definition: StubWorkflowDefinitionRecord,
+): StubWorkflowDefinitionRecord {
+  if (definition.nodes.some((node) => node.id === "node-agent-executed-at")) {
+    return definition;
+  }
+
+  const sourceNode = definition.nodes.find(
+    (node) => node.kind === WorkflowNodeKind.TriggerManual,
+  );
+  const sourcePort = sourceNode?.outputPorts[0];
+
+  if (!sourceNode || !sourcePort) {
+    throw new Error("Expected trigger port for executedAt variable QA.");
+  }
+
+  const agentNode: StubWorkflowNodeRecord = {
+    id: "node-agent-executed-at",
+    kind: WorkflowNodeKind.AiAgent,
+    label: "Agent step",
+    position: {
+      x: sourceNode.position.x + 320,
+      y: sourceNode.position.y,
+    },
+    width: 260,
+    collapsed: false,
+    config: {
+      role: "executor",
+      prompt: "",
+      provider: {
+        providerId: "custom:custom",
+        modelId: "gpt-5",
+        reasoningLevel: "medium",
+        temperature: 0.2,
+        verbosity: "medium",
+      },
+    },
+    inputPorts: [
+      {
+        id: "input",
+        name: "Input",
+        acceptsMany: true,
+      },
+    ],
+    outputPorts: [
+      {
+        id: "output",
+        name: "Output",
+        acceptsMany: true,
+      },
+    ],
+    attachedGuardrails: [],
+  };
+  const targetPort = agentNode.inputPorts[0];
+
+  if (!targetPort) {
+    throw new Error("Expected agent input port for executedAt variable QA.");
+  }
+
+  return {
+    ...definition,
+    nodes: [...definition.nodes, agentNode],
+    edges: [
+      ...definition.edges,
+      {
+        id: "edge-trigger-agent-executed-at",
+        sourceNodeId: sourceNode.id,
+        sourcePortId: sourcePort.id,
+        targetNodeId: agentNode.id,
         targetPortId: targetPort.id,
         mapping: {
           mode: "passthrough",

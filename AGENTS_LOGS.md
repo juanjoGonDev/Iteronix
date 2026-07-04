@@ -3860,3 +3860,23 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-04 22:55 (Europe/Madrid) — Workflow Connected Variable Scope
+
+- Summary
+  - Implemented the next smallest Workflows feature slice: deep editor node-output variables are now scoped to connected upstream ancestors instead of every non-selected node.
+- Decisions
+  - Keep asset-level deep editing unchanged; only node-target deep editors restrict previous-node outputs by graph ancestry.
+  - Preserve Manual trigger metadata ($.executedAt) as a selectable output when the trigger is actually upstream of the edited node.
+- Changes
+  - Added `readWorkflowConnectedUpstreamNodeIds` in `apps/web-ui/src/screens/workflows-editor-state.ts`.
+  - Updated `apps/web-ui/src/screens/Workflows.ts` to use connected upstream node ids for previous output variable tokens.
+  - Extended `apps/web-ui/scripts/validate-workflows.ts` with a connected trigger → agent browser path that inserts `$.executedAt` into the agent prompt.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts --passWithNoTests` failed first, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` failed first on helper input type, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first on brittle text assertion, then PASS after exact test-id helpers.
+- Issues/Risks
+  - Browser validation token IDs can include `$` and `.`, so exact `data-testid` lookup is safer than CSS selector interpolation for variable tokens.
+- Next
+  - Run full gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.

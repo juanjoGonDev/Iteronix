@@ -95,6 +95,7 @@ import {
   readNodeKindLabel,
   readNodeKindsForPalette,
   readWorkflowNodeSelectableOutputPaths,
+  readWorkflowConnectedUpstreamNodeIds,
   removeWorkflowEdge,
   removeWorkflowNode,
   removeJsonSchemaProperty,
@@ -6974,9 +6975,17 @@ export class WorkflowsScreen extends Component<
   ): ReadonlyArray<WorkflowVariableGroup> {
     const workflow = this.state.draftWorkflow;
     const targetNodeId = target.type === "node" ? target.id : null;
+    const upstreamNodeIds =
+      workflow && targetNodeId
+        ? new Set(readWorkflowConnectedUpstreamNodeIds(workflow, targetNodeId))
+        : null;
     const upstreamTokens = workflow
       ? workflow.nodes
-          .filter((node) => node.id !== targetNodeId)
+          .filter(
+            (node) =>
+              node.id !== targetNodeId &&
+              (upstreamNodeIds === null || upstreamNodeIds.has(node.id)),
+          )
           .flatMap((node) =>
             readWorkflowNodeSelectableOutputPaths(node).map((path) => ({
               id: `node-${node.id}-${path}`,
