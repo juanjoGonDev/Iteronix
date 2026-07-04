@@ -88,6 +88,7 @@ const WorkflowSelector = {
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  OutputPinControl: "workflows-output-pin-control",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
   VariableTokenPrefix: "workflows-variable-token-",
   OutputContractAddField: "workflows-output-contract-add-field",
@@ -521,13 +522,34 @@ async function validateWorkflowsScreen(): Promise<void> {
       createPinnedOutputExecutionFixture(savedDefinition),
     ];
 
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForNodeCardCount(page, 2);
     await clickByTestId(page, WorkflowSelector.SectionHistory);
     await waitForExecutionCardCount(page, 1);
     await mouseClickByTestId(
       page,
       `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPinnedId}`,
     );
+    await waitForExecutionCardSelected(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPinnedId}`,
+    );
     await waitForPageText(page, "Autosave");
+    const selectedHistoryResponseCardTestId = await readNodeCardTestIdByText(
+      page,
+      "Response",
+    );
+    await mouseClickByTestId(page, selectedHistoryResponseCardTestId);
+    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await clickByTestId(page, WorkflowSelector.OutputPinControl);
+    await waitForPinnedDefinitionOutput(
+      stubServer.state,
+      ValidationText.HistoryPinnedOutputNeedle,
+    );
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
+    await clickButtonByTitle(page, "Close editor");
 
     await page.reload({
       waitUntil: "networkidle0",
@@ -538,7 +560,8 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
-    await waitForPageText(page, ValidationText.EditedPinnedOutputNeedle);
+    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
     await captureBrowserValidationScreenshot({
       page,
@@ -1377,6 +1400,26 @@ async function waitForNodeCardCount(
       return count === expectedCount;
     },
     `node card count ${String(expectedCount)}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForExecutionCardSelected(
+  page: Page,
+  testId: string,
+): Promise<void> {
+  await waitForCondition(
+    async () =>
+      page.evaluate((targetTestId) => {
+        const element = document.querySelector(
+          `[data-testid="${targetTestId}"]`,
+        );
+        return element?.className.includes("bg-[#333333]") ?? false;
+      }, testId),
+    `selected execution card ${testId}`,
     {
       timeoutMs: ValidationConfig.UiPollingTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs,

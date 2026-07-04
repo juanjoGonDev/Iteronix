@@ -3772,3 +3772,44 @@
   - The history smoke path verifies selection and persisted manual pin reload; direct history-output pinning still needs a focused UI follow-up.
 - Next
   - Commit, push with hooks enabled, and monitor CI.
+
+### 2026-07-04 18:15 (Europe/Madrid) — Workflow History Output Pin Validation
+
+- Summary
+  - Added a focused Workflows browser validation path for pinning output directly from a selected historical execution.
+- Decisions
+  - Preserve `debugExecutionId` when opening the n8n-like node editor from a selected execution so the modal shows historical output, not stale pinned/session output.
+  - Use a stable `workflows-output-pin-control` selector for browser validation instead of relying on icon-only title text.
+  - Historical execution output takes precedence over pinned output while a historical execution context is active; pinned output remains the fallback outside explicit history/live contexts.
+- Changes
+  - `apps/web-ui/src/screens/Workflows.ts` now keeps the selected execution context when opening node editor modals and compares the displayed output before deciding pin/overwrite actions.
+  - `apps/web-ui/scripts/validate-workflows.ts` now covers history selection → historical output pin → persisted definition check → reload → purple pin/output verification.
+- Commands
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts --passWithNoTests` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first against stale dist/old close title, then PASS after rebuild and script alignment.
+- Issues/Risks
+  - `validate:workflows` serves the compiled web-ui dist, so source edits require a web-ui build before browser validation reflects them.
+- Next
+  - Run full quality gates, commit, push with hooks enabled, and verify remote CI.
+
+### 2026-07-04 18:18 (Europe/Madrid) — Workflow History Output Pin Verification
+
+- Summary
+  - Completed validation for historical execution output pinning and prepared the change for normal hook-protected commit/push.
+- Decisions
+  - Keep the browser validation focused on the current modal UX: history selection, n8n-like node modal, output pin, reload, and pinned output rehydration.
+- Changes
+  - No additional production changes after the final validation pass.
+- Commands
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 lint` PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 test` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+- Issues/Risks
+  - Local git tests emit expected temp-repository CRLF warnings on Windows.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

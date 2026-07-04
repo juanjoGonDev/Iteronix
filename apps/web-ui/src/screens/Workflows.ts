@@ -257,6 +257,7 @@ const WorkflowScreenSelector = {
   DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  OutputPinControl: "workflows-output-pin-control",
   DeepEditorTabPrompt: "workflows-deep-editor-tab-prompt",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
   DeepEditorTabPreview: "workflows-deep-editor-tab-preview",
@@ -3149,8 +3150,13 @@ export class WorkflowsScreen extends Component<
   }
 
   private openSelectionEditorModal(selection?: WorkflowSelection): void {
+    const debugExecutionId =
+      selection?.type === "node" && this.state.selection.type === "execution"
+        ? this.state.selection.id
+        : this.state.debugExecutionId;
     this.setState({
       ...(selection ? { selection } : {}),
+      debugExecutionId,
       editorModalOpen: true,
     });
   }
@@ -5087,8 +5093,11 @@ export class WorkflowsScreen extends Component<
     context: WorkflowNodeDebugContext,
   ): HTMLElement {
     const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
+      currentPinnedOutput: readWorkflowPinnedTestOutputFromDefinition(
+        context.workflow,
+      ),
       nextNodeId: context.node.id,
+      nextOutputSnapshot: context.outputValue,
       hasOutput: context.outputValue !== undefined,
     });
     const active = action === "unpin";
@@ -5097,6 +5106,7 @@ export class WorkflowsScreen extends Component<
       icon: "push_pin",
       tooltip: active ? "Unpin test output" : "Pin output as test response",
       disabled: action === "disabled",
+      "data-testid": WorkflowScreenSelector.OutputPinControl,
       ...(active
         ? { className: "border-primary/60 bg-primary/15 text-primary" }
         : {}),
@@ -5226,14 +5236,15 @@ export class WorkflowsScreen extends Component<
     const outputTextarea = document.querySelector<HTMLTextAreaElement>(
       `[data-testid="${WorkflowScreenSelector.OutputEditorTextarea}"]`,
     );
-    const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
-      nextNodeId: editor.nodeId,
-      hasOutput: true,
-    });
     const outputSnapshot = parseWorkflowEditedOutputSnapshot(
       outputTextarea?.value ?? this.outputEditorDraftText ?? editor.text,
     );
+    const action = readWorkflowPinnedOutputAction({
+      currentPinnedOutput: this.state.pinnedTestOutput,
+      nextNodeId: editor.nodeId,
+      nextOutputSnapshot: outputSnapshot,
+      hasOutput: true,
+    });
     await this.handleTogglePinnedTestOutputForNode(
       editor.nodeId,
       outputSnapshot,
@@ -5609,10 +5620,13 @@ export class WorkflowsScreen extends Component<
         ? this.state.pinnedTestOutput.outputSnapshot
         : undefined;
     const outputValue =
-      liveRun?.outputSnapshot ??
-      (liveRun?.outputText.trim().length ? liveRun.outputText : undefined) ??
-      persistedRun?.outputSnapshot ??
-      pinnedOutputValue;
+      execution !== null
+        ? persistedRun?.outputSnapshot
+        : (liveRun?.outputSnapshot ??
+          (liveRun?.outputText.trim().length
+            ? liveRun.outputText
+            : undefined) ??
+          pinnedOutputValue);
     const debugStatus = liveRun?.status ?? persistedRun?.status;
     const statusTone = readWorkflowDebugStatusTone({
       ...(debugStatus ? { status: debugStatus } : {}),
@@ -10298,6 +10312,16 @@ export class WorkflowsScreen extends Component<
       this.state.selection.type === "execution" ||
       this.state.liveExecution !== null
     ) {
+      if (this.state.selection.type === "execution") {
+        this.setState({
+          debugExecutionId: this.state.selection.id,
+          executionNodeModal: null,
+          selection: { type: "node", id: nodeId },
+          editorModalOpen: true,
+        });
+        return;
+      }
+
       this.openExecutionNodeModal(nodeId);
       return;
     }
