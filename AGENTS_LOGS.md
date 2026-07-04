@@ -3840,3 +3840,23 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-04 21:43 (Europe/Madrid) — Workflow Stabilization Browser Sweep
+
+- Summary
+  - Audited the current Workflows regression surface and hardened the browser validation before starting the next feature.
+- Decisions
+  - Keep production code unchanged because the audit found coverage gaps rather than a confirmed runtime defect.
+  - Exercise execute-step through a stubbed `/workflows/executions/stream-node` SSE path so the validation covers the same live modal/update path as the real UI.
+- Changes
+  - Extended `apps/web-ui/scripts/validate-workflows.ts` to validate execute-step running state, modal output hydration, persisted step execution, no normal saved-toast noise, and reload fallback to pinned output instead of stale live output.
+- Commands
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` failed first on a readonly array return type, then PASS after fixing the validation helper type.
+  - `corepack pnpm@10.18.3 build` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

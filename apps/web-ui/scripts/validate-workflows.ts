@@ -52,6 +52,7 @@ const RequestPath = {
   ExecutionsList: "/workflows/executions/list",
   ExecutionsGet: "/workflows/executions/get",
   ExecutionsDelete: "/workflows/executions/delete",
+  ExecutionsStreamNode: "/workflows/executions/stream-node",
 } as const;
 
 const ResponseHeader = {
@@ -394,6 +395,7 @@ const ValidationText = {
     '{\n  "source": "manual-edit",\n  "value": "browser-pinned-output"\n}',
   EditedPinnedOutputNeedle: "browser-pinned-output",
   HistoryPinnedOutputNeedle: "history-pinned-output",
+  StepOutputNeedle: "step-executed-output",
   LegacyProviderError: "Workflow 06.6 supports codex-cli profiles only.",
 } as const;
 
@@ -578,6 +580,30 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    await clickButtonByText(page, "Execute step");
+    await waitForPageText(page, "Executing");
+    await waitForPageText(page, ValidationText.StepOutputNeedle);
+    await waitForExecutionWithOutput(
+      stubServer.state,
+      ValidationText.StepOutputNeedle,
+    );
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
+    await waitForMissingPageText(page, ValidationText.WorkflowSavedNotice);
+    await clickButtonByTitle(page, "Close editor");
+    await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
+
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForNodeCardCount(page, 2);
+    const postStepResponseCardTestId = await readNodeCardTestIdByText(
+      page,
+      "Response",
+    );
+    await doubleClickByTestId(page, postStepResponseCardTestId);
+    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await waitForMissingPageText(page, ValidationText.StepOutputNeedle);
+    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -679,6 +705,11 @@ async function handleStubRequest(
     writeJson(response, 401, {
       message: "Unauthorized",
     });
+    return;
+  }
+
+  if (requestUrl.pathname === RequestPath.ExecutionsStreamNode) {
+    await handleStreamNodeRequest(requestUrl, response, state);
     return;
   }
 
@@ -912,6 +943,102 @@ async function handleStubRequest(
   writeJson(response, 404, {
     message: "Not found",
   });
+}
+
+async function handleStreamNodeRequest(
+  requestUrl: URL,
+  response: ServerResponse,
+  state: StubServerState,
+): Promise<void> {
+  const workflowId = requestUrl.searchParams.get("workflowId") ?? "";
+  const nodeId = requestUrl.searchParams.get("nodeId") ?? "";
+  const definition = state.definitions.find((entry) => entry.id === workflowId);
+  const node = definition?.nodes.find((entry) => entry.id === nodeId);
+
+  if (!definition || !node) {
+    writeJson(response, 404, { message: "Not found" });
+    return;
+  }
+
+  const execution = createStepExecutionFixture(definition, node);
+  state.executions = upsertStubExecution(
+    state.executions,
+    createRunningStepExecutionFixture(execution),
+  );
+
+  response.writeHead(200, {
+    ...createCorsHeaders(),
+    [ResponseHeader.ContentType]: "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  writeStreamEvent(response, "workflow_started", {
+    workflowId: definition.id,
+    workflowRunId: execution.id,
+    startedAt: execution.startedAt,
+  });
+  writeStreamEvent(response, "node_started", {
+    workflowId: definition.id,
+    workflowRunId: execution.id,
+    nodeId: node.id,
+    nodeKind: node.kind,
+    label: node.label,
+    startedAt: execution.startedAt,
+  });
+  await waitForStubDelay();
+  writeStreamEvent(response, "node_completed", {
+    workflowId: definition.id,
+    workflowRunId: execution.id,
+    nodeId: node.id,
+    nodeKind: node.kind,
+    label: node.label,
+    status: "completed",
+    startedAt: execution.startedAt,
+    finishedAt: execution.finishedAt,
+    outputSnapshot: execution.nodeRuns[0]?.outputSnapshot,
+    alerts: [],
+    guardrailFindings: [],
+  });
+  state.executions = upsertStubExecution(state.executions, execution);
+  writeStreamEvent(response, "workflow_completed", {
+    workflowId: definition.id,
+    workflowRunId: execution.id,
+    finishedAt: execution.finishedAt,
+    execution,
+  });
+  response.end();
+}
+
+function writeStreamEvent(
+  response: ServerResponse,
+  eventName: string,
+  data: Record<string, unknown>,
+): void {
+  response.write(`event: ${eventName}\n`);
+  response.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function waitForStubDelay(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 250);
+  });
+}
+
+function upsertStubExecution(
+  executions: ReadonlyArray<StubExecutionRecord>,
+  execution: StubExecutionRecord,
+): StubExecutionRecord[] {
+  const existingIndex = executions.findIndex(
+    (entry) => entry.id === execution.id,
+  );
+  if (existingIndex < 0) {
+    return [execution, ...executions];
+  }
+
+  return executions.map((entry, index) =>
+    index === existingIndex ? execution : entry,
+  );
 }
 
 function createWorkspaceState(
@@ -1304,6 +1431,25 @@ async function waitForPageTexts(
     },
   );
 }
+async function waitForExecutionWithOutput(
+  state: StubServerState,
+  expectedNeedle: string,
+): Promise<void> {
+  await waitForCondition(
+    async () =>
+      state.executions.some((execution) =>
+        execution.nodeRuns.some((nodeRun) =>
+          JSON.stringify(nodeRun.outputSnapshot ?? {}).includes(expectedNeedle),
+        ),
+      ),
+    `execution output ${expectedNeedle}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function waitForPinnedDefinitionOutput(
   state: StubServerState,
   expectedNeedle: string,
@@ -1556,9 +1702,79 @@ function createPinnedOutputExecutionFixture(
   };
 }
 
+function createRunningStepExecutionFixture(
+  execution: StubExecutionRecord,
+): StubExecutionRecord {
+  const {
+    finishedAt: _finishedAt,
+    durationMs: _durationMs,
+    ...running
+  } = execution;
+  return {
+    ...running,
+    status: "running",
+    nodeRuns: execution.nodeRuns.map((run) => {
+      const {
+        finishedAt: _runFinishedAt,
+        durationMs: _runDurationMs,
+        ...runningRun
+      } = run;
+      return {
+        ...runningRun,
+        status: "running",
+      };
+    }),
+  };
+}
+
+function createStepExecutionFixture(
+  definition: StubWorkflowDefinitionRecord,
+  node: StubWorkflowNodeRecord,
+): StubExecutionRecord {
+  return {
+    id: "execution-step-response",
+    workflowId: definition.id,
+    projectId: definition.projectId,
+    triggerKind: "manual",
+    status: "completed",
+    startedAt: "2026-05-06T08:45:00.000Z",
+    finishedAt: "2026-05-06T08:45:01.000Z",
+    durationMs: 1000,
+    warningsCount: 0,
+    errorsCount: 0,
+    totals: {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCostEur: 0,
+      latencyMs: 1000,
+    },
+    contextSessionId: "ctx-step",
+    nodeRuns: [
+      {
+        id: "node-run-step-response",
+        nodeId: node.id,
+        nodeKind: node.kind,
+        status: "completed",
+        startedAt: "2026-05-06T08:45:00.000Z",
+        finishedAt: "2026-05-06T08:45:01.000Z",
+        durationMs: 1000,
+        outputSnapshot: {
+          json: {
+            source: "step",
+            value: ValidationText.StepOutputNeedle,
+          },
+        },
+        alerts: [],
+        guardrailFindings: [],
+      },
+    ],
+  };
+}
+
 function createExecutionFixtures(
   definition: StubWorkflowDefinitionRecord,
-): ReadonlyArray<StubExecutionRecord> {
+): StubExecutionRecord[] {
   const triggerNode = definition.nodes.find(
     (node) => node.kind === WorkflowNodeKind.TriggerManual,
   );
