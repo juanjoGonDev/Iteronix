@@ -296,6 +296,9 @@ const EdgeDeleteWideOffset = 58;
 const WorkflowNodePaletteDragMimeType = "application/x-iteronix-workflow-node";
 const LatestResponseSourcePath = "$";
 const LatestResponseSourceLabel = "Latest response";
+const AccumulatedOutputsSourcePath = "accumulated:$";
+const AccumulatedOutputsSourcePrefix = "accumulated:";
+const AccumulatedOutputsSourceLabel = "All previous outputs";
 const ExecutionRefreshIntervalMs = 1_500;
 const WorkflowAssetTimeoutMinuteMs = 60_000;
 const DefaultRegexTesterFlags = "";
@@ -7155,6 +7158,13 @@ export class WorkflowsScreen extends Component<
       ...(selectableSourcePaths.length > 0
         ? selectableSourcePaths
         : ["$.result"]),
+      AccumulatedOutputsSourcePath,
+      ...(sourceNode
+        ? selectableSourcePaths.map(
+            (path) =>
+              `${AccumulatedOutputsSourcePrefix}$.${sourceNode.id}${path.replace(/^\$/u, "")}`,
+          )
+        : []),
     ];
 
     return createElement(
@@ -7201,7 +7211,11 @@ export class WorkflowsScreen extends Component<
               label:
                 path === LatestResponseSourcePath
                   ? LatestResponseSourceLabel
-                  : path,
+                  : path === AccumulatedOutputsSourcePath
+                    ? AccumulatedOutputsSourceLabel
+                    : path.startsWith(AccumulatedOutputsSourcePrefix)
+                      ? `All previous · ${path.slice(AccumulatedOutputsSourcePrefix.length)}`
+                      : path,
             })),
             WorkflowScreenSelector.MappingSourcePathInput,
           ),
@@ -10749,13 +10763,10 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    const sourcePath = this.state.mappingSourcePath.trim();
     const mappingEntry: EdgeMappingEntryRecord = {
       targetPath: this.state.mappingTargetPath.trim(),
-      source: {
-        kind: "node_output",
-        nodeId: edge.sourceNodeId,
-        path: this.state.mappingSourcePath.trim(),
-      },
+      source: readMappingSourceRecord(edge.sourceNodeId, sourcePath),
     };
     const nextWorkflow = addWorkflowEdgeMappingEntry(
       this.state.draftWorkflow,
@@ -12056,11 +12067,42 @@ const readMappingSourceLabel = (entry: EdgeMappingEntryRecord): string => {
     return entry.source.path ?? "Workflow context";
   }
 
+  if (entry.source.kind === "accumulated_outputs") {
+    return entry.source.path
+      ? `${AccumulatedOutputsSourceLabel} · ${entry.source.path}`
+      : AccumulatedOutputsSourceLabel;
+  }
+
   if (!entry.source.path || entry.source.path === LatestResponseSourcePath) {
     return LatestResponseSourceLabel;
   }
 
   return entry.source.path;
+};
+
+const readMappingSourceRecord = (
+  sourceNodeId: string,
+  sourcePath: string,
+): EdgeMappingEntryRecord["source"] => {
+  if (sourcePath.startsWith(AccumulatedOutputsSourcePrefix)) {
+    return {
+      kind: "accumulated_outputs",
+      path: sourcePath.slice(AccumulatedOutputsSourcePrefix.length),
+    };
+  }
+
+  if (sourcePath === LatestResponseSourcePath) {
+    return {
+      kind: "last_node_output",
+      path: sourcePath,
+    };
+  }
+
+  return {
+    kind: "node_output",
+    nodeId: sourceNodeId,
+    path: sourcePath,
+  };
 };
 
 const readPortOffset = (index: number, total: number): number => {

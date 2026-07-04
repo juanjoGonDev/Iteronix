@@ -311,7 +311,12 @@ export type WorkflowNodeRecord = {
 export type EdgeMappingEntryRecord = {
   targetPath: string;
   source: {
-    kind: "node_output" | "context_value" | "literal";
+    kind:
+      | "node_output"
+      | "last_node_output"
+      | "accumulated_outputs"
+      | "context_value"
+      | "literal";
     nodeId?: string;
     path?: string;
     value?: string | number | boolean;

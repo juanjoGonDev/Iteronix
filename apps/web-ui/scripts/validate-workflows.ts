@@ -367,6 +367,8 @@ const ValidationText = {
   OutputContractArrayField: "tags",
   MappingTargetPath: "$.promptSummary",
   MappingSourcePath: "$.result",
+  AccumulatedOutputsSourcePath: "accumulated:$",
+  AccumulatedOutputsSourceLabel: "All previous outputs",
   GuardrailValidationPath: "$.summary",
   GuardrailValidationMessage: "Summary must be present before continuing.",
   ExecutionCleanId: "execution-clean",
@@ -539,6 +541,21 @@ async function validateWorkflowsScreen(): Promise<void> {
     const agentCardTestId = await readNodeCardTestIdByText(page, "Agent step");
     await doubleClickByTestId(page, agentCardTestId);
     await waitForPageText(page, "Agent configuration");
+    await waitForSelectOptionLabel(
+      page,
+      WorkflowSelector.MappingSourcePathInput,
+      ValidationText.AccumulatedOutputsSourceLabel,
+    );
+    await selectValueByTestId(
+      page,
+      WorkflowSelector.MappingSourcePathInput,
+      ValidationText.AccumulatedOutputsSourcePath,
+    );
+    await clickByTestId(page, WorkflowSelector.MappingAddEntry);
+    await waitForPageText(
+      page,
+      `${ValidationText.AccumulatedOutputsSourceLabel} · $`,
+    );
     await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
     await waitForTestId(page, WorkflowSelector.DeepEditorModal);
     await waitForExactTestId(
@@ -1399,6 +1416,64 @@ async function setTextAreaValueByTestId(
     throw new Error(`Could not set textarea ${testId}.`);
   }
 }
+
+async function selectValueByTestId(
+  page: Page,
+  testId: string,
+  value: string,
+): Promise<void> {
+  const updated = await page.evaluate(
+    (payload: { testId: string; value: string }) => {
+      const element = document.querySelector(
+        `[data-testid="${payload.testId}"]`,
+      );
+      if (!(element instanceof HTMLSelectElement)) {
+        return false;
+      }
+
+      element.value = payload.value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    },
+    { testId, value },
+  );
+
+  if (!updated) {
+    throw new Error(`Could not set select ${testId}.`);
+  }
+}
+
+async function waitForSelectOptionLabel(
+  page: Page,
+  testId: string,
+  label: string,
+): Promise<void> {
+  await waitForCondition(
+    async () =>
+      page.evaluate(
+        (payload: { testId: string; label: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${payload.testId}"]`,
+          );
+          if (!(element instanceof HTMLSelectElement)) {
+            return false;
+          }
+
+          return Array.from(element.options).some(
+            (option) => option.textContent?.trim() === payload.label,
+          );
+        },
+        { testId, label },
+      ),
+    `select option ${label}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function readNodeCardTestIdByText(
   page: Page,
   text: string,

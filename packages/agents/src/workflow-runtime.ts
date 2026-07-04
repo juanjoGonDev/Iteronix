@@ -1070,7 +1070,12 @@ const readNodeInput = (
       writePathValue(
         mapped,
         normalizeTargetPath(entry.targetPath),
-        readMappingSourceValue(entry.source, outputs, envelope),
+        readMappingSourceValue({
+          source: entry.source,
+          edge,
+          outputs,
+          envelope,
+        }),
       );
     }
   }
@@ -1123,7 +1128,12 @@ const renderTemplateMapping = (
   edge.mapping.entries
     .map((entry) =>
       serializeNodeInput(
-        readMappingSourceValue(entry.source, outputs, envelope),
+        readMappingSourceValue({
+          source: entry.source,
+          edge,
+          outputs,
+          envelope,
+        }),
       ),
     )
     .filter((value) => value.length > 0)
@@ -1196,25 +1206,48 @@ const collectAncestorNodeIds = (
   }
 };
 
-const readMappingSourceValue = (
-  source: WorkflowEdgeRecord["mapping"]["entries"][number]["source"],
-  outputs: Map<string, unknown>,
-  envelope: WorkflowContextEnvelope,
-): unknown => {
+const readMappingSourceValue = (input: {
+  source: WorkflowEdgeRecord["mapping"]["entries"][number]["source"];
+  edge: WorkflowEdgeRecord;
+  outputs: Map<string, unknown>;
+  envelope: WorkflowContextEnvelope;
+}): unknown => {
+  const source = input.source;
   if (source.kind === "literal") {
     return source.value;
   }
 
   if (source.kind === "context_value") {
-    return readPathValue(envelope.variables, normalizeTargetPath(source.path));
+    return readPathValue(
+      input.envelope.variables,
+      normalizeTargetPath(source.path),
+    );
   }
 
-  const nodeOutput = source.nodeId ? outputs.get(source.nodeId) : undefined;
-  if (!source.path) {
-    return nodeOutput;
+  if (source.kind === "last_node_output") {
+    return readSourcePathValue(
+      input.outputs.get(input.edge.sourceNodeId),
+      source.path,
+    );
   }
 
-  return readPathValue(nodeOutput, normalizeTargetPath(source.path));
+  if (source.kind === "accumulated_outputs") {
+    return readSourcePathValue(Object.fromEntries(input.outputs), source.path);
+  }
+
+  const nodeOutput = source.nodeId
+    ? input.outputs.get(source.nodeId)
+    : undefined;
+
+  return readSourcePathValue(nodeOutput, source.path);
+};
+
+const readSourcePathValue = (value: unknown, path: string | undefined) => {
+  if (!path) {
+    return value;
+  }
+
+  return readPathValue(value, normalizeTargetPath(path));
 };
 
 const normalizeTargetPath = (value?: string): ReadonlyArray<string> => {

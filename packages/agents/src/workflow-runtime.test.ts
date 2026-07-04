@@ -462,6 +462,31 @@ describe("workflow runtime", () => {
     expect(providerPrompts.at(-1)).toContain('"firstName": "First item"');
     expect(providerPrompts.at(-1)).toContain('"total": 1');
   });
+
+  it("maps last-node and accumulated outputs through dynamic paths", async () => {
+    const providerPrompts: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push(request.prompt);
+        return {
+          outputText:
+            request.node.id === "node-provider-source"
+              ? '{"items":[{"name":"First item"}],"meta":{"total":1}}'
+              : '{"result":"Done"}',
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createDynamicOutputReferenceWorkflowDefinitionRecord(),
+      assets: [],
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(providerPrompts.at(-1)).toContain('"lastItemName": "First item"');
+    expect(providerPrompts.at(-1)).toContain('"accumulatedTotal": 1');
+  });
 });
 
 const isEventOfType = <TType extends string>(
@@ -684,6 +709,55 @@ const createNestedJsonMappingWorkflowDefinitionRecord =
                 kind: "node_output" as const,
                 nodeId: "node-provider-source",
                 path: "$.meta.total",
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+const createDynamicOutputReferenceWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-source",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return items.",
+        outputContract: createItemsOutputContract(),
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-2", "gpt-2"),
+        prompt: "Use dynamic fields.",
+        outputContract: createResultOutputContract(),
+      }),
+    ],
+    edges: [
+      {
+        ...createEdgeRecord(
+          "edge-provider-dynamic",
+          "node-provider-source",
+          "node-provider-target",
+        ),
+        mapping: {
+          mode: "object" as const,
+          entries: [
+            {
+              targetPath: "$.lastItemName",
+              source: {
+                kind: "last_node_output" as const,
+                path: "$.items[0].name",
+              },
+            },
+            {
+              targetPath: "$.accumulatedTotal",
+              source: {
+                kind: "accumulated_outputs" as const,
+                path: "$.node-provider-source.meta.total",
               },
             },
           ],

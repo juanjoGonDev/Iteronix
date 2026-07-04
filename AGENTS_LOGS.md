@@ -3880,3 +3880,30 @@
   - Browser validation token IDs can include `$` and `.`, so exact `data-testid` lookup is safer than CSS selector interpolation for variable tokens.
 - Next
   - Run full gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 00:31 (Europe/Madrid) — Workflow Dynamic Output References
+
+- Summary
+  - Added dynamic Workflows output references for latest upstream output and accumulated previous outputs.
+- Decisions
+  - Preserve existing `node_output` mappings for saved workflows while adding explicit `last_node_output` and `accumulated_outputs` mapping source kinds.
+  - Keep UI change minimal: the node input mapping editor exposes accumulated outputs as selectable source paths without reintroducing any sidebar inspector.
+- Changes
+  - `packages/shared/src/workflows.ts` and `apps/web-ui/src/screens/workflows-editor-state.ts` extend mapping source kinds.
+  - `packages/agents/src/workflow-runtime.ts` resolves latest-upstream and accumulated-output sources through the existing nested path/array-index reader.
+  - `packages/agents/src/workflow-runtime.test.ts` adds the red/green regression for nested dynamic output references.
+  - `apps/web-ui/src/screens/Workflows.ts` exposes accumulated-output mapping options and writes the new source kinds.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates the mapping UI path in the browser flow.
+  - `PLAN.md` records the 06.6 refinement.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-runtime.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-runtime.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first on an over-strict persistence wait, then PASS after validating the UI mapping row directly.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

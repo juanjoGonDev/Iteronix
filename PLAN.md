@@ -778,6 +778,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - `apps/web-ui/src/screens/Workflows.ts` now renders persisted guardrail findings in the execution inspector without inflating the workflow-level attention model with non-alert success state
     - `apps/web-ui/scripts/validate-workflows.ts` now proves execution detail hydration for persisted guardrail findings in the real browser flow
     - Validation passed again: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:workflows`
+  - `06.6` dynamic output reference refinement completed on `2026-07-05`:
+    - Workflow edge mappings now support explicit latest-upstream and accumulated-output sources, including nested paths and array indexes
+    - The Workflows mapping UI exposes accumulated previous outputs as a selectable source without changing the modal-first editor model
+    - Runtime and browser validations cover dynamic output references before the next feature slice
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows
