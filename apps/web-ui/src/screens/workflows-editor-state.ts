@@ -329,6 +329,13 @@ export type WorkflowExpressionFilterItem = {
   groupLabel: string;
 };
 
+export type WorkflowExpressionUsageHintRecord = {
+  id: string;
+  kindLabel: string;
+  label: string;
+  detail: string;
+};
+
 export type WorkflowNodeRecord = {
   id: string;
   kind: WorkflowNodeKind;
@@ -1366,6 +1373,32 @@ export const filterWorkflowExpressionItems = <
     return terms.every((term) => haystack.includes(term));
   });
 };
+
+export const readWorkflowExpressionUsageHints = (input: {
+  value: string;
+  resolveSourceLabel?: (sourceId: string) => string | undefined;
+}): ReadonlyArray<WorkflowExpressionUsageHintRecord> =>
+  parseWorkflowExpression(input.value).segments.flatMap((segment) => {
+    if (segment.kind !== WorkflowExpressionSegmentKind.Variable) {
+      return [];
+    }
+
+    const reference = segment.reference;
+    const kindLabel = readWorkflowExpressionVariableKindLabel(reference.kind);
+    const sourceLabel = readWorkflowExpressionUsageSourceLabel(
+      reference,
+      input.resolveSourceLabel,
+    );
+
+    return [
+      {
+        id: `${reference.kind}:${reference.sourceId ?? ""}:${reference.path}`,
+        kindLabel,
+        label: sourceLabel ? `${kindLabel} · ${sourceLabel}` : kindLabel,
+        detail: reference.path,
+      },
+    ];
+  });
 
 export const addWorkflowEdgeMappingEntry = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
@@ -2790,6 +2823,55 @@ const buildWorkflowExpressionToken = (
   reference.sourceId
     ? `{{var|${reference.kind}|${reference.sourceId}|${reference.path}}}`
     : `{{var|${reference.kind}||${reference.path}}}`;
+
+const readWorkflowExpressionVariableKindLabel = (
+  kind: WorkflowExpressionVariableKind,
+): string => {
+  if (kind === WorkflowExpressionVariableKind.NodeOutput) {
+    return "Previous node output";
+  }
+
+  if (kind === WorkflowExpressionVariableKind.LastNodeOutput) {
+    return "Last upstream output";
+  }
+
+  if (kind === WorkflowExpressionVariableKind.AccumulatedOutputs) {
+    return "Accumulated outputs";
+  }
+
+  if (kind === WorkflowExpressionVariableKind.CurrentInput) {
+    return "Current input";
+  }
+
+  if (kind === WorkflowExpressionVariableKind.WorkflowContext) {
+    return "Workflow context";
+  }
+
+  return "Reusable asset output";
+};
+
+const readWorkflowExpressionUsageSourceLabel = (
+  reference: WorkflowExpressionVariableReference,
+  resolveSourceLabel: ((sourceId: string) => string | undefined) | undefined,
+): string | undefined => {
+  if (reference.sourceId) {
+    return resolveSourceLabel?.(reference.sourceId);
+  }
+
+  if (reference.kind !== WorkflowExpressionVariableKind.AccumulatedOutputs) {
+    return undefined;
+  }
+
+  const sourceId = readAccumulatedWorkflowExpressionSourceId(reference.path);
+  return sourceId ? resolveSourceLabel?.(sourceId) : undefined;
+};
+
+const readAccumulatedWorkflowExpressionSourceId = (
+  path: string,
+): string | undefined => {
+  const match = /^\$\.([^.[]+)/u.exec(path);
+  return match?.[1];
+};
 
 const splitWorkflowExpressionSegments = (
   value: string,

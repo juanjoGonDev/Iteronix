@@ -84,6 +84,7 @@ const WorkflowSelector = {
   DeepEditorModal: "workflows-deep-editor-modal",
   DeepEditorClose: "workflows-deep-editor-close",
   DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
+  DeepEditorPromptHints: "workflows-deep-editor-prompt-hints",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   DeepEditorApplyRawJson: "workflows-deep-editor-apply-raw-json",
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
@@ -117,6 +118,7 @@ const WorkflowSelector = {
     "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
   GuardrailValidationValueInput: "workflows-guardrail-validation-value-input",
+  GuardrailExpressionHints: "workflows-guardrail-expression-hints",
   GuardrailValidationVariablePrefix: "workflows-guardrail-variable-",
   GuardrailValidationMessageInput:
     "workflows-guardrail-validation-message-input",
@@ -583,6 +585,9 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.DeepEditorPromptInput,
       `{{var|node_output|${triggerNode.id}|${ValidationText.TriggerExecutedAtToken}}}`,
     );
+    await waitForTestId(page, WorkflowSelector.DeepEditorPromptHints);
+    await waitForPageText(page, "Previous node output · Manual trigger");
+    await waitForPageText(page, ValidationText.TriggerExecutedAtToken);
     await setInputValueByTestId(
       page,
       WorkflowSelector.VariableSearchInput,
@@ -666,6 +671,9 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.GuardrailValidationValueInput,
       ValidationText.GuardrailLastOutputToken,
     );
+    await waitForTestId(page, WorkflowSelector.GuardrailExpressionHints);
+    await waitForPageText(page, "Last upstream output");
+    await waitForPageText(page, "$.result");
     await clickButtonByTitle(page, "Close editor");
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
 

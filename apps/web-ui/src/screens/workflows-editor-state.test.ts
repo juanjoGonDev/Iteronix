@@ -24,6 +24,7 @@ import {
   renameJsonSchemaProperty,
   readJsonContractValidation,
   readGuardrailDefinitionValidity,
+  readWorkflowExpressionUsageHints,
   parseJsonOutputContractDocument,
   parseWorkflowExpression,
   safeParseJsonContractValue,
@@ -914,6 +915,36 @@ describe("workflows editor state", () => {
       filterWorkflowExpressionItems(items, "$.testing").map((item) => item.id),
     ).toEqual(["accumulated"]);
     expect(filterWorkflowExpressionItems(items, "   ")).toHaveLength(3);
+  });
+
+  it("describes inserted workflow expression tokens for usage hints", () => {
+    const hints = readWorkflowExpressionUsageHints({
+      value:
+        "From {{var|node_output|node-trigger|$.executedAt}} and {{var|last_node_output||$.result}} then {{var|accumulated_outputs||$.node-trigger.executedAt}}",
+      resolveSourceLabel: (sourceId) =>
+        sourceId === "node-trigger" ? "Manual trigger" : undefined,
+    });
+
+    expect(hints).toEqual([
+      {
+        id: "node_output:node-trigger:$.executedAt",
+        kindLabel: "Previous node output",
+        label: "Previous node output · Manual trigger",
+        detail: "$.executedAt",
+      },
+      {
+        id: "last_node_output::$.result",
+        kindLabel: "Last upstream output",
+        label: "Last upstream output",
+        detail: "$.result",
+      },
+      {
+        id: "accumulated_outputs::$.node-trigger.executedAt",
+        kindLabel: "Accumulated outputs",
+        label: "Accumulated outputs · Manual trigger",
+        detail: "$.node-trigger.executedAt",
+      },
+    ]);
   });
 
   it("exposes manual trigger metadata as selectable output paths", () => {

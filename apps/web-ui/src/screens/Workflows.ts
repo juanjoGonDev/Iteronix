@@ -90,6 +90,7 @@ import {
   readDefaultWorkflowWorkspaceId,
   readGuardrailDefinitionValidity,
   readJsonContractValidation,
+  readWorkflowExpressionUsageHints,
   readNodeAccentClassName,
   readNodeAssetKind,
   readNodeIcon,
@@ -249,6 +250,7 @@ const WorkflowScreenSelector = {
     "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
   GuardrailValidationValueInput: "workflows-guardrail-validation-value-input",
+  GuardrailExpressionHints: "workflows-guardrail-expression-hints",
   GuardrailValidationVariablePrefix: "workflows-guardrail-variable-",
   GuardrailValidationRegexTest: "workflows-guardrail-validation-regex-test",
   GuardrailValidationMessageInput:
@@ -257,6 +259,8 @@ const WorkflowScreenSelector = {
   DeepEditorOpenPrefix: "workflows-deep-editor-open-",
   DeepEditorModal: "workflows-deep-editor-modal",
   DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
+  DeepEditorPromptHints: "workflows-deep-editor-prompt-hints",
+  ExpressionHintPrefix: "workflows-expression-hint-",
   DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   OutputEditorTextarea: "workflows-output-editor-textarea",
@@ -6392,6 +6396,10 @@ export class WorkflowsScreen extends Component<
         },
         "data-testid": WorkflowScreenSelector.DeepEditorPromptInput,
       }),
+      this.renderExpressionUsageHints(
+        promptValue,
+        WorkflowScreenSelector.DeepEditorPromptHints,
+      ),
     ]);
   }
 
@@ -6716,6 +6724,68 @@ export class WorkflowsScreen extends Component<
           "rounded-lg border border-dashed border-border-dark bg-[#0f141a] px-3 py-4 text-xs text-text-secondary",
       },
       ["No variables match this search."],
+    );
+  }
+
+  private renderExpressionUsageHints(
+    value: string,
+    testId: string,
+  ): string | HTMLElement {
+    const hints = readWorkflowExpressionUsageHints({
+      value,
+      resolveSourceLabel: (sourceId) =>
+        this.readWorkflowExpressionSourceLabel(sourceId),
+    });
+
+    if (hints.length === 0) {
+      return "";
+    }
+
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-lg border border-border-dark bg-[#101720] px-3 py-3",
+        "data-testid": testId,
+      },
+      [
+        createElement(
+          "p",
+          {
+            className:
+              "text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary",
+          },
+          ["Expression previews"],
+        ),
+        createElement("div", { className: "mt-2 flex flex-wrap gap-2" }, [
+          hints.map((hint) =>
+            createElement(
+              "span",
+              {
+                key: hint.id,
+                className:
+                  "inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] text-slate-100",
+                "data-testid": `${WorkflowScreenSelector.ExpressionHintPrefix}${hint.id}`,
+              },
+              [
+                createElement("span", { className: "shrink-0 text-primary" }, [
+                  hint.kindLabel,
+                ]),
+                createElement(
+                  "span",
+                  { className: "truncate text-text-secondary" },
+                  [hint.label],
+                ),
+                createElement(
+                  "code",
+                  { className: "shrink-0 font-mono text-slate-100" },
+                  [hint.detail],
+                ),
+              ],
+            ),
+          ),
+        ]),
+      ],
     );
   }
 
@@ -7044,6 +7114,19 @@ export class WorkflowsScreen extends Component<
     return (
       this.state.assets.find((entry) => entry.id === target.id)?.body ?? ""
     );
+  }
+
+  private readWorkflowExpressionSourceLabel(
+    sourceId: string,
+  ): string | undefined {
+    const workflowNode = this.state.draftWorkflow?.nodes.find(
+      (node) => node.id === sourceId,
+    );
+    if (workflowNode) {
+      return workflowNode.label;
+    }
+
+    return this.state.assets.find((asset) => asset.id === sourceId)?.name;
   }
 
   private readDeepEditorContract(
@@ -8958,6 +9041,12 @@ export class WorkflowsScreen extends Component<
             })
           : "",
       ]),
+      this.state.guardrailValidationKind === "json_schema"
+        ? ""
+        : this.renderExpressionUsageHints(
+            this.state.guardrailValidationValue,
+            WorkflowScreenSelector.GuardrailExpressionHints,
+          ),
       this.state.guardrailValidationKind === "json_schema"
         ? ""
         : createElement("div", { className: "flex flex-wrap gap-2" }, [

@@ -4010,3 +4010,24 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-05 21:22 (Europe/Madrid) — Workflow Expression Usage Hints
+
+- Summary
+  - Added compact inline previews for inserted workflow expression tokens in prompts and guardrail validation values.
+- Decisions
+  - Keep the change UI-only/modal-only and do not alter runtime expression parsing or execution semantics.
+  - Generate usage hint metadata in `workflows-editor-state.ts` so labels and source inference stay deterministic and unit-tested.
+- Changes
+  - `apps/web-ui/src/screens/workflows-editor-state.ts` adds expression usage hint records derived from parsed expression tokens.
+  - `apps/web-ui/src/screens/Workflows.ts` renders expression preview chips under prompt and guardrail value fields, showing source kind, source label when available and path.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates prompt and guardrail expression hint visibility in the existing modal flow.
+  - `PLAN.md` records the 06.6 expression usage hints refinement.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts` failed first on missing helper, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - Full repository gates and CI verification still pending for this slice.
+- Next
+  - Run format:check, quality and build; then commit, push with hooks enabled and verify GitHub CI/CodeQL.
