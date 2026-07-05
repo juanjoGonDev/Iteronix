@@ -334,6 +334,12 @@ export type WorkflowExpressionUsageHintRecord = {
   kindLabel: string;
   label: string;
   detail: string;
+  rawToken: string;
+  sourceId?: string;
+  sourceLabel?: string;
+  status: "resolved" | "no_data" | "missing_source" | "invalid";
+  statusLabel: string;
+  preview?: string;
 };
 
 export type WorkflowNodeRecord = {
@@ -1377,28 +1383,188 @@ export const filterWorkflowExpressionItems = <
 export const readWorkflowExpressionUsageHints = (input: {
   value: string;
   resolveSourceLabel?: (sourceId: string) => string | undefined;
-}): ReadonlyArray<WorkflowExpressionUsageHintRecord> =>
-  parseWorkflowExpression(input.value).segments.flatMap((segment) => {
-    if (segment.kind !== WorkflowExpressionSegmentKind.Variable) {
-      return [];
-    }
+  resolvePreviewValue?: (
+    reference: WorkflowExpressionVariableReference,
+  ) => unknown;
+}): ReadonlyArray<WorkflowExpressionUsageHintRecord> => {
+  const validHints = parseWorkflowExpression(input.value).segments.flatMap(
+    (segment) => {
+      if (segment.kind !== WorkflowExpressionSegmentKind.Variable) {
+        return [];
+      }
 
-    const reference = segment.reference;
-    const kindLabel = readWorkflowExpressionVariableKindLabel(reference.kind);
-    const sourceLabel = readWorkflowExpressionUsageSourceLabel(
-      reference,
-      input.resolveSourceLabel,
+      const reference = segment.reference;
+      const kindLabel = readWorkflowExpressionVariableKindLabel(reference.kind);
+      const sourceLabel = readWorkflowExpressionUsageSourceLabel(
+        reference,
+        input.resolveSourceLabel,
+      );
+      const rawToken = buildWorkflowExpressionToken(reference);
+      const previewValue = input.resolvePreviewValue?.(reference);
+      const sourceId =
+        reference.sourceId ??
+        (reference.kind === WorkflowExpressionVariableKind.AccumulatedOutputs
+          ? readAccumulatedWorkflowExpressionSourceId(reference.path)
+          : undefined);
+      const status = readWorkflowExpressionUsageStatus({
+        sourceId,
+        sourceLabel,
+        previewValue,
+      });
+
+      return [
+        {
+          id: `${reference.kind}:${reference.sourceId ?? ""}:${reference.path}`,
+          kindLabel,
+          label: sourceLabel ? `${kindLabel} · ${sourceLabel}` : kindLabel,
+          detail: reference.path,
+          rawToken,
+          ...(sourceId ? { sourceId } : {}),
+          ...(sourceLabel ? { sourceLabel } : {}),
+          status,
+          statusLabel: readWorkflowExpressionUsageStatusLabel(status),
+          ...(previewValue === undefined
+            ? {}
+            : { preview: summarizeWorkflowExpressionPreview(previewValue) }),
+        },
+      ];
+    },
+  );
+
+  const validTokens = new Set(validHints.map((hint) => hint.rawToken));
+  const invalidHints = readInvalidWorkflowExpressionTokens(input.value)
+    .filter((token) => !validTokens.has(token))
+    .map(
+      (token): WorkflowExpressionUsageHintRecord => ({
+        id: `invalid:${token}`,
+        kindLabel: "Invalid expression",
+        label: "Invalid expression",
+        detail: token,
+        rawToken: token,
+        status: "invalid",
+        statusLabel: "Invalid token",
+      }),
     );
 
-    return [
-      {
-        id: `${reference.kind}:${reference.sourceId ?? ""}:${reference.path}`,
-        kindLabel,
-        label: sourceLabel ? `${kindLabel} · ${sourceLabel}` : kindLabel,
-        detail: reference.path,
-      },
-    ];
-  });
+  return [...validHints, ...invalidHints];
+};
+
+export const readWorkflowExpressionPathValue = (
+  value: unknown,
+  path: string,
+): unknown => {
+  const segments = normalizeWorkflowExpressionPath(path);
+  let current = value;
+
+  for (const segment of segments) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+
+    if (Array.isArray(current)) {
+      const index = Number.parseInt(segment, 10);
+      if (!Number.isInteger(index) || index < 0) {
+        return undefined;
+      }
+      current = current[index];
+      continue;
+    }
+
+    if (typeof current === "object") {
+      current = (current as Record<string, unknown>)[segment];
+      continue;
+    }
+
+    return undefined;
+  }
+
+  return current;
+};
+
+const readWorkflowExpressionUsageStatus = (input: {
+  sourceId: string | undefined;
+  sourceLabel: string | undefined;
+  previewValue: unknown;
+}): WorkflowExpressionUsageHintRecord["status"] => {
+  if (input.sourceId && !input.sourceLabel) {
+    return "missing_source";
+  }
+
+  return input.previewValue === undefined ? "no_data" : "resolved";
+};
+
+const readWorkflowExpressionUsageStatusLabel = (
+  status: WorkflowExpressionUsageHintRecord["status"],
+): string => {
+  if (status === "resolved") {
+    return "Resolved";
+  }
+
+  if (status === "missing_source") {
+    return "Missing source";
+  }
+
+  if (status === "invalid") {
+    return "Invalid token";
+  }
+
+  return "No preview data";
+};
+
+const summarizeWorkflowExpressionPreview = (value: unknown): string => {
+  if (value === null) {
+    return "null";
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 88 ? `${trimmed.slice(0, 85)}...` : trimmed;
+  }
+
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `Array · ${value.length.toString()} item${value.length === 1 ? "" : "s"}`;
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) {
+      return "Empty object";
+    }
+
+    return entries
+      .slice(0, 2)
+      .map(
+        ([key, entryValue]) =>
+          `${key}: ${summarizeWorkflowExpressionPreview(entryValue)}`,
+      )
+      .join(" · ");
+  }
+
+  return String(value);
+};
+
+const readInvalidWorkflowExpressionTokens = (
+  value: string,
+): ReadonlyArray<string> =>
+  [...value.matchAll(/\{\{var\|[^}]*\}\}/gu)].map((match) => match[0]);
+
+const normalizeWorkflowExpressionPath = (
+  value: string,
+): ReadonlyArray<string> =>
+  value
+    .replace(/^\$\.?/u, "")
+    .replace(/\[(\d+)\]/gu, ".$1")
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
 
 export const addWorkflowEdgeMappingEntry = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,

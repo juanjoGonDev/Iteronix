@@ -85,6 +85,9 @@ const WorkflowSelector = {
   DeepEditorClose: "workflows-deep-editor-close",
   DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
   DeepEditorPromptHints: "workflows-deep-editor-prompt-hints",
+  ExpressionHintPrefix: "workflows-expression-hint-",
+  ExpressionHintCopyPrefix: "workflows-expression-hint-copy-",
+  ExpressionHintInspectPrefix: "workflows-expression-hint-inspect-",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   DeepEditorApplyRawJson: "workflows-deep-editor-apply-raw-json",
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
@@ -586,8 +589,22 @@ async function validateWorkflowsScreen(): Promise<void> {
       `{{var|node_output|${triggerNode.id}|${ValidationText.TriggerExecutedAtToken}}}`,
     );
     await waitForTestId(page, WorkflowSelector.DeepEditorPromptHints);
+    const triggerExpressionHintId = `node_output:${triggerNode.id}:${ValidationText.TriggerExecutedAtToken}`;
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.ExpressionHintPrefix}${triggerExpressionHintId}`,
+    );
     await waitForPageText(page, "Previous node output · Manual trigger");
     await waitForPageText(page, ValidationText.TriggerExecutedAtToken);
+    await waitForPageText(page, "No preview data");
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.ExpressionHintInspectPrefix}${triggerExpressionHintId}`,
+    );
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.ExpressionHintCopyPrefix}${triggerExpressionHintId}`,
+    );
     await setInputValueByTestId(
       page,
       WorkflowSelector.VariableSearchInput,
@@ -672,6 +689,10 @@ async function validateWorkflowsScreen(): Promise<void> {
       ValidationText.GuardrailLastOutputToken,
     );
     await waitForTestId(page, WorkflowSelector.GuardrailExpressionHints);
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.ExpressionHintPrefix}last_node_output::$.result`,
+    );
     await waitForPageText(page, "Last upstream output");
     await waitForPageText(page, "$.result");
     await clickButtonByTitle(page, "Close editor");

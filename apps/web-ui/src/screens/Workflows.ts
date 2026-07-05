@@ -91,6 +91,7 @@ import {
   readGuardrailDefinitionValidity,
   readJsonContractValidation,
   readWorkflowExpressionUsageHints,
+  readWorkflowExpressionPathValue,
   readNodeAccentClassName,
   readNodeAssetKind,
   readNodeIcon,
@@ -127,6 +128,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowDefinitionUpsertInput,
   type WorkflowExecutionRecord,
+  type WorkflowExpressionUsageHintRecord,
   type WorkflowExpressionVariableReference,
   type WorkflowGuardrailFindingRecord,
   type WorkflowNodeExecutionRecord,
@@ -261,6 +263,8 @@ const WorkflowScreenSelector = {
   DeepEditorPromptInput: "workflows-deep-editor-prompt-input",
   DeepEditorPromptHints: "workflows-deep-editor-prompt-hints",
   ExpressionHintPrefix: "workflows-expression-hint-",
+  ExpressionHintCopyPrefix: "workflows-expression-hint-copy-",
+  ExpressionHintInspectPrefix: "workflows-expression-hint-inspect-",
   DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   OutputEditorTextarea: "workflows-output-editor-textarea",
@@ -6243,7 +6247,10 @@ export class WorkflowsScreen extends Component<
                   },
                   [
                     deepEditor.tab === "prompt"
-                      ? this.renderDeepEditorPromptPane(promptValue)
+                      ? this.renderDeepEditorPromptPane(
+                          promptValue,
+                          deepEditor.target,
+                        )
                       : deepEditor.tab === "output"
                         ? this.renderDeepEditorOutputPane(
                             contract,
@@ -6329,7 +6336,10 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private renderDeepEditorPromptPane(promptValue: string): HTMLElement {
+  private renderDeepEditorPromptPane(
+    promptValue: string,
+    target: DeepEditorTarget,
+  ): HTMLElement {
     return createElement("div", { className: "flex h-full flex-col gap-4" }, [
       createElement(
         "div",
@@ -6399,6 +6409,7 @@ export class WorkflowsScreen extends Component<
       this.renderExpressionUsageHints(
         promptValue,
         WorkflowScreenSelector.DeepEditorPromptHints,
+        target,
       ),
     ]);
   }
@@ -6730,11 +6741,14 @@ export class WorkflowsScreen extends Component<
   private renderExpressionUsageHints(
     value: string,
     testId: string,
+    target?: DeepEditorTarget,
   ): string | HTMLElement {
     const hints = readWorkflowExpressionUsageHints({
       value,
       resolveSourceLabel: (sourceId) =>
         this.readWorkflowExpressionSourceLabel(sourceId),
+      resolvePreviewValue: (reference) =>
+        this.readWorkflowExpressionPreviewValue(reference, target),
     });
 
     if (hints.length === 0) {
@@ -6758,35 +6772,185 @@ export class WorkflowsScreen extends Component<
           ["Expression previews"],
         ),
         createElement("div", { className: "mt-2 flex flex-wrap gap-2" }, [
-          hints.map((hint) =>
-            createElement(
-              "span",
-              {
-                key: hint.id,
-                className:
-                  "inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] text-slate-100",
-                "data-testid": `${WorkflowScreenSelector.ExpressionHintPrefix}${hint.id}`,
-              },
-              [
-                createElement("span", { className: "shrink-0 text-primary" }, [
-                  hint.kindLabel,
-                ]),
-                createElement(
-                  "span",
-                  { className: "truncate text-text-secondary" },
-                  [hint.label],
-                ),
-                createElement(
-                  "code",
-                  { className: "shrink-0 font-mono text-slate-100" },
-                  [hint.detail],
-                ),
-              ],
-            ),
-          ),
+          hints.map((hint) => this.renderExpressionUsageHint(hint)),
         ]),
       ],
     );
+  }
+
+  private renderExpressionUsageHint(
+    hint: WorkflowExpressionUsageHintRecord,
+  ): HTMLElement {
+    const statusClassName = readExpressionHintStatusClassName(hint.status);
+    return createElement(
+      "details",
+      {
+        key: hint.id,
+        className: `group max-w-full rounded-full border px-3 py-1 text-[11px] text-slate-100 transition-colors open:rounded-xl open:px-3 open:py-2 ${statusClassName}`,
+        "data-testid": `${WorkflowScreenSelector.ExpressionHintPrefix}${hint.id}`,
+      },
+      [
+        createElement(
+          "summary",
+          {
+            className:
+              "flex max-w-full cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden",
+            onClick: (event: Event) => {
+              event.preventDefault();
+              const currentTarget = event.currentTarget;
+              if (
+                currentTarget instanceof HTMLElement &&
+                currentTarget.parentElement instanceof HTMLDetailsElement
+              ) {
+                currentTarget.parentElement.open =
+                  !currentTarget.parentElement.open;
+              }
+            },
+            "data-testid": `${WorkflowScreenSelector.ExpressionHintInspectPrefix}${hint.id}`,
+          },
+          [
+            createElement("span", { className: "shrink-0 text-primary" }, [
+              hint.kindLabel,
+            ]),
+            createElement(
+              "span",
+              { className: "truncate text-text-secondary" },
+              [hint.label],
+            ),
+            createElement(
+              "code",
+              { className: "shrink-0 font-mono text-slate-100" },
+              [hint.detail],
+            ),
+            createElement("span", { className: "shrink-0 text-text-muted" }, [
+              hint.statusLabel,
+            ]),
+          ],
+        ),
+        createElement(
+          "div",
+          {
+            className:
+              "mt-2 grid gap-2 border-t border-white/10 pt-2 text-[11px] text-text-secondary",
+          },
+          [
+            this.renderExpressionUsageMeta("Raw token", hint.rawToken),
+            this.renderExpressionUsageMeta("Source kind", hint.kindLabel),
+            this.renderExpressionUsageMeta(
+              "Source",
+              hint.sourceLabel ?? hint.sourceId ?? "None",
+            ),
+            this.renderExpressionUsageMeta("Path", hint.detail),
+            this.renderExpressionUsageMeta(
+              "Preview",
+              hint.preview ?? hint.statusLabel,
+            ),
+            createElement(
+              "button",
+              {
+                type: "button",
+                className:
+                  "justify-self-start rounded-md border border-border-dark bg-[#151b22] px-2 py-1 text-[11px] text-slate-100 transition-colors hover:border-primary/60",
+                onClick: (event: Event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void this.copyWorkflowExpressionToken(hint.rawToken);
+                },
+                "data-testid": `${WorkflowScreenSelector.ExpressionHintCopyPrefix}${hint.id}`,
+              },
+              ["Copy token"],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderExpressionUsageMeta(label: string, value: string): HTMLElement {
+    return createElement("div", { className: "grid gap-1" }, [
+      createElement("span", { className: "uppercase tracking-[0.16em]" }, [
+        label,
+      ]),
+      createElement(
+        "code",
+        { className: "break-all font-mono text-slate-100" },
+        [value],
+      ),
+    ]);
+  }
+
+  private async copyWorkflowExpressionToken(rawToken: string): Promise<void> {
+    try {
+      await navigator.clipboard?.writeText(rawToken);
+    } catch {
+      return;
+    }
+  }
+
+  private readWorkflowExpressionPreviewValue(
+    reference: WorkflowExpressionVariableReference,
+    target?: DeepEditorTarget,
+  ): unknown {
+    const sourceValue = this.readWorkflowExpressionPreviewSourceValue(
+      reference,
+      target,
+    );
+    return readWorkflowExpressionPathValue(sourceValue, reference.path);
+  }
+
+  private readWorkflowExpressionPreviewSourceValue(
+    reference: WorkflowExpressionVariableReference,
+    target?: DeepEditorTarget,
+  ): unknown {
+    const outputs = this.readWorkflowDebugOutputMap(
+      this.readWorkflowDebugExecution(),
+    );
+
+    if (reference.kind === WorkflowExpressionVariableKind.NodeOutput) {
+      return reference.sourceId ? outputs.get(reference.sourceId) : undefined;
+    }
+
+    if (reference.kind === WorkflowExpressionVariableKind.LastNodeOutput) {
+      return target?.type === "node"
+        ? this.readLastUpstreamWorkflowOutput(target.id, outputs)
+        : undefined;
+    }
+
+    if (reference.kind === WorkflowExpressionVariableKind.AccumulatedOutputs) {
+      return Object.fromEntries(outputs);
+    }
+
+    if (reference.kind === WorkflowExpressionVariableKind.WorkflowContext) {
+      return {
+        workflow: {
+          name: this.state.draftWorkflow?.name ?? "",
+          language: "en",
+        },
+      };
+    }
+
+    if (reference.kind === WorkflowExpressionVariableKind.AssetOutput) {
+      const asset = this.state.assets.find(
+        (entry) => entry.id === reference.sourceId,
+      );
+      return asset?.outputContract?.sampleOutput;
+    }
+
+    return undefined;
+  }
+
+  private readLastUpstreamWorkflowOutput(
+    targetNodeId: string,
+    outputs: WorkflowDebugOutputMap,
+  ): unknown {
+    const workflow = this.state.draftWorkflow;
+    const sourceNodeId = [...(workflow?.edges ?? [])]
+      .reverse()
+      .find(
+        (edge) =>
+          edge.targetNodeId === targetNodeId && outputs.has(edge.sourceNodeId),
+      )?.sourceNodeId;
+    return sourceNodeId ? outputs.get(sourceNodeId) : undefined;
   }
 
   private renderVariableGroup(group: WorkflowVariableGroup): HTMLElement {
@@ -9046,6 +9210,9 @@ export class WorkflowsScreen extends Component<
         : this.renderExpressionUsageHints(
             this.state.guardrailValidationValue,
             WorkflowScreenSelector.GuardrailExpressionHints,
+            this.state.selection.type === "node"
+              ? { type: "node", id: this.state.selection.id }
+              : undefined,
           ),
       this.state.guardrailValidationKind === "json_schema"
         ? ""
@@ -13644,6 +13811,20 @@ const readFilteredWorkflowVariableGroups = (
 const readWorkflowVariableTokenCount = (
   groups: ReadonlyArray<WorkflowVariableGroup>,
 ): number => groups.reduce((count, group) => count + group.tokens.length, 0);
+
+const readExpressionHintStatusClassName = (
+  status: WorkflowExpressionUsageHintRecord["status"],
+): string => {
+  if (status === "resolved") {
+    return "border-emerald-400/30 bg-emerald-500/10";
+  }
+
+  if (status === "invalid" || status === "missing_source") {
+    return "border-rose-400/35 bg-rose-500/10";
+  }
+
+  return "border-amber-400/30 bg-amber-500/10";
+};
 
 const readGuardrailFindingBadgeStatus = (
   severity: WorkflowGuardrailFindingRecord["severity"],

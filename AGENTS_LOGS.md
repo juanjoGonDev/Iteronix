@@ -4031,3 +4031,24 @@
   - Full repository gates and CI verification still pending for this slice.
 - Next
   - Run format:check, quality and build; then commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-05 22:18 (Europe/Madrid) — Workflow Expression Preview Polish
+
+- Summary
+  - Added compact inspection-ready expression previews for Workflows prompt and guardrail expression tokens.
+- Decisions
+  - Keep runtime semantics unchanged: previews resolve only for UI explanation and never mutate saved expressions or execution behavior.
+  - Keep the UX modal-only: expression chips live under existing prompt and guardrail fields, with inline inspect/copy affordances instead of a sidebar.
+- Changes
+  - `apps/web-ui/src/screens/workflows-editor-state.ts` now enriches expression usage hints with raw tokens, source ids/labels, status, invalid-token detection, path resolution, and resolved preview summaries.
+  - `apps/web-ui/src/screens/Workflows.ts` renders status-colored expression chips with inspect metadata and copy-token actions, resolving previews from selected history/live/pinned outputs when available.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates expression hint chips, inspect affordance presence, copy affordance presence, and guardrail hint visibility in the existing browser flow.
+  - `apps/web-ui/src/screens/workflows-editor-state.test.ts` covers enriched hints, invalid tokens, and nested array/path preview resolution.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first on details-open browser assertion, then PASS after keeping browser validation focused on stable affordance presence.
+- Issues/Risks
+  - Full repository gates and CI verification still pending for this slice.
+- Next
+  - Run full gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.

@@ -25,6 +25,7 @@ import {
   readJsonContractValidation,
   readGuardrailDefinitionValidity,
   readWorkflowExpressionUsageHints,
+  readWorkflowExpressionPathValue,
   parseJsonOutputContractDocument,
   parseWorkflowExpression,
   safeParseJsonContractValue,
@@ -920,9 +921,23 @@ describe("workflows editor state", () => {
   it("describes inserted workflow expression tokens for usage hints", () => {
     const hints = readWorkflowExpressionUsageHints({
       value:
-        "From {{var|node_output|node-trigger|$.executedAt}} and {{var|last_node_output||$.result}} then {{var|accumulated_outputs||$.node-trigger.executedAt}}",
+        "From {{var|node_output|node-trigger|$.executedAt}} and {{var|last_node_output||$.result}} then {{var|accumulated_outputs||$.node-trigger.executedAt}} and {{var|node_output|node-missing}}",
       resolveSourceLabel: (sourceId) =>
         sourceId === "node-trigger" ? "Manual trigger" : undefined,
+      resolvePreviewValue: (reference) => {
+        if (
+          reference.kind === WorkflowExpressionVariableKind.NodeOutput &&
+          reference.sourceId === "node-trigger"
+        ) {
+          return "2026-07-05T21:30:00.000Z";
+        }
+
+        if (reference.kind === WorkflowExpressionVariableKind.LastNodeOutput) {
+          return { result: "Ready" };
+        }
+
+        return undefined;
+      },
     });
 
     expect(hints).toEqual([
@@ -931,20 +946,59 @@ describe("workflows editor state", () => {
         kindLabel: "Previous node output",
         label: "Previous node output · Manual trigger",
         detail: "$.executedAt",
+        rawToken: "{{var|node_output|node-trigger|$.executedAt}}",
+        sourceId: "node-trigger",
+        sourceLabel: "Manual trigger",
+        status: "resolved",
+        statusLabel: "Resolved",
+        preview: "2026-07-05T21:30:00.000Z",
       },
       {
         id: "last_node_output::$.result",
         kindLabel: "Last upstream output",
         label: "Last upstream output",
         detail: "$.result",
+        rawToken: "{{var|last_node_output||$.result}}",
+        status: "resolved",
+        statusLabel: "Resolved",
+        preview: "result: Ready",
       },
       {
         id: "accumulated_outputs::$.node-trigger.executedAt",
         kindLabel: "Accumulated outputs",
         label: "Accumulated outputs · Manual trigger",
         detail: "$.node-trigger.executedAt",
+        rawToken: "{{var|accumulated_outputs||$.node-trigger.executedAt}}",
+        sourceId: "node-trigger",
+        sourceLabel: "Manual trigger",
+        status: "no_data",
+        statusLabel: "No preview data",
+      },
+      {
+        id: "invalid:{{var|node_output|node-missing}}",
+        kindLabel: "Invalid expression",
+        label: "Invalid expression",
+        detail: "{{var|node_output|node-missing}}",
+        rawToken: "{{var|node_output|node-missing}}",
+        status: "invalid",
+        statusLabel: "Invalid token",
       },
     ]);
+  });
+
+  it("reads nested workflow expression preview values by path", () => {
+    const value = {
+      rows: [{ result: "first" }, { result: "second" }],
+      meta: { total: 2 },
+    };
+
+    expect(readWorkflowExpressionPathValue(value, "$.rows[1].result")).toBe(
+      "second",
+    );
+    expect(readWorkflowExpressionPathValue(value, "$.meta.total")).toBe(2);
+    expect(readWorkflowExpressionPathValue(value, "$.rows[9].result")).toBe(
+      undefined,
+    );
   });
 
   it("exposes manual trigger metadata as selectable output paths", () => {

@@ -798,6 +798,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Inserted prompt and guardrail expression tokens now render compact modal-only previews with source kind, source label when available, and JSON path
     - Expression usage hint generation is centralized in editor state helpers without changing runtime expression semantics
     - Unit and browser coverage verify prompt and guardrail hint visibility
+  - `06.6` expression preview polish completed on `2026-07-05`:
+    - Expression hint chips now expose raw token, source kind, source id/label, path, status, invalid-token warnings and resolved preview text when data exists
+    - Prompt and guardrail hints keep the modal-only authoring model with inspect/copy affordances and no runtime semantic changes
+    - Unit and browser coverage verify enriched hints, invalid tokens, nested path preview resolution and UI affordance presence
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows
