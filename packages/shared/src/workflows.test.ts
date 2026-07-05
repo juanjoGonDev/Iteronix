@@ -13,6 +13,7 @@ describe("workflow shared contracts", () => {
       assets: [],
       assetUsages: [],
       executions: [],
+      definitionVersions: [],
     });
   });
 

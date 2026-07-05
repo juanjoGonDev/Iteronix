@@ -841,3 +841,5 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 - [ ] **Histórico de versiones**: cada cambio en un prompt genera una nueva versión inmutable. El histórico debe mostrar diff entre versiones, quién cambió qué, cuándo, y permitir revertir a una versión anterior.
 - [ ] **Integración con el editor de flujos**: los nodos de tipo `asset.prompt` en el workflow editor deben poder seleccionar una versión específica de un prompt y mostrar advertencias si la versión referenciada no es la última.
 - [ ] **API de versionado**: endpoints para listar versiones de un prompt, crear nuevas versiones, obtener diff, y consultar el grafo de dependencias (qué flujos/steps usan cada versión).
+
+- 2026-07-05: Workflows now persist server-backed definition version snapshots on save, expose list/restore API endpoints, hydrate versions in the History panel, and keep local edit history as draft-only quick restore.

@@ -432,6 +432,15 @@ export type WorkflowDefinitionRecord = {
   tags: ReadonlyArray<string>;
 };
 
+export type WorkflowDefinitionVersionRecord = {
+  id: string;
+  workflowId: string;
+  projectId: string;
+  version: number;
+  createdAt: string;
+  snapshot: WorkflowDefinitionRecord;
+};
+
 export type WorkflowAssetRecord = {
   id: string;
   workspaceId: string;

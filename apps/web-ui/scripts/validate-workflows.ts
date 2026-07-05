@@ -42,6 +42,8 @@ const RequestPath = {
   WorkspaceStateUpdate: "/workspace/state/update",
   DefinitionsList: "/workflows/definitions/list",
   DefinitionsGet: "/workflows/definitions/get",
+  DefinitionsVersions: "/workflows/definitions/versions",
+  DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -278,6 +280,15 @@ type StubWorkflowDefinitionRecord = {
   tags: ReadonlyArray<string>;
 };
 
+type StubWorkflowDefinitionVersionRecord = {
+  id: string;
+  workflowId: string;
+  projectId: string;
+  version: number;
+  createdAt: string;
+  snapshot: StubWorkflowDefinitionRecord;
+};
+
 type StubExecutionRecord = {
   id: string;
   workflowId: string;
@@ -344,6 +355,7 @@ type StubAssetUsageRecord = {
 type StubServerState = {
   settings: Record<string, unknown>;
   definitions: StubWorkflowDefinitionRecord[];
+  definitionVersions: StubWorkflowDefinitionVersionRecord[];
   assets: StubWorkflowAssetRecord[];
   executions: StubExecutionRecord[];
   nextWorkflowId: number;
@@ -825,6 +837,7 @@ async function startWorkflowStubServer(): Promise<{
   const state: StubServerState = {
     settings: createDefaultWorkspaceSettings(),
     definitions: [],
+    definitionVersions: [],
     assets: [],
     executions: [],
     nextWorkflowId: 1,
@@ -938,6 +951,50 @@ async function handleStubRequest(
     return;
   }
 
+  if (requestUrl.pathname === RequestPath.DefinitionsVersions) {
+    const workflowId = readRequiredString(body, "workflowId");
+    writeJson(response, 200, {
+      versions: state.definitionVersions
+        .filter((entry) => entry.workflowId === workflowId)
+        .sort((left, right) => right.version - left.version),
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsRestoreVersion) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    if (!version) {
+      writeJson(response, 404, { message: "Not found" });
+      return;
+    }
+    const restored = {
+      ...version.snapshot,
+      id: workflowId,
+      version: version.snapshot.version + 1,
+      updatedAt: "2026-05-06T08:20:00.000Z",
+    };
+    const existingIndex = state.definitions.findIndex(
+      (entry) => entry.id === workflowId,
+    );
+    if (existingIndex >= 0) {
+      state.definitions[existingIndex] = restored;
+    } else {
+      state.definitions.push(restored);
+    }
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: restored,
+        version: state.definitionVersions.length + 1,
+      }),
+    );
+    writeJson(response, 200, { definition: restored });
+    return;
+  }
+
   if (requestUrl.pathname === RequestPath.DefinitionsUpsert) {
     const projectId = readRequiredString(body, "projectId");
     const definitionInput = readRequiredRecord(body, "definition");
@@ -965,6 +1022,12 @@ async function handleStubRequest(
       state.nextWorkflowId += 1;
       state.definitions.push(nextDefinition);
     }
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: nextDefinition,
+        version: state.definitionVersions.length + 1,
+      }),
+    );
     state.executions = [
       ...state.executions.filter(
         (execution) => execution.workflowId !== nextDefinition.id,
@@ -1293,6 +1356,20 @@ function createDefinitionRecord(input: {
       "defaultContextPolicy",
     ),
     tags: readStringArray(input.definitionInput, "tags"),
+  };
+}
+
+function createDefinitionVersionRecord(input: {
+  definition: StubWorkflowDefinitionRecord;
+  version: number;
+}): StubWorkflowDefinitionVersionRecord {
+  return {
+    id: `${input.definition.id}-version-${input.version}`,
+    workflowId: input.definition.id,
+    projectId: input.definition.projectId,
+    version: input.version,
+    createdAt: input.definition.updatedAt,
+    snapshot: input.definition,
   };
 }
 

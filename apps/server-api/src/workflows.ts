@@ -9,6 +9,7 @@ import {
   type WorkflowAssetUsageRecord,
   type WorkflowAssetRecord,
   type WorkflowDefinitionRecord,
+  type WorkflowDefinitionVersionRecord,
   type WorkflowExecutionRecord,
   WorkflowExecutionStatus,
   WorkflowNodeExecutionInputSourceKind,
@@ -94,6 +95,49 @@ export const executeWorkflowDefinitionGet = (
   },
 ): Result<WorkflowDefinitionRecord, ApiError> => {
   const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(workflow);
+};
+
+export const executeWorkflowDefinitionVersionList = (
+  input: {
+    workflowId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<ReadonlyArray<WorkflowDefinitionVersionRecord>, ApiError> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(
+    dependencies.catalog.listWorkflowVersions({
+      workflowId: input.workflowId,
+    }),
+  );
+};
+
+export const executeWorkflowDefinitionRestoreVersion = (
+  input: {
+    workflowId: string;
+    versionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const workflow = dependencies.catalog.restoreWorkflowVersion(input);
   if (!workflow) {
     return err({
       status: HttpStatus.NotFound,
@@ -548,6 +592,38 @@ export const parseWorkflowDefinitionGetRequest = (
   value: unknown,
 ): Result<{ workflowId: string }, ApiError> =>
   parseSingleIdentifierRequest(value, "workflowId");
+
+export const parseWorkflowDefinitionVersionListRequest = (
+  value: unknown,
+): Result<{ workflowId: string }, ApiError> =>
+  parseSingleIdentifierRequest(value, "workflowId");
+
+export const parseWorkflowDefinitionRestoreVersionRequest = (
+  value: unknown,
+): Result<{ workflowId: string; versionId: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId,
+  );
+  const versionId = readRequiredString(
+    value,
+    "versionId",
+    ErrorMessage.InvalidBody,
+  );
+  if (workflowId.type === ResultType.Err || versionId.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    versionId: versionId.value,
+  });
+};
 
 export const parseWorkflowAssetUpsertRequest = (
   value: unknown,

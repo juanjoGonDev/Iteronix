@@ -4052,3 +4052,12 @@
   - Full repository gates and CI verification still pending for this slice.
 - Next
   - Run full gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 22:45 (Europe/Madrid) — Workflow Version History
+
+- Summary: Added server-backed workflow definition version snapshots created on each save, plus list/restore API and a compact History-panel restore UI.
+- Decisions: Kept local edit history as draft/session-only; persisted versions live in workflow catalog state and survive workspace reloads via definitionVersions.
+- Changes: Updated shared workflow types, catalog store, server workflow contracts/routes, workspace persistence, web workflow client, Workflows history panel UI, and focused tests.
+- Commands: vitest workflow catalog/server/client focused tests; pnpm build. Full gates pending.
+- Issues/Risks: Version UI is intentionally minimal; clone/download actions are deferred to the dedicated version-history feature polish.
+- Next: Run validate:workflows, format:check, quality, build, commit, push, verify CI/CodeQL.

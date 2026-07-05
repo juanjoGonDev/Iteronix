@@ -7,7 +7,10 @@ import {
   WorkflowRecordStatus,
   WorkflowTriggerKind,
 } from "../../shared/src/workflows";
-import { createWorkflowCatalogStore } from "./workflow-catalog";
+import {
+  createWorkflowCatalogStore,
+  type WorkflowDefinitionUpsertInput,
+} from "./workflow-catalog";
 
 const BaseTime = "2026-05-06T18:00:00.000Z";
 
@@ -291,4 +294,78 @@ describe("workflow catalog store", () => {
       }),
     ).toHaveLength(0);
   });
+
+  it("stores workflow definition versions and restores an older snapshot", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "First workflow name",
+      }),
+    );
+    const updated = store.upsertWorkflow(
+      createWorkflowInput({
+        id: created.id,
+        name: "Second workflow name",
+      }),
+    );
+
+    const versions = store.listWorkflowVersions({
+      workflowId: created.id,
+    });
+
+    expect(updated.version).toBe(2);
+    expect(versions.map((version) => version.version)).toEqual([2, 1]);
+    expect(versions[1]?.snapshot.name).toBe("First workflow name");
+
+    const restored = store.restoreWorkflowVersion({
+      workflowId: created.id,
+      versionId: versions[1]?.id ?? "",
+    });
+
+    expect(restored?.version).toBe(3);
+    expect(restored?.name).toBe("First workflow name");
+    expect(store.getWorkflow(created.id)?.name).toBe("First workflow name");
+    expect(
+      store.listWorkflowVersions({
+        workflowId: created.id,
+      }),
+    ).toHaveLength(3);
+  });
+});
+
+const createWorkflowInput = (input: {
+  id?: string;
+  name: string;
+}): WorkflowDefinitionUpsertInput => ({
+  ...(input.id ? { id: input.id } : {}),
+  workspaceId: "workspace-1",
+  projectId: "project-1",
+  name: input.name,
+  description: "Description",
+  status: WorkflowRecordStatus.Draft,
+  trigger: {
+    kind: WorkflowTriggerKind.Manual,
+    enabled: true,
+    config: {},
+  },
+  viewport: {
+    x: 0,
+    y: 0,
+    zoom: 1,
+  },
+  executionPolicy: {
+    maxNodeRetries: 1,
+    allowManualCheckpointResume: true,
+  },
+  defaultContextPolicy: {
+    language: "en",
+    carryMessagesLimit: 8,
+    carryArtifactLimit: 8,
+  },
+  tags: [],
+  nodes: [],
+  edges: [],
 });

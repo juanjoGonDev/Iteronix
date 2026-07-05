@@ -7,6 +7,7 @@ import {
   type WorkflowAssetUsageRecord,
   type WorkflowCatalogState,
   type WorkflowDefinitionRecord,
+  type WorkflowDefinitionVersionRecord,
   type WorkflowExecutionRecord,
 } from "../../shared/src/workflows";
 
@@ -41,6 +42,13 @@ export type WorkflowCatalogStore = {
     projectId: string;
   }) => ReadonlyArray<WorkflowDefinitionRecord>;
   getWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
+  listWorkflowVersions: (input: {
+    workflowId: string;
+  }) => ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  restoreWorkflowVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => WorkflowDefinitionRecord | undefined;
   deleteWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
   upsertAsset: (input: WorkflowAssetUpsertInput) => WorkflowAssetRecord;
   listAssets: (input: {
@@ -69,6 +77,7 @@ export type WorkflowCatalogStore = {
 export const createWorkflowCatalogStore = (
   seed: {
     definitions?: ReadonlyArray<WorkflowDefinitionRecord>;
+    definitionVersions?: ReadonlyArray<WorkflowDefinitionVersionRecord>;
     assets?: ReadonlyArray<WorkflowAssetRecord>;
     executions?: ReadonlyArray<WorkflowExecutionRecord>;
     now?: () => Date;
@@ -76,12 +85,20 @@ export const createWorkflowCatalogStore = (
 ): WorkflowCatalogStore => {
   const now = seed.now ?? (() => new Date());
   const definitionsById = new Map<string, WorkflowDefinitionRecord>();
+  const definitionVersionsById = new Map<
+    string,
+    WorkflowDefinitionVersionRecord
+  >();
   const assetsById = new Map<string, WorkflowAssetRecord>();
   const executionsById = new Map<string, WorkflowExecutionRecord>();
   let assetUsages = createAssetUsages(seed.definitions ?? [], now);
 
   for (const definition of seed.definitions ?? []) {
     definitionsById.set(definition.id, definition);
+  }
+
+  for (const definitionVersion of seed.definitionVersions ?? []) {
+    definitionVersionsById.set(definitionVersion.id, definitionVersion);
   }
 
   for (const asset of seed.assets ?? []) {
@@ -98,6 +115,8 @@ export const createWorkflowCatalogStore = (
     const current = input.id ? definitionsById.get(input.id) : undefined;
     const next = createWorkflowRecord(input, current, now);
     definitionsById.set(next.id, next);
+    const version = createWorkflowVersionRecord(next, now);
+    definitionVersionsById.set(version.id, version);
     assetUsages = createAssetUsages(Array.from(definitionsById.values()), now);
     return next;
   };
@@ -111,6 +130,30 @@ export const createWorkflowCatalogStore = (
 
   const getWorkflow = (id: string): WorkflowDefinitionRecord | undefined =>
     definitionsById.get(id);
+
+  const listWorkflowVersions = (input: {
+    workflowId: string;
+  }): ReadonlyArray<WorkflowDefinitionVersionRecord> =>
+    Array.from(definitionVersionsById.values())
+      .filter((version) => version.workflowId === input.workflowId)
+      .sort((left, right) => right.version - left.version);
+
+  const restoreWorkflowVersion = (input: {
+    workflowId: string;
+    versionId: string;
+  }): WorkflowDefinitionRecord | undefined => {
+    const current = definitionsById.get(input.workflowId);
+    const version = definitionVersionsById.get(input.versionId);
+    if (!current || !version || version.workflowId !== input.workflowId) {
+      return undefined;
+    }
+
+    return upsertWorkflow({
+      ...version.snapshot,
+      id: current.id,
+      projectId: current.projectId,
+    });
+  };
 
   const deleteWorkflow = (id: string): WorkflowDefinitionRecord | undefined => {
     const existing = definitionsById.get(id);
@@ -228,6 +271,7 @@ export const createWorkflowCatalogStore = (
 
   const snapshot = (): WorkflowCatalogState => ({
     definitions: Array.from(definitionsById.values()),
+    definitionVersions: Array.from(definitionVersionsById.values()),
     assets: Array.from(assetsById.values()),
     assetUsages,
     executions: Array.from(executionsById.values()),
@@ -237,6 +281,8 @@ export const createWorkflowCatalogStore = (
     upsertWorkflow,
     listWorkflows,
     getWorkflow,
+    listWorkflowVersions,
+    restoreWorkflowVersion,
     deleteWorkflow,
     upsertAsset,
     listAssets,
@@ -276,6 +322,18 @@ const createWorkflowRecord = (
     tags: input.tags,
   };
 };
+
+const createWorkflowVersionRecord = (
+  workflow: WorkflowDefinitionRecord,
+  now: () => Date,
+): WorkflowDefinitionVersionRecord => ({
+  id: randomUUID(),
+  workflowId: workflow.id,
+  projectId: workflow.projectId,
+  version: workflow.version,
+  createdAt: now().toISOString(),
+  snapshot: workflow,
+});
 
 const createAssetRecord = (
   input: WorkflowAssetUpsertInput,

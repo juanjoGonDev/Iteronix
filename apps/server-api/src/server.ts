@@ -152,7 +152,9 @@ import {
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionList,
+  executeWorkflowDefinitionRestoreVersion,
   executeWorkflowDefinitionUpsert,
+  executeWorkflowDefinitionVersionList,
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
@@ -167,7 +169,9 @@ import {
   parseWorkflowDefinitionDeleteRequest,
   parseWorkflowDefinitionGetRequest,
   parseWorkflowDefinitionListRequest,
+  parseWorkflowDefinitionRestoreVersionRequest,
   parseWorkflowDefinitionUpsertRequest,
+  parseWorkflowDefinitionVersionListRequest,
   parseWorkflowAssetUsageListRequest,
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
@@ -751,6 +755,31 @@ const handleRequest = async (
     }
 
     await handleWorkflowDefinitionGet(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsVersions) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionVersionList(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsRestoreVersion) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionRestoreVersion(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
     return;
   }
 
@@ -4330,6 +4359,68 @@ const handleWorkflowDefinitionGet = async (
     return;
   }
 
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value,
+  });
+};
+
+const handleWorkflowDefinitionVersionList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionVersionListRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionVersionList(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    versions: result.value,
+  });
+};
+
+const handleWorkflowDefinitionRestoreVersion = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionRestoreVersionRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionRestoreVersion(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });

@@ -126,6 +126,7 @@ import {
   type WorkflowAssetUsageRecord,
   type WorkflowAssetUpsertInput,
   type WorkflowDefinitionRecord,
+  type WorkflowDefinitionVersionRecord,
   type WorkflowDefinitionUpsertInput,
   type WorkflowExecutionRecord,
   type WorkflowExpressionUsageHintRecord,
@@ -593,6 +594,7 @@ interface WorkflowsScreenState {
   workflows: ReadonlyArray<WorkflowDefinitionRecord>;
   assets: ReadonlyArray<WorkflowAssetRecord>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
+  workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
   serverLogs: ReadonlyArray<ServerLogEntry>;
   workflowLogsFilter: WorkflowLogsFilter;
@@ -669,6 +671,7 @@ export class WorkflowsScreen extends Component<
       workflows: [],
       assets: [],
       assetUsages: [],
+      workflowVersions: [],
       executions: [],
       serverLogs: [],
       workflowLogsFilter: WorkflowLogsFilter.Errors,
@@ -1660,6 +1663,7 @@ export class WorkflowsScreen extends Component<
                 ),
               ],
             ),
+            this.renderWorkflowVersionHistoryCard(),
             this.renderWorkflowEditHistoryCard(),
           ],
         ),
@@ -1759,6 +1763,120 @@ export class WorkflowsScreen extends Component<
         ]),
       ],
     );
+  }
+
+  private renderWorkflowVersionHistoryCard(): HTMLElement {
+    return createElement(
+      "section",
+      {
+        className:
+          "mt-4 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex items-center justify-between gap-3" },
+          [
+            createElement("div", { className: "min-w-0" }, [
+              createElement(
+                "p",
+                { className: "text-sm font-medium text-white" },
+                ["Version history"],
+              ),
+              createElement(
+                "p",
+                { className: "mt-1 text-xs text-text-secondary" },
+                ["Server snapshots saved on each workflow save."],
+              ),
+            ]),
+            createElement(StatusBadge, { status: "info" }, [
+              this.state.workflowVersions.length.toString(),
+            ]),
+          ],
+        ),
+        this.state.workflowVersions.length === 0
+          ? createElement(
+              "p",
+              { className: "mt-3 text-xs text-text-secondary" },
+              ["Save this workflow to create the first version."],
+            )
+          : createElement(
+              "div",
+              {
+                className: "mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto",
+              },
+              this.state.workflowVersions.slice(0, 8).map((version) =>
+                createElement(
+                  "button",
+                  {
+                    key: version.id,
+                    type: "button",
+                    className:
+                      "rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-left text-xs transition-colors hover:border-blue-500/50 hover:bg-blue-500/10",
+                    onClick: () => {
+                      void this.restoreWorkflowVersion(version.id);
+                    },
+                  },
+                  [
+                    createElement(
+                      "div",
+                      { className: "flex items-center justify-between gap-2" },
+                      [
+                        createElement(
+                          "span",
+                          { className: "font-medium text-white" },
+                          [`Version ${version.version.toString()}`],
+                        ),
+                        createElement(
+                          "span",
+                          { className: "text-[11px] text-text-secondary" },
+                          [formatExecutionHistoryTitle(version.createdAt)],
+                        ),
+                      ],
+                    ),
+                    createElement(
+                      "p",
+                      {
+                        className:
+                          "mt-1 truncate text-[11px] text-text-secondary",
+                      },
+                      [version.snapshot.name],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+
+  private async restoreWorkflowVersion(versionId: string): Promise<void> {
+    const workflow = this.readCurrentWorkflowRecord();
+    if (!workflow) {
+      return;
+    }
+
+    try {
+      const restored = await this.workflowClient.restoreDefinitionVersion({
+        workflowId: workflow.id,
+        versionId,
+      });
+      await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
+        preserveLocalDraft: false,
+      });
+      this.setState({
+        selection: { type: "workflow", id: restored.id },
+        noticeMessage: `Workflow restored to version ${restored.version.toString()}.`,
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not restore workflow version.",
+        ),
+      });
+    }
   }
 
   private renderWorkflowEditHistoryCard(): HTMLElement {
@@ -10016,6 +10134,11 @@ export class WorkflowsScreen extends Component<
         workflows[0] ??
         null)
       : null;
+    const workflowVersions = currentWorkflow
+      ? await this.workflowClient.listDefinitionVersions({
+          workflowId: currentWorkflow.id,
+        })
+      : [];
 
     const nextSelection = currentWorkflow
       ? resolveSelectionAfterReload(
@@ -10051,6 +10174,7 @@ export class WorkflowsScreen extends Component<
       workflows,
       assets,
       assetUsages,
+      workflowVersions,
       executions,
       draftWorkflow: draftState.draftWorkflow,
       pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(

@@ -61,6 +61,8 @@ export const RoutePath = {
   AiMemoryQuery: "/ai/memory/query",
   WorkflowDefinitionsList: "/workflows/definitions/list",
   WorkflowDefinitionsGet: "/workflows/definitions/get",
+  WorkflowDefinitionsVersions: "/workflows/definitions/versions",
+  WorkflowDefinitionsRestoreVersion: "/workflows/definitions/restore-version",
   WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",
   WorkflowDefinitionsDelete: "/workflows/definitions/delete",
   WorkflowAssetsList: "/workflows/assets/list",

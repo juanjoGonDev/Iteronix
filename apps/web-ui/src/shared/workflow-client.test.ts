@@ -3,6 +3,7 @@ import {
   decodeServerSentEvents,
   parseWorkflowAssetListResponse,
   parseWorkflowDefinitionListResponse,
+  parseWorkflowDefinitionVersionListResponse,
   parseWorkflowExecutionListResponse,
   parseWorkflowNodeProviderTestResponse,
   parseWorkflowRunStreamEvent,
@@ -52,6 +53,56 @@ describe("workflow client parsers", () => {
     expect(definitions).toHaveLength(1);
     expect(definitions[0]?.workspaceId).toBe("workspace-1");
     expect(definitions[0]?.tags).toEqual(["mvp"]);
+  });
+
+  it("parses workflow definition version list responses", () => {
+    const versions = parseWorkflowDefinitionVersionListResponse({
+      versions: [
+        {
+          id: "version-1",
+          workflowId: "workflow-1",
+          projectId: "project-1",
+          version: 2,
+          createdAt: "2026-05-06T18:10:00.000Z",
+          snapshot: {
+            id: "workflow-1",
+            workspaceId: "workspace-1",
+            projectId: "project-1",
+            name: "Workflow v2",
+            description: "",
+            status: "draft",
+            version: 2,
+            createdAt: "2026-05-06T18:00:00.000Z",
+            updatedAt: "2026-05-06T18:10:00.000Z",
+            trigger: {
+              kind: "manual",
+              enabled: true,
+              config: {},
+            },
+            viewport: {
+              x: 12,
+              y: 18,
+              zoom: 1,
+            },
+            nodes: [],
+            edges: [],
+            executionPolicy: {
+              maxNodeRetries: 1,
+              allowManualCheckpointResume: true,
+            },
+            defaultContextPolicy: {
+              language: "en",
+              carryMessagesLimit: 8,
+              carryArtifactLimit: 8,
+            },
+            tags: ["mvp"],
+          },
+        },
+      ],
+    });
+
+    expect(versions).toHaveLength(1);
+    expect(versions[0]?.snapshot.name).toBe("Workflow v2");
   });
 
   it("parses workflow asset lists with optional contracts and guardrails", () => {

@@ -426,6 +426,9 @@ const readWorkflowCatalogState = (value: unknown): WorkflowCatalogState => {
     definitions: readJsonRecordArray(
       value["definitions"],
     ) as WorkflowCatalogState["definitions"],
+    definitionVersions: readJsonRecordArray(
+      value["definitionVersions"],
+    ) as NonNullable<WorkflowCatalogState["definitionVersions"]>,
     assets: readJsonRecordArray(
       value["assets"],
     ) as WorkflowCatalogState["assets"],

@@ -5,6 +5,7 @@ import type {
   WorkflowAssetUpsertInput,
   WorkflowAssetUsageRecord,
   WorkflowDefinitionRecord,
+  WorkflowDefinitionVersionRecord,
   WorkflowDefinitionUpsertInput,
   WorkflowExecutionRecord,
   WorkflowGuardrailFindingRecord,
@@ -17,6 +18,8 @@ import type {
 const EndpointPath = {
   DefinitionsList: "/workflows/definitions/list",
   DefinitionsGet: "/workflows/definitions/get",
+  DefinitionsVersions: "/workflows/definitions/versions",
+  DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -127,6 +130,13 @@ export type WorkflowClient = {
   getDefinition: (input: {
     workflowId: string;
   }) => Promise<WorkflowDefinitionRecord>;
+  listDefinitionVersions: (input: {
+    workflowId: string;
+  }) => Promise<ReadonlyArray<WorkflowDefinitionVersionRecord>>;
+  restoreDefinitionVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => Promise<WorkflowDefinitionRecord>;
   upsertDefinition: (input: {
     projectId: string;
     definition: WorkflowDefinitionUpsertInput;
@@ -204,6 +214,23 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.DefinitionsGet,
       body: {
         workflowId: input.workflowId,
+      },
+      parse: parseWorkflowDefinitionResponse,
+    }),
+  listDefinitionVersions: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsVersions,
+      body: {
+        workflowId: input.workflowId,
+      },
+      parse: parseWorkflowDefinitionVersionListResponse,
+    }),
+  restoreDefinitionVersion: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsRestoreVersion,
+      body: {
+        workflowId: input.workflowId,
+        versionId: input.versionId,
       },
       parse: parseWorkflowDefinitionResponse,
     }),
@@ -396,6 +423,19 @@ const parseWorkflowDefinitionResponse = (
 ): WorkflowDefinitionRecord =>
   parseWorkflowDefinitionRecord(
     readRequiredRecord(value, "workflowDefinitionResponse", "definition"),
+  );
+
+export const parseWorkflowDefinitionVersionListResponse = (
+  value: unknown,
+): ReadonlyArray<WorkflowDefinitionVersionRecord> =>
+  readRequiredArray(
+    value,
+    "workflowDefinitionVersionListResponse",
+    "versions",
+  ).map((item) =>
+    parseWorkflowDefinitionVersionRecord(
+      ensureRecord(item, "workflowDefinitionVersionRecord"),
+    ),
   );
 
 export const parseWorkflowAssetListResponse = (
@@ -817,6 +857,35 @@ const parseWorkflowDefinitionRecord = (
     "defaultContextPolicy",
   ) as WorkflowDefinitionRecord["defaultContextPolicy"],
   tags: readRequiredStringArray(value, "workflowDefinitionRecord", "tags"),
+});
+
+const parseWorkflowDefinitionVersionRecord = (
+  value: Record<string, unknown>,
+): WorkflowDefinitionVersionRecord => ({
+  id: readRequiredString(value, "workflowDefinitionVersionRecord", "id"),
+  workflowId: readRequiredString(
+    value,
+    "workflowDefinitionVersionRecord",
+    "workflowId",
+  ),
+  projectId: readRequiredString(
+    value,
+    "workflowDefinitionVersionRecord",
+    "projectId",
+  ),
+  version: readRequiredNumber(
+    value,
+    "workflowDefinitionVersionRecord",
+    "version",
+  ),
+  createdAt: readRequiredString(
+    value,
+    "workflowDefinitionVersionRecord",
+    "createdAt",
+  ),
+  snapshot: parseWorkflowDefinitionRecord(
+    readRequiredRecord(value, "workflowDefinitionVersionRecord", "snapshot"),
+  ),
 });
 
 const parseWorkflowAssetRecord = (

@@ -21,7 +21,9 @@ import {
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionList,
+  executeWorkflowDefinitionRestoreVersion,
   executeWorkflowDefinitionUpsert,
+  executeWorkflowDefinitionVersionList,
   executeWorkflowExecutionDelete,
   executeWorkflowExecutionGet,
   executeWorkflowExecutionList,
@@ -138,6 +140,74 @@ describe("workflow api contracts", () => {
     expect(deleted.type).toBe(ResultType.Ok);
     if (listed.type === ResultType.Ok) {
       expect(listed.value).toHaveLength(1);
+    }
+  });
+
+  it("lists and restores persisted workflow definition versions", () => {
+    const projectStore = createProjectStore({
+      projects: [createProjectRecord()],
+    });
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const first = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: createWorkflowDefinitionInput(),
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (first.type !== ResultType.Ok) {
+      throw new Error("Expected first workflow upsert to succeed.");
+    }
+
+    executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: {
+          ...createWorkflowDefinitionInput(),
+          id: first.value.id,
+          name: "Updated workflow",
+        },
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+
+    const listed = executeWorkflowDefinitionVersionList(
+      {
+        workflowId: first.value.id,
+      },
+      {
+        catalog,
+      },
+    );
+    expect(listed.type).toBe(ResultType.Ok);
+    if (listed.type !== ResultType.Ok) {
+      throw new Error("Expected workflow versions to list.");
+    }
+    expect(listed.value.map((version) => version.version)).toEqual([2, 1]);
+
+    const restored = executeWorkflowDefinitionRestoreVersion(
+      {
+        workflowId: first.value.id,
+        versionId: listed.value[1]?.id ?? "",
+      },
+      {
+        catalog,
+      },
+    );
+
+    expect(restored.type).toBe(ResultType.Ok);
+    if (restored.type === ResultType.Ok) {
+      expect(restored.value.name).toBe(first.value.name);
+      expect(restored.value.version).toBe(3);
     }
   });
 

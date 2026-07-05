@@ -356,6 +356,15 @@ export type WorkflowDefinitionRecord = {
   tags: ReadonlyArray<string>;
 };
 
+export type WorkflowDefinitionVersionRecord = {
+  id: string;
+  workflowId: string;
+  projectId: string;
+  version: number;
+  createdAt: string;
+  snapshot: WorkflowDefinitionRecord;
+};
+
 export type WorkflowAssetRecord = {
   id: string;
   workspaceId: string;
@@ -452,6 +461,7 @@ export type WorkflowExecutionRecord = {
 
 export type WorkflowCatalogState = {
   definitions: ReadonlyArray<WorkflowDefinitionRecord>;
+  definitionVersions?: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   assets: ReadonlyArray<WorkflowAssetRecord>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
@@ -459,6 +469,7 @@ export type WorkflowCatalogState = {
 
 export const createDefaultWorkflowCatalogState = (): WorkflowCatalogState => ({
   definitions: [],
+  definitionVersions: [],
   assets: [],
   assetUsages: [],
   executions: [],
