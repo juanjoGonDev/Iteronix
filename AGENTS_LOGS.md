@@ -3907,3 +3907,25 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 15:10 (Europe/Madrid) — Workflow Dynamic Prompt References
+
+- Summary
+  - Added runtime expression resolution for Workflows prompts and guardrail validation values.
+- Decisions
+  - Keep the diff focused in `packages/agents`; the existing deep-editor UI already inserts node-output expression tokens, while this slice hardens runtime evaluation.
+  - Reuse the existing nested path reader so array indexes and subpaths behave the same in mappings, prompts and guardrails.
+- Changes
+  - `packages/agents/src/workflow-runtime.ts` resolves `{{var|node_output|...}}`, `{{var|last_node_output||...}}`, `{{var|accumulated_outputs||...}}`, current input and workflow context tokens before provider execution.
+  - Guardrail expected values now resolve expression tokens before field equality, contains, regex and numeric validation.
+  - `packages/agents/src/workflow-runtime.test.ts` adds the red/green regression for nested prompt and guardrail references.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-runtime.test.ts` failed first on unresolved prompt tokens, then PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS before docs, then failed on `PLAN.md`/`AGENTS_LOGS.md`, then PASS after formatting docs.
+  - `corepack pnpm@10.18.3 quality` timed out once locally at 124s, then PASS with a longer timeout, then PASS again after docs.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

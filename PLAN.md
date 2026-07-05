@@ -782,6 +782,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflow edge mappings now support explicit latest-upstream and accumulated-output sources, including nested paths and array indexes
     - The Workflows mapping UI exposes accumulated previous outputs as a selectable source without changing the modal-first editor model
     - Runtime and browser validations cover dynamic output references before the next feature slice
+  - `06.6` dynamic prompt/guardrail reference refinement completed on `2026-07-05`:
+    - Provider prompts now resolve workflow expression tokens for node output, latest upstream output, accumulated outputs, current input and workflow context before execution
+    - Guardrail validation values resolve the same expression tokens before comparison, regex, contains and numeric checks
+    - Runtime regression coverage verifies nested paths and array indexes in prompt and guardrail references
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

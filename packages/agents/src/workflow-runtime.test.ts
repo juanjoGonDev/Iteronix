@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   WorkflowExecutionStatus,
+  WorkflowGuardrailOperator,
+  WorkflowGuardrailSeverity,
   WorkflowNodeKind,
   WorkflowNodeExecutionInputSourceKind,
   WorkflowReasoningLevel,
@@ -487,6 +489,48 @@ describe("workflow runtime", () => {
     expect(providerPrompts.at(-1)).toContain('"lastItemName": "First item"');
     expect(providerPrompts.at(-1)).toContain('"accumulatedTotal": 1');
   });
+
+  it("resolves dynamic output references in prompts and guardrail values", async () => {
+    const providerPrompts: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerPrompts.push(request.prompt);
+        return {
+          outputText:
+            request.node.id === "node-provider-source"
+              ? '{"items":[{"name":"First item"}],"meta":{"total":1}}'
+              : '{"result":"First item"}',
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createDynamicExpressionReferenceWorkflowDefinitionRecord(),
+      assets: [
+        createGuardrailFieldEqualsAssetRecord({
+          id: "asset-dynamic-guardrail",
+          expectedValue: "{{var|last_node_output||$.items[0].name}}",
+          message: "Output matched previous item name.",
+        }),
+      ],
+    });
+
+    const targetPrompt = providerPrompts.at(-1) ?? "";
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(targetPrompt).toContain("Last: First item.");
+    expect(targetPrompt).toContain("Accumulated total: 1.");
+    expect(targetPrompt).toContain("Specific: First item.");
+    expect(targetPrompt).not.toContain("{{var|");
+    expect(execution.nodeRuns.at(-1)?.guardrailFindings).toEqual([
+      {
+        guardrailAssetId: "asset-dynamic-guardrail",
+        nodeId: "node-provider-target",
+        severity: WorkflowGuardrailSeverity.Warn,
+        message: "Output matched previous item name.",
+      },
+    ]);
+  });
 });
 
 const isEventOfType = <TType extends string>(
@@ -766,6 +810,45 @@ const createDynamicOutputReferenceWorkflowDefinitionRecord =
     ],
   });
 
+const createDynamicExpressionReferenceWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-source",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return items.",
+        outputContract: createItemsOutputContract(),
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-2", "gpt-2"),
+        prompt: [
+          "Last: {{var|last_node_output||$.items[0].name}}.",
+          "Accumulated total: {{var|accumulated_outputs||$.node-provider-source.meta.total}}.",
+          "Specific: {{var|node_output|node-provider-source|$.items[0].name}}.",
+        ].join(" "),
+        outputContract: createResultOutputContract(),
+        attachedGuardrails: [
+          {
+            assetId: "asset-dynamic-guardrail",
+            order: 1,
+            enabled: true,
+          },
+        ],
+      }),
+    ],
+    edges: [
+      createEdgeRecord(
+        "edge-provider-expression",
+        "node-provider-source",
+        "node-provider-target",
+      ),
+    ],
+  });
+
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",
   workspaceId: "workspace-1",
@@ -817,6 +900,34 @@ const createGuardrailAssetRecord = (input: {
   },
   createdAt: BaseTime,
   updatedAt: BaseTime,
+});
+
+const createGuardrailFieldEqualsAssetRecord = (input: {
+  id: string;
+  expectedValue: string;
+  message: string;
+}): WorkflowAssetRecord => ({
+  ...createGuardrailAssetRecord({
+    id: input.id,
+    severity: WorkflowGuardrailSeverity.Warn,
+    targetPath: "$.result",
+    message: input.message,
+  }),
+  guardrail: {
+    id: `${input.id}-definition`,
+    severity: WorkflowGuardrailSeverity.Warn,
+    operator: WorkflowGuardrailOperator.All,
+    validations: [
+      {
+        id: `${input.id}-validation`,
+        kind: "field_equals",
+        target: "output",
+        path: "$.result",
+        value: input.expectedValue,
+        message: input.message,
+      },
+    ],
+  },
 });
 
 const createNodeRecord = (input: {

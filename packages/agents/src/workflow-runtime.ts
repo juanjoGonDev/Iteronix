@@ -27,6 +27,15 @@ const DefaultSummaryLength = 240;
 const PromptSectionSeparator = "\n\n";
 const JsonContractPromptTitle = "Expected JSON output contract";
 const JsonContractRetryTitle = "Previous JSON output failed validation";
+const WorkflowExpressionTokenPattern =
+  /\{\{var\|([^|{}]+)\|([^|{}]*)\|([^{}]*)\}\}/gu;
+const WorkflowExpressionVariableKind = {
+  NodeOutput: "node_output",
+  LastNodeOutput: "last_node_output",
+  AccumulatedOutputs: "accumulated_outputs",
+  CurrentInput: "current_input",
+  WorkflowContext: "workflow_context",
+} as const;
 const DefaultWorkflowNodeExecutionInputSource = {
   kind: WorkflowNodeExecutionInputSourceKind.LastUpstream,
 } satisfies WorkflowNodeExecutionInputSourceRecord;
@@ -325,6 +334,7 @@ export const createWorkflowRuntime = (input: {
           node,
           inputValue,
           envelope,
+          outputs,
           assetsById,
           workflowRunId,
           definition: request.definition,
@@ -455,6 +465,7 @@ const executeWorkflowNode = async (input: {
   node: WorkflowNodeRecord;
   inputValue: unknown;
   envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
   assetsById: Map<string, WorkflowAssetRecord>;
   workflowRunId: string;
   definition: WorkflowDefinitionRecord;
@@ -553,6 +564,7 @@ const executeWorkflowNode = async (input: {
       provider,
       inputValue: input.inputValue,
       envelope: input.envelope,
+      outputs: input.outputs,
       runProviderNode: input.runProviderNode,
       ...(input.signal ? { signal: input.signal } : {}),
     });
@@ -571,6 +583,7 @@ const executeWorkflowNode = async (input: {
       inputValue: input.inputValue,
       outputSnapshot: providerRun.outputSnapshot,
       envelope: input.envelope,
+      outputs: input.outputs,
       assetsById: input.assetsById,
     });
     const nextEnvelope = appendEnvelopeOutput(input.envelope, {
@@ -609,6 +622,7 @@ const runProviderWithOutputContract = async (input: {
   provider: WorkflowProviderSelectionRecord;
   inputValue: unknown;
   envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
   runProviderNode: (
     request: WorkflowProviderRunRequest,
   ) => Promise<WorkflowProviderRunResult>;
@@ -626,6 +640,7 @@ const runProviderWithOutputContract = async (input: {
       input.node,
       input.inputValue,
       input.envelope,
+      input.outputs,
       feedback,
     );
     const providerResult = await input.runProviderNode({
@@ -663,12 +678,20 @@ const buildProviderPrompt = (
   node: WorkflowNodeRecord,
   inputValue: unknown,
   envelope: WorkflowContextEnvelope,
+  outputs: ReadonlyMap<string, unknown>,
   retryFeedback?: string,
 ): string => {
   const sections: string[] = [];
   const prompt = node.config.prompt?.trim();
   if (prompt) {
-    sections.push(prompt);
+    sections.push(
+      resolveWorkflowExpressionText({
+        text: prompt,
+        inputValue,
+        envelope,
+        outputs,
+      }),
+    );
   }
 
   if (node.outputContract) {
@@ -690,6 +713,66 @@ const buildProviderPrompt = (
   }
 
   return sections.join(PromptSectionSeparator);
+};
+
+const resolveWorkflowExpressionText = (input: {
+  text: string;
+  inputValue: unknown;
+  envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
+}): string =>
+  input.text.replace(
+    WorkflowExpressionTokenPattern,
+    (_match: string, kind: string, sourceId: string, path: string) =>
+      formatWorkflowExpressionValue(
+        resolveWorkflowExpressionValue({
+          kind,
+          sourceId,
+          path,
+          inputValue: input.inputValue,
+          envelope: input.envelope,
+          outputs: input.outputs,
+        }),
+      ),
+  );
+
+const resolveWorkflowExpressionValue = (input: {
+  kind: string;
+  sourceId: string;
+  path: string;
+  inputValue: unknown;
+  envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
+}): unknown => {
+  if (input.kind === WorkflowExpressionVariableKind.NodeOutput) {
+    return readSourcePathValue(input.outputs.get(input.sourceId), input.path);
+  }
+
+  if (input.kind === WorkflowExpressionVariableKind.LastNodeOutput) {
+    return readSourcePathValue(input.inputValue, input.path);
+  }
+
+  if (input.kind === WorkflowExpressionVariableKind.AccumulatedOutputs) {
+    return readSourcePathValue(Object.fromEntries(input.outputs), input.path);
+  }
+
+  if (input.kind === WorkflowExpressionVariableKind.CurrentInput) {
+    return readSourcePathValue(input.inputValue, input.path);
+  }
+
+  if (input.kind === WorkflowExpressionVariableKind.WorkflowContext) {
+    return readSourcePathValue(input.envelope, input.path);
+  }
+
+  return undefined;
+};
+
+const formatWorkflowExpressionValue = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return serializeNodeInput(value);
 };
 
 const parseProviderOutput = (
@@ -1482,6 +1565,7 @@ const evaluateNodeGuardrails = (input: {
   inputValue: unknown;
   outputSnapshot: unknown;
   envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
   assetsById: Map<string, WorkflowAssetRecord>;
 }): ReadonlyArray<WorkflowGuardrailFindingRecord> =>
   input.node.attachedGuardrails
@@ -1500,6 +1584,7 @@ const evaluateNodeGuardrails = (input: {
           inputValue: input.inputValue,
           outputSnapshot: input.outputSnapshot,
           envelope: input.envelope,
+          outputs: input.outputs,
         }),
       );
       const matched =
@@ -1530,6 +1615,7 @@ const evaluateGuardrailValidation = (input: {
   inputValue: unknown;
   outputSnapshot: unknown;
   envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
 }): boolean => {
   const targetValue = readGuardrailTargetValue({
     target: input.validation.target,
@@ -1548,53 +1634,58 @@ const evaluateGuardrailValidation = (input: {
   }
 
   if (input.validation.kind === "field_equals") {
-    return resolvedValue === input.validation.value;
+    return resolvedValue === resolveGuardrailValidationValue(input);
   }
 
   if (input.validation.kind === "contains") {
+    const validationValue = resolveGuardrailValidationValue(input);
     return (
       typeof resolvedValue === "string" &&
-      typeof input.validation.value === "string" &&
-      resolvedValue.includes(input.validation.value)
+      typeof validationValue === "string" &&
+      resolvedValue.includes(validationValue)
     );
   }
 
   if (input.validation.kind === "not_contains") {
+    const validationValue = resolveGuardrailValidationValue(input);
     return (
       typeof resolvedValue === "string" &&
-      typeof input.validation.value === "string" &&
-      !resolvedValue.includes(input.validation.value)
+      typeof validationValue === "string" &&
+      !resolvedValue.includes(validationValue)
     );
   }
 
   if (input.validation.kind === "regex") {
+    const validationValue = resolveGuardrailValidationValue(input);
     if (
       typeof resolvedValue !== "string" ||
-      typeof input.validation.value !== "string"
+      typeof validationValue !== "string"
     ) {
       return false;
     }
 
     try {
-      return new RegExp(input.validation.value, "u").test(resolvedValue);
+      return new RegExp(validationValue, "u").test(resolvedValue);
     } catch {
       return false;
     }
   }
 
   if (input.validation.kind === "number_gte") {
+    const validationValue = resolveGuardrailValidationValue(input);
     return (
       typeof resolvedValue === "number" &&
-      typeof input.validation.value === "number" &&
-      resolvedValue >= input.validation.value
+      typeof validationValue === "number" &&
+      resolvedValue >= validationValue
     );
   }
 
   if (input.validation.kind === "number_lte") {
+    const validationValue = resolveGuardrailValidationValue(input);
     return (
       typeof resolvedValue === "number" &&
-      typeof input.validation.value === "number" &&
-      resolvedValue <= input.validation.value
+      typeof validationValue === "number" &&
+      resolvedValue <= validationValue
     );
   }
 
@@ -1604,6 +1695,24 @@ const evaluateGuardrailValidation = (input: {
 
   return false;
 };
+
+const resolveGuardrailValidationValue = (input: {
+  validation: NonNullable<
+    WorkflowAssetRecord["guardrail"]
+  >["validations"][number];
+  inputValue: unknown;
+  outputSnapshot: unknown;
+  envelope: WorkflowContextEnvelope;
+  outputs: ReadonlyMap<string, unknown>;
+}): unknown =>
+  typeof input.validation.value === "string"
+    ? resolveWorkflowExpressionText({
+        text: input.validation.value,
+        inputValue: input.inputValue,
+        envelope: input.envelope,
+        outputs: input.outputs,
+      })
+    : input.validation.value;
 
 const readGuardrailTargetValue = (input: {
   target: NonNullable<
