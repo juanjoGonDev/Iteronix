@@ -115,6 +115,8 @@ const WorkflowSelector = {
   GuardrailValidationTargetSelect:
     "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
+  GuardrailValidationValueInput: "workflows-guardrail-validation-value-input",
+  GuardrailValidationVariablePrefix: "workflows-guardrail-variable-",
   GuardrailValidationMessageInput:
     "workflows-guardrail-validation-message-input",
   GuardrailAddValidation: "workflows-guardrail-add-validation",
@@ -399,6 +401,10 @@ const ValidationText = {
   HistoryPinnedOutputNeedle: "history-pinned-output",
   StepOutputNeedle: "step-executed-output",
   TriggerExecutedAtToken: "$.executedAt",
+  LastOutputToken: "{{var|last_node_output||$}}",
+  CurrentInputToken: "{{var|current_input||$}}",
+  AccumulatedOutputsToken: "{{var|accumulated_outputs||$}}",
+  GuardrailLastOutputToken: "{{var|last_node_output||$.result}}",
   LegacyProviderError: "Workflow 06.6 supports codex-cli profiles only.",
 } as const;
 
@@ -571,8 +577,62 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.DeepEditorPromptInput,
       `{{var|node_output|${triggerNode.id}|${ValidationText.TriggerExecutedAtToken}}}`,
     );
+    await clickByExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}input-edge-trigger-agent-executed-at-$`,
+    );
+    await waitForTextAreaToContain(
+      page,
+      WorkflowSelector.DeepEditorPromptInput,
+      ValidationText.CurrentInputToken,
+    );
+    await clickByExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}last-output-root`,
+    );
+    await waitForTextAreaToContain(
+      page,
+      WorkflowSelector.DeepEditorPromptInput,
+      ValidationText.LastOutputToken,
+    );
+    await clickByExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}accumulated-outputs-root`,
+    );
+    await waitForTextAreaToContain(
+      page,
+      WorkflowSelector.DeepEditorPromptInput,
+      ValidationText.AccumulatedOutputsToken,
+    );
     await clickByTestId(page, WorkflowSelector.DeepEditorClose);
     await waitForMissingTestId(page, WorkflowSelector.DeepEditorModal);
+    await clickByTestId(page, WorkflowSelector.GuardrailNewForNode);
+    await waitForCondition(
+      () => Promise.resolve(stubServer.state.assets.length > 0),
+      "guardrail asset created",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    const guardrailAsset = stubServer.state.assets[0];
+    if (!guardrailAsset) {
+      throw new Error("Expected guardrail asset after creating it.");
+    }
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.GuardrailAttachmentEditPrefix}${guardrailAsset.id}`,
+    );
+    await waitForTestId(page, WorkflowSelector.GuardrailValidationValueInput);
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.GuardrailValidationVariablePrefix}last-output-result`,
+    );
+    await waitForInputToContain(
+      page,
+      WorkflowSelector.GuardrailValidationValueInput,
+      ValidationText.GuardrailLastOutputToken,
+    );
     await clickButtonByTitle(page, "Close editor");
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
 
@@ -1534,6 +1594,31 @@ async function waitForTextAreaToContain(
       return value?.includes(expectedNeedle) ?? false;
     },
     `textarea ${testId} contains ${expectedNeedle}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForInputToContain(
+  page: Page,
+  testId: string,
+  expectedNeedle: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const value = await page.evaluate((selector: string) => {
+        const element = document.querySelector(`[data-testid="${selector}"]`);
+        if (!(element instanceof HTMLInputElement)) {
+          return null;
+        }
+        return element.value;
+      }, testId);
+
+      return value?.includes(expectedNeedle) ?? false;
+    },
+    `input ${testId} contains ${expectedNeedle}`,
     {
       timeoutMs: ValidationConfig.UiPollingTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs,

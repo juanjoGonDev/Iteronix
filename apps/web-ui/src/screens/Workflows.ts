@@ -248,6 +248,7 @@ const WorkflowScreenSelector = {
     "workflows-guardrail-validation-target-select",
   GuardrailValidationPathInput: "workflows-guardrail-validation-path-input",
   GuardrailValidationValueInput: "workflows-guardrail-validation-value-input",
+  GuardrailValidationVariablePrefix: "workflows-guardrail-variable-",
   GuardrailValidationRegexTest: "workflows-guardrail-validation-regex-test",
   GuardrailValidationMessageInput:
     "workflows-guardrail-validation-message-input",
@@ -6932,6 +6933,20 @@ export class WorkflowsScreen extends Component<
     });
   }
 
+  private handleGuardrailVariableInsert(
+    reference: WorkflowExpressionVariableReference,
+  ): void {
+    const inserted = insertWorkflowExpressionVariable({
+      value: this.state.guardrailValidationValue,
+      selectionStart: this.state.guardrailValidationValue.length,
+      selectionEnd: this.state.guardrailValidationValue.length,
+      reference,
+    });
+    this.setState({
+      guardrailValidationValue: inserted.value,
+    });
+  }
+
   private readDeepEditorTitle(target: DeepEditorTarget): string {
     if (target.type === "node") {
       const node = this.state.draftWorkflow?.nodes.find(
@@ -7013,7 +7028,10 @@ export class WorkflowsScreen extends Component<
               const sourcePaths = sourceNode
                 ? readWorkflowNodeSelectableOutputPaths(sourceNode)
                 : [];
-              const paths = sourcePaths.length > 0 ? sourcePaths : ["$"];
+              const paths = [
+                "$",
+                ...sourcePaths.filter((path) => path !== "$"),
+              ];
               return paths.map((path) => ({
                 id: `input-${edge.id}-${path}`,
                 label: path,
@@ -7026,6 +7044,47 @@ export class WorkflowsScreen extends Component<
                 } satisfies WorkflowExpressionVariableReference,
               }));
             })
+        : [];
+    const lastOutputTokens: ReadonlyArray<WorkflowVariableToken> =
+      targetNodeId === null || incomingTokens.length === 0
+        ? []
+        : [
+            {
+              id: "last-output-root",
+              label: "Last upstream output · $",
+              detail: "Latest connected node output",
+              reference: {
+                kind: WorkflowExpressionVariableKind.LastNodeOutput,
+                path: "$",
+              } satisfies WorkflowExpressionVariableReference,
+            },
+          ];
+    const accumulatedOutputTokens: ReadonlyArray<WorkflowVariableToken> =
+      workflow && upstreamNodeIds && upstreamNodeIds.size > 0
+        ? [
+            {
+              id: "accumulated-outputs-root",
+              label: "All previous outputs · $",
+              detail: "Accumulated outputs",
+              reference: {
+                kind: WorkflowExpressionVariableKind.AccumulatedOutputs,
+                path: "$",
+              } satisfies WorkflowExpressionVariableReference,
+            },
+            ...workflow.nodes
+              .filter((node) => upstreamNodeIds.has(node.id))
+              .flatMap((node) =>
+                readWorkflowNodeSelectableOutputPaths(node).map((path) => ({
+                  id: `accumulated-${node.id}-${path}`,
+                  label: `${node.label} · ${readAccumulatedOutputPath(node.id, path)}`,
+                  detail: "Accumulated output path",
+                  reference: {
+                    kind: WorkflowExpressionVariableKind.AccumulatedOutputs,
+                    path: readAccumulatedOutputPath(node.id, path),
+                  } satisfies WorkflowExpressionVariableReference,
+                })),
+              ),
+          ]
         : [];
     const contextTokens: ReadonlyArray<WorkflowVariableToken> = [
       {
@@ -7071,9 +7130,19 @@ export class WorkflowsScreen extends Component<
         tokens: incomingTokens,
       },
       {
+        id: "last-output",
+        label: "Last upstream output",
+        tokens: lastOutputTokens,
+      },
+      {
         id: "previous-outputs",
         label: "Previous node outputs",
         tokens: upstreamTokens,
+      },
+      {
+        id: "accumulated-outputs",
+        label: "Accumulated outputs",
+        tokens: accumulatedOutputTokens,
       },
       {
         id: "workflow-context",
@@ -8815,6 +8884,23 @@ export class WorkflowsScreen extends Component<
             })
           : "",
       ]),
+      this.state.guardrailValidationKind === "json_schema"
+        ? ""
+        : createElement("div", { className: "flex flex-wrap gap-2" }, [
+            readGuardrailVariableTokens().map((token) =>
+              createElement(Button, {
+                key: token.id,
+                variant: "secondary",
+                size: "sm",
+                onClick: () =>
+                  this.handleGuardrailVariableInsert(token.reference),
+                children: token.label,
+                dataset: {
+                  testid: `${WorkflowScreenSelector.GuardrailValidationVariablePrefix}${token.id}`,
+                },
+              }),
+            ),
+          ]),
     ]);
   }
 
@@ -12057,6 +12143,49 @@ const readNodeInputPorts = (
     },
   ];
 };
+
+const readAccumulatedOutputPath = (nodeId: string, path: string): string => {
+  if (path === "$") {
+    return `$.${nodeId}`;
+  }
+
+  if (path.startsWith("$.")) {
+    return `$.${nodeId}.${path.slice(2)}`;
+  }
+
+  return `$.${nodeId}.${path}`;
+};
+
+const readGuardrailVariableTokens =
+  (): ReadonlyArray<WorkflowVariableToken> => [
+    {
+      id: "current-input-root",
+      label: "Current input",
+      detail: "Current node input",
+      reference: {
+        kind: WorkflowExpressionVariableKind.CurrentInput,
+        path: "$",
+      },
+    },
+    {
+      id: "last-output-result",
+      label: "Last output",
+      detail: "Latest upstream output result",
+      reference: {
+        kind: WorkflowExpressionVariableKind.LastNodeOutput,
+        path: "$.result",
+      },
+    },
+    {
+      id: "accumulated-outputs-root",
+      label: "All outputs",
+      detail: "Accumulated outputs",
+      reference: {
+        kind: WorkflowExpressionVariableKind.AccumulatedOutputs,
+        path: "$",
+      },
+    },
+  ];
 
 const readMappingSourceLabel = (entry: EdgeMappingEntryRecord): string => {
   if (entry.source.kind === "literal") {

@@ -288,6 +288,8 @@ export type WorkflowExpressionSegmentKind =
 
 export const WorkflowExpressionVariableKind = {
   NodeOutput: "node_output",
+  LastNodeOutput: "last_node_output",
+  AccumulatedOutputs: "accumulated_outputs",
   CurrentInput: "current_input",
   WorkflowContext: "workflow_context",
   AssetOutput: "asset_output",
@@ -2812,6 +2814,8 @@ const readWorkflowExpressionReferenceFromMatch = (
 ): WorkflowExpressionVariableReference | null => {
   if (
     kind !== WorkflowExpressionVariableKind.NodeOutput &&
+    kind !== WorkflowExpressionVariableKind.LastNodeOutput &&
+    kind !== WorkflowExpressionVariableKind.AccumulatedOutputs &&
     kind !== WorkflowExpressionVariableKind.CurrentInput &&
     kind !== WorkflowExpressionVariableKind.WorkflowContext &&
     kind !== WorkflowExpressionVariableKind.AssetOutput

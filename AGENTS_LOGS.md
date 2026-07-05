@@ -3929,3 +3929,44 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 15:58 (Europe/Madrid) — Workflow Expression Insertion UX
+
+- Summary
+  - Added the smallest Workflows UI slice for expression insertion in prompts and guardrail validation values.
+- Decisions
+  - Keep the modal-only authoring model: no right sidebar inspector was reintroduced.
+  - Reuse the existing `{{var|kind|sourceId|path}}` token model for current input, latest upstream output and accumulated outputs.
+- Changes
+  - `apps/web-ui/src/screens/workflows-editor-state.ts` now parses and serializes `last_node_output` and `accumulated_outputs` expression variables.
+  - `apps/web-ui/src/screens/Workflows.ts` exposes current input root, latest upstream output and accumulated output tokens in the deep editor, plus quick insertion buttons in guardrail validation values.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates prompt insertion and guardrail value insertion in the browser workflow path.
+  - `apps/web-ui/src/screens/workflows-editor-state.test.ts` adds the red/green parser/insertion regression.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - Full repository gates and CI verification still pending for this slice.
+- Next
+  - Run full gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 16:01 (Europe/Madrid) — Workflow Expression Insertion Verification
+
+- Summary
+  - Completed full local verification for the expression insertion UX slice.
+- Decisions
+  - Keep browser validation focused on the existing Workflows modal path instead of adding a second standalone harness.
+- Changes
+  - Formatted `PLAN.md`, `AGENTS_LOGS.md` and modified Workflows files after Prettier reported style drift.
+- Commands
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` failed first on formatting, then PASS after Prettier.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

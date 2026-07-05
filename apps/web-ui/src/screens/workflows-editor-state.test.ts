@@ -847,6 +847,36 @@ describe("workflows editor state", () => {
     );
   });
 
+  it("parses and inserts dynamic workflow expression variable shortcuts", () => {
+    const lastOutput = insertWorkflowExpressionVariable({
+      value: "",
+      selectionStart: 0,
+      selectionEnd: 0,
+      reference: {
+        kind: WorkflowExpressionVariableKind.LastNodeOutput,
+        path: "$.result",
+      },
+    });
+    const accumulatedOutputs = insertWorkflowExpressionVariable({
+      value: "All ",
+      selectionStart: 4,
+      selectionEnd: 4,
+      reference: {
+        kind: WorkflowExpressionVariableKind.AccumulatedOutputs,
+        path: "$",
+      },
+    });
+
+    expect(lastOutput.value).toBe("{{var|last_node_output||$.result}}");
+    expect(accumulatedOutputs.value).toBe("All {{var|accumulated_outputs||$}}");
+    expect(parseWorkflowExpression(lastOutput.value).segments).toEqual(
+      lastOutput.expression.segments,
+    );
+    expect(parseWorkflowExpression(accumulatedOutputs.value).segments).toEqual(
+      accumulatedOutputs.expression.segments,
+    );
+  });
+
   it("exposes manual trigger metadata as selectable output paths", () => {
     const definition = createEmptyWorkflowDefinition({
       projectId: "project-1",

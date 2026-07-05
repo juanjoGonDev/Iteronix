@@ -786,6 +786,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Provider prompts now resolve workflow expression tokens for node output, latest upstream output, accumulated outputs, current input and workflow context before execution
     - Guardrail validation values resolve the same expression tokens before comparison, regex, contains and numeric checks
     - Runtime regression coverage verifies nested paths and array indexes in prompt and guardrail references
+  - `06.6` expression insertion UX refinement completed on `2026-07-05`:
+    - The Workflows deep editor now exposes current input, latest upstream output, connected previous node outputs and accumulated outputs as selectable prompt variables
+    - Guardrail validation value fields now expose quick variable insertion for current input, latest output and accumulated outputs without reintroducing any right sidebar inspector
+    - Unit and browser coverage verify expression token insertion for prompts and guardrail values
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows
