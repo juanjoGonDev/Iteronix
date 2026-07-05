@@ -790,6 +790,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - The Workflows deep editor now exposes current input, latest upstream output, connected previous node outputs and accumulated outputs as selectable prompt variables
     - Guardrail validation value fields now expose quick variable insertion for current input, latest output and accumulated outputs without reintroducing any right sidebar inspector
     - Unit and browser coverage verify expression token insertion for prompts and guardrail values
+  - `06.6` expression discovery polish completed on `2026-07-05`:
+    - The Workflows deep editor variable panel now includes compact search across current input, latest upstream output, connected previous node outputs and accumulated output paths
+    - Expression variable filtering is centralized in editor state helpers and covered by unit tests
+    - Browser validation now exercises filtered variable insertion inside the modal-only authoring flow
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

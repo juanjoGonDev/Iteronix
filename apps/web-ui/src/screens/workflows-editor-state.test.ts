@@ -17,6 +17,7 @@ import {
   evaluateWorkflowRegex,
   createJsonSchemaNode,
   formatJsonOutputContractDocument,
+  filterWorkflowExpressionItems,
   insertWorkflowExpressionVariable,
   normalizeWorkflowAssetExecutionPolicy,
   removeJsonSchemaProperty,
@@ -875,6 +876,44 @@ describe("workflows editor state", () => {
     expect(parseWorkflowExpression(accumulatedOutputs.value).segments).toEqual(
       accumulatedOutputs.expression.segments,
     );
+  });
+
+  it("filters workflow expression items by label detail and group", () => {
+    const items = [
+      {
+        id: "current",
+        label: "Current input · $",
+        detail: "Current input via Manual trigger",
+        groupLabel: "Current input",
+      },
+      {
+        id: "last",
+        label: "Last upstream output · $",
+        detail: "Latest connected node output",
+        groupLabel: "Last upstream output",
+      },
+      {
+        id: "accumulated",
+        label: "Testing · $.testing.result",
+        detail: "Accumulated output path",
+        groupLabel: "Accumulated outputs",
+      },
+    ] as const;
+
+    expect(
+      filterWorkflowExpressionItems(items, "latest output").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["last"]);
+    expect(
+      filterWorkflowExpressionItems(items, "manual trigger").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["current"]);
+    expect(
+      filterWorkflowExpressionItems(items, "$.testing").map((item) => item.id),
+    ).toEqual(["accumulated"]);
+    expect(filterWorkflowExpressionItems(items, "   ")).toHaveLength(3);
   });
 
   it("exposes manual trigger metadata as selectable output paths", () => {

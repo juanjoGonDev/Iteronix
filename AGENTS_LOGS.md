@@ -3970,3 +3970,43 @@
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-05 20:55 (Europe/Madrid) — Workflow Expression Discovery Polish
+
+- Summary
+  - Added compact search/filter inside the Workflows deep editor variable panel so users can find current input, latest upstream output, previous node outputs and accumulated output paths quickly.
+- Decisions
+  - Keep expression discovery modal-only and reuse the existing variable token insertion model.
+  - Centralize variable item filtering in `workflows-editor-state.ts` so UI and tests share deterministic matching semantics.
+- Changes
+  - `apps/web-ui/src/screens/workflows-editor-state.ts` adds `filterWorkflowExpressionItems`.
+  - `apps/web-ui/src/screens/Workflows.ts` adds the variable search input, empty state and filtered variable groups.
+  - `apps/web-ui/scripts/validate-workflows.ts` exercises filtered variable insertion in the browser flow.
+  - `PLAN.md` records the 06.6 expression discovery refinement.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed once on missing wait for filtered token rerender, then PASS.
+- Issues/Risks
+  - Full repository gates and CI verification still pending for this slice.
+- Next
+  - Run format:check, quality and build; then commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-05 21:01 (Europe/Madrid) — Workflow Expression Discovery Verification
+
+- Summary
+  - Completed full local verification for the expression discovery polish slice.
+- Decisions
+  - Keep the browser validation in the existing Workflows flow and wait for filtered token rerenders after search input changes.
+- Changes
+  - Renamed the expression filter generic type to satisfy strict TypeScript naming rules.
+  - Formatted Workflows and log files after Prettier reported drift.
+- Commands
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` failed once before formatting, then PASS.
+  - `corepack pnpm@10.18.3 quality` failed once on generic type naming, then PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+- Issues/Risks
+  - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
+- Next
+  - Commit, push with hooks enabled and verify GitHub CI/CodeQL.

@@ -323,6 +323,12 @@ export type WorkflowExpressionInsertionResult = {
   value: string;
 };
 
+export type WorkflowExpressionFilterItem = {
+  label: string;
+  detail: string;
+  groupLabel: string;
+};
+
 export type WorkflowNodeRecord = {
   id: string;
   kind: WorkflowNodeKind;
@@ -1335,6 +1341,30 @@ export const insertWorkflowExpressionVariable = (input: {
     expression: parseWorkflowExpression(nextValue),
     value: nextValue,
   };
+};
+
+export const filterWorkflowExpressionItems = <
+  TItem extends WorkflowExpressionFilterItem,
+>(
+  items: ReadonlyArray<TItem>,
+  query: string,
+): ReadonlyArray<TItem> => {
+  const terms = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+
+  if (terms.length === 0) {
+    return items;
+  }
+
+  return items.filter((item) => {
+    const haystack = `${item.groupLabel} ${item.label} ${item.detail}`
+      .toLowerCase()
+      .trim();
+    return terms.every((term) => haystack.includes(term));
+  });
 };
 
 export const addWorkflowEdgeMappingEntry = (

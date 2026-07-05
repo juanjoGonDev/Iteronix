@@ -78,6 +78,7 @@ import {
   createWorkflowAssetDraft,
   detachGuardrailFromNode,
   evaluateWorkflowRegex,
+  filterWorkflowExpressionItems,
   formatJsonOutputContractDocument,
   insertWorkflowExpressionVariable,
   moveWorkflowNode,
@@ -271,6 +272,7 @@ const WorkflowScreenSelector = {
   RegexTesterPatternInput: "workflows-regex-tester-pattern-input",
   RegexTesterFlagsInput: "workflows-regex-tester-flags-input",
   RegexTesterTextInput: "workflows-regex-tester-text-input",
+  VariableSearchInput: "workflows-variable-search-input",
   VariableTokenPrefix: "workflows-variable-token-",
   NodePalettePrefix: "workflows-node-palette-",
   AssetCreatePrefix: "workflows-asset-create-",
@@ -402,6 +404,7 @@ type DeepEditorState = {
   outputTab: DeepEditorOutputTab;
   rawContractText: string;
   rawContractError: string | null;
+  variableSearchQuery: string;
   promptSelectionStart: number;
   promptSelectionEnd: number;
   sampleSelectionStart: number;
@@ -6090,6 +6093,7 @@ export class WorkflowsScreen extends Component<
           ? formatJsonOutputContractDocument(contract)
           : "",
         rawContractError: null,
+        variableSearchQuery: "",
         promptSelectionStart: 0,
         promptSelectionEnd: 0,
         sampleSelectionStart: 0,
@@ -6141,6 +6145,13 @@ export class WorkflowsScreen extends Component<
     const promptValue = this.readDeepEditorPromptValue(deepEditor.target);
     const contract = this.readDeepEditorContract(deepEditor.target);
     const variableGroups = this.readDeepEditorVariableGroups(deepEditor.target);
+    const filteredVariableGroups = readFilteredWorkflowVariableGroups(
+      variableGroups,
+      deepEditor.variableSearchQuery,
+    );
+    const variableMatchCount = readWorkflowVariableTokenCount(
+      filteredVariableGroups,
+    );
     const sampleOutputValue = contract?.sampleOutput ?? "";
 
     return createElement(
@@ -6261,13 +6272,19 @@ export class WorkflowsScreen extends Component<
                         "Click or drag variables into prompt or output template fields. Raw schema JSON stays explicit and recoverable.",
                       ],
                     ),
+                    this.renderVariableSearchControl(
+                      deepEditor.variableSearchQuery,
+                      variableMatchCount,
+                    ),
                     createElement(
                       "div",
                       { className: "mt-4 flex flex-col gap-3" },
                       [
-                        variableGroups.map((group) =>
-                          this.renderVariableGroup(group),
-                        ),
+                        filteredVariableGroups.length === 0
+                          ? this.renderVariableSearchEmptyState()
+                          : filteredVariableGroups.map((group) =>
+                              this.renderVariableGroup(group),
+                            ),
                       ],
                     ),
                   ],
@@ -6658,6 +6675,50 @@ export class WorkflowsScreen extends Component<
     ]);
   }
 
+  private renderVariableSearchControl(
+    value: string,
+    matchCount: number,
+  ): HTMLElement {
+    const hasQuery = value.trim().length > 0;
+
+    return createElement("label", { className: "mt-3 block" }, [
+      createElement("span", { className: "sr-only" }, ["Search variables"]),
+      createElement("input", {
+        type: "search",
+        value,
+        placeholder: "Search variables...",
+        className:
+          "w-full rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-text-muted focus:border-primary",
+        onInput: (event: Event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          this.updateDeepEditorVariableSearch(target.value);
+        },
+        "data-testid": WorkflowScreenSelector.VariableSearchInput,
+      }),
+      hasQuery
+        ? createElement(
+            "span",
+            { className: "mt-2 block text-[11px] text-text-secondary" },
+            [`${matchCount} matching variable${matchCount === 1 ? "" : "s"}`],
+          )
+        : "",
+    ]);
+  }
+
+  private renderVariableSearchEmptyState(): HTMLElement {
+    return createElement(
+      "p",
+      {
+        className:
+          "rounded-lg border border-dashed border-border-dark bg-[#0f141a] px-3 py-4 text-xs text-text-secondary",
+      },
+      ["No variables match this search."],
+    );
+  }
+
   private renderVariableGroup(group: WorkflowVariableGroup): HTMLElement {
     return createElement(
       "div",
@@ -6721,6 +6782,19 @@ export class WorkflowsScreen extends Component<
             ]),
       ],
     );
+  }
+
+  private updateDeepEditorVariableSearch(variableSearchQuery: string): void {
+    if (!this.state.deepEditor) {
+      return;
+    }
+
+    this.setState({
+      deepEditor: {
+        ...this.state.deepEditor,
+        variableSearchQuery,
+      },
+    });
   }
 
   private setDeepEditorOutputTab(outputTab: DeepEditorOutputTab): void {
@@ -13450,6 +13524,37 @@ const readAlertBadgeStatus = (
 
   return "info";
 };
+
+type WorkflowVariableFilterItem = WorkflowVariableToken & {
+  groupLabel: string;
+};
+
+const readFilteredWorkflowVariableGroups = (
+  groups: ReadonlyArray<WorkflowVariableGroup>,
+  query: string,
+): ReadonlyArray<WorkflowVariableGroup> => {
+  const hasQuery = query.trim().length > 0;
+
+  return groups
+    .map((group) => {
+      const items: ReadonlyArray<WorkflowVariableFilterItem> = group.tokens.map(
+        (token) => ({
+          ...token,
+          groupLabel: group.label,
+        }),
+      );
+
+      return {
+        ...group,
+        tokens: filterWorkflowExpressionItems(items, query),
+      };
+    })
+    .filter((group) => !hasQuery || group.tokens.length > 0);
+};
+
+const readWorkflowVariableTokenCount = (
+  groups: ReadonlyArray<WorkflowVariableGroup>,
+): number => groups.reduce((count, group) => count + group.tokens.length, 0);
 
 const readGuardrailFindingBadgeStatus = (
   severity: WorkflowGuardrailFindingRecord["severity"],

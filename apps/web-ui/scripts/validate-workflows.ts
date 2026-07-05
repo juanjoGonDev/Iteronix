@@ -93,6 +93,7 @@ const WorkflowSelector = {
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
+  VariableSearchInput: "workflows-variable-search-input",
   VariableTokenPrefix: "workflows-variable-token-",
   OutputContractAddField: "workflows-output-contract-add-field",
   OutputContractPropertyNamePrefix: "workflows-output-contract-property-name-",
@@ -564,6 +565,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
     await waitForTestId(page, WorkflowSelector.DeepEditorModal);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.VariableSearchInput,
+      "executedAt",
+    );
     await waitForExactTestId(
       page,
       `${WorkflowSelector.VariableTokenPrefix}node-${triggerNode.id}-${ValidationText.TriggerExecutedAtToken}`,
@@ -577,6 +583,15 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.DeepEditorPromptInput,
       `{{var|node_output|${triggerNode.id}|${ValidationText.TriggerExecutedAtToken}}}`,
     );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.VariableSearchInput,
+      "current input",
+    );
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}input-edge-trigger-agent-executed-at-$`,
+    );
     await clickByExactTestId(
       page,
       `${WorkflowSelector.VariableTokenPrefix}input-edge-trigger-agent-executed-at-$`,
@@ -586,6 +601,15 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.DeepEditorPromptInput,
       ValidationText.CurrentInputToken,
     );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.VariableSearchInput,
+      "last upstream",
+    );
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}last-output-root`,
+    );
     await clickByExactTestId(
       page,
       `${WorkflowSelector.VariableTokenPrefix}last-output-root`,
@@ -594,6 +618,15 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       WorkflowSelector.DeepEditorPromptInput,
       ValidationText.LastOutputToken,
+    );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.VariableSearchInput,
+      "accumulated",
+    );
+    await waitForExactTestId(
+      page,
+      `${WorkflowSelector.VariableTokenPrefix}accumulated-outputs-root`,
     );
     await clickByExactTestId(
       page,
@@ -1474,6 +1507,35 @@ async function setTextAreaValueByTestId(
 
   if (!updated) {
     throw new Error(`Could not set textarea ${testId}.`);
+  }
+}
+
+async function setInputValueByTestId(
+  page: Page,
+  testId: string,
+  value: string,
+): Promise<void> {
+  const updated = await page.evaluate(
+    (payload: { testId: string; value: string }) => {
+      const element = document.querySelector(
+        `[data-testid="${payload.testId}"]`,
+      );
+      if (!(element instanceof HTMLInputElement)) {
+        return false;
+      }
+      element.value = payload.value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    },
+    {
+      testId,
+      value,
+    },
+  );
+
+  if (!updated) {
+    throw new Error(`Could not set input ${testId}.`);
   }
 }
 
