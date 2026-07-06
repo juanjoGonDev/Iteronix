@@ -15,10 +15,12 @@ import {
   computeWorkflowVersionChecksum,
   exportWorkflowVersionSnapshot,
   importWorkflowVersionSnapshot,
+  previewWorkflowVersionImport,
   readWorkflowVersionChangeSummary,
   restoreWorkflowVersionPart,
   trimWorkflowVersionsByRetention,
   type WorkflowVersionExportRecord,
+  type WorkflowVersionImportPreviewRecord,
   type WorkflowVersionRestorePart,
 } from "./workflow-versioning";
 
@@ -80,6 +82,11 @@ export type WorkflowCatalogStore = {
     exported: WorkflowVersionExportRecord;
     name?: string;
   }) => WorkflowDefinitionRecord | undefined;
+  previewWorkflowVersionImport: (input: {
+    exported: WorkflowVersionExportRecord;
+    targetWorkspaceId: string;
+    targetProjectId: string;
+  }) => WorkflowVersionImportPreviewRecord;
   cleanupWorkflowVersions: (input: {
     workflowId: string;
     keepLatest: number;
@@ -278,6 +285,16 @@ export const createWorkflowCatalogStore = (
     });
   };
 
+  const previewWorkflowVersionImportInStore = (input: {
+    exported: WorkflowVersionExportRecord;
+    targetWorkspaceId: string;
+    targetProjectId: string;
+  }): WorkflowVersionImportPreviewRecord =>
+    previewWorkflowVersionImport({
+      ...input,
+      existingWorkflowIds: Array.from(definitionsById.keys()),
+    });
+
   const cleanupWorkflowVersions = (input: {
     workflowId: string;
     keepLatest: number;
@@ -428,6 +445,7 @@ export const createWorkflowCatalogStore = (
     cloneWorkflowVersion,
     exportWorkflowVersion,
     importWorkflowVersion,
+    previewWorkflowVersionImport: previewWorkflowVersionImportInStore,
     cleanupWorkflowVersions,
     deleteWorkflow,
     upsertAsset,

@@ -155,6 +155,7 @@ import {
   executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionImportVersion,
+  executeWorkflowDefinitionPreviewImportVersion,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
   executeWorkflowDefinitionRestoreVersionPart,
@@ -177,6 +178,7 @@ import {
   parseWorkflowDefinitionExportVersionRequest,
   parseWorkflowDefinitionGetRequest,
   parseWorkflowDefinitionImportVersionRequest,
+  parseWorkflowDefinitionPreviewImportVersionRequest,
   parseWorkflowDefinitionListRequest,
   parseWorkflowDefinitionRestoreVersionRequest,
   parseWorkflowDefinitionRestoreVersionPartRequest,
@@ -830,6 +832,20 @@ const handleRequest = async (
     }
 
     await handleWorkflowDefinitionExportVersion(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsPreviewImportVersion) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionPreviewImportVersion(
+      req,
+      res,
+      workflowCatalog,
+    );
     return;
   }
 
@@ -4631,6 +4647,38 @@ const handleWorkflowDefinitionImportVersion = async (
   await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
+  });
+};
+
+const handleWorkflowDefinitionPreviewImportVersion = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionPreviewImportVersionRequest(
+    bodyResult.value,
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionPreviewImportVersion(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    preview: result.value,
   });
 };
 

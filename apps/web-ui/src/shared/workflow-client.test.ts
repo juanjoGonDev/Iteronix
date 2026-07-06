@@ -5,6 +5,7 @@ import {
   parseWorkflowDefinitionListResponse,
   parseWorkflowDefinitionCleanupResponse,
   parseWorkflowDefinitionExportResponse,
+  parseWorkflowDefinitionImportPreviewResponse,
   parseWorkflowDefinitionVersionListResponse,
   parseWorkflowExecutionListResponse,
   parseWorkflowNodeProviderTestResponse,
@@ -137,6 +138,33 @@ describe("workflow client parsers", () => {
     expect(exported.snapshot.name).toBe("Workflow");
     expect(cleanup.kept).toHaveLength(1);
     expect(cleanup.removed[0]?.version).toBe(1);
+  });
+
+  it("parses workflow version import preview responses", () => {
+    const preview = parseWorkflowDefinitionImportPreviewResponse({
+      preview: {
+        status: "warning",
+        schemaSupported: true,
+        checksumValid: true,
+        workspaceMismatch: true,
+        projectMismatch: false,
+        workflowIdCollision: true,
+        recommendedIdMode: "regenerate_ids",
+        suggestedName: "Imported workflow",
+        messages: [
+          {
+            code: "workflow_id_collision",
+            severity: "warning",
+            message:
+              "Snapshot workflow id already exists and will be regenerated.",
+          },
+        ],
+      },
+    });
+
+    expect(preview.status).toBe("warning");
+    expect(preview.workflowIdCollision).toBe(true);
+    expect(preview.messages[0]?.code).toBe("workflow_id_collision");
   });
 
   it("parses workflow asset lists with optional contracts and guardrails", () => {

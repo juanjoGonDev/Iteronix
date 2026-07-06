@@ -47,6 +47,8 @@ const RequestPath = {
   DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsPreviewImportVersion:
+    "/workflows/definitions/preview-import-version",
   DefinitionsImportVersion: "/workflows/definitions/import-version",
   DefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   DefinitionsUpsert: "/workflows/definitions/upsert",
@@ -173,6 +175,9 @@ const WorkflowSelector = {
   WorkflowVersionDownloadPrefix: "workflows-version-download-",
   WorkflowVersionSearch: "workflows-version-search",
   WorkflowVersionImportText: "workflows-version-import-text",
+  WorkflowVersionImportPreview: "workflows-version-import-preview",
+  WorkflowVersionImportPreviewMessage:
+    "workflows-version-import-preview-message",
   WorkflowVersionImport: "workflows-version-import",
   WorkflowVersionCleanup: "workflows-version-cleanup",
   WorkflowVersionRetentionKeepLatest: "workflows-version-retention-keep-latest",
@@ -736,6 +741,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await clickByTestId(page, WorkflowSelector.WorkflowVersionImport);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionImportPreview);
+    await waitForTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportPreviewMessage,
+    );
     await setInputValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionActionDialogInput,
@@ -1498,6 +1508,69 @@ function handleDefinitionVersionRequest(input: {
         checksum: version.checksum ?? "0".repeat(64),
         snapshot: version.snapshot,
         tags: version.tags ?? [],
+      },
+    });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsPreviewImportVersion) {
+    const exported = readRequiredRecord(body, "exported");
+    const snapshot = exported["snapshot"];
+    if (!isRecord(snapshot)) {
+      writeJson(response, 400, { message: "Invalid request body" });
+      return true;
+    }
+
+    const targetWorkspaceId = readRequiredString(body, "targetWorkspaceId");
+    const targetProjectId = readRequiredString(body, "targetProjectId");
+    const workflowIdCollision = state.definitions.some(
+      (definition) => definition.id === readRequiredString(snapshot, "id"),
+    );
+    const workspaceMismatch =
+      readRequiredString(snapshot, "workspaceId") !== targetWorkspaceId;
+    const projectMismatch =
+      readRequiredString(snapshot, "projectId") !== targetProjectId;
+    const messages = [
+      ...(workflowIdCollision
+        ? [
+            {
+              code: "workflow_id_collision",
+              severity: "warning",
+              message:
+                "Snapshot workflow id already exists and will be regenerated.",
+            },
+          ]
+        : []),
+      ...(workspaceMismatch
+        ? [
+            {
+              code: "workspace_mismatch",
+              severity: "warning",
+              message: "Snapshot workspace differs from the current workspace.",
+            },
+          ]
+        : []),
+      ...(projectMismatch
+        ? [
+            {
+              code: "project_mismatch",
+              severity: "warning",
+              message: "Snapshot project differs from the current project.",
+            },
+          ]
+        : []),
+    ];
+    writeJson(response, 200, {
+      preview: {
+        status: messages.length > 0 ? "warning" : "valid",
+        schemaSupported: exported["schemaVersion"] === 1,
+        checksumValid: typeof exported["checksum"] === "string",
+        workspaceMismatch,
+        projectMismatch,
+        workflowIdCollision,
+        recommendedIdMode: workflowIdCollision ? "regenerate_ids" : "keep_ids",
+        suggestedName: readRequiredString(snapshot, "name"),
+        messages,
       },
     });
     return true;

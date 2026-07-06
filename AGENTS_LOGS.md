@@ -4125,3 +4125,25 @@
   - This completes a high-value slice of the 200-item roadmap, not the entire roadmap.
 - Next
   - Run full repository gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-06 15:20 (Europe/Madrid) — Workflow Version Import Hardening
+
+- Summary
+  - Added server-backed import preview hardening for Workflows version snapshots and default export redaction safeguards.
+- Decisions
+  - Keep import validation source-of-truth in the workflow versioning/catalog/server path while the UI renders the preview in the existing modal-first import flow.
+  - Exported snapshots redact secret-looking trigger config values by default and can omit pinned outputs while preserving checksum validation against the exported payload.
+- Changes
+  - `packages/agents/src/workflow-versioning.ts` now supports import preview status/messages for checksum, schema, workspace/project mismatch and workflow-id collisions, plus export redaction options.
+  - `packages/agents/src/workflow-catalog.ts`, `apps/server-api/src/workflows.ts`, `apps/server-api/src/server.ts` and `apps/web-ui/src/shared/workflow-client.ts` expose the preview-import path.
+  - `apps/web-ui/src/screens/Workflows.ts` shows import preview warnings in the modal and accepts file or textarea import input.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates the import preview panel before confirming import.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts` failed first, then PASS after implementation.
+  - `corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts` failed first, then PASS after adding preview execute/parse support.
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/workflow-client.test.ts` failed first, then PASS after adding preview parser/client support.
+  - `corepack pnpm@10.18.3 typecheck` failed once on strict config/index access, then PASS.
+- Issues/Risks
+  - Full gates, browser validation, commit, push and remote CI/CodeQL are still pending for this slice.
+- Next
+  - Run required gates, fix any failures, commit, push with hooks enabled and verify GitHub CI/CodeQL.

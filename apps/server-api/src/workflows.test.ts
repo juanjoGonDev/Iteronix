@@ -24,6 +24,7 @@ import {
   executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionImportVersion,
+  executeWorkflowDefinitionPreviewImportVersion,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
   executeWorkflowDefinitionRestoreVersionPart,
@@ -42,6 +43,7 @@ import {
   parseWorkflowDefinitionCleanupVersionsRequest,
   parseWorkflowDefinitionExportVersionRequest,
   parseWorkflowDefinitionImportVersionRequest,
+  parseWorkflowDefinitionPreviewImportVersionRequest,
   parseWorkflowDefinitionRestoreVersionPartRequest,
   parseWorkflowDefinitionUpsertRequest,
   parseWorkflowExecutionDeleteRequest,
@@ -358,6 +360,71 @@ describe("workflow api contracts", () => {
     if (cleanup.type === ResultType.Ok) {
       expect(cleanup.value.kept).toHaveLength(1);
       expect(cleanup.value.removed.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("previews workflow version imports with checksum and collision warnings", () => {
+    const projectStore = createProjectStore({
+      projects: [createProjectRecord()],
+    });
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    const created = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: createWorkflowDefinitionInput(),
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (created.type !== ResultType.Ok) {
+      throw new Error("Expected workflow create to succeed.");
+    }
+    const versions = executeWorkflowDefinitionVersionList(
+      {
+        workflowId: created.value.id,
+      },
+      {
+        catalog,
+      },
+    );
+    if (versions.type !== ResultType.Ok) {
+      throw new Error("Expected workflow versions to list.");
+    }
+    const exported = executeWorkflowDefinitionExportVersion(
+      {
+        workflowId: created.value.id,
+        versionId: versions.value[0]?.id ?? "",
+      },
+      {
+        catalog,
+      },
+    );
+    if (exported.type !== ResultType.Ok) {
+      throw new Error("Expected version export to succeed.");
+    }
+
+    const parsed = parseWorkflowDefinitionPreviewImportVersionRequest({
+      exported: exported.value,
+      targetWorkspaceId: "workspace-2",
+      targetProjectId: "project-2",
+    });
+    const preview =
+      parsed.type === ResultType.Ok
+        ? executeWorkflowDefinitionPreviewImportVersion(parsed.value, {
+            catalog,
+          })
+        : parsed;
+
+    expect(preview.type).toBe(ResultType.Ok);
+    if (preview.type === ResultType.Ok) {
+      expect(preview.value.status).toBe("warning");
+      expect(preview.value.workflowIdCollision).toBe(true);
+      expect(preview.value.workspaceMismatch).toBe(true);
+      expect(preview.value.projectMismatch).toBe(true);
     }
   });
 

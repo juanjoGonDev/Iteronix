@@ -18,6 +18,7 @@ import {
   WorkflowRunStreamEventType,
   type WorkflowRunStreamEvent,
   type WorkflowVersionExportRecord,
+  type WorkflowVersionImportPreviewRecord,
   type WorkflowVersionRestorePart,
 } from "../shared/workflow-client.js";
 import {
@@ -299,6 +300,10 @@ const WorkflowScreenSelector = {
   WorkflowVersionActionDialogInput: "workflows-version-action-dialog-input",
   WorkflowVersionActionDialogConfirm: "workflows-version-action-dialog-confirm",
   WorkflowVersionActionDialogCancel: "workflows-version-action-dialog-cancel",
+  WorkflowVersionImportFile: "workflows-version-import-file",
+  WorkflowVersionImportPreview: "workflows-version-import-preview",
+  WorkflowVersionImportPreviewMessage:
+    "workflows-version-import-preview-message",
   WorkflowDeleteDialog: "workflows-delete-dialog",
   WorkflowDeleteConfirm: "workflows-delete-confirm",
   NodeRenameDialog: "workflows-node-rename-dialog",
@@ -524,6 +529,7 @@ type WorkflowVersionActionDialogState =
       description: string;
       rawText: string;
       inputValue: string;
+      preview: WorkflowVersionImportPreviewRecord;
       confirmLabel: string;
     }
   | {
@@ -1945,12 +1951,22 @@ export class WorkflowsScreen extends Component<
               });
             },
           }),
+          createElement("input", {
+            "data-testid": WorkflowScreenSelector.WorkflowVersionImportFile,
+            type: "file",
+            accept: "application/json,.json",
+            className:
+              "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-text-secondary file:mr-3 file:rounded-md file:border-0 file:bg-[#151c24] file:px-3 file:py-1.5 file:text-xs file:text-slate-200",
+            onChange: (event: Event) => {
+              void this.readWorkflowVersionImportFile(event);
+            },
+          }),
           createElement("div", { className: "flex flex-wrap gap-2" }, [
             this.renderWorkflowVersionActionButton({
               label: "Import",
               testId: "workflows-version-import",
               onClick: () => {
-                this.openWorkflowVersionImportDialog();
+                void this.openWorkflowVersionImportDialog();
               },
             }),
             createElement("input", {
@@ -2570,6 +2586,9 @@ export class WorkflowsScreen extends Component<
                     "A backup version is already kept in server history before restore. The selected snapshot remains available for compare and recovery.",
                   ],
                 ),
+            dialog.kind === "import"
+              ? this.renderWorkflowVersionImportPreview(dialog.preview)
+              : "",
             createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
               createElement(
                 "button",
@@ -2605,6 +2624,57 @@ export class WorkflowsScreen extends Component<
             ]),
           ],
         ),
+      ],
+    );
+  }
+
+  private renderWorkflowVersionImportPreview(
+    preview: WorkflowVersionImportPreviewRecord,
+  ): HTMLElement {
+    const statusClass =
+      preview.status === "invalid"
+        ? "border-red-500/30 bg-red-500/10 text-red-100"
+        : preview.status === "warning"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100";
+    return createElement(
+      "div",
+      {
+        className: `mt-4 rounded-lg border p-3 text-xs leading-5 ${statusClass}`,
+        dataset: {
+          testid: WorkflowScreenSelector.WorkflowVersionImportPreview,
+        },
+      },
+      [
+        createElement("p", { className: "font-semibold" }, [
+          `Import preview · ${preview.status}`,
+        ]),
+        createElement("p", { className: "mt-1" }, [
+          `Checksum ${preview.checksumValid ? "valid" : "invalid"} · schema ${
+            preview.schemaSupported ? "supported" : "unsupported"
+          } · IDs ${preview.recommendedIdMode.replace("_", " ")}`,
+        ]),
+        preview.messages.length === 0
+          ? createElement("p", { className: "mt-2" }, [
+              "No import warnings detected.",
+            ])
+          : createElement(
+              "div",
+              { className: "mt-2 grid gap-1" },
+              preview.messages.map((message) =>
+                createElement(
+                  "p",
+                  {
+                    key: message.code,
+                    dataset: {
+                      testid:
+                        WorkflowScreenSelector.WorkflowVersionImportPreviewMessage,
+                    },
+                  },
+                  [`${message.severity}: ${message.message}`],
+                ),
+              ),
+            ),
       ],
     );
   }
@@ -2651,7 +2721,7 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private openWorkflowVersionImportDialog(): void {
+  private async openWorkflowVersionImportDialog(): Promise<void> {
     const rawText = this.state.versionImportText.trim();
     if (rawText.length === 0) {
       return;
@@ -2659,6 +2729,15 @@ export class WorkflowsScreen extends Component<
 
     try {
       const parsed = JSON.parse(rawText) as WorkflowVersionExportRecord;
+      const target = this.readCurrentWorkflowRecord();
+      if (!target) {
+        return;
+      }
+      const preview = await this.workflowClient.previewDefinitionVersionImport({
+        exported: parsed,
+        targetWorkspaceId: target.workspaceId,
+        targetProjectId: target.projectId,
+      });
       this.setState({
         versionActionDialog: {
           kind: "import",
@@ -2666,7 +2745,8 @@ export class WorkflowsScreen extends Component<
           description:
             "Validate the exported snapshot and choose the workflow name before creating it.",
           rawText,
-          inputValue: parsed.snapshot.name,
+          inputValue: preview.suggestedName || parsed.snapshot.name,
+          preview,
           confirmLabel: "Import snapshot",
         },
         errorMessage: null,
@@ -2676,6 +2756,29 @@ export class WorkflowsScreen extends Component<
         errorMessage: readErrorMessage(
           error,
           "Could not parse workflow version snapshot.",
+        ),
+      });
+    }
+  }
+
+  private async readWorkflowVersionImportFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      this.setState({
+        versionImportText: text,
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not read workflow version import file.",
         ),
       });
     }
@@ -2722,6 +2825,10 @@ export class WorkflowsScreen extends Component<
   ): boolean {
     if (dialog.kind === "restore") {
       return true;
+    }
+
+    if (dialog.kind === "import" && dialog.preview.status === "invalid") {
+      return false;
     }
 
     return dialog.inputValue.trim().length > 0;

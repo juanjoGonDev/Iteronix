@@ -69,8 +69,64 @@ export type WorkflowVersionExportRecord = {
   tags: ReadonlyArray<string>;
 };
 
+export type WorkflowVersionExportOptions = {
+  includePinnedOutputs: boolean;
+  redactSecrets: boolean;
+};
+
+type WorkflowVersionImportIdMode = "keep_ids" | "regenerate_ids";
+
+type WorkflowVersionImportMessageCode =
+  | "checksum_mismatch"
+  | "project_mismatch"
+  | "unsupported_schema_version"
+  | "workflow_id_collision"
+  | "workspace_mismatch";
+
+type WorkflowVersionImportMessage = {
+  code: WorkflowVersionImportMessageCode;
+  severity: "error" | "warning";
+  message: string;
+};
+
+export type WorkflowVersionImportPreviewRecord = {
+  status: "valid" | "warning" | "invalid";
+  schemaSupported: boolean;
+  checksumValid: boolean;
+  workspaceMismatch: boolean;
+  projectMismatch: boolean;
+  workflowIdCollision: boolean;
+  recommendedIdMode: WorkflowVersionImportIdMode;
+  suggestedName: string;
+  messages: ReadonlyArray<WorkflowVersionImportMessage>;
+};
+
 export type WorkflowVersionRetentionPolicy = {
   keepLatest: number;
+};
+
+type WorkflowVersionImportCandidate = Omit<
+  WorkflowVersionExportRecord,
+  "schemaVersion"
+> & {
+  schemaVersion: number;
+};
+
+const WorkflowVersionSchemaVersion = 1;
+const RedactedValue = "[redacted]";
+const SensitiveKeyFragments = [
+  "apikey",
+  "api_key",
+  "authorization",
+  "bearer",
+  "password",
+  "secret",
+  "token",
+] as const;
+
+const DefaultWorkflowVersionExportOptions: WorkflowVersionExportOptions = {
+  includePinnedOutputs: true,
+  redactSecrets: true,
 };
 
 export const compareWorkflowVersions = (
@@ -203,18 +259,64 @@ export const restoreWorkflowVersionPart = (
 
 export const exportWorkflowVersionSnapshot = (
   version: WorkflowDefinitionVersionRecord,
-): WorkflowVersionExportRecord => ({
-  schemaVersion: 1,
-  workflowId: version.workflowId,
-  versionId: version.id,
-  version: version.version,
-  createdAt: version.createdAt,
-  checksum:
-    version.checksum ?? computeWorkflowVersionChecksum(version.snapshot),
-  snapshot: version.snapshot,
-  ...(version.note ? { note: version.note } : {}),
-  tags: version.tags ?? [],
-});
+  options: WorkflowVersionExportOptions = DefaultWorkflowVersionExportOptions,
+): WorkflowVersionExportRecord => {
+  const snapshot = prepareWorkflowVersionExportSnapshot(
+    version.snapshot,
+    options,
+  );
+  return {
+    schemaVersion: WorkflowVersionSchemaVersion,
+    workflowId: version.workflowId,
+    versionId: version.id,
+    version: version.version,
+    createdAt: version.createdAt,
+    checksum: computeWorkflowVersionChecksum(snapshot),
+    snapshot,
+    ...(version.note ? { note: version.note } : {}),
+    tags: version.tags ?? [],
+  };
+};
+
+export const previewWorkflowVersionImport = (input: {
+  exported: WorkflowVersionImportCandidate;
+  targetWorkspaceId: string;
+  targetProjectId: string;
+  existingWorkflowIds: ReadonlyArray<string>;
+}): WorkflowVersionImportPreviewRecord => {
+  const schemaSupported =
+    input.exported.schemaVersion === WorkflowVersionSchemaVersion;
+  const checksumValid = validateWorkflowVersionChecksum(
+    input.exported.snapshot,
+    input.exported.checksum,
+  );
+  const workflowIdCollision = input.existingWorkflowIds.includes(
+    input.exported.snapshot.id,
+  );
+  const workspaceMismatch =
+    input.exported.snapshot.workspaceId !== input.targetWorkspaceId;
+  const projectMismatch =
+    input.exported.snapshot.projectId !== input.targetProjectId;
+  const messages = createWorkflowVersionImportMessages({
+    schemaSupported,
+    checksumValid,
+    workflowIdCollision,
+    workspaceMismatch,
+    projectMismatch,
+  });
+
+  return {
+    status: readWorkflowVersionImportStatus(messages),
+    schemaSupported,
+    checksumValid,
+    workspaceMismatch,
+    projectMismatch,
+    workflowIdCollision,
+    recommendedIdMode: workflowIdCollision ? "regenerate_ids" : "keep_ids",
+    suggestedName: input.exported.snapshot.name,
+    messages,
+  };
+};
 
 export const importWorkflowVersionSnapshot = (
   exported: WorkflowVersionExportRecord,
@@ -262,6 +364,181 @@ const compareMetadata = (
     ["Status", left.status, right.status],
     ["Tags", left.tags, right.tags],
   ]);
+
+const prepareWorkflowVersionExportSnapshot = (
+  workflow: WorkflowDefinitionRecord,
+  options: WorkflowVersionExportOptions,
+): WorkflowDefinitionRecord => ({
+  ...workflow,
+  trigger: {
+    ...workflow.trigger,
+    config: options.redactSecrets
+      ? redactWorkflowVersionSecrets(workflow.trigger.config)
+      : workflow.trigger.config,
+  },
+  nodes: workflow.nodes.map((node) =>
+    prepareWorkflowVersionExportNode(node, options),
+  ),
+});
+
+const prepareWorkflowVersionExportNode = (
+  node: WorkflowNodeRecord,
+  options: WorkflowVersionExportOptions,
+): WorkflowNodeRecord => ({
+  ...node,
+  config: prepareWorkflowVersionExportNodeConfig(node.config, options),
+});
+
+const prepareWorkflowVersionExportNodeConfig = (
+  config: Record<string, unknown>,
+  options: WorkflowVersionExportOptions,
+): Record<string, unknown> => {
+  const withoutPinned = options.includePinnedOutputs
+    ? config
+    : removeWorkflowVersionPinnedOutput(config);
+
+  return options.redactSecrets
+    ? redactWorkflowVersionSecrets(withoutPinned)
+    : withoutPinned;
+};
+
+const removeWorkflowVersionPinnedOutput = (
+  config: Record<string, unknown>,
+): Record<string, unknown> => {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (key === "pinnedTestOutput") {
+      continue;
+    }
+    next[key] = value;
+  }
+
+  return next;
+};
+
+const redactWorkflowVersionSecrets = (
+  value: unknown,
+): Record<string, unknown> => {
+  if (!isWorkflowVersionPlainRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      key,
+      redactWorkflowVersionSecretEntry(key, entryValue),
+    ]),
+  );
+};
+
+const redactWorkflowVersionSecretEntry = (
+  key: string,
+  value: unknown,
+): unknown => {
+  if (isWorkflowVersionSensitiveKey(key)) {
+    return RedactedValue;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactWorkflowVersionSecretValue(entry));
+  }
+
+  if (isWorkflowVersionPlainRecord(value)) {
+    return redactWorkflowVersionSecrets(value);
+  }
+
+  return value;
+};
+
+const redactWorkflowVersionSecretValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactWorkflowVersionSecretValue(entry));
+  }
+
+  if (isWorkflowVersionPlainRecord(value)) {
+    return redactWorkflowVersionSecrets(value);
+  }
+
+  return value;
+};
+
+const isWorkflowVersionSensitiveKey = (key: string): boolean => {
+  const normalized = key.toLowerCase();
+  return SensitiveKeyFragments.some((fragment) =>
+    normalized.includes(fragment),
+  );
+};
+
+const isWorkflowVersionPlainRecord = (
+  value: unknown,
+): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const createWorkflowVersionImportMessages = (input: {
+  schemaSupported: boolean;
+  checksumValid: boolean;
+  workflowIdCollision: boolean;
+  workspaceMismatch: boolean;
+  projectMismatch: boolean;
+}): ReadonlyArray<WorkflowVersionImportMessage> => {
+  const messages: Array<WorkflowVersionImportMessage> = [];
+
+  if (!input.schemaSupported) {
+    messages.push({
+      code: "unsupported_schema_version",
+      severity: "error",
+      message: "Snapshot schema version is not supported.",
+    });
+  }
+
+  if (!input.checksumValid) {
+    messages.push({
+      code: "checksum_mismatch",
+      severity: "error",
+      message: "Snapshot checksum does not match its workflow payload.",
+    });
+  }
+
+  if (input.workflowIdCollision) {
+    messages.push({
+      code: "workflow_id_collision",
+      severity: "warning",
+      message: "Snapshot workflow id already exists and will be regenerated.",
+    });
+  }
+
+  if (input.workspaceMismatch) {
+    messages.push({
+      code: "workspace_mismatch",
+      severity: "warning",
+      message: "Snapshot workspace differs from the current workspace.",
+    });
+  }
+
+  if (input.projectMismatch) {
+    messages.push({
+      code: "project_mismatch",
+      severity: "warning",
+      message: "Snapshot project differs from the current project.",
+    });
+  }
+
+  return messages;
+};
+
+const readWorkflowVersionImportStatus = (
+  messages: ReadonlyArray<WorkflowVersionImportMessage>,
+): WorkflowVersionImportPreviewRecord["status"] => {
+  if (messages.some((message) => message.severity === "error")) {
+    return "invalid";
+  }
+
+  if (messages.some((message) => message.severity === "warning")) {
+    return "warning";
+  }
+
+  return "valid";
+};
 
 const compareSettings = (
   left: WorkflowDefinitionRecord,

@@ -5,6 +5,7 @@ import type {
 } from "../../../packages/agents/src/workflow-catalog";
 import type {
   WorkflowVersionExportRecord,
+  WorkflowVersionImportPreviewRecord,
   WorkflowVersionRestorePart,
 } from "../../../packages/agents/src/workflow-versioning";
 import type { WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
@@ -241,6 +242,18 @@ export const executeWorkflowDefinitionImportVersion = (
     });
   }
 };
+
+export const executeWorkflowDefinitionPreviewImportVersion = (
+  input: {
+    exported: WorkflowVersionExportRecord;
+    targetWorkspaceId: string;
+    targetProjectId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowVersionImportPreviewRecord, ApiError> =>
+  ok(dependencies.catalog.previewWorkflowVersionImport(input));
 
 export const executeWorkflowDefinitionCleanupVersions = (
   input: {
@@ -812,6 +825,44 @@ export const parseWorkflowDefinitionImportVersionRequest = (
   return ok({
     exported: value["exported"] as unknown as WorkflowVersionExportRecord,
     ...(name ? { name } : {}),
+  });
+};
+
+export const parseWorkflowDefinitionPreviewImportVersionRequest = (
+  value: unknown,
+): Result<
+  {
+    exported: WorkflowVersionExportRecord;
+    targetWorkspaceId: string;
+    targetProjectId: string;
+  },
+  ApiError
+> => {
+  if (!isRecord(value) || !isRecord(value["exported"])) {
+    return invalidBody();
+  }
+
+  const targetWorkspaceId = readRequiredString(
+    value,
+    "targetWorkspaceId",
+    ErrorMessage.InvalidBody,
+  );
+  const targetProjectId = readRequiredString(
+    value,
+    "targetProjectId",
+    ErrorMessage.InvalidBody,
+  );
+  if (
+    targetWorkspaceId.type === ResultType.Err ||
+    targetProjectId.type === ResultType.Err
+  ) {
+    return invalidBody();
+  }
+
+  return ok({
+    exported: value["exported"] as unknown as WorkflowVersionExportRecord,
+    targetWorkspaceId: targetWorkspaceId.value,
+    targetProjectId: targetProjectId.value,
   });
 };
 

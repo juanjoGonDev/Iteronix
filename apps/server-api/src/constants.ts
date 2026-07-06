@@ -67,6 +67,8 @@ export const RoutePath = {
     "/workflows/definitions/restore-version-part",
   WorkflowDefinitionsCloneVersion: "/workflows/definitions/clone-version",
   WorkflowDefinitionsExportVersion: "/workflows/definitions/export-version",
+  WorkflowDefinitionsPreviewImportVersion:
+    "/workflows/definitions/preview-import-version",
   WorkflowDefinitionsImportVersion: "/workflows/definitions/import-version",
   WorkflowDefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",

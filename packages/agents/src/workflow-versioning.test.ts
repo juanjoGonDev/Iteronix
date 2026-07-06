@@ -10,6 +10,7 @@ import {
   computeWorkflowVersionChecksum,
   exportWorkflowVersionSnapshot,
   importWorkflowVersionSnapshot,
+  previewWorkflowVersionImport,
   readWorkflowVersionChangeSummary,
   restoreWorkflowVersionPart,
   trimWorkflowVersionsByRetention,
@@ -163,6 +164,128 @@ describe("workflow versioning", () => {
     expect(imported.note).toBe("release");
     expect(imported.tags).toEqual(["release"]);
     expect(imported.checksum).toBe(exported.checksum);
+  });
+
+  it("previews import risks before creating a workflow", () => {
+    const workflow = createWorkflow({
+      name: "Imported",
+      nodes: [createNode("node-a", "A")],
+    });
+    const exported = exportWorkflowVersionSnapshot({
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      id: "version-1",
+      version: 1,
+      createdAt: workflow.updatedAt,
+      snapshot: workflow,
+      tags: [],
+    });
+    const preview = previewWorkflowVersionImport({
+      exported,
+      targetWorkspaceId: "workspace-2",
+      targetProjectId: "project-2",
+      existingWorkflowIds: [workflow.id],
+    });
+
+    expect(preview.status).toBe("warning");
+    expect(preview.checksumValid).toBe(true);
+    expect(preview.workflowIdCollision).toBe(true);
+    expect(preview.workspaceMismatch).toBe(true);
+    expect(preview.projectMismatch).toBe(true);
+    expect(preview.recommendedIdMode).toBe("regenerate_ids");
+    expect(preview.messages.map((message) => message.code)).toEqual([
+      "workflow_id_collision",
+      "workspace_mismatch",
+      "project_mismatch",
+    ]);
+  });
+
+  it("redacts sensitive fields and can omit pinned outputs from exports", () => {
+    const workflow: WorkflowDefinitionRecord = {
+      ...createWorkflow({
+        name: "Exported",
+        nodes: [
+          createNode("node-a", "A", {
+            pinnedTestOutput: {
+              outputSnapshot: { result: "pinned" },
+              updatedAt: "2026-05-06T08:00:00.000Z",
+            },
+          }),
+        ],
+      }),
+      trigger: {
+        kind: WorkflowTriggerKind.Manual,
+        enabled: true,
+        config: {
+          authorization: "Bearer secret",
+          nested: {
+            password: "secret-password",
+          },
+        },
+      },
+    };
+    const exported = exportWorkflowVersionSnapshot(
+      {
+        workflowId: workflow.id,
+        projectId: workflow.projectId,
+        id: "version-1",
+        version: 1,
+        createdAt: workflow.updatedAt,
+        snapshot: workflow,
+        tags: [],
+      },
+      {
+        includePinnedOutputs: false,
+        redactSecrets: true,
+      },
+    );
+    const exportedNode = exported.snapshot.nodes[0];
+
+    expect(exported.snapshot.trigger.config["authorization"]).toBe(
+      "[redacted]",
+    );
+    expect(exported.snapshot.trigger.config["nested"]).toEqual({
+      password: "[redacted]",
+    });
+    expect(exportedNode?.config.pinnedTestOutput).toBeUndefined();
+    expect(
+      validateWorkflowVersionChecksum(exported.snapshot, exported.checksum),
+    ).toBe(true);
+  });
+
+  it("marks corrupt or unsupported imports as invalid", () => {
+    const workflow = createWorkflow({
+      name: "Unsupported",
+      nodes: [createNode("node-a", "A")],
+    });
+    const exported = exportWorkflowVersionSnapshot({
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      id: "version-1",
+      version: 1,
+      createdAt: workflow.updatedAt,
+      snapshot: workflow,
+      tags: [],
+    });
+    const unsupported = {
+      ...exported,
+      schemaVersion: 999,
+      checksum: "0".repeat(64),
+    };
+    const preview = previewWorkflowVersionImport({
+      exported: unsupported,
+      targetWorkspaceId: workflow.workspaceId,
+      targetProjectId: workflow.projectId,
+      existingWorkflowIds: [],
+    });
+
+    expect(preview.status).toBe("invalid");
+    expect(preview.schemaSupported).toBe(false);
+    expect(preview.checksumValid).toBe(false);
+    expect(preview.messages.map((message) => message.code)).toEqual([
+      "unsupported_schema_version",
+      "checksum_mismatch",
+    ]);
   });
 
   it("trims old versions with a retention policy", () => {

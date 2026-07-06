@@ -23,6 +23,8 @@ const EndpointPath = {
   DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsPreviewImportVersion:
+    "/workflows/definitions/preview-import-version",
   DefinitionsImportVersion: "/workflows/definitions/import-version",
   DefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   DefinitionsUpsert: "/workflows/definitions/upsert",
@@ -66,6 +68,29 @@ export type WorkflowVersionExportRecord = {
   snapshot: WorkflowDefinitionRecord;
   note?: string;
   tags: ReadonlyArray<string>;
+};
+
+type WorkflowVersionImportPreviewMessage = {
+  code:
+    | "checksum_mismatch"
+    | "project_mismatch"
+    | "unsupported_schema_version"
+    | "workflow_id_collision"
+    | "workspace_mismatch";
+  severity: "error" | "warning";
+  message: string;
+};
+
+export type WorkflowVersionImportPreviewRecord = {
+  status: "valid" | "warning" | "invalid";
+  schemaSupported: boolean;
+  checksumValid: boolean;
+  workspaceMismatch: boolean;
+  projectMismatch: boolean;
+  workflowIdCollision: boolean;
+  recommendedIdMode: "keep_ids" | "regenerate_ids";
+  suggestedName: string;
+  messages: ReadonlyArray<WorkflowVersionImportPreviewMessage>;
 };
 
 export type WorkflowNodeProviderTestResult = {
@@ -181,6 +206,11 @@ export type WorkflowClient = {
     workflowId: string;
     versionId: string;
   }) => Promise<WorkflowVersionExportRecord>;
+  previewDefinitionVersionImport: (input: {
+    exported: WorkflowVersionExportRecord;
+    targetWorkspaceId: string;
+    targetProjectId: string;
+  }) => Promise<WorkflowVersionImportPreviewRecord>;
   importDefinitionVersion: (input: {
     exported: WorkflowVersionExportRecord;
     name?: string;
@@ -317,6 +347,16 @@ export const createWorkflowClient = (): WorkflowClient => ({
         versionId: input.versionId,
       },
       parse: parseWorkflowDefinitionExportResponse,
+    }),
+  previewDefinitionVersionImport: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsPreviewImportVersion,
+      body: {
+        exported: input.exported,
+        targetWorkspaceId: input.targetWorkspaceId,
+        targetProjectId: input.targetProjectId,
+      },
+      parse: parseWorkflowDefinitionImportPreviewResponse,
     }),
   importDefinitionVersion: (input) =>
     requestJson({
@@ -572,6 +612,67 @@ export const parseWorkflowDefinitionExportResponse = (
   };
 };
 
+export const parseWorkflowDefinitionImportPreviewResponse = (
+  value: unknown,
+): WorkflowVersionImportPreviewRecord => {
+  const record = readRequiredRecord(
+    value,
+    "workflowDefinitionImportPreviewResponse",
+    "preview",
+  );
+  return {
+    status: parseWorkflowVersionImportPreviewStatus(
+      readRequiredString(record, "workflowVersionImportPreview", "status"),
+    ),
+    schemaSupported: readRequiredBoolean(
+      record,
+      "workflowVersionImportPreview",
+      "schemaSupported",
+    ),
+    checksumValid: readRequiredBoolean(
+      record,
+      "workflowVersionImportPreview",
+      "checksumValid",
+    ),
+    workspaceMismatch: readRequiredBoolean(
+      record,
+      "workflowVersionImportPreview",
+      "workspaceMismatch",
+    ),
+    projectMismatch: readRequiredBoolean(
+      record,
+      "workflowVersionImportPreview",
+      "projectMismatch",
+    ),
+    workflowIdCollision: readRequiredBoolean(
+      record,
+      "workflowVersionImportPreview",
+      "workflowIdCollision",
+    ),
+    recommendedIdMode: parseWorkflowVersionImportIdMode(
+      readRequiredString(
+        record,
+        "workflowVersionImportPreview",
+        "recommendedIdMode",
+      ),
+    ),
+    suggestedName: readRequiredString(
+      record,
+      "workflowVersionImportPreview",
+      "suggestedName",
+    ),
+    messages: readRequiredArray(
+      record,
+      "workflowVersionImportPreview",
+      "messages",
+    ).map((item) =>
+      parseWorkflowVersionImportMessage(
+        ensureRecord(item, "workflowVersionImportMessage"),
+      ),
+    ),
+  };
+};
+
 export const parseWorkflowDefinitionCleanupResponse = (
   value: unknown,
 ): {
@@ -597,6 +698,64 @@ export const parseWorkflowDefinitionCleanupResponse = (
     ),
   ),
 });
+
+const parseWorkflowVersionImportPreviewStatus = (
+  value: string,
+): WorkflowVersionImportPreviewRecord["status"] => {
+  if (value === "valid" || value === "warning" || value === "invalid") {
+    return value;
+  }
+
+  throw new Error("Invalid workflowVersionImportPreview.status");
+};
+
+const parseWorkflowVersionImportIdMode = (
+  value: string,
+): WorkflowVersionImportPreviewRecord["recommendedIdMode"] => {
+  if (value === "keep_ids" || value === "regenerate_ids") {
+    return value;
+  }
+
+  throw new Error("Invalid workflowVersionImportPreview.recommendedIdMode");
+};
+
+const parseWorkflowVersionImportMessage = (
+  value: Record<string, unknown>,
+): WorkflowVersionImportPreviewMessage => ({
+  code: parseWorkflowVersionImportMessageCode(
+    readRequiredString(value, "workflowVersionImportMessage", "code"),
+  ),
+  severity: parseWorkflowVersionImportMessageSeverity(
+    readRequiredString(value, "workflowVersionImportMessage", "severity"),
+  ),
+  message: readRequiredString(value, "workflowVersionImportMessage", "message"),
+});
+
+const parseWorkflowVersionImportMessageCode = (
+  value: string,
+): WorkflowVersionImportPreviewMessage["code"] => {
+  if (
+    value === "checksum_mismatch" ||
+    value === "project_mismatch" ||
+    value === "unsupported_schema_version" ||
+    value === "workflow_id_collision" ||
+    value === "workspace_mismatch"
+  ) {
+    return value;
+  }
+
+  throw new Error("Invalid workflowVersionImportMessage.code");
+};
+
+const parseWorkflowVersionImportMessageSeverity = (
+  value: string,
+): WorkflowVersionImportPreviewMessage["severity"] => {
+  if (value === "error" || value === "warning") {
+    return value;
+  }
+
+  throw new Error("Invalid workflowVersionImportMessage.severity");
+};
 
 export const parseWorkflowAssetListResponse = (
   value: unknown,
@@ -1288,6 +1447,19 @@ const readRequiredString = (
 ): string => {
   const nested = value[key];
   if (typeof nested !== "string") {
+    throw new Error(`Invalid ${label}.${key}`);
+  }
+
+  return nested;
+};
+
+const readRequiredBoolean = (
+  value: Record<string, unknown>,
+  label: string,
+  key: string,
+): boolean => {
+  const nested = value[key];
+  if (typeof nested !== "boolean") {
     throw new Error(`Invalid ${label}.${key}`);
   }
 
