@@ -363,6 +363,12 @@ export type WorkflowDefinitionVersionRecord = {
   version: number;
   createdAt: string;
   snapshot: WorkflowDefinitionRecord;
+  checksum?: string;
+  author?: string;
+  note?: string;
+  tags?: ReadonlyArray<string>;
+  changeType?: "manual" | "autosave" | "restore" | "clone" | "import";
+  changeSummary?: string;
 };
 
 export type WorkflowAssetRecord = {

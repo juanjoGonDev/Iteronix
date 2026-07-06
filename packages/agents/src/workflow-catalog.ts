@@ -10,6 +10,17 @@ import {
   type WorkflowDefinitionVersionRecord,
   type WorkflowExecutionRecord,
 } from "../../shared/src/workflows";
+import {
+  compareWorkflowVersions,
+  computeWorkflowVersionChecksum,
+  exportWorkflowVersionSnapshot,
+  importWorkflowVersionSnapshot,
+  readWorkflowVersionChangeSummary,
+  restoreWorkflowVersionPart,
+  trimWorkflowVersionsByRetention,
+  type WorkflowVersionExportRecord,
+  type WorkflowVersionRestorePart,
+} from "./workflow-versioning";
 
 export type WorkflowDefinitionUpsertInput = Omit<
   WorkflowDefinitionRecord,
@@ -17,6 +28,8 @@ export type WorkflowDefinitionUpsertInput = Omit<
 > & {
   id?: string;
   projectId?: string;
+  versionNote?: string;
+  versionTags?: ReadonlyArray<string>;
 };
 
 export type WorkflowAssetUpsertInput = Omit<
@@ -49,10 +62,31 @@ export type WorkflowCatalogStore = {
     workflowId: string;
     versionId: string;
   }) => WorkflowDefinitionRecord | undefined;
+  restoreWorkflowVersionPart: (input: {
+    workflowId: string;
+    versionId: string;
+    part: WorkflowVersionRestorePart;
+  }) => WorkflowDefinitionRecord | undefined;
   cloneWorkflowVersion: (input: {
     workflowId: string;
     versionId: string;
+    name?: string;
   }) => WorkflowDefinitionRecord | undefined;
+  exportWorkflowVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => WorkflowVersionExportRecord | undefined;
+  importWorkflowVersion: (input: {
+    exported: WorkflowVersionExportRecord;
+    name?: string;
+  }) => WorkflowDefinitionRecord | undefined;
+  cleanupWorkflowVersions: (input: {
+    workflowId: string;
+    keepLatest: number;
+  }) => {
+    kept: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+    removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  };
   deleteWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
   upsertAsset: (input: WorkflowAssetUpsertInput) => WorkflowAssetRecord;
   listAssets: (input: {
@@ -118,8 +152,24 @@ export const createWorkflowCatalogStore = (
   ): WorkflowDefinitionRecord => {
     const current = input.id ? definitionsById.get(input.id) : undefined;
     const next = createWorkflowRecord(input, current, now);
+    const checksum = computeWorkflowVersionChecksum(next);
+    const latestVersion = readLatestWorkflowVersion(
+      definitionVersionsById,
+      next.id,
+    );
+    if (current && latestVersion?.checksum === checksum) {
+      return current;
+    }
+
     definitionsById.set(next.id, next);
-    const version = createWorkflowVersionRecord(next, now);
+    const version = createWorkflowVersionRecord({
+      workflow: next,
+      previous: current,
+      now,
+      checksum,
+      ...(input.versionNote ? { note: input.versionNote } : {}),
+      ...(input.versionTags ? { tags: input.versionTags } : {}),
+    });
     definitionVersionsById.set(version.id, version);
     assetUsages = createAssetUsages(Array.from(definitionsById.values()), now);
     return next;
@@ -159,9 +209,28 @@ export const createWorkflowCatalogStore = (
     });
   };
 
+  const restoreWorkflowVersionPartInStore = (input: {
+    workflowId: string;
+    versionId: string;
+    part: WorkflowVersionRestorePart;
+  }): WorkflowDefinitionRecord | undefined => {
+    const current = definitionsById.get(input.workflowId);
+    const version = definitionVersionsById.get(input.versionId);
+    if (!current || !version || version.workflowId !== input.workflowId) {
+      return undefined;
+    }
+
+    return upsertWorkflow({
+      ...restoreWorkflowVersionPart(current, version.snapshot, input.part),
+      id: current.id,
+      projectId: current.projectId,
+    });
+  };
+
   const cloneWorkflowVersion = (input: {
     workflowId: string;
     versionId: string;
+    name?: string;
   }): WorkflowDefinitionRecord | undefined => {
     const current = definitionsById.get(input.workflowId);
     const version = definitionVersionsById.get(input.versionId);
@@ -173,7 +242,7 @@ export const createWorkflowCatalogStore = (
     return upsertWorkflow({
       workspaceId: snapshot.workspaceId,
       projectId: current.projectId,
-      name: `${snapshot.name} copy`,
+      name: input.name ?? `${snapshot.name} copy`,
       description: snapshot.description,
       status: snapshot.status,
       trigger: snapshot.trigger,
@@ -184,6 +253,47 @@ export const createWorkflowCatalogStore = (
       defaultContextPolicy: snapshot.defaultContextPolicy,
       tags: snapshot.tags,
     });
+  };
+
+  const exportWorkflowVersion = (input: {
+    workflowId: string;
+    versionId: string;
+  }): WorkflowVersionExportRecord | undefined => {
+    const version = definitionVersionsById.get(input.versionId);
+    if (!version || version.workflowId !== input.workflowId) {
+      return undefined;
+    }
+
+    return exportWorkflowVersionSnapshot(version);
+  };
+
+  const importWorkflowVersion = (input: {
+    exported: WorkflowVersionExportRecord;
+    name?: string;
+  }): WorkflowDefinitionRecord | undefined => {
+    const imported = importWorkflowVersionSnapshot(input.exported);
+    return upsertWorkflow({
+      ...createImportedWorkflowInput(imported.snapshot),
+      name: input.name ?? imported.snapshot.name,
+    });
+  };
+
+  const cleanupWorkflowVersions = (input: {
+    workflowId: string;
+    keepLatest: number;
+  }): {
+    kept: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+    removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  } => {
+    const trimmed = trimWorkflowVersionsByRetention(
+      listWorkflowVersions({ workflowId: input.workflowId }),
+      { keepLatest: input.keepLatest },
+    );
+    for (const version of trimmed.removed) {
+      definitionVersionsById.delete(version.id);
+    }
+
+    return trimmed;
   };
 
   const deleteWorkflow = (id: string): WorkflowDefinitionRecord | undefined => {
@@ -314,7 +424,11 @@ export const createWorkflowCatalogStore = (
     getWorkflow,
     listWorkflowVersions,
     restoreWorkflowVersion,
+    restoreWorkflowVersionPart: restoreWorkflowVersionPartInStore,
     cloneWorkflowVersion,
+    exportWorkflowVersion,
+    importWorkflowVersion,
+    cleanupWorkflowVersions,
     deleteWorkflow,
     upsertAsset,
     listAssets,
@@ -355,17 +469,60 @@ const createWorkflowRecord = (
   };
 };
 
-const createWorkflowVersionRecord = (
-  workflow: WorkflowDefinitionRecord,
-  now: () => Date,
-): WorkflowDefinitionVersionRecord => ({
-  id: randomUUID(),
-  workflowId: workflow.id,
-  projectId: workflow.projectId,
-  version: workflow.version,
-  createdAt: now().toISOString(),
-  snapshot: workflow,
+const createImportedWorkflowInput = (
+  snapshot: WorkflowDefinitionRecord,
+): Omit<
+  WorkflowDefinitionUpsertInput,
+  "name" | "versionNote" | "versionTags"
+> => ({
+  workspaceId: snapshot.workspaceId,
+  projectId: snapshot.projectId,
+  description: snapshot.description,
+  status: snapshot.status,
+  trigger: snapshot.trigger,
+  viewport: snapshot.viewport,
+  nodes: snapshot.nodes,
+  edges: snapshot.edges,
+  executionPolicy: snapshot.executionPolicy,
+  defaultContextPolicy: snapshot.defaultContextPolicy,
+  tags: snapshot.tags,
 });
+
+const createWorkflowVersionRecord = (input: {
+  workflow: WorkflowDefinitionRecord;
+  previous: WorkflowDefinitionRecord | undefined;
+  now: () => Date;
+  checksum: string;
+  note?: string;
+  tags?: ReadonlyArray<string>;
+}): WorkflowDefinitionVersionRecord => {
+  const diff = input.previous
+    ? compareWorkflowVersions(input.previous, input.workflow)
+    : undefined;
+  return {
+    id: randomUUID(),
+    workflowId: input.workflow.id,
+    projectId: input.workflow.projectId,
+    version: input.workflow.version,
+    createdAt: input.now().toISOString(),
+    snapshot: input.workflow,
+    checksum: input.checksum,
+    ...(input.note ? { note: input.note } : {}),
+    tags: input.tags ?? [],
+    changeType: "manual",
+    changeSummary: diff
+      ? readWorkflowVersionChangeSummary(diff)
+      : "Initial version",
+  };
+};
+
+const readLatestWorkflowVersion = (
+  versionsById: ReadonlyMap<string, WorkflowDefinitionVersionRecord>,
+  workflowId: string,
+): WorkflowDefinitionVersionRecord | undefined =>
+  Array.from(versionsById.values())
+    .filter((version) => version.workflowId === workflowId)
+    .sort((left, right) => right.version - left.version)[0];
 
 const createAssetRecord = (
   input: WorkflowAssetUpsertInput,

@@ -368,13 +368,127 @@ describe("workflow catalog store", () => {
       cloned ? store.listWorkflowVersions({ workflowId: cloned.id }) : [],
     ).toHaveLength(1);
   });
+
+  it("manages rich workflow versions without duplicate snapshot noise", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "Source workflow",
+        versionNote: "first save",
+        versionTags: ["release"],
+      }),
+    );
+    const duplicate = store.upsertWorkflow(
+      createWorkflowInput({
+        id: created.id,
+        name: "Source workflow",
+      }),
+    );
+    const updated = store.upsertWorkflow(
+      createWorkflowInput({
+        id: created.id,
+        name: "Updated workflow",
+      }),
+    );
+    const versions = store.listWorkflowVersions({
+      workflowId: created.id,
+    });
+
+    expect(duplicate.version).toBe(1);
+    expect(updated.version).toBe(2);
+    expect(versions).toHaveLength(2);
+    expect(versions[1]?.checksum).toMatch(/[a-f0-9]{64}/);
+    expect(versions[1]?.note).toBe("first save");
+    expect(versions[1]?.tags).toEqual(["release"]);
+    expect(versions[0]?.changeSummary).toContain("workflow changes");
+  });
+
+  it("supports named clone, partial restore, export/import and retention", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "Source workflow",
+        nodes: [
+          createWorkflowNode({
+            id: "node-a",
+            label: "Original node",
+          }),
+        ],
+      }),
+    );
+    store.upsertWorkflow(
+      createWorkflowInput({
+        id: created.id,
+        name: "Updated workflow",
+        nodes: [
+          createWorkflowNode({
+            id: "node-a",
+            label: "Updated node",
+          }),
+        ],
+      }),
+    );
+    const versions = store.listWorkflowVersions({
+      workflowId: created.id,
+    });
+    const oldVersionId = versions[1]?.id ?? "";
+
+    const cloned = store.cloneWorkflowVersion({
+      workflowId: created.id,
+      versionId: oldVersionId,
+      name: "Custom clone",
+    });
+    const partial = store.restoreWorkflowVersionPart({
+      workflowId: created.id,
+      versionId: oldVersionId,
+      part: {
+        kind: "nodes",
+        nodeIds: ["node-a"],
+      },
+    });
+    const exported = store.exportWorkflowVersion({
+      workflowId: created.id,
+      versionId: oldVersionId,
+    });
+    const imported = exported
+      ? store.importWorkflowVersion({
+          exported,
+          name: "Imported workflow",
+        })
+      : undefined;
+    const retention = store.cleanupWorkflowVersions({
+      workflowId: created.id,
+      keepLatest: 1,
+    });
+
+    expect(cloned?.name).toBe("Custom clone");
+    expect(partial?.nodes[0]?.label).toBe("Original node");
+    expect(exported?.checksum).toMatch(/[a-f0-9]{64}/);
+    expect(imported?.name).toBe("Imported workflow");
+    expect(imported?.id).not.toBe(created.id);
+    expect(retention.removed).toHaveLength(2);
+    expect(store.listWorkflowVersions({ workflowId: created.id })).toHaveLength(
+      1,
+    );
+  });
 });
 
 const createWorkflowInput = (input: {
   id?: string;
   name: string;
+  versionNote?: string;
+  versionTags?: ReadonlyArray<string>;
+  nodes?: WorkflowDefinitionUpsertInput["nodes"];
 }): WorkflowDefinitionUpsertInput => ({
   ...(input.id ? { id: input.id } : {}),
+  ...(input.versionNote ? { versionNote: input.versionNote } : {}),
+  ...(input.versionTags ? { versionTags: input.versionTags } : {}),
   workspaceId: "workspace-1",
   projectId: "project-1",
   name: input.name,
@@ -400,6 +514,25 @@ const createWorkflowInput = (input: {
     carryArtifactLimit: 8,
   },
   tags: [],
-  nodes: [],
+  nodes: input.nodes ?? [],
   edges: [],
+});
+
+const createWorkflowNode = (input: {
+  id: string;
+  label: string;
+}): WorkflowDefinitionUpsertInput["nodes"][number] => ({
+  id: input.id,
+  kind: WorkflowNodeKind.AiAgent,
+  label: input.label,
+  position: {
+    x: 0,
+    y: 0,
+  },
+  width: 220,
+  collapsed: false,
+  config: {},
+  inputPorts: [],
+  outputPorts: [],
+  attachedGuardrails: [],
 });
