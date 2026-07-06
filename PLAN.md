@@ -209,6 +209,8 @@ Acceptance:
 - [x] Unified restore/copy workflow between local draft history and server snapshots
 - [x] Autosave/version dedupe by checksum to prevent noisy duplicate versions
 - [x] Retention/cleanup policy for old workflow versions
+- [x] Modal-first version history actions replace native prompt/confirm flows for clone, import, restore, delete, rename and pinned-output overwrite
+- [x] Compact visual version compare with diff search, node/edge/contract/pin status colors and section restore actions
 
 ### UI continuity & interaction completion (mandatory)
 

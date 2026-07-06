@@ -162,6 +162,11 @@ const WorkflowSelector = {
   WorkflowVersionDetailsModal: "workflows-version-details-modal",
   WorkflowVersionDetailsDiff: "workflows-version-details-diff",
   WorkflowVersionDetailsSnapshot: "workflows-version-details-snapshot",
+  WorkflowVersionVisualDiff: "workflows-version-visual-diff",
+  WorkflowVersionDiffSearch: "workflows-version-diff-search",
+  WorkflowVersionActionDialog: "workflows-version-action-dialog",
+  WorkflowVersionActionDialogInput: "workflows-version-action-dialog-input",
+  WorkflowVersionActionDialogConfirm: "workflows-version-action-dialog-confirm",
   WorkflowVersionDetailsPrefix: "workflows-version-details-",
   WorkflowVersionRestorePrefix: "workflows-version-restore-",
   WorkflowVersionClonePrefix: "workflows-version-clone-",
@@ -520,13 +525,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     });
 
     page.on("dialog", (dialog) => {
-      const message = dialog.message();
-      const value = message.includes("Cloned workflow name")
-        ? "Browser cloned workflow"
-        : message.includes("Imported workflow name")
-          ? "Browser imported workflow"
-          : undefined;
-      void dialog.accept(value);
+      throw new Error(`Unexpected native dialog: ${dialog.message()}`);
     });
 
     await clickByTestId(page, WorkflowSelector.WorkflowCreate);
@@ -553,6 +552,14 @@ async function validateWorkflowsScreen(): Promise<void> {
       ValidationText.EditedPinnedOutput,
     );
     await clickButtonByText(page, "Save");
+    if (
+      await readTestIdExists(page, WorkflowSelector.WorkflowVersionActionDialog)
+    ) {
+      await clickByTestId(
+        page,
+        WorkflowSelector.WorkflowVersionActionDialogConfirm,
+      );
+    }
     await waitForMissingTestId(page, WorkflowSelector.OutputEditorTextarea);
     await waitForPinnedDefinitionOutput(
       stubServer.state,
@@ -623,6 +630,14 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsModal);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsDiff);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsSnapshot);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionVisualDiff);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionDiffSearch);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionDiffSearch,
+      "nodes",
+    );
+    await waitForPageText(page, "nodes");
     await waitForTestId(page, WorkflowSelector.WorkflowVersionCompareSelect);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionCopyToEditor);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionRestoreMetadata);
@@ -636,10 +651,25 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       `${WorkflowSelector.WorkflowVersionRestorePrefix}${savedVersion.id}`,
     );
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await clickByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogConfirm,
+    );
     await waitForPageText(page, "Workflow restored to version");
     await clickByTestId(
       page,
       `${WorkflowSelector.WorkflowVersionClonePrefix}${savedVersion.id}`,
+    );
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogInput,
+      "Browser cloned workflow",
+    );
+    await clickByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogConfirm,
     );
     await waitForCondition(
       () =>
@@ -705,6 +735,16 @@ async function validateWorkflowsScreen(): Promise<void> {
       }),
     );
     await clickByTestId(page, WorkflowSelector.WorkflowVersionImport);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogInput,
+      "Browser imported workflow",
+    );
+    await clickByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogConfirm,
+    );
     await waitForCondition(
       () =>
         Promise.resolve(
@@ -918,6 +958,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickByTestId(page, WorkflowSelector.OutputPinControl);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await clickByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogConfirm,
+    );
     await waitForPinnedDefinitionOutput(
       stubServer.state,
       ValidationText.HistoryPinnedOutputNeedle,
@@ -2206,11 +2251,7 @@ async function waitForPinnedDefinitionOutput(
 async function waitForTestId(page: Page, testId: string): Promise<void> {
   await waitForCondition(
     async () => {
-      const exists = await page.evaluate((selector: string) => {
-        const element = document.querySelector(`[data-testid="${selector}"]`);
-        return element instanceof Element;
-      }, testId);
-      return exists;
+      return readTestIdExists(page, testId);
     },
     `test id "${testId}"`,
     {
@@ -2218,6 +2259,13 @@ async function waitForTestId(page: Page, testId: string): Promise<void> {
       intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
+}
+
+async function readTestIdExists(page: Page, testId: string): Promise<boolean> {
+  return page.evaluate((selector: string) => {
+    const element = document.querySelector(`[data-testid="${selector}"]`);
+    return element instanceof Element;
+  }, testId);
 }
 
 async function waitForExactTestId(page: Page, testId: string): Promise<void> {

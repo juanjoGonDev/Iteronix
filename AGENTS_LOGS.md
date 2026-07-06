@@ -4106,3 +4106,22 @@
   - First UI commit attempt failed the pre-commit hook on validate-workflows complexity; refactored route handling and recommitted with hooks enabled.
 - Next
   - Run full required gates, commit documentation, push normally with pre-push hook enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-06 14:53 (Europe/Madrid) — Workflow Version History Modal Polish
+
+- Summary
+  - Replaced remaining native browser prompt/confirm flows in Workflows with modal-first dialogs and added a compact visual compare surface for version details.
+- Decisions
+  - Kept this as the first safe work unit from the 200-item roadmap because it removes native dialogs across Workflows and expands version compare without changing server snapshot contracts.
+  - Reused server-backed snapshots as source of truth and kept restore/clone/import actions modal-scoped.
+- Changes
+  - `apps/web-ui/src/screens/Workflows.ts` now renders custom clone/import/restore/delete/rename/pin-overwrite dialogs and visual diff cards with search, status colors and section restore actions.
+  - `apps/web-ui/scripts/validate-workflows.ts` now fails on unexpected native dialogs and validates version visual diff/search plus modal clone/import/restore confirmation paths.
+- Commands
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed first on remaining native pinned-output confirm, then PASS after modalizing the overwrite path.
+- Issues/Risks
+  - This completes a high-value slice of the 200-item roadmap, not the entire roadmap.
+- Next
+  - Run full repository gates, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
