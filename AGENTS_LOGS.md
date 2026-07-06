@@ -4084,3 +4084,25 @@
   - Remote CI/CodeQL verification still pending after commit and push.
 - Next
   - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-06 11:05 (Europe/Madrid) — Workflow Version History Roadmap
+
+- Summary
+  - Implemented the full Workflows version-history roadmap across core, API/client and modal-first UI.
+- Decisions
+  - Server-backed workflow definition snapshots remain the source of truth; local edit history stays a draft aid.
+  - Version noise is controlled by checksum dedupe, and retention cleanup is explicit/configurable from the History panel.
+  - Normal workflow/history actions avoid toast noise and stay in the Workflows modal/panel model without reintroducing a right inspector.
+- Changes
+  - Added structured workflow version diff/checksum/restore/export/import/retention logic and focused unit tests.
+  - Added clone/export/import/partial-restore/cleanup server routes and web client parsing.
+  - Added version search, notes/tags, compare selector, copy-to-editor, partial restore buttons, import/export, cleanup controls and expanded browser validation.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts packages/agents/src/workflow-catalog.test.ts apps/server-api/src/workflows.test.ts apps/web-ui/src/shared/workflow-client.test.ts` PASS.
+  - `corepack pnpm@10.18.3 typecheck` PASS.
+  - `corepack pnpm@10.18.3 lint` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - First UI commit attempt failed the pre-commit hook on validate-workflows complexity; refactored route handling and recommitted with hooks enabled.
+- Next
+  - Run full required gates, commit documentation, push normally with pre-push hook enabled, and verify GitHub CI/CodeQL.

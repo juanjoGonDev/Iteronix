@@ -187,6 +187,29 @@ Acceptance:
 
 - UI runs in browser/PWA and fully operates a remote server.
 
+### Workflows: version history roadmap
+
+- [x] Structured version diff by nodes, edges, metadata, settings, mappings, output contracts, pinned outputs and edited outputs
+- [x] Partial restore for metadata, nodes, edges/connections, output contracts and pinned/test outputs
+- [x] Visual compare between any two workflow versions and current draft
+- [x] Timeline metadata with author-ready fields, timestamp, change type and summary
+- [x] Editable save notes and tags for workflow versions
+- [x] Restore confirmation when current draft has unsaved changes
+- [x] Clone flow with editable cloned workflow name
+- [x] Export/import for versioned workflow snapshots
+- [x] Version history search/filter
+- [x] Compact what-changed summary in the History panel
+- [x] Browser validation for clone and download/export/import/retention actions
+- [x] Snapshot checksum validation for corrupt or mismatched versions
+- [x] Output-contract diff and compatibility warnings in the versioning engine
+- [x] Downstream mapping breakage warnings in the versioning engine
+- [x] Copy to editor from historical versions
+- [x] Pinned/test outputs included in version snapshots
+- [x] Edit history coverage through server snapshots plus existing local draft history
+- [x] Unified restore/copy workflow between local draft history and server snapshots
+- [x] Autosave/version dedupe by checksum to prevent noisy duplicate versions
+- [x] Retention/cleanup policy for old workflow versions
+
 ### UI continuity & interaction completion (mandatory)
 
 Goal:
