@@ -20,9 +20,13 @@ import {
   executeWorkflowAssetUpsert,
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionCloneVersion,
+  executeWorkflowDefinitionCleanupVersions,
+  executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
+  executeWorkflowDefinitionImportVersion,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
+  executeWorkflowDefinitionRestoreVersionPart,
   executeWorkflowDefinitionUpsert,
   executeWorkflowDefinitionVersionList,
   executeWorkflowExecutionDelete,
@@ -35,6 +39,10 @@ import {
   parseWorkflowAssetDeleteRequest,
   parseWorkflowAssetUpsertRequest,
   parseWorkflowDefinitionDeleteRequest,
+  parseWorkflowDefinitionCleanupVersionsRequest,
+  parseWorkflowDefinitionExportVersionRequest,
+  parseWorkflowDefinitionImportVersionRequest,
+  parseWorkflowDefinitionRestoreVersionPartRequest,
   parseWorkflowDefinitionUpsertRequest,
   parseWorkflowExecutionDeleteRequest,
   parseWorkflowExecutionGetRequest,
@@ -226,6 +234,130 @@ describe("workflow api contracts", () => {
       expect(cloned.value.id).not.toBe(first.value.id);
       expect(cloned.value.name).toBe(`${first.value.name} copy`);
       expect(cloned.value.version).toBe(1);
+    }
+  });
+
+  it("exports, imports, partially restores and cleans workflow versions", () => {
+    const projectStore = createProjectStore({
+      projects: [createProjectRecord()],
+    });
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: createWorkflowDefinitionInput(),
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (created.type !== ResultType.Ok) {
+      throw new Error("Expected workflow create to succeed.");
+    }
+    const createdNode = created.value.nodes[0];
+    if (!createdNode) {
+      throw new Error("Expected workflow node to exist.");
+    }
+
+    const updated = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: {
+          ...createWorkflowDefinitionInput(),
+          id: created.value.id,
+          name: "Updated workflow",
+          nodes: [
+            {
+              ...createdNode,
+              label: "Updated prompt",
+            },
+          ],
+        },
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (updated.type !== ResultType.Ok) {
+      throw new Error("Expected workflow update to succeed.");
+    }
+
+    const versions = executeWorkflowDefinitionVersionList(
+      {
+        workflowId: created.value.id,
+      },
+      {
+        catalog,
+      },
+    );
+    if (versions.type !== ResultType.Ok) {
+      throw new Error("Expected versions to list.");
+    }
+
+    const oldVersionId = versions.value[1]?.id ?? "";
+    const partial = executeWorkflowDefinitionRestoreVersionPart(
+      {
+        workflowId: created.value.id,
+        versionId: oldVersionId,
+        part: {
+          kind: "nodes",
+          nodeIds: ["node-1"],
+        },
+      },
+      {
+        catalog,
+      },
+    );
+    const exported = executeWorkflowDefinitionExportVersion(
+      {
+        workflowId: created.value.id,
+        versionId: oldVersionId,
+      },
+      {
+        catalog,
+      },
+    );
+    if (exported.type !== ResultType.Ok) {
+      throw new Error("Expected version export to succeed.");
+    }
+
+    const imported = executeWorkflowDefinitionImportVersion(
+      {
+        exported: exported.value,
+        name: "Imported workflow",
+      },
+      {
+        catalog,
+      },
+    );
+    const cleanup = executeWorkflowDefinitionCleanupVersions(
+      {
+        workflowId: created.value.id,
+        keepLatest: 1,
+      },
+      {
+        catalog,
+      },
+    );
+
+    expect(partial.type).toBe(ResultType.Ok);
+    expect(imported.type).toBe(ResultType.Ok);
+    expect(cleanup.type).toBe(ResultType.Ok);
+    if (partial.type === ResultType.Ok) {
+      expect(partial.value.nodes[0]?.label).toBe("Prompt");
+    }
+    if (imported.type === ResultType.Ok) {
+      expect(imported.value.id).not.toBe(created.value.id);
+      expect(imported.value.name).toBe("Imported workflow");
+    }
+    if (cleanup.type === ResultType.Ok) {
+      expect(cleanup.value.kept).toHaveLength(1);
+      expect(cleanup.value.removed.length).toBeGreaterThan(0);
     }
   });
 
@@ -582,6 +714,42 @@ describe("workflow api contracts", () => {
     expect(
       parseWorkflowDefinitionDeleteRequest({
         workflowId: "workflow-1",
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowDefinitionRestoreVersionPartRequest({
+        workflowId: "workflow-1",
+        versionId: "version-1",
+        part: {
+          kind: "nodes",
+          nodeIds: ["node-1"],
+        },
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowDefinitionExportVersionRequest({
+        workflowId: "workflow-1",
+        versionId: "version-1",
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowDefinitionImportVersionRequest({
+        exported: {
+          schemaVersion: 1,
+          workflowId: "workflow-1",
+          versionId: "version-1",
+          version: 1,
+          createdAt: BaseTime,
+          checksum: "checksum",
+          snapshot: createWorkflowDefinitionInput(),
+          tags: [],
+        },
+      }).type,
+    ).toBe(ResultType.Ok);
+    expect(
+      parseWorkflowDefinitionCleanupVersionsRequest({
+        workflowId: "workflow-1",
+        keepLatest: 3,
       }).type,
     ).toBe(ResultType.Ok);
     expect(

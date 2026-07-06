@@ -20,7 +20,11 @@ const EndpointPath = {
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
   DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
+  DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
+  DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsImportVersion: "/workflows/definitions/import-version",
+  DefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -38,6 +42,31 @@ const EndpointPath = {
   ExecutionsStreamNode: "/workflows/executions/stream-node",
   ProvidersTest: "/workflows/providers/test",
 } as const;
+
+export type WorkflowVersionRestorePart =
+  | {
+      kind: "metadata" | "settings" | "edges";
+    }
+  | {
+      kind: "nodes" | "output_contracts";
+      nodeIds: ReadonlyArray<string>;
+    }
+  | {
+      kind: "pinned_outputs";
+      nodeIds?: ReadonlyArray<string>;
+    };
+
+export type WorkflowVersionExportRecord = {
+  schemaVersion: 1;
+  workflowId: string;
+  versionId: string;
+  version: number;
+  createdAt: string;
+  checksum: string;
+  snapshot: WorkflowDefinitionRecord;
+  note?: string;
+  tags: ReadonlyArray<string>;
+};
 
 export type WorkflowNodeProviderTestResult = {
   definition: WorkflowDefinitionRecord;
@@ -138,10 +167,31 @@ export type WorkflowClient = {
     workflowId: string;
     versionId: string;
   }) => Promise<WorkflowDefinitionRecord>;
+  restoreDefinitionVersionPart: (input: {
+    workflowId: string;
+    versionId: string;
+    part: WorkflowVersionRestorePart;
+  }) => Promise<WorkflowDefinitionRecord>;
   cloneDefinitionVersion: (input: {
     workflowId: string;
     versionId: string;
+    name?: string;
   }) => Promise<WorkflowDefinitionRecord>;
+  exportDefinitionVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => Promise<WorkflowVersionExportRecord>;
+  importDefinitionVersion: (input: {
+    exported: WorkflowVersionExportRecord;
+    name?: string;
+  }) => Promise<WorkflowDefinitionRecord>;
+  cleanupDefinitionVersions: (input: {
+    workflowId: string;
+    keepLatest: number;
+  }) => Promise<{
+    kept: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+    removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  }>;
   upsertDefinition: (input: {
     projectId: string;
     definition: WorkflowDefinitionUpsertInput;
@@ -239,14 +289,52 @@ export const createWorkflowClient = (): WorkflowClient => ({
       },
       parse: parseWorkflowDefinitionResponse,
     }),
+  restoreDefinitionVersionPart: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsRestoreVersionPart,
+      body: {
+        workflowId: input.workflowId,
+        versionId: input.versionId,
+        part: input.part,
+      },
+      parse: parseWorkflowDefinitionResponse,
+    }),
   cloneDefinitionVersion: (input) =>
     requestJson({
       path: EndpointPath.DefinitionsCloneVersion,
       body: {
         workflowId: input.workflowId,
         versionId: input.versionId,
+        ...(input.name ? { name: input.name } : {}),
       },
       parse: parseWorkflowDefinitionResponse,
+    }),
+  exportDefinitionVersion: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsExportVersion,
+      body: {
+        workflowId: input.workflowId,
+        versionId: input.versionId,
+      },
+      parse: parseWorkflowDefinitionExportResponse,
+    }),
+  importDefinitionVersion: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsImportVersion,
+      body: {
+        exported: input.exported,
+        ...(input.name ? { name: input.name } : {}),
+      },
+      parse: parseWorkflowDefinitionResponse,
+    }),
+  cleanupDefinitionVersions: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsCleanupVersions,
+      body: {
+        workflowId: input.workflowId,
+        keepLatest: input.keepLatest,
+      },
+      parse: parseWorkflowDefinitionCleanupResponse,
     }),
   upsertDefinition: (input) =>
     requestJson({
@@ -451,6 +539,64 @@ export const parseWorkflowDefinitionVersionListResponse = (
       ensureRecord(item, "workflowDefinitionVersionRecord"),
     ),
   );
+
+export const parseWorkflowDefinitionExportResponse = (
+  value: unknown,
+): WorkflowVersionExportRecord => {
+  const record = readRequiredRecord(
+    value,
+    "workflowDefinitionExportResponse",
+    "exported",
+  );
+  const note = readOptionalString(record, "note");
+  return {
+    schemaVersion: readRequiredNumber(
+      record,
+      "workflowVersionExport",
+      "schemaVersion",
+    ) as 1,
+    workflowId: readRequiredString(
+      record,
+      "workflowVersionExport",
+      "workflowId",
+    ),
+    versionId: readRequiredString(record, "workflowVersionExport", "versionId"),
+    version: readRequiredNumber(record, "workflowVersionExport", "version"),
+    createdAt: readRequiredString(record, "workflowVersionExport", "createdAt"),
+    checksum: readRequiredString(record, "workflowVersionExport", "checksum"),
+    snapshot: parseWorkflowDefinitionRecord(
+      readRequiredRecord(record, "workflowVersionExport", "snapshot"),
+    ),
+    ...(note ? { note } : {}),
+    tags: readRequiredStringArray(record, "workflowVersionExport", "tags"),
+  };
+};
+
+export const parseWorkflowDefinitionCleanupResponse = (
+  value: unknown,
+): {
+  kept: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+} => ({
+  kept: readRequiredArray(
+    value,
+    "workflowDefinitionCleanupResponse",
+    "kept",
+  ).map((item) =>
+    parseWorkflowDefinitionVersionRecord(
+      ensureRecord(item, "workflowDefinitionVersionRecord"),
+    ),
+  ),
+  removed: readRequiredArray(
+    value,
+    "workflowDefinitionCleanupResponse",
+    "removed",
+  ).map((item) =>
+    parseWorkflowDefinitionVersionRecord(
+      ensureRecord(item, "workflowDefinitionVersionRecord"),
+    ),
+  ),
+});
 
 export const parseWorkflowAssetListResponse = (
   value: unknown,
@@ -875,32 +1021,71 @@ const parseWorkflowDefinitionRecord = (
 
 const parseWorkflowDefinitionVersionRecord = (
   value: Record<string, unknown>,
-): WorkflowDefinitionVersionRecord => ({
-  id: readRequiredString(value, "workflowDefinitionVersionRecord", "id"),
-  workflowId: readRequiredString(
-    value,
-    "workflowDefinitionVersionRecord",
-    "workflowId",
-  ),
-  projectId: readRequiredString(
-    value,
-    "workflowDefinitionVersionRecord",
-    "projectId",
-  ),
-  version: readRequiredNumber(
-    value,
-    "workflowDefinitionVersionRecord",
-    "version",
-  ),
-  createdAt: readRequiredString(
-    value,
-    "workflowDefinitionVersionRecord",
-    "createdAt",
-  ),
-  snapshot: parseWorkflowDefinitionRecord(
-    readRequiredRecord(value, "workflowDefinitionVersionRecord", "snapshot"),
-  ),
-});
+): WorkflowDefinitionVersionRecord => {
+  const checksum = readOptionalString(value, "checksum");
+  const author = readOptionalString(value, "author");
+  const note = readOptionalString(value, "note");
+  const changeType = parseWorkflowVersionChangeType(
+    readOptionalString(value, "changeType"),
+  );
+  const changeSummary = readOptionalString(value, "changeSummary");
+  return {
+    id: readRequiredString(value, "workflowDefinitionVersionRecord", "id"),
+    workflowId: readRequiredString(
+      value,
+      "workflowDefinitionVersionRecord",
+      "workflowId",
+    ),
+    projectId: readRequiredString(
+      value,
+      "workflowDefinitionVersionRecord",
+      "projectId",
+    ),
+    version: readRequiredNumber(
+      value,
+      "workflowDefinitionVersionRecord",
+      "version",
+    ),
+    createdAt: readRequiredString(
+      value,
+      "workflowDefinitionVersionRecord",
+      "createdAt",
+    ),
+    snapshot: parseWorkflowDefinitionRecord(
+      readRequiredRecord(value, "workflowDefinitionVersionRecord", "snapshot"),
+    ),
+    ...(checksum ? { checksum } : {}),
+    ...(author ? { author } : {}),
+    ...(note ? { note } : {}),
+    ...(Array.isArray(value["tags"])
+      ? {
+          tags: readRequiredStringArray(
+            value,
+            "workflowDefinitionVersionRecord",
+            "tags",
+          ),
+        }
+      : {}),
+    ...(changeType ? { changeType } : {}),
+    ...(changeSummary ? { changeSummary } : {}),
+  };
+};
+
+const parseWorkflowVersionChangeType = (
+  value: string | undefined,
+): WorkflowDefinitionVersionRecord["changeType"] | undefined => {
+  if (
+    value === "manual" ||
+    value === "autosave" ||
+    value === "restore" ||
+    value === "clone" ||
+    value === "import"
+  ) {
+    return value;
+  }
+
+  return undefined;
+};
 
 const parseWorkflowAssetRecord = (
   value: Record<string, unknown>,

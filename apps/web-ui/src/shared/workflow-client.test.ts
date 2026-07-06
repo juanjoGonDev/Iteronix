@@ -3,6 +3,8 @@ import {
   decodeServerSentEvents,
   parseWorkflowAssetListResponse,
   parseWorkflowDefinitionListResponse,
+  parseWorkflowDefinitionCleanupResponse,
+  parseWorkflowDefinitionExportResponse,
   parseWorkflowDefinitionVersionListResponse,
   parseWorkflowExecutionListResponse,
   parseWorkflowNodeProviderTestResponse,
@@ -97,12 +99,44 @@ describe("workflow client parsers", () => {
             },
             tags: ["mvp"],
           },
+          checksum:
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          note: "release",
+          tags: ["release"],
+          changeType: "manual",
+          changeSummary: "1 node changed",
         },
       ],
     });
 
     expect(versions).toHaveLength(1);
     expect(versions[0]?.snapshot.name).toBe("Workflow v2");
+    expect(versions[0]?.changeSummary).toBe("1 node changed");
+    expect(versions[0]?.tags).toEqual(["release"]);
+  });
+
+  it("parses workflow version export and cleanup responses", () => {
+    const exported = parseWorkflowDefinitionExportResponse({
+      exported: {
+        schemaVersion: 1,
+        workflowId: "workflow-1",
+        versionId: "version-1",
+        version: 1,
+        createdAt: "2026-05-06T18:10:00.000Z",
+        checksum:
+          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        snapshot: createWorkflowDefinitionRecord(),
+        tags: ["release"],
+      },
+    });
+    const cleanup = parseWorkflowDefinitionCleanupResponse({
+      kept: [createWorkflowDefinitionVersionRecord("version-2", 2)],
+      removed: [createWorkflowDefinitionVersionRecord("version-1", 1)],
+    });
+
+    expect(exported.snapshot.name).toBe("Workflow");
+    expect(cleanup.kept).toHaveLength(1);
+    expect(cleanup.removed[0]?.version).toBe(1);
   });
 
   it("parses workflow asset lists with optional contracts and guardrails", () => {
@@ -320,4 +354,50 @@ describe("workflow client parsers", () => {
       expect(event.execution.id).toBe("execution-1");
     }
   });
+});
+
+const createWorkflowDefinitionVersionRecord = (
+  id: string,
+  version: number,
+) => ({
+  id,
+  workflowId: "workflow-1",
+  projectId: "project-1",
+  version,
+  createdAt: "2026-05-06T18:10:00.000Z",
+  snapshot: createWorkflowDefinitionRecord(),
+});
+
+const createWorkflowDefinitionRecord = () => ({
+  id: "workflow-1",
+  workspaceId: "workspace-1",
+  projectId: "project-1",
+  name: "Workflow",
+  description: "",
+  status: "draft",
+  version: 1,
+  createdAt: "2026-05-06T18:00:00.000Z",
+  updatedAt: "2026-05-06T18:10:00.000Z",
+  trigger: {
+    kind: "manual",
+    enabled: true,
+    config: {},
+  },
+  viewport: {
+    x: 12,
+    y: 18,
+    zoom: 1,
+  },
+  nodes: [],
+  edges: [],
+  executionPolicy: {
+    maxNodeRetries: 1,
+    allowManualCheckpointResume: true,
+  },
+  defaultContextPolicy: {
+    language: "en",
+    carryMessagesLimit: 8,
+    carryArtifactLimit: 8,
+  },
+  tags: ["mvp"],
 });

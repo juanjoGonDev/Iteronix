@@ -3,6 +3,10 @@ import type {
   WorkflowAssetUpsertInput,
   WorkflowDefinitionUpsertInput,
 } from "../../../packages/agents/src/workflow-catalog";
+import type {
+  WorkflowVersionExportRecord,
+  WorkflowVersionRestorePart,
+} from "../../../packages/agents/src/workflow-versioning";
 import type { WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
 import {
   isWorkflowTriggerKindSupportedInMvp,
@@ -148,10 +152,32 @@ export const executeWorkflowDefinitionRestoreVersion = (
   return ok(workflow);
 };
 
+export const executeWorkflowDefinitionRestoreVersionPart = (
+  input: {
+    workflowId: string;
+    versionId: string;
+    part: WorkflowVersionRestorePart;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const workflow = dependencies.catalog.restoreWorkflowVersionPart(input);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(workflow);
+};
+
 export const executeWorkflowDefinitionCloneVersion = (
   input: {
     workflowId: string;
     versionId: string;
+    name?: string;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
@@ -166,6 +192,80 @@ export const executeWorkflowDefinitionCloneVersion = (
   }
 
   return ok(workflow);
+};
+
+export const executeWorkflowDefinitionExportVersion = (
+  input: {
+    workflowId: string;
+    versionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowVersionExportRecord, ApiError> => {
+  const exported = dependencies.catalog.exportWorkflowVersion(input);
+  if (!exported) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(exported);
+};
+
+export const executeWorkflowDefinitionImportVersion = (
+  input: {
+    exported: WorkflowVersionExportRecord;
+    name?: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  try {
+    const workflow = dependencies.catalog.importWorkflowVersion(input);
+    if (!workflow) {
+      return err({
+        status: HttpStatus.NotFound,
+        message: ErrorMessage.NotFound,
+      });
+    }
+
+    return ok(workflow);
+  } catch (error) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message:
+        error instanceof Error ? error.message : ErrorMessage.InvalidBody,
+    });
+  }
+};
+
+export const executeWorkflowDefinitionCleanupVersions = (
+  input: {
+    workflowId: string;
+    keepLatest: number;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<
+  {
+    kept: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+    removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  },
+  ApiError
+> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(dependencies.catalog.cleanupWorkflowVersions(input));
 };
 
 export const executeWorkflowDefinitionDelete = (
@@ -647,8 +747,101 @@ export const parseWorkflowDefinitionRestoreVersionRequest = (
 
 export const parseWorkflowDefinitionCloneVersionRequest = (
   value: unknown,
+): Result<
+  { workflowId: string; versionId: string; name?: string },
+  ApiError
+> => {
+  const parsed = parseWorkflowDefinitionRestoreVersionRequest(value);
+  if (parsed.type === ResultType.Err) {
+    return parsed;
+  }
+
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const name = readOptionalString(value, "name");
+  return ok({
+    ...parsed.value,
+    ...(name ? { name } : {}),
+  });
+};
+
+export const parseWorkflowDefinitionRestoreVersionPartRequest = (
+  value: unknown,
+): Result<
+  { workflowId: string; versionId: string; part: WorkflowVersionRestorePart },
+  ApiError
+> => {
+  const parsed = parseWorkflowDefinitionRestoreVersionRequest(value);
+  if (parsed.type === ResultType.Err) {
+    return parsed;
+  }
+
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const part = parseWorkflowVersionRestorePart(value["part"]);
+  if (part.type === ResultType.Err) {
+    return part;
+  }
+
+  return ok({
+    ...parsed.value,
+    part: part.value,
+  });
+};
+
+export const parseWorkflowDefinitionExportVersionRequest = (
+  value: unknown,
 ): Result<{ workflowId: string; versionId: string }, ApiError> =>
   parseWorkflowDefinitionRestoreVersionRequest(value);
+
+export const parseWorkflowDefinitionImportVersionRequest = (
+  value: unknown,
+): Result<
+  { exported: WorkflowVersionExportRecord; name?: string },
+  ApiError
+> => {
+  if (!isRecord(value) || !isRecord(value["exported"])) {
+    return invalidBody();
+  }
+
+  const name = readOptionalString(value, "name");
+  return ok({
+    exported: value["exported"] as unknown as WorkflowVersionExportRecord,
+    ...(name ? { name } : {}),
+  });
+};
+
+export const parseWorkflowDefinitionCleanupVersionsRequest = (
+  value: unknown,
+): Result<{ workflowId: string; keepLatest: number }, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId,
+  );
+  const keepLatest = value["keepLatest"];
+  if (
+    workflowId.type === ResultType.Err ||
+    typeof keepLatest !== "number" ||
+    !Number.isInteger(keepLatest) ||
+    keepLatest < 1
+  ) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    keepLatest,
+  });
+};
 
 export const parseWorkflowAssetUpsertRequest = (
   value: unknown,
@@ -888,6 +1081,83 @@ const parseProjectRequest = (
     projectId: projectId.value,
   });
 };
+
+const parseWorkflowVersionRestorePart = (
+  value: unknown,
+): Result<WorkflowVersionRestorePart, ApiError> => {
+  if (!isRecord(value) || typeof value["kind"] !== "string") {
+    return invalidBody();
+  }
+
+  if (value["kind"] === "metadata") {
+    return ok({ kind: "metadata" });
+  }
+
+  if (value["kind"] === "settings") {
+    return ok({ kind: "settings" });
+  }
+
+  if (value["kind"] === "edges") {
+    return ok({ kind: "edges" });
+  }
+
+  if (value["kind"] === "nodes") {
+    return parseNodeScopedRestorePart(value, "nodes");
+  }
+
+  if (value["kind"] === "output_contracts") {
+    return parseNodeScopedRestorePart(value, "output_contracts");
+  }
+
+  if (value["kind"] !== "pinned_outputs") {
+    return invalidBody();
+  }
+
+  const nodeIds = parseOptionalStringArray(value["nodeIds"]);
+  if (nodeIds.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    kind: "pinned_outputs",
+    ...(nodeIds.value ? { nodeIds: nodeIds.value } : {}),
+  });
+};
+
+const parseNodeScopedRestorePart = (
+  record: Record<string, unknown>,
+  kind: "nodes" | "output_contracts",
+): Result<WorkflowVersionRestorePart, ApiError> => {
+  const nodeIds = parseOptionalStringArray(record["nodeIds"]);
+  if (nodeIds.type === ResultType.Err || !nodeIds.value) {
+    return invalidBody();
+  }
+
+  return ok({
+    kind,
+    nodeIds: nodeIds.value,
+  });
+};
+
+const parseOptionalStringArray = (
+  value: unknown,
+): Result<ReadonlyArray<string> | undefined, ApiError> => {
+  if (value === undefined) {
+    return ok(undefined);
+  }
+
+  if (!isNonEmptyStringArray(value)) {
+    return invalidBody();
+  }
+
+  return ok(value.map((item) => item.trim()));
+};
+
+const isNonEmptyStringArray = (
+  value: unknown,
+): value is ReadonlyArray<string> =>
+  Array.isArray(value) &&
+  value.every((item) => typeof item === "string" && item.trim().length > 0);
 
 const readWorkflowExecutionIsActive = (
   status: WorkflowExecutionRecord["status"],

@@ -63,7 +63,12 @@ export const RoutePath = {
   WorkflowDefinitionsGet: "/workflows/definitions/get",
   WorkflowDefinitionsVersions: "/workflows/definitions/versions",
   WorkflowDefinitionsRestoreVersion: "/workflows/definitions/restore-version",
+  WorkflowDefinitionsRestoreVersionPart:
+    "/workflows/definitions/restore-version-part",
   WorkflowDefinitionsCloneVersion: "/workflows/definitions/clone-version",
+  WorkflowDefinitionsExportVersion: "/workflows/definitions/export-version",
+  WorkflowDefinitionsImportVersion: "/workflows/definitions/import-version",
+  WorkflowDefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",
   WorkflowDefinitionsDelete: "/workflows/definitions/delete",
   WorkflowAssetsList: "/workflows/assets/list",

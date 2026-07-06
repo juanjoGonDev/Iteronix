@@ -151,9 +151,13 @@ import {
   executeWorkflowAssetUsageList,
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionCloneVersion,
+  executeWorkflowDefinitionCleanupVersions,
+  executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
+  executeWorkflowDefinitionImportVersion,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
+  executeWorkflowDefinitionRestoreVersionPart,
   executeWorkflowDefinitionUpsert,
   executeWorkflowDefinitionVersionList,
   executeWorkflowExecutionDelete,
@@ -169,9 +173,13 @@ import {
   parseWorkflowAssetUpsertRequest,
   parseWorkflowDefinitionDeleteRequest,
   parseWorkflowDefinitionCloneVersionRequest,
+  parseWorkflowDefinitionCleanupVersionsRequest,
+  parseWorkflowDefinitionExportVersionRequest,
   parseWorkflowDefinitionGetRequest,
+  parseWorkflowDefinitionImportVersionRequest,
   parseWorkflowDefinitionListRequest,
   parseWorkflowDefinitionRestoreVersionRequest,
+  parseWorkflowDefinitionRestoreVersionPartRequest,
   parseWorkflowDefinitionUpsertRequest,
   parseWorkflowDefinitionVersionListRequest,
   parseWorkflowAssetUsageListRequest,
@@ -785,6 +793,21 @@ const handleRequest = async (
     return;
   }
 
+  if (path === RoutePath.WorkflowDefinitionsRestoreVersionPart) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionRestoreVersionPart(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+
   if (path === RoutePath.WorkflowDefinitionsCloneVersion) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
@@ -792,6 +815,46 @@ const handleRequest = async (
     }
 
     await handleWorkflowDefinitionCloneVersion(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsExportVersion) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionExportVersion(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsImportVersion) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionImportVersion(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsCleanupVersions) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionCleanupVersions(
       req,
       res,
       workflowCatalog,
@@ -4443,6 +4506,40 @@ const handleWorkflowDefinitionRestoreVersion = async (
   });
 };
 
+const handleWorkflowDefinitionRestoreVersionPart = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionRestoreVersionPartRequest(
+    bodyResult.value,
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionRestoreVersionPart(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value,
+  });
+};
+
 const handleWorkflowDefinitionCloneVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -4473,6 +4570,100 @@ const handleWorkflowDefinitionCloneVersion = async (
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
+};
+
+const handleWorkflowDefinitionExportVersion = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionExportVersionRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionExportVersion(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    exported: result.value,
+  });
+};
+
+const handleWorkflowDefinitionImportVersion = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionImportVersionRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionImportVersion(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value,
+  });
+};
+
+const handleWorkflowDefinitionCleanupVersions = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionCleanupVersionsRequest(
+    bodyResult.value,
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionCleanupVersions(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, result.value);
 };
 
 const handleWorkflowDefinitionUpsert = async (
