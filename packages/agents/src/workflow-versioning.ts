@@ -6,7 +6,7 @@ import type {
   WorkflowNodeRecord,
 } from "../../shared/src/workflows";
 
-export type WorkflowVersionDiffSection = {
+type WorkflowVersionDiffSection = {
   added: number;
   removed: number;
   modified: number;
