@@ -3,10 +3,12 @@ import type {
   WorkflowAssetUpsertInput,
   WorkflowDefinitionUpsertInput,
 } from "../../../packages/agents/src/workflow-catalog";
+import { migrateWorkflowVersionExport } from "../../../packages/agents/src/workflow-versioning";
 import type {
   WorkflowVersionExportRecord,
   WorkflowVersionImportPreviewRecord,
   WorkflowVersionRestorePart,
+  WorkflowVersionTimelineExportRecord,
 } from "../../../packages/agents/src/workflow-versioning";
 import type { WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
 import {
@@ -209,6 +211,32 @@ export const executeWorkflowDefinitionExportVersion = (
     return err({
       status: HttpStatus.NotFound,
       message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(exported);
+};
+
+export const executeWorkflowDefinitionExportVersionTimeline = (
+  input: {
+    workflowId: string;
+    versionIds?: ReadonlyArray<string>;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    now: () => Date;
+  },
+): Result<WorkflowVersionTimelineExportRecord, ApiError> => {
+  const exported: WorkflowVersionTimelineExportRecord | undefined =
+    dependencies.catalog.exportWorkflowVersionTimeline({
+      workflowId: input.workflowId,
+      ...(input.versionIds ? { versionIds: input.versionIds } : {}),
+      exportedAt: dependencies.now().toISOString(),
+    });
+  if (!exported) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: "Workflow definition not found",
     });
   }
 
@@ -811,6 +839,36 @@ export const parseWorkflowDefinitionExportVersionRequest = (
 ): Result<{ workflowId: string; versionId: string }, ApiError> =>
   parseWorkflowDefinitionRestoreVersionRequest(value);
 
+export const parseWorkflowDefinitionExportVersionTimelineRequest = (
+  value: unknown,
+): Result<
+  { workflowId: string; versionIds?: ReadonlyArray<string> },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId,
+  );
+  if (workflowId.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  const versionIds = parseOptionalStringArray(value["versionIds"]);
+  if (versionIds.type === ResultType.Err) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    ...(versionIds.value ? { versionIds: versionIds.value } : {}),
+  });
+};
+
 export const parseWorkflowDefinitionImportVersionRequest = (
   value: unknown,
 ): Result<
@@ -822,10 +880,14 @@ export const parseWorkflowDefinitionImportVersionRequest = (
   }
 
   const name = readOptionalString(value, "name");
-  return ok({
-    exported: value["exported"] as unknown as WorkflowVersionExportRecord,
-    ...(name ? { name } : {}),
-  });
+  try {
+    return ok({
+      exported: migrateWorkflowVersionExport(value["exported"]),
+      ...(name ? { name } : {}),
+    });
+  } catch {
+    return invalidBody();
+  }
 };
 
 export const parseWorkflowDefinitionPreviewImportVersionRequest = (
@@ -859,11 +921,15 @@ export const parseWorkflowDefinitionPreviewImportVersionRequest = (
     return invalidBody();
   }
 
-  return ok({
-    exported: value["exported"] as unknown as WorkflowVersionExportRecord,
-    targetWorkspaceId: targetWorkspaceId.value,
-    targetProjectId: targetProjectId.value,
-  });
+  try {
+    return ok({
+      exported: migrateWorkflowVersionExport(value["exported"]),
+      targetWorkspaceId: targetWorkspaceId.value,
+      targetProjectId: targetProjectId.value,
+    });
+  } catch {
+    return invalidBody();
+  }
 };
 
 export const parseWorkflowDefinitionCleanupVersionsRequest = (

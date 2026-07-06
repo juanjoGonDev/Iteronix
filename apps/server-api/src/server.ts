@@ -152,6 +152,7 @@ import {
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionCloneVersion,
   executeWorkflowDefinitionCleanupVersions,
+  executeWorkflowDefinitionExportVersionTimeline,
   executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionImportVersion,
@@ -175,6 +176,7 @@ import {
   parseWorkflowDefinitionDeleteRequest,
   parseWorkflowDefinitionCloneVersionRequest,
   parseWorkflowDefinitionCleanupVersionsRequest,
+  parseWorkflowDefinitionExportVersionTimelineRequest,
   parseWorkflowDefinitionExportVersionRequest,
   parseWorkflowDefinitionGetRequest,
   parseWorkflowDefinitionImportVersionRequest,
@@ -832,6 +834,20 @@ const handleRequest = async (
     }
 
     await handleWorkflowDefinitionExportVersion(req, res, workflowCatalog);
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsExportVersionTimeline) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionExportVersionTimeline(
+      req,
+      res,
+      workflowCatalog,
+    );
     return;
   }
 
@@ -4607,6 +4623,39 @@ const handleWorkflowDefinitionExportVersion = async (
 
   const result = executeWorkflowDefinitionExportVersion(parsed.value, {
     catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  respondJson(res, HttpStatus.Ok, {
+    exported: result.value,
+  });
+};
+
+const handleWorkflowDefinitionExportVersionTimeline = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionExportVersionTimelineRequest(
+    bodyResult.value,
+  );
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionExportVersionTimeline(parsed.value, {
+    catalog: workflowCatalog,
+    now: () => new Date(),
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);

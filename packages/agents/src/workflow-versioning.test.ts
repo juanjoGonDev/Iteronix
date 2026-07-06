@@ -9,7 +9,9 @@ import {
   compareWorkflowVersions,
   computeWorkflowVersionChecksum,
   exportWorkflowVersionSnapshot,
+  exportWorkflowVersionTimeline,
   importWorkflowVersionSnapshot,
+  migrateWorkflowVersionExport,
   previewWorkflowVersionImport,
   readWorkflowVersionChangeSummary,
   restoreWorkflowVersionPart,
@@ -164,6 +166,74 @@ describe("workflow versioning", () => {
     expect(imported.note).toBe("release");
     expect(imported.tags).toEqual(["release"]);
     expect(imported.checksum).toBe(exported.checksum);
+  });
+
+  it("exports a timeline range with version metadata and deterministic checksums", () => {
+    const workflow = createWorkflow({
+      name: "Timeline",
+      nodes: [createNode("node-a", "A")],
+    });
+    const versions = [1, 2, 3].map((version) => ({
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      id: `version-${version.toString()}`,
+      version,
+      createdAt: `2026-05-06T08:0${version.toString()}:00.000Z`,
+      snapshot: {
+        ...workflow,
+        version,
+        name: `Timeline ${version.toString()}`,
+      },
+      tags: version === 2 ? ["middle"] : [],
+      changeType: version === 1 ? ("manual" as const) : ("autosave" as const),
+      changeSummary: `Change ${version.toString()}`,
+    }));
+
+    const timeline = exportWorkflowVersionTimeline({
+      workflowId: workflow.id,
+      versions,
+      versionIds: ["version-1", "version-3"],
+      exportedAt: "2026-05-06T09:00:00.000Z",
+    });
+
+    expect(timeline.schemaVersion).toBe(1);
+    expect(timeline.workflowId).toBe(workflow.id);
+    expect(timeline.exportedAt).toBe("2026-05-06T09:00:00.000Z");
+    expect(timeline.versions.map((version) => version.versionId)).toEqual([
+      "version-1",
+      "version-3",
+    ]);
+    expect(timeline.timeline.map((entry) => entry.changeSummary)).toEqual([
+      "Change 1",
+      "Change 3",
+    ]);
+    expect(
+      timeline.versions.every((version) =>
+        validateWorkflowVersionChecksum(version.snapshot, version.checksum),
+      ),
+    ).toBe(true);
+  });
+
+  it("migrates legacy single-version exports into the current schema", () => {
+    const workflow = createWorkflow({
+      name: "Legacy",
+      nodes: [createNode("node-a", "A")],
+    });
+    const legacy = {
+      workflowId: workflow.id,
+      versionId: "legacy-version",
+      version: 4,
+      createdAt: "2026-05-06T08:00:00.000Z",
+      snapshot: workflow,
+      checksum: computeWorkflowVersionChecksum(workflow),
+    };
+
+    const migrated = migrateWorkflowVersionExport(legacy);
+
+    expect(migrated.schemaVersion).toBe(1);
+    expect(migrated.versionId).toBe("legacy-version");
+    expect(migrated.tags).toEqual([]);
+    expect(migrated.snapshot.name).toBe("Legacy");
   });
 
   it("previews import risks before creating a workflow", () => {

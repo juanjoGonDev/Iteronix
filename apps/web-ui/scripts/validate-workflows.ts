@@ -47,6 +47,8 @@ const RequestPath = {
   DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsExportVersionTimeline:
+    "/workflows/definitions/export-version-timeline",
   DefinitionsPreviewImportVersion:
     "/workflows/definitions/preview-import-version",
   DefinitionsImportVersion: "/workflows/definitions/import-version",
@@ -173,6 +175,7 @@ const WorkflowSelector = {
   WorkflowVersionRestorePrefix: "workflows-version-restore-",
   WorkflowVersionClonePrefix: "workflows-version-clone-",
   WorkflowVersionDownloadPrefix: "workflows-version-download-",
+  WorkflowVersionTimelineDownload: "workflows-version-timeline-download",
   WorkflowVersionSearch: "workflows-version-search",
   WorkflowVersionImportText: "workflows-version-import-text",
   WorkflowVersionImportPreview: "workflows-version-import-preview",
@@ -397,6 +400,7 @@ type StubServerState = {
   nextWorkflowId: number;
   nextAssetId: number;
   versionExportCount: number;
+  versionTimelineExportCount: number;
 };
 
 const fixtureProject: StubProjectRecord = {
@@ -700,6 +704,21 @@ async function validateWorkflowsScreen(): Promise<void> {
           stubServer.state.versionExportCount > exportCountBeforeDownload,
         ),
       "Expected version export request after download action.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    const timelineExportCountBeforeDownload =
+      stubServer.state.versionTimelineExportCount;
+    await clickByTestId(page, WorkflowSelector.WorkflowVersionTimelineDownload);
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.versionTimelineExportCount >
+            timelineExportCountBeforeDownload,
+        ),
+      "Expected version timeline export request after timeline download action.",
       {
         timeoutMs: ValidationConfig.UiPollingTimeoutMs,
         intervalMs: ValidationConfig.UiPollingIntervalMs,
@@ -1067,6 +1086,7 @@ async function startWorkflowStubServer(): Promise<{
     nextWorkflowId: 1,
     nextAssetId: 1,
     versionExportCount: 0,
+    versionTimelineExportCount: 0,
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -1508,6 +1528,48 @@ function handleDefinitionVersionRequest(input: {
         checksum: version.checksum ?? "0".repeat(64),
         snapshot: version.snapshot,
         tags: version.tags ?? [],
+      },
+    });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsExportVersionTimeline) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionIds = readOptionalStringSet(body, "versionIds");
+    const versions = state.definitionVersions
+      .filter((entry) => entry.workflowId === workflowId)
+      .filter((entry) => !versionIds || versionIds.has(entry.id))
+      .sort((left, right) => left.version - right.version);
+    if (versions.length === 0) {
+      writeJson(response, 404, { message: "Not found" });
+      return true;
+    }
+
+    state.versionTimelineExportCount += 1;
+    writeJson(response, 200, {
+      exported: {
+        schemaVersion: 1,
+        workflowId,
+        exportedAt: "2026-05-06T08:45:00.000Z",
+        versions: versions.map((version) => ({
+          schemaVersion: 1,
+          workflowId: version.workflowId,
+          versionId: version.id,
+          version: version.version,
+          createdAt: version.createdAt,
+          checksum: version.checksum ?? "0".repeat(64),
+          snapshot: version.snapshot,
+          tags: version.tags ?? [],
+        })),
+        timeline: versions.map((version) => ({
+          versionId: version.id,
+          version: version.version,
+          createdAt: version.createdAt,
+          checksum: version.checksum ?? "0".repeat(64),
+          changeType: version.changeType ?? "manual",
+          changeSummary: version.changeSummary ?? "Snapshot saved",
+          tags: version.tags ?? [],
+        })),
       },
     });
     return true;
@@ -2947,7 +3009,8 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return parsed;
   } catch {
     return {};
   }
@@ -3071,6 +3134,26 @@ function readStringArray(
     }
     return entry;
   });
+}
+
+function readOptionalStringSet(
+  value: unknown,
+  key: string,
+): ReadonlySet<string> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const nested = value[key];
+  if (!Array.isArray(nested) || !nested.every(isStringValue)) {
+    return undefined;
+  }
+
+  return new Set<string>(nested);
+}
+
+function isStringValue(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 function readTriggerRecord(

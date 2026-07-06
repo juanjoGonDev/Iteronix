@@ -14,6 +14,7 @@ import {
   compareWorkflowVersions,
   computeWorkflowVersionChecksum,
   exportWorkflowVersionSnapshot,
+  exportWorkflowVersionTimeline,
   importWorkflowVersionSnapshot,
   previewWorkflowVersionImport,
   readWorkflowVersionChangeSummary,
@@ -21,6 +22,7 @@ import {
   trimWorkflowVersionsByRetention,
   type WorkflowVersionExportRecord,
   type WorkflowVersionImportPreviewRecord,
+  type WorkflowVersionTimelineExportRecord,
   type WorkflowVersionRestorePart,
 } from "./workflow-versioning";
 
@@ -78,6 +80,11 @@ export type WorkflowCatalogStore = {
     workflowId: string;
     versionId: string;
   }) => WorkflowVersionExportRecord | undefined;
+  exportWorkflowVersionTimeline: (input: {
+    workflowId: string;
+    versionIds?: ReadonlyArray<string>;
+    exportedAt: string;
+  }) => WorkflowVersionTimelineExportRecord | undefined;
   importWorkflowVersion: (input: {
     exported: WorkflowVersionExportRecord;
     name?: string;
@@ -274,6 +281,23 @@ export const createWorkflowCatalogStore = (
     return exportWorkflowVersionSnapshot(version);
   };
 
+  const exportWorkflowVersionTimelineInStore = (input: {
+    workflowId: string;
+    versionIds?: ReadonlyArray<string>;
+    exportedAt: string;
+  }): WorkflowVersionTimelineExportRecord | undefined => {
+    if (!definitionsById.has(input.workflowId)) {
+      return undefined;
+    }
+
+    return exportWorkflowVersionTimeline({
+      workflowId: input.workflowId,
+      versions: listWorkflowVersions({ workflowId: input.workflowId }),
+      ...(input.versionIds ? { versionIds: input.versionIds } : {}),
+      exportedAt: input.exportedAt,
+    });
+  };
+
   const importWorkflowVersion = (input: {
     exported: WorkflowVersionExportRecord;
     name?: string;
@@ -444,6 +468,7 @@ export const createWorkflowCatalogStore = (
     restoreWorkflowVersionPart: restoreWorkflowVersionPartInStore,
     cloneWorkflowVersion,
     exportWorkflowVersion,
+    exportWorkflowVersionTimeline: exportWorkflowVersionTimelineInStore,
     importWorkflowVersion,
     previewWorkflowVersionImport: previewWorkflowVersionImportInStore,
     cleanupWorkflowVersions,

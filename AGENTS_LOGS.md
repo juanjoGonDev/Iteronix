@@ -4147,3 +4147,24 @@
   - Full gates, browser validation, commit, push and remote CI/CodeQL are still pending for this slice.
 - Next
   - Run required gates, fix any failures, commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-06 21:53 (Europe/Madrid) — Workflow Version Timeline Export
+
+- Summary
+  - Added a focused Workflows version-history slice for range/timeline exports and legacy version export migration.
+- Decisions
+  - Keep single-version exports unchanged and add a separate server-backed timeline export endpoint for selected/filtered version ranges.
+  - Route import and preview-import parsing through migrateWorkflowVersionExport so legacy single-version exports without explicit schema metadata can still be accepted safely.
+- Changes
+  - packages/agents/src/workflow-versioning.ts now exports timeline bundles and migrates legacy single-version exports.
+  - packages/agents/src/workflow-catalog.ts, pps/server-api/src/workflows.ts, pps/server-api/src/server.ts, and client contracts expose timeline export.
+  - pps/web-ui/src/screens/Workflows.ts adds a compact Download timeline action in the version history panel.
+  - pps/web-ui/scripts/validate-workflows.ts validates the timeline download request in the browser workflow stub.
+- Commands
+  - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts failed first, then PASS.
+  - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts failed first, then PASS.
+  - corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/workflow-client.test.ts failed first, then PASS.
+- Issues/Risks
+  - Full gates, commit, push and remote CI/CodeQL verification pending.
+- Next
+  - Run validate:workflows, format:check, quality, build; then commit, push with hooks enabled and verify CI/CodeQL.

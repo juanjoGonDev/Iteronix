@@ -69,6 +69,25 @@ export type WorkflowVersionExportRecord = {
   tags: ReadonlyArray<string>;
 };
 
+type WorkflowVersionTimelineEntryRecord = {
+  versionId: string;
+  version: number;
+  createdAt: string;
+  checksum: string;
+  changeType?: WorkflowDefinitionVersionRecord["changeType"];
+  changeSummary?: string;
+  note?: string;
+  tags: ReadonlyArray<string>;
+};
+
+export type WorkflowVersionTimelineExportRecord = {
+  schemaVersion: 1;
+  workflowId: string;
+  exportedAt: string;
+  versions: ReadonlyArray<WorkflowVersionExportRecord>;
+  timeline: ReadonlyArray<WorkflowVersionTimelineEntryRecord>;
+};
+
 export type WorkflowVersionExportOptions = {
   includePinnedOutputs: boolean;
   redactSecrets: boolean;
@@ -112,7 +131,7 @@ type WorkflowVersionImportCandidate = Omit<
   schemaVersion: number;
 };
 
-const WorkflowVersionSchemaVersion = 1;
+const WorkflowVersionSchemaVersion = 1 as const;
 const RedactedValue = "[redacted]";
 const SensitiveKeyFragments = [
   "apikey",
@@ -278,6 +297,59 @@ export const exportWorkflowVersionSnapshot = (
   };
 };
 
+export const exportWorkflowVersionTimeline = (input: {
+  workflowId: string;
+  versions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  versionIds?: ReadonlyArray<string>;
+  exportedAt: string;
+  options?: WorkflowVersionExportOptions;
+}): WorkflowVersionTimelineExportRecord => {
+  const selectedVersions = selectWorkflowVersionTimelineVersions(input);
+  const versions = selectedVersions.map((version) =>
+    exportWorkflowVersionSnapshot(version, input.options),
+  );
+
+  return {
+    schemaVersion: WorkflowVersionSchemaVersion,
+    workflowId: input.workflowId,
+    exportedAt: input.exportedAt,
+    versions,
+    timeline: versions.map((version) =>
+      createWorkflowVersionTimelineEntry(version, selectedVersions),
+    ),
+  };
+};
+
+export const migrateWorkflowVersionExport = (
+  value: unknown,
+): WorkflowVersionExportRecord => {
+  if (!isWorkflowVersionPlainRecord(value)) {
+    throw new Error("Workflow version export must be an object");
+  }
+
+  const schemaVersion = value["schemaVersion"];
+  if (schemaVersion !== undefined && schemaVersion !== 1) {
+    throw new Error("Workflow version export schema is not supported");
+  }
+
+  const migrated = {
+    schemaVersion: WorkflowVersionSchemaVersion,
+    workflowId: readWorkflowVersionExportString(value, "workflowId"),
+    versionId: readWorkflowVersionExportString(value, "versionId"),
+    version: readWorkflowVersionExportNumber(value, "version"),
+    createdAt: readWorkflowVersionExportString(value, "createdAt"),
+    checksum: readWorkflowVersionExportString(value, "checksum"),
+    snapshot: readWorkflowVersionExportSnapshot(value),
+    tags: readWorkflowVersionExportTags(value),
+  };
+  const note = readWorkflowVersionExportOptionalString(value, "note");
+
+  return {
+    ...migrated,
+    ...(note ? { note } : {}),
+  };
+};
+
 export const previewWorkflowVersionImport = (input: {
   exported: WorkflowVersionImportCandidate;
   targetWorkspaceId: string;
@@ -380,6 +452,106 @@ const prepareWorkflowVersionExportSnapshot = (
     prepareWorkflowVersionExportNode(node, options),
   ),
 });
+
+const selectWorkflowVersionTimelineVersions = (input: {
+  workflowId: string;
+  versions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
+  versionIds?: ReadonlyArray<string>;
+}): ReadonlyArray<WorkflowDefinitionVersionRecord> => {
+  const selectedIds = input.versionIds ? new Set(input.versionIds) : undefined;
+  return input.versions
+    .filter((version) => version.workflowId === input.workflowId)
+    .filter((version) => !selectedIds || selectedIds.has(version.id))
+    .sort((left, right) => left.version - right.version);
+};
+
+const createWorkflowVersionTimelineEntry = (
+  exported: WorkflowVersionExportRecord,
+  sourceVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>,
+): WorkflowVersionTimelineEntryRecord => {
+  const source = sourceVersions.find(
+    (version) => version.id === exported.versionId,
+  );
+  return {
+    versionId: exported.versionId,
+    version: exported.version,
+    createdAt: exported.createdAt,
+    checksum: exported.checksum,
+    ...(source?.changeType ? { changeType: source.changeType } : {}),
+    ...(source?.changeSummary ? { changeSummary: source.changeSummary } : {}),
+    ...(exported.note ? { note: exported.note } : {}),
+    tags: exported.tags,
+  };
+};
+
+const readWorkflowVersionExportString = (
+  record: Record<string, unknown>,
+  key: string,
+): string => {
+  const value = record[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Workflow version export ${key} must be a string`);
+  }
+
+  return value;
+};
+
+const readWorkflowVersionExportOptionalString = (
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined => {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`Workflow version export ${key} must be a string`);
+  }
+
+  return value;
+};
+
+const readWorkflowVersionExportNumber = (
+  record: Record<string, unknown>,
+  key: string,
+): number => {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Workflow version export ${key} must be a number`);
+  }
+
+  return value;
+};
+
+const readWorkflowVersionExportTags = (
+  record: Record<string, unknown>,
+): ReadonlyArray<string> => {
+  const value = record["tags"];
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value) || !value.every(isStringValue)) {
+    throw new Error("Workflow version export tags must be strings");
+  }
+
+  return value;
+};
+
+const isStringValue = (value: unknown): value is string =>
+  typeof value === "string";
+
+const readWorkflowVersionExportSnapshot = (
+  record: Record<string, unknown>,
+): WorkflowDefinitionRecord => {
+  const value = record["snapshot"];
+  if (!isWorkflowVersionPlainRecord(value)) {
+    throw new Error("Workflow version export snapshot must be an object");
+  }
+
+  return value as WorkflowDefinitionRecord;
+};
 
 const prepareWorkflowVersionExportNode = (
   node: WorkflowNodeRecord,

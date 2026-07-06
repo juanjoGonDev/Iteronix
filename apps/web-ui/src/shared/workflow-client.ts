@@ -23,6 +23,8 @@ const EndpointPath = {
   DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsExportVersionTimeline:
+    "/workflows/definitions/export-version-timeline",
   DefinitionsPreviewImportVersion:
     "/workflows/definitions/preview-import-version",
   DefinitionsImportVersion: "/workflows/definitions/import-version",
@@ -68,6 +70,25 @@ export type WorkflowVersionExportRecord = {
   snapshot: WorkflowDefinitionRecord;
   note?: string;
   tags: ReadonlyArray<string>;
+};
+
+type WorkflowVersionTimelineEntryRecord = {
+  versionId: string;
+  version: number;
+  createdAt: string;
+  checksum: string;
+  changeType?: WorkflowDefinitionVersionRecord["changeType"];
+  changeSummary?: string;
+  note?: string;
+  tags: ReadonlyArray<string>;
+};
+
+export type WorkflowVersionTimelineExportRecord = {
+  schemaVersion: 1;
+  workflowId: string;
+  exportedAt: string;
+  versions: ReadonlyArray<WorkflowVersionExportRecord>;
+  timeline: ReadonlyArray<WorkflowVersionTimelineEntryRecord>;
 };
 
 type WorkflowVersionImportPreviewMessage = {
@@ -206,6 +227,10 @@ export type WorkflowClient = {
     workflowId: string;
     versionId: string;
   }) => Promise<WorkflowVersionExportRecord>;
+  exportDefinitionVersionTimeline: (input: {
+    workflowId: string;
+    versionIds?: ReadonlyArray<string>;
+  }) => Promise<WorkflowVersionTimelineExportRecord>;
   previewDefinitionVersionImport: (input: {
     exported: WorkflowVersionExportRecord;
     targetWorkspaceId: string;
@@ -347,6 +372,15 @@ export const createWorkflowClient = (): WorkflowClient => ({
         versionId: input.versionId,
       },
       parse: parseWorkflowDefinitionExportResponse,
+    }),
+  exportDefinitionVersionTimeline: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsExportVersionTimeline,
+      body: {
+        workflowId: input.workflowId,
+        ...(input.versionIds ? { versionIds: input.versionIds } : {}),
+      },
+      parse: parseWorkflowDefinitionExportTimelineResponse,
     }),
   previewDefinitionVersionImport: (input) =>
     requestJson({
@@ -582,12 +616,59 @@ export const parseWorkflowDefinitionVersionListResponse = (
 
 export const parseWorkflowDefinitionExportResponse = (
   value: unknown,
-): WorkflowVersionExportRecord => {
+): WorkflowVersionExportRecord =>
+  parseWorkflowVersionExportRecord(
+    readRequiredRecord(value, "workflowDefinitionExportResponse", "exported"),
+  );
+
+export const parseWorkflowDefinitionExportTimelineResponse = (
+  value: unknown,
+): WorkflowVersionTimelineExportRecord => {
   const record = readRequiredRecord(
     value,
-    "workflowDefinitionExportResponse",
+    "workflowDefinitionExportTimelineResponse",
     "exported",
   );
+  return {
+    schemaVersion: readRequiredNumber(
+      record,
+      "workflowVersionTimelineExport",
+      "schemaVersion",
+    ) as 1,
+    workflowId: readRequiredString(
+      record,
+      "workflowVersionTimelineExport",
+      "workflowId",
+    ),
+    exportedAt: readRequiredString(
+      record,
+      "workflowVersionTimelineExport",
+      "exportedAt",
+    ),
+    versions: readRequiredArray(
+      record,
+      "workflowVersionTimelineExport",
+      "versions",
+    ).map((item) =>
+      parseWorkflowVersionExportRecord(
+        ensureRecord(item, "workflowVersionExport"),
+      ),
+    ),
+    timeline: readRequiredArray(
+      record,
+      "workflowVersionTimelineExport",
+      "timeline",
+    ).map((item) =>
+      parseWorkflowVersionTimelineEntryRecord(
+        ensureRecord(item, "workflowVersionTimelineEntry"),
+      ),
+    ),
+  };
+};
+
+const parseWorkflowVersionExportRecord = (
+  record: Record<string, unknown>,
+): WorkflowVersionExportRecord => {
   const note = readOptionalString(record, "note");
   return {
     schemaVersion: readRequiredNumber(
@@ -609,6 +690,47 @@ export const parseWorkflowDefinitionExportResponse = (
     ),
     ...(note ? { note } : {}),
     tags: readRequiredStringArray(record, "workflowVersionExport", "tags"),
+  };
+};
+
+const parseWorkflowVersionTimelineEntryRecord = (
+  record: Record<string, unknown>,
+): WorkflowVersionTimelineEntryRecord => {
+  const changeType = parseWorkflowVersionChangeType(
+    readOptionalString(record, "changeType"),
+  );
+  const changeSummary = readOptionalString(record, "changeSummary");
+  const note = readOptionalString(record, "note");
+
+  return {
+    versionId: readRequiredString(
+      record,
+      "workflowVersionTimelineEntry",
+      "versionId",
+    ),
+    version: readRequiredNumber(
+      record,
+      "workflowVersionTimelineEntry",
+      "version",
+    ),
+    createdAt: readRequiredString(
+      record,
+      "workflowVersionTimelineEntry",
+      "createdAt",
+    ),
+    checksum: readRequiredString(
+      record,
+      "workflowVersionTimelineEntry",
+      "checksum",
+    ),
+    ...(changeType ? { changeType } : {}),
+    ...(changeSummary ? { changeSummary } : {}),
+    ...(note ? { note } : {}),
+    tags: readRequiredStringArray(
+      record,
+      "workflowVersionTimelineEntry",
+      "tags",
+    ),
   };
 };
 

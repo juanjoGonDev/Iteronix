@@ -212,6 +212,7 @@ Acceptance:
 - [x] Modal-first version history actions replace native prompt/confirm flows for clone, import, restore, delete, rename and pinned-output overwrite
 - [x] Compact visual version compare with diff search, node/edge/contract/pin status colors and section restore actions
 - [x] Import/export hardening with import preview warnings for checksum/schema/workspace/project/id collisions plus default secret redaction and pinned-output export controls
+- [x] Version export timeline/range bundles with legacy single-version export migration
 
 ### UI continuity & interaction completion (mandatory)
 

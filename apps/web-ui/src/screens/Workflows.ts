@@ -20,6 +20,7 @@ import {
   type WorkflowVersionExportRecord,
   type WorkflowVersionImportPreviewRecord,
   type WorkflowVersionRestorePart,
+  type WorkflowVersionTimelineExportRecord,
 } from "../shared/workflow-client.js";
 import {
   createWorkspaceStateClient,
@@ -312,6 +313,7 @@ const WorkflowScreenSelector = {
   WorkflowVersionRestorePrefix: "workflows-version-restore-",
   WorkflowVersionClonePrefix: "workflows-version-clone-",
   WorkflowVersionDownloadPrefix: "workflows-version-download-",
+  WorkflowVersionTimelineDownload: "workflows-version-timeline-download",
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
   InspectorEmpty: "workflows-inspector-empty",
@@ -1969,6 +1971,13 @@ export class WorkflowsScreen extends Component<
                 void this.openWorkflowVersionImportDialog();
               },
             }),
+            this.renderWorkflowVersionActionButton({
+              label: "Download timeline",
+              testId: WorkflowScreenSelector.WorkflowVersionTimelineDownload,
+              onClick: () => {
+                void this.downloadWorkflowVersionTimeline();
+              },
+            }),
             createElement("input", {
               "data-testid": "workflows-version-retention-keep-latest",
               value: this.state.versionRetentionKeepLatest,
@@ -2984,6 +2993,44 @@ export class WorkflowsScreen extends Component<
     const link = document.createElement("a");
     link.href = url;
     link.download = `${exported.snapshot.name}-v${exported.version.toString()}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  private async downloadWorkflowVersionTimeline(): Promise<void> {
+    const workflow = this.readCurrentWorkflowRecord();
+    if (!workflow) {
+      return;
+    }
+
+    try {
+      const exported =
+        await this.workflowClient.exportDefinitionVersionTimeline({
+          workflowId: workflow.id,
+          versionIds: this.readFilteredWorkflowVersions().map(
+            (version) => version.id,
+          ),
+        });
+      this.downloadWorkflowVersionTimelineExport(exported);
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not download workflow version timeline.",
+        ),
+      });
+    }
+  }
+
+  private downloadWorkflowVersionTimelineExport(
+    exported: WorkflowVersionTimelineExportRecord,
+  ): void {
+    const payload = formatOutputSnapshot(exported);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${exported.workflowId}-versions-timeline.json`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }

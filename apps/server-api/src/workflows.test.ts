@@ -21,6 +21,7 @@ import {
   executeWorkflowDefinitionDelete,
   executeWorkflowDefinitionCloneVersion,
   executeWorkflowDefinitionCleanupVersions,
+  executeWorkflowDefinitionExportVersionTimeline,
   executeWorkflowDefinitionExportVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionImportVersion,
@@ -41,6 +42,7 @@ import {
   parseWorkflowAssetUpsertRequest,
   parseWorkflowDefinitionDeleteRequest,
   parseWorkflowDefinitionCleanupVersionsRequest,
+  parseWorkflowDefinitionExportVersionTimelineRequest,
   parseWorkflowDefinitionExportVersionRequest,
   parseWorkflowDefinitionImportVersionRequest,
   parseWorkflowDefinitionPreviewImportVersionRequest,
@@ -360,6 +362,78 @@ describe("workflow api contracts", () => {
     if (cleanup.type === ResultType.Ok) {
       expect(cleanup.value.kept).toHaveLength(1);
       expect(cleanup.value.removed.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("exports a selected workflow version timeline range", () => {
+    const projectStore = createProjectStore({
+      projects: [createProjectRecord()],
+    });
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: createWorkflowDefinitionInput(),
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (created.type !== ResultType.Ok) {
+      throw new Error("Expected workflow create to succeed.");
+    }
+
+    const updated = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: {
+          ...createWorkflowDefinitionInput(),
+          id: created.value.id,
+          name: "Timeline update",
+        },
+      },
+      {
+        projectStore,
+        catalog,
+      },
+    );
+    if (updated.type !== ResultType.Ok) {
+      throw new Error("Expected workflow update to succeed.");
+    }
+
+    const versions = executeWorkflowDefinitionVersionList(
+      {
+        workflowId: created.value.id,
+      },
+      {
+        catalog,
+      },
+    );
+    if (versions.type !== ResultType.Ok) {
+      throw new Error("Expected versions to list.");
+    }
+
+    const parsed = parseWorkflowDefinitionExportVersionTimelineRequest({
+      workflowId: created.value.id,
+      versionIds: [versions.value[1]?.id ?? ""],
+    });
+    const exported =
+      parsed.type === ResultType.Ok
+        ? executeWorkflowDefinitionExportVersionTimeline(parsed.value, {
+            catalog,
+            now: () => new Date("2026-05-06T19:00:00.000Z"),
+          })
+        : parsed;
+
+    expect(exported.type).toBe(ResultType.Ok);
+    if (exported.type === ResultType.Ok) {
+      expect(exported.value.exportedAt).toBe("2026-05-06T19:00:00.000Z");
+      expect(exported.value.versions).toHaveLength(1);
+      expect(exported.value.timeline[0]?.version).toBe(1);
     }
   });
 

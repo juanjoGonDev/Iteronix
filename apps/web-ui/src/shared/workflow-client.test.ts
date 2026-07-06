@@ -5,6 +5,7 @@ import {
   parseWorkflowDefinitionListResponse,
   parseWorkflowDefinitionCleanupResponse,
   parseWorkflowDefinitionExportResponse,
+  parseWorkflowDefinitionExportTimelineResponse,
   parseWorkflowDefinitionImportPreviewResponse,
   parseWorkflowDefinitionVersionListResponse,
   parseWorkflowExecutionListResponse,
@@ -138,6 +139,45 @@ describe("workflow client parsers", () => {
     expect(exported.snapshot.name).toBe("Workflow");
     expect(cleanup.kept).toHaveLength(1);
     expect(cleanup.removed[0]?.version).toBe(1);
+  });
+
+  it("parses workflow version timeline export responses", () => {
+    const exported = parseWorkflowDefinitionExportTimelineResponse({
+      exported: {
+        schemaVersion: 1,
+        workflowId: "workflow-1",
+        exportedAt: "2026-05-06T19:00:00.000Z",
+        versions: [
+          {
+            schemaVersion: 1,
+            workflowId: "workflow-1",
+            versionId: "version-1",
+            version: 1,
+            createdAt: "2026-05-06T18:10:00.000Z",
+            checksum:
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            snapshot: createWorkflowDefinitionRecord(),
+            tags: ["release"],
+          },
+        ],
+        timeline: [
+          {
+            versionId: "version-1",
+            version: 1,
+            createdAt: "2026-05-06T18:10:00.000Z",
+            checksum:
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            changeType: "manual",
+            changeSummary: "Initial version",
+            tags: ["release"],
+          },
+        ],
+      },
+    });
+
+    expect(exported.exportedAt).toBe("2026-05-06T19:00:00.000Z");
+    expect(exported.versions[0]?.snapshot.name).toBe("Workflow");
+    expect(exported.timeline[0]?.changeSummary).toBe("Initial version");
   });
 
   it("parses workflow version import preview responses", () => {
