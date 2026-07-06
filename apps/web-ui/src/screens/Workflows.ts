@@ -19,6 +19,7 @@ import {
   type WorkflowRunStreamEvent,
   type WorkflowVersionExportRecord,
   type WorkflowVersionImportPreviewRecord,
+  type WorkflowVersionImportSourceRecord,
   type WorkflowVersionRestorePart,
   type WorkflowVersionTimelineExportRecord,
 } from "../shared/workflow-client.js";
@@ -2737,7 +2738,7 @@ export class WorkflowsScreen extends Component<
     }
 
     try {
-      const parsed = JSON.parse(rawText) as WorkflowVersionExportRecord;
+      const parsed = JSON.parse(rawText) as WorkflowVersionImportSourceRecord;
       const target = this.readCurrentWorkflowRecord();
       if (!target) {
         return;
@@ -2754,7 +2755,7 @@ export class WorkflowsScreen extends Component<
           description:
             "Validate the exported snapshot and choose the workflow name before creating it.",
           rawText,
-          inputValue: preview.suggestedName || parsed.snapshot.name,
+          inputValue: preview.suggestedName,
           preview,
           confirmLabel: "Import snapshot",
         },
@@ -3105,7 +3106,7 @@ export class WorkflowsScreen extends Component<
     requestedName: string,
   ): Promise<void> {
     try {
-      const parsed = JSON.parse(rawText) as WorkflowVersionExportRecord;
+      const parsed = JSON.parse(rawText) as WorkflowVersionImportSourceRecord;
       const name = requestedName.trim();
       const imported = await this.workflowClient.importDefinitionVersion({
         exported: parsed,

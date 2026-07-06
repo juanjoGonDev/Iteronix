@@ -12,6 +12,7 @@ import {
   exportWorkflowVersionTimeline,
   importWorkflowVersionSnapshot,
   migrateWorkflowVersionExport,
+  migrateWorkflowVersionImportSource,
   previewWorkflowVersionImport,
   readWorkflowVersionChangeSummary,
   restoreWorkflowVersionPart,
@@ -212,6 +213,38 @@ describe("workflow versioning", () => {
         validateWorkflowVersionChecksum(version.snapshot, version.checksum),
       ),
     ).toBe(true);
+  });
+
+  it("migrates timeline exports into a selected importable version", () => {
+    const workflow = createWorkflow({
+      name: "Timeline import",
+      nodes: [createNode("node-a", "A")],
+    });
+    const versions = [1, 2].map((version) => ({
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      id: `version-${version.toString()}`,
+      version,
+      createdAt: `2026-05-06T08:0${version.toString()}:00.000Z`,
+      snapshot: {
+        ...workflow,
+        version,
+        name: `Timeline import ${version.toString()}`,
+      },
+      tags: [],
+    }));
+    const timeline = exportWorkflowVersionTimeline({
+      workflowId: workflow.id,
+      versions,
+      exportedAt: "2026-05-06T09:00:00.000Z",
+    });
+
+    const latest = migrateWorkflowVersionImportSource(timeline);
+    const selected = migrateWorkflowVersionImportSource(timeline, "version-1");
+
+    expect(latest.versionId).toBe("version-2");
+    expect(selected.versionId).toBe("version-1");
+    expect(selected.snapshot.name).toBe("Timeline import 1");
   });
 
   it("migrates legacy single-version exports into the current schema", () => {

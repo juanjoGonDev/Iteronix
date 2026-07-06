@@ -350,6 +350,17 @@ export const migrateWorkflowVersionExport = (
   };
 };
 
+export const migrateWorkflowVersionImportSource = (
+  value: unknown,
+  selectedVersionId?: string,
+): WorkflowVersionExportRecord => {
+  if (isWorkflowVersionTimelineExportRecord(value)) {
+    return migrateWorkflowVersionTimelineImportSource(value, selectedVersionId);
+  }
+
+  return migrateWorkflowVersionExport(value);
+};
+
 export const previewWorkflowVersionImport = (input: {
   exported: WorkflowVersionImportCandidate;
   targetWorkspaceId: string;
@@ -645,6 +656,58 @@ const isWorkflowVersionPlainRecord = (
   value: unknown,
 ): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isWorkflowVersionTimelineExportRecord = (
+  value: unknown,
+): value is Record<string, unknown> =>
+  isWorkflowVersionPlainRecord(value) && Array.isArray(value["versions"]);
+
+const migrateWorkflowVersionTimelineImportSource = (
+  value: Record<string, unknown>,
+  selectedVersionId?: string,
+): WorkflowVersionExportRecord => {
+  const schemaVersion = value["schemaVersion"];
+  if (schemaVersion !== WorkflowVersionSchemaVersion) {
+    throw new Error("Workflow version timeline export schema is not supported");
+  }
+
+  const workflowId = readWorkflowVersionExportString(value, "workflowId");
+  const versions = readWorkflowVersionTimelineVersions(value).map((version) =>
+    migrateWorkflowVersionExport(version),
+  );
+  if (versions.length === 0) {
+    throw new Error("Workflow version timeline export has no versions");
+  }
+  if (versions.some((version) => version.workflowId !== workflowId)) {
+    throw new Error("Workflow version timeline export is mismatched");
+  }
+
+  if (selectedVersionId) {
+    const selected = versions.find(
+      (version) => version.versionId === selectedVersionId,
+    );
+    if (!selected) {
+      throw new Error("Workflow version timeline selected version is missing");
+    }
+
+    return selected;
+  }
+
+  return versions.reduce((latest, version) =>
+    version.version > latest.version ? version : latest,
+  );
+};
+
+const readWorkflowVersionTimelineVersions = (
+  value: Record<string, unknown>,
+): ReadonlyArray<unknown> => {
+  const versions = value["versions"];
+  if (!Array.isArray(versions)) {
+    throw new Error("Workflow version timeline versions must be an array");
+  }
+
+  return versions;
+};
 
 const createWorkflowVersionImportMessages = (input: {
   schemaSupported: boolean;

@@ -437,6 +437,78 @@ describe("workflow api contracts", () => {
     }
   });
 
+  it("previews timeline bundle imports using the selected version", () => {
+    const projectStore = createProjectStore({
+      projects: [createProjectRecord()],
+    });
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    const created = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: createWorkflowDefinitionInput(),
+      },
+      {
+        catalog,
+        projectStore,
+      },
+    );
+    expect(created.type).toBe(ResultType.Ok);
+    if (created.type !== ResultType.Ok) {
+      return;
+    }
+    const updated = executeWorkflowDefinitionUpsert(
+      {
+        projectId: "project-1",
+        definition: {
+          ...createWorkflowDefinitionInput(),
+          id: created.value.id,
+          name: "Timeline selected import",
+        },
+      },
+      {
+        catalog,
+        projectStore,
+      },
+    );
+    expect(updated.type).toBe(ResultType.Ok);
+    const versions = catalog.listWorkflowVersions({
+      workflowId: created.value.id,
+    });
+    const exported = executeWorkflowDefinitionExportVersionTimeline(
+      {
+        workflowId: created.value.id,
+      },
+      {
+        catalog,
+        now: () => new Date("2026-05-06T19:00:00.000Z"),
+      },
+    );
+    expect(exported.type).toBe(ResultType.Ok);
+    if (exported.type !== ResultType.Ok) {
+      return;
+    }
+
+    const parsed = parseWorkflowDefinitionPreviewImportVersionRequest({
+      exported: exported.value,
+      versionId: versions[1]?.id,
+      targetWorkspaceId: created.value.workspaceId,
+      targetProjectId: created.value.projectId,
+    });
+    const preview =
+      parsed.type === ResultType.Ok
+        ? executeWorkflowDefinitionPreviewImportVersion(parsed.value, {
+            catalog,
+          })
+        : parsed;
+
+    expect(preview.type).toBe(ResultType.Ok);
+    if (preview.type === ResultType.Ok) {
+      expect(preview.value.suggestedName).toBe("Example workflow");
+    }
+  });
+
   it("previews workflow version imports with checksum and collision warnings", () => {
     const projectStore = createProjectStore({
       projects: [createProjectRecord()],

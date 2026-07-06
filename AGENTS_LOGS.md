@@ -4168,3 +4168,12 @@
   - Full gates, commit, push and remote CI/CodeQL verification pending.
 - Next
   - Run validate:workflows, format:check, quality, build; then commit, push with hooks enabled and verify CI/CodeQL.
+
+### 2026-07-06 22:15 (Europe/Madrid) — Workflow Version Timeline Imports
+
+- Summary: Added timeline bundle import-source migration so exported version timelines can feed import preview/import using a selected version or latest version by default.
+- Decisions: Reused the existing single-version import endpoint contract and server-side migration to avoid new modal surfaces or native browser dialogs.
+- Changes: Added domain migration helper and tests; server parsers now accept timeline bundles with optional versionId; web client/UI accepts single-version or timeline import source records.
+- Commands: `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts`; `corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts`; `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/workflow-client.test.ts apps/server-api/src/workflows.test.ts packages/agents/src/workflow-versioning.test.ts`.
+- Issues/Risks: Full gates and push pending for this second slice.
+- Next: Run formatting, quality, build, workflow browser validation, then commit/push with hooks and verify remote CI/CodeQL.

@@ -874,3 +874,5 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 - [ ] **API de versionado**: endpoints para listar versiones de un prompt, crear nuevas versiones, obtener diff, y consultar el grafo de dependencias (qué flujos/steps usan cada versión).
 
 - 2026-07-05: Workflows now persist server-backed definition version snapshots on save, expose list/restore API endpoints, hydrate versions in the History panel, and keep local edit history as draft-only quick restore.
+
+- [x] Workflows version timeline bundles can be imported/previewed through the existing version import flow with selected-version migration.

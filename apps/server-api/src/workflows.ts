@@ -3,7 +3,7 @@ import type {
   WorkflowAssetUpsertInput,
   WorkflowDefinitionUpsertInput,
 } from "../../../packages/agents/src/workflow-catalog";
-import { migrateWorkflowVersionExport } from "../../../packages/agents/src/workflow-versioning";
+import { migrateWorkflowVersionImportSource } from "../../../packages/agents/src/workflow-versioning";
 import type {
   WorkflowVersionExportRecord,
   WorkflowVersionImportPreviewRecord,
@@ -880,9 +880,13 @@ export const parseWorkflowDefinitionImportVersionRequest = (
   }
 
   const name = readOptionalString(value, "name");
+  const versionId = readOptionalString(value, "versionId");
   try {
     return ok({
-      exported: migrateWorkflowVersionExport(value["exported"]),
+      exported: migrateWorkflowVersionImportSource(
+        value["exported"],
+        versionId,
+      ),
       ...(name ? { name } : {}),
     });
   } catch {
@@ -921,9 +925,13 @@ export const parseWorkflowDefinitionPreviewImportVersionRequest = (
     return invalidBody();
   }
 
+  const versionId = readOptionalString(value, "versionId");
   try {
     return ok({
-      exported: migrateWorkflowVersionExport(value["exported"]),
+      exported: migrateWorkflowVersionImportSource(
+        value["exported"],
+        versionId,
+      ),
       targetWorkspaceId: targetWorkspaceId.value,
       targetProjectId: targetProjectId.value,
     });

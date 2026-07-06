@@ -91,6 +91,10 @@ export type WorkflowVersionTimelineExportRecord = {
   timeline: ReadonlyArray<WorkflowVersionTimelineEntryRecord>;
 };
 
+export type WorkflowVersionImportSourceRecord =
+  | WorkflowVersionExportRecord
+  | WorkflowVersionTimelineExportRecord;
+
 type WorkflowVersionImportPreviewMessage = {
   code:
     | "checksum_mismatch"
@@ -232,12 +236,12 @@ export type WorkflowClient = {
     versionIds?: ReadonlyArray<string>;
   }) => Promise<WorkflowVersionTimelineExportRecord>;
   previewDefinitionVersionImport: (input: {
-    exported: WorkflowVersionExportRecord;
+    exported: WorkflowVersionImportSourceRecord;
     targetWorkspaceId: string;
     targetProjectId: string;
   }) => Promise<WorkflowVersionImportPreviewRecord>;
   importDefinitionVersion: (input: {
-    exported: WorkflowVersionExportRecord;
+    exported: WorkflowVersionImportSourceRecord;
     name?: string;
   }) => Promise<WorkflowDefinitionRecord>;
   cleanupDefinitionVersions: (input: {
