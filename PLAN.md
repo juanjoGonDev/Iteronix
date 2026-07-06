@@ -802,6 +802,10 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Expression hint chips now expose raw token, source kind, source id/label, path, status, invalid-token warnings and resolved preview text when data exists
     - Prompt and guardrail hints keep the modal-only authoring model with inspect/copy affordances and no runtime semantic changes
     - Unit and browser coverage verify enriched hints, invalid tokens, nested path preview resolution and UI affordance presence
+  - `06.6` persisted version history polish completed on `2026-07-06`:
+    - Workflow version rows now expose Details, Restore, Clone and Download actions against server-backed snapshots
+    - The details action opens a modal diff preview with snapshot JSON and current-workflow comparison metadata
+    - Browser validation covers version action visibility, details modal rendering and restore flow; catalog/API tests cover clone-from-version behavior
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

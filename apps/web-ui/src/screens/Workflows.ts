@@ -287,6 +287,13 @@ const WorkflowScreenSelector = {
   AssetCreatePrefix: "workflows-asset-create-",
   AssetCardPrefix: "workflows-asset-card-",
   NodeCardPrefix: "workflows-node-card-",
+  WorkflowVersionDetailsModal: "workflows-version-details-modal",
+  WorkflowVersionDetailsPrefix: "workflows-version-details-",
+  WorkflowVersionDetailsDiff: "workflows-version-details-diff",
+  WorkflowVersionDetailsSnapshot: "workflows-version-details-snapshot",
+  WorkflowVersionRestorePrefix: "workflows-version-restore-",
+  WorkflowVersionClonePrefix: "workflows-version-clone-",
+  WorkflowVersionDownloadPrefix: "workflows-version-download-",
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
   InspectorEmpty: "workflows-inspector-empty",
@@ -467,6 +474,10 @@ type WorkflowOutputEditorState = {
   text: string;
 };
 
+type WorkflowVersionDetailsState = {
+  versionId: string;
+};
+
 type ExecutionNodeModalContext = {
   modal: ExecutionNodeModalState;
   workflow: WorkflowDefinitionUpsertInput;
@@ -635,6 +646,7 @@ interface WorkflowsScreenState {
   liveExecution: LiveExecutionState | null;
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
   outputEditor: WorkflowOutputEditorState | null;
+  versionDetails: WorkflowVersionDetailsState | null;
   nodeActionMenuId: string | null;
   workflowEditHistory: ReadonlyArray<
     WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
@@ -713,6 +725,7 @@ export class WorkflowsScreen extends Component<
       liveExecution: null,
       pinnedTestOutput: null,
       outputEditor: null,
+      versionDetails: null,
       nodeActionMenuId: null,
       workflowEditHistory: [],
       errorMessage: null,
@@ -764,6 +777,9 @@ export class WorkflowsScreen extends Component<
         this.state.regexTester ? this.renderRegexTesterModal() : "",
         this.state.executionNodeModal ? this.renderExecutionNodeModal() : "",
         this.state.outputEditor ? this.renderOutputEditorModal() : "",
+        this.state.versionDetails
+          ? this.renderWorkflowVersionDetailsModal()
+          : "",
       ],
     );
   }
@@ -1807,15 +1823,11 @@ export class WorkflowsScreen extends Component<
               },
               this.state.workflowVersions.slice(0, 8).map((version) =>
                 createElement(
-                  "button",
+                  "div",
                   {
                     key: version.id,
-                    type: "button",
                     className:
-                      "rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-left text-xs transition-colors hover:border-blue-500/50 hover:bg-blue-500/10",
-                    onClick: () => {
-                      void this.restoreWorkflowVersion(version.id);
-                    },
+                      "rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-xs",
                   },
                   [
                     createElement(
@@ -1842,12 +1854,349 @@ export class WorkflowsScreen extends Component<
                       },
                       [version.snapshot.name],
                     ),
+                    createElement(
+                      "div",
+                      { className: "mt-2 flex flex-wrap gap-1.5" },
+                      [
+                        this.renderWorkflowVersionActionButton({
+                          label: "Details",
+                          testId: `${WorkflowScreenSelector.WorkflowVersionDetailsPrefix}${version.id}`,
+                          onClick: () =>
+                            this.setState({
+                              versionDetails: { versionId: version.id },
+                            }),
+                        }),
+                        this.renderWorkflowVersionActionButton({
+                          label: "Restore",
+                          testId: `${WorkflowScreenSelector.WorkflowVersionRestorePrefix}${version.id}`,
+                          onClick: () => {
+                            void this.restoreWorkflowVersion(version.id);
+                          },
+                        }),
+                        this.renderWorkflowVersionActionButton({
+                          label: "Clone",
+                          testId: `${WorkflowScreenSelector.WorkflowVersionClonePrefix}${version.id}`,
+                          onClick: () => {
+                            void this.cloneWorkflowVersion(version.id);
+                          },
+                        }),
+                        this.renderWorkflowVersionActionButton({
+                          label: "Download",
+                          testId: `${WorkflowScreenSelector.WorkflowVersionDownloadPrefix}${version.id}`,
+                          onClick: () =>
+                            this.downloadWorkflowVersion(version.id),
+                        }),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
       ],
     );
+  }
+
+  private renderWorkflowVersionActionButton(input: {
+    label: string;
+    testId: string;
+    onClick: () => void;
+  }): HTMLElement {
+    return createElement(
+      "button",
+      {
+        type: "button",
+        className:
+          "rounded border border-border-dark bg-[#151c24] px-2 py-1 text-[11px] text-slate-200 transition-colors hover:border-blue-500/60 hover:bg-blue-500/10",
+        dataset: {
+          testid: input.testId,
+        },
+        onClick: (event: Event) => {
+          event.stopPropagation();
+          input.onClick();
+        },
+      },
+      [input.label],
+    );
+  }
+
+  private renderWorkflowVersionDetailsModal(): HTMLElement | string {
+    const version = this.readSelectedWorkflowVersion();
+    const currentWorkflow = this.readCurrentWorkflowRecord();
+    if (!version || !currentWorkflow) {
+      return "";
+    }
+
+    const diffEntries = readWorkflowVersionDiffEntries(
+      version.snapshot,
+      currentWorkflow,
+    );
+
+    return createElement(
+      "div",
+      {
+        className:
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6",
+        onClick: () => this.closeWorkflowVersionDetails(),
+      },
+      [
+        createElement(
+          "section",
+          {
+            className:
+              "flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border-dark bg-[#10161d] shadow-2xl",
+            dataset: {
+              testid: WorkflowScreenSelector.WorkflowVersionDetailsModal,
+            },
+            onClick: (event: Event) => event.stopPropagation(),
+          },
+          [
+            createElement(
+              "header",
+              {
+                className:
+                  "flex items-start justify-between gap-4 border-b border-border-dark px-5 py-4",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement(
+                    "p",
+                    { className: "text-sm font-semibold text-white" },
+                    [`Version ${version.version.toString()} details`],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-1 text-xs text-text-secondary" },
+                    [
+                      `${version.snapshot.name} · ${formatExecutionHistoryTitle(version.createdAt)}`,
+                    ],
+                  ),
+                ]),
+                createElement(IconButton, {
+                  icon: "close",
+                  tooltip: "Close version details",
+                  onClick: () => this.closeWorkflowVersionDetails(),
+                  className:
+                    "h-8 w-8 rounded-md border border-border-dark bg-[#151c24] hover:bg-[#20262f]",
+                }),
+              ],
+            ),
+            createElement(
+              "div",
+              {
+                className:
+                  "grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 md:grid-cols-[0.9fr_1.1fr]",
+              },
+              [
+                createElement("div", { className: "space-y-3" }, [
+                  this.renderWorkflowVersionMetricGrid(version),
+                  createElement(
+                    "div",
+                    {
+                      className:
+                        "rounded-lg border border-border-dark bg-[#0b1117] p-3",
+                    },
+                    [
+                      createElement(
+                        "p",
+                        {
+                          className:
+                            "text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary",
+                          dataset: {
+                            testid:
+                              WorkflowScreenSelector.WorkflowVersionDetailsSnapshot,
+                          },
+                        },
+                        ["Snapshot JSON"],
+                      ),
+                      createElement(
+                        "pre",
+                        {
+                          className:
+                            "mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-slate-200",
+                        },
+                        [formatOutputSnapshot(version.snapshot)],
+                      ),
+                    ],
+                  ),
+                ]),
+                createElement(
+                  "div",
+                  {
+                    className:
+                      "rounded-lg border border-border-dark bg-[#0b1117] p-3",
+                  },
+                  [
+                    createElement(
+                      "p",
+                      {
+                        className:
+                          "text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary",
+                        dataset: {
+                          testid:
+                            WorkflowScreenSelector.WorkflowVersionDetailsDiff,
+                        },
+                      },
+                      ["Diff preview"],
+                    ),
+                    diffEntries.length === 0
+                      ? createElement(
+                          "p",
+                          { className: "mt-3 text-sm text-text-secondary" },
+                          [
+                            "No differences between this version and the current workflow.",
+                          ],
+                        )
+                      : createElement(
+                          "div",
+                          { className: "mt-3 space-y-2" },
+                          diffEntries.map((entry) =>
+                            createElement(
+                              "div",
+                              {
+                                key: entry.label,
+                                className:
+                                  "rounded-md border border-border-dark bg-[#101820] p-3",
+                              },
+                              [
+                                createElement(
+                                  "p",
+                                  {
+                                    className: "text-xs font-medium text-white",
+                                  },
+                                  [entry.label],
+                                ),
+                                createElement(
+                                  "p",
+                                  {
+                                    className: "mt-1 text-[11px] text-rose-200",
+                                  },
+                                  [`Version: ${entry.versionValue}`],
+                                ),
+                                createElement(
+                                  "p",
+                                  {
+                                    className:
+                                      "mt-1 text-[11px] text-emerald-200",
+                                  },
+                                  [`Current: ${entry.currentValue}`],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderWorkflowVersionMetricGrid(
+    version: WorkflowDefinitionVersionRecord,
+  ): HTMLElement {
+    return createElement("div", { className: "grid grid-cols-2 gap-2" }, [
+      this.renderWorkflowVersionMetric("Version", version.version.toString()),
+      this.renderWorkflowVersionMetric(
+        "Nodes",
+        version.snapshot.nodes.length.toString(),
+      ),
+      this.renderWorkflowVersionMetric(
+        "Connections",
+        version.snapshot.edges.length.toString(),
+      ),
+      this.renderWorkflowVersionMetric(
+        "Status",
+        formatSelectOptionLabel(version.snapshot.status),
+      ),
+    ]);
+  }
+
+  private renderWorkflowVersionMetric(
+    label: string,
+    value: string,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      { className: "rounded-lg border border-border-dark bg-[#0b1117] p-3" },
+      [
+        createElement(
+          "p",
+          {
+            className:
+              "text-[10px] uppercase tracking-[0.2em] text-text-secondary",
+          },
+          [label],
+        ),
+        createElement(
+          "p",
+          { className: "mt-2 text-sm font-medium text-white" },
+          [value],
+        ),
+      ],
+    );
+  }
+
+  private closeWorkflowVersionDetails(): void {
+    this.setState({ versionDetails: null });
+  }
+
+  private readSelectedWorkflowVersion():
+    | WorkflowDefinitionVersionRecord
+    | undefined {
+    const versionId = this.state.versionDetails?.versionId;
+    return versionId
+      ? this.state.workflowVersions.find((version) => version.id === versionId)
+      : undefined;
+  }
+
+  private async cloneWorkflowVersion(versionId: string): Promise<void> {
+    const workflow = this.readCurrentWorkflowRecord();
+    if (!workflow) {
+      return;
+    }
+
+    try {
+      const cloned = await this.workflowClient.cloneDefinitionVersion({
+        workflowId: workflow.id,
+        versionId,
+      });
+      await this.reloadCatalog(cloned.projectId, this.state.workspaceState, {
+        preserveLocalDraft: false,
+      });
+      this.setState({
+        selection: { type: "workflow", id: cloned.id },
+        noticeMessage: "Workflow cloned from selected version.",
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not clone workflow version.",
+        ),
+      });
+    }
+  }
+
+  private downloadWorkflowVersion(versionId: string): void {
+    const version = this.state.workflowVersions.find(
+      (entry) => entry.id === versionId,
+    );
+    if (!version) {
+      return;
+    }
+
+    const payload = formatOutputSnapshot(version.snapshot);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${version.snapshot.name}-v${version.version.toString()}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   private async restoreWorkflowVersion(versionId: string): Promise<void> {
@@ -13766,6 +14115,79 @@ const readErrorMessage = (error: unknown, fallback: string): string =>
 const formatTimestamp = (value: string): string => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+};
+
+type WorkflowVersionDiffEntry = {
+  label: string;
+  versionValue: string;
+  currentValue: string;
+};
+
+const readWorkflowVersionDiffEntries = (
+  version: WorkflowDefinitionRecord,
+  current: WorkflowDefinitionRecord,
+): ReadonlyArray<WorkflowVersionDiffEntry> => {
+  const entries: WorkflowVersionDiffEntry[] = [];
+
+  appendWorkflowVersionDiffEntry(entries, "Name", version.name, current.name);
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Description",
+    version.description,
+    current.description,
+  );
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Status",
+    formatSelectOptionLabel(version.status),
+    formatSelectOptionLabel(current.status),
+  );
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Language",
+    version.defaultContextPolicy.language,
+    current.defaultContextPolicy.language,
+  );
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Nodes",
+    version.nodes.length,
+    current.nodes.length,
+  );
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Connections",
+    version.edges.length,
+    current.edges.length,
+  );
+  appendWorkflowVersionDiffEntry(
+    entries,
+    "Tags",
+    version.tags.join(", "),
+    current.tags.join(", "),
+  );
+
+  return entries;
+};
+
+const appendWorkflowVersionDiffEntry = (
+  entries: WorkflowVersionDiffEntry[],
+  label: string,
+  versionValue: string | number,
+  currentValue: string | number,
+): void => {
+  const formattedVersionValue = String(versionValue);
+  const formattedCurrentValue = String(currentValue);
+
+  if (formattedVersionValue === formattedCurrentValue) {
+    return;
+  }
+
+  entries.push({
+    label,
+    versionValue: formattedVersionValue,
+    currentValue: formattedCurrentValue,
+  });
 };
 
 const formatExecutionHistoryTitle = (value: string): string => {

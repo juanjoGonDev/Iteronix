@@ -148,6 +148,26 @@ export const executeWorkflowDefinitionRestoreVersion = (
   return ok(workflow);
 };
 
+export const executeWorkflowDefinitionCloneVersion = (
+  input: {
+    workflowId: string;
+    versionId: string;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+  },
+): Result<WorkflowDefinitionRecord, ApiError> => {
+  const workflow = dependencies.catalog.cloneWorkflowVersion(input);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(workflow);
+};
+
 export const executeWorkflowDefinitionDelete = (
   input: {
     workflowId: string;
@@ -624,6 +644,11 @@ export const parseWorkflowDefinitionRestoreVersionRequest = (
     versionId: versionId.value,
   });
 };
+
+export const parseWorkflowDefinitionCloneVersionRequest = (
+  value: unknown,
+): Result<{ workflowId: string; versionId: string }, ApiError> =>
+  parseWorkflowDefinitionRestoreVersionRequest(value);
 
 export const parseWorkflowAssetUpsertRequest = (
   value: unknown,

@@ -20,6 +20,7 @@ const EndpointPath = {
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
   DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
+  DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -137,6 +138,10 @@ export type WorkflowClient = {
     workflowId: string;
     versionId: string;
   }) => Promise<WorkflowDefinitionRecord>;
+  cloneDefinitionVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => Promise<WorkflowDefinitionRecord>;
   upsertDefinition: (input: {
     projectId: string;
     definition: WorkflowDefinitionUpsertInput;
@@ -228,6 +233,15 @@ export const createWorkflowClient = (): WorkflowClient => ({
   restoreDefinitionVersion: (input) =>
     requestJson({
       path: EndpointPath.DefinitionsRestoreVersion,
+      body: {
+        workflowId: input.workflowId,
+        versionId: input.versionId,
+      },
+      parse: parseWorkflowDefinitionResponse,
+    }),
+  cloneDefinitionVersion: (input) =>
+    requestJson({
+      path: EndpointPath.DefinitionsCloneVersion,
       body: {
         workflowId: input.workflowId,
         versionId: input.versionId,

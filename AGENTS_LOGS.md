@@ -4061,3 +4061,26 @@
 - Commands: vitest workflow catalog/server/client focused tests; pnpm build. Full gates pending.
 - Issues/Risks: Version UI is intentionally minimal; clone/download actions are deferred to the dedicated version-history feature polish.
 - Next: Run validate:workflows, format:check, quality, build, commit, push, verify CI/CodeQL.
+
+### 2026-07-06 09:28 (Europe/Madrid) — Workflow Version History Polish
+
+- Summary
+  - Added clone/download/details actions and a diff-preview modal for server-backed workflow definition versions.
+- Decisions
+  - Kept persisted version snapshots in the workflow catalog as the source of truth; browser validation exercises the restore flow while unit/API coverage exercises clone.
+- Changes
+  - packages/agents/src/workflow-catalog.ts clones workflow definitions from version snapshots.
+  - pps/server-api/src/workflows.ts and pps/server-api/src/server.ts expose the clone-version API route.
+  - pps/web-ui/src/screens/Workflows.ts adds per-version Details, Restore, Clone and Download actions plus the details/diff modal.
+  - pps/web-ui/scripts/validate-workflows.ts covers version actions visibility, details modal rendering and restore flow in browser validation.
+- Commands
+  - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-catalog.test.ts PASS.
+  - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts PASS.
+  - corepack pnpm@10.18.3 -C apps/web-ui validate:workflows failed once on missing History-section navigation and once on text assertion, then PASS.
+  - corepack pnpm@10.18.3 format:check failed once before formatting, then PASS.
+  - corepack pnpm@10.18.3 quality failed once on duplicate parser export, then PASS.
+  - corepack pnpm@10.18.3 build PASS.
+- Issues/Risks
+  - Remote CI/CodeQL verification still pending after commit and push.
+- Next
+  - Commit, push with hooks enabled, and verify GitHub CI/CodeQL.

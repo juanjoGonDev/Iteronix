@@ -49,6 +49,10 @@ export type WorkflowCatalogStore = {
     workflowId: string;
     versionId: string;
   }) => WorkflowDefinitionRecord | undefined;
+  cloneWorkflowVersion: (input: {
+    workflowId: string;
+    versionId: string;
+  }) => WorkflowDefinitionRecord | undefined;
   deleteWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
   upsertAsset: (input: WorkflowAssetUpsertInput) => WorkflowAssetRecord;
   listAssets: (input: {
@@ -152,6 +156,33 @@ export const createWorkflowCatalogStore = (
       ...version.snapshot,
       id: current.id,
       projectId: current.projectId,
+    });
+  };
+
+  const cloneWorkflowVersion = (input: {
+    workflowId: string;
+    versionId: string;
+  }): WorkflowDefinitionRecord | undefined => {
+    const current = definitionsById.get(input.workflowId);
+    const version = definitionVersionsById.get(input.versionId);
+    if (!current || !version || version.workflowId !== input.workflowId) {
+      return undefined;
+    }
+
+    const snapshot = version.snapshot;
+    return upsertWorkflow({
+      workspaceId: snapshot.workspaceId,
+      projectId: current.projectId,
+      name: `${snapshot.name} copy`,
+      description: snapshot.description,
+      status: snapshot.status,
+      trigger: snapshot.trigger,
+      viewport: snapshot.viewport,
+      nodes: snapshot.nodes,
+      edges: snapshot.edges,
+      executionPolicy: snapshot.executionPolicy,
+      defaultContextPolicy: snapshot.defaultContextPolicy,
+      tags: snapshot.tags,
     });
   };
 
@@ -283,6 +314,7 @@ export const createWorkflowCatalogStore = (
     getWorkflow,
     listWorkflowVersions,
     restoreWorkflowVersion,
+    cloneWorkflowVersion,
     deleteWorkflow,
     upsertAsset,
     listAssets,

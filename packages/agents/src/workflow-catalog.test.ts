@@ -334,6 +334,40 @@ describe("workflow catalog store", () => {
       }),
     ).toHaveLength(3);
   });
+
+  it("clones a workflow definition from a persisted version snapshot", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const created = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "Source workflow",
+      }),
+    );
+    store.upsertWorkflow(
+      createWorkflowInput({
+        id: created.id,
+        name: "Updated source workflow",
+      }),
+    );
+    const versions = store.listWorkflowVersions({
+      workflowId: created.id,
+    });
+
+    const cloned = store.cloneWorkflowVersion({
+      workflowId: created.id,
+      versionId: versions[1]?.id ?? "",
+    });
+
+    expect(cloned?.id).not.toBe(created.id);
+    expect(cloned?.name).toBe("Source workflow copy");
+    expect(cloned?.version).toBe(1);
+    expect(store.listWorkflows({ projectId: "project-1" })).toHaveLength(2);
+    expect(
+      cloned ? store.listWorkflowVersions({ workflowId: cloned.id }) : [],
+    ).toHaveLength(1);
+  });
 });
 
 const createWorkflowInput = (input: {

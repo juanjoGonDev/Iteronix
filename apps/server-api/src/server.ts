@@ -150,6 +150,7 @@ import {
   executeWorkflowAssetUpsert,
   executeWorkflowAssetUsageList,
   executeWorkflowDefinitionDelete,
+  executeWorkflowDefinitionCloneVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
@@ -167,6 +168,7 @@ import {
   parseWorkflowAssetListRequest,
   parseWorkflowAssetUpsertRequest,
   parseWorkflowDefinitionDeleteRequest,
+  parseWorkflowDefinitionCloneVersionRequest,
   parseWorkflowDefinitionGetRequest,
   parseWorkflowDefinitionListRequest,
   parseWorkflowDefinitionRestoreVersionRequest,
@@ -775,6 +777,21 @@ const handleRequest = async (
     }
 
     await handleWorkflowDefinitionRestoreVersion(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+
+  if (path === RoutePath.WorkflowDefinitionsCloneVersion) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleWorkflowDefinitionCloneVersion(
       req,
       res,
       workflowCatalog,
@@ -4413,6 +4430,38 @@ const handleWorkflowDefinitionRestoreVersion = async (
   }
 
   const result = executeWorkflowDefinitionRestoreVersion(parsed.value, {
+    catalog: workflowCatalog,
+  });
+  if (result.type === ResultType.Err) {
+    respondError(res, result.error);
+    return;
+  }
+
+  await workspacePersistence.saveCurrent();
+  respondJson(res, HttpStatus.Ok, {
+    definition: result.value,
+  });
+};
+
+const handleWorkflowDefinitionCloneVersion = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseWorkflowDefinitionCloneVersionRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  const result = executeWorkflowDefinitionCloneVersion(parsed.value, {
     catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {

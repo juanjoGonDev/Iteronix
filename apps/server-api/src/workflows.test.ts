@@ -19,6 +19,7 @@ import {
   executeWorkflowAssetUsageList,
   executeWorkflowAssetUpsert,
   executeWorkflowDefinitionDelete,
+  executeWorkflowDefinitionCloneVersion,
   executeWorkflowDefinitionGet,
   executeWorkflowDefinitionList,
   executeWorkflowDefinitionRestoreVersion,
@@ -208,6 +209,23 @@ describe("workflow api contracts", () => {
     if (restored.type === ResultType.Ok) {
       expect(restored.value.name).toBe(first.value.name);
       expect(restored.value.version).toBe(3);
+    }
+
+    const cloned = executeWorkflowDefinitionCloneVersion(
+      {
+        workflowId: first.value.id,
+        versionId: listed.value[1]?.id ?? "",
+      },
+      {
+        catalog,
+      },
+    );
+
+    expect(cloned.type).toBe(ResultType.Ok);
+    if (cloned.type === ResultType.Ok) {
+      expect(cloned.value.id).not.toBe(first.value.id);
+      expect(cloned.value.name).toBe(`${first.value.name} copy`);
+      expect(cloned.value.version).toBe(1);
     }
   });
 

@@ -44,6 +44,7 @@ const RequestPath = {
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
   DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
+  DefinitionsCloneVersion: "/workflows/definitions/clone-version",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -154,6 +155,13 @@ const WorkflowSelector = {
   InspectorPanel: "workflows-inspector-panel",
   ExecutionInspector: "workflows-execution-inspector",
   ExecutionNodeRunPrefix: "workflows-execution-node-run-",
+  WorkflowVersionDetailsModal: "workflows-version-details-modal",
+  WorkflowVersionDetailsDiff: "workflows-version-details-diff",
+  WorkflowVersionDetailsSnapshot: "workflows-version-details-snapshot",
+  WorkflowVersionDetailsPrefix: "workflows-version-details-",
+  WorkflowVersionRestorePrefix: "workflows-version-restore-",
+  WorkflowVersionClonePrefix: "workflows-version-clone-",
+  WorkflowVersionDownloadPrefix: "workflows-version-download-",
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
   CompactCanvas: "workflows-compact-canvas",
@@ -549,6 +557,48 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!savedDefinition) {
       throw new Error("Expected saved workflow definition before history QA.");
     }
+    const savedVersion = stubServer.state.definitionVersions.find(
+      (version) => version.workflowId === savedDefinition.id,
+    );
+    if (!savedVersion) {
+      throw new Error(
+        "Expected workflow definition version before history QA.",
+      );
+    }
+    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionRestorePrefix}${savedVersion.id}`,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionClonePrefix}${savedVersion.id}`,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionDownloadPrefix}${savedVersion.id}`,
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,
+    );
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsModal);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsDiff);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsSnapshot);
+    await clickButtonByTitle(page, "Close version details");
+    await waitForMissingTestId(
+      page,
+      WorkflowSelector.WorkflowVersionDetailsModal,
+    );
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionRestorePrefix}${savedVersion.id}`,
+    );
+    await waitForPageText(page, "Workflow restored to version");
     const definitionWithAgent = addConnectedAgentNode(savedDefinition);
     const triggerNode = definitionWithAgent.nodes.find(
       (node) => node.kind === WorkflowNodeKind.TriggerManual,
@@ -992,6 +1042,37 @@ async function handleStubRequest(
       }),
     );
     writeJson(response, 200, { definition: restored });
+    return;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsCloneVersion) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    if (!version) {
+      writeJson(response, 404, { message: "Not found" });
+      return;
+    }
+
+    const cloned = {
+      ...version.snapshot,
+      id: `workflow-${state.nextWorkflowId.toString()}`,
+      name: `${version.snapshot.name} copy`,
+      version: 1,
+      createdAt: "2026-05-06T08:25:00.000Z",
+      updatedAt: "2026-05-06T08:25:00.000Z",
+    };
+    state.nextWorkflowId += 1;
+    state.definitions.push(cloned);
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: cloned,
+        version: cloned.version,
+      }),
+    );
+    writeJson(response, 200, { definition: cloned });
     return;
   }
 
