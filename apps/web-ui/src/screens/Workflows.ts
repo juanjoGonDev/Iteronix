@@ -17,6 +17,8 @@ import {
   createWorkflowClient,
   WorkflowRunStreamEventType,
   type WorkflowRunStreamEvent,
+  type WorkflowVersionExportRecord,
+  type WorkflowVersionRestorePart,
 } from "../shared/workflow-client.js";
 import {
   createWorkspaceStateClient,
@@ -476,6 +478,7 @@ type WorkflowOutputEditorState = {
 
 type WorkflowVersionDetailsState = {
   versionId: string;
+  compareVersionId?: string;
 };
 
 type ExecutionNodeModalContext = {
@@ -647,6 +650,11 @@ interface WorkflowsScreenState {
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
   outputEditor: WorkflowOutputEditorState | null;
   versionDetails: WorkflowVersionDetailsState | null;
+  versionSearchQuery: string;
+  versionImportText: string;
+  versionRetentionKeepLatest: string;
+  nextVersionNote: string;
+  nextVersionTags: string;
   nodeActionMenuId: string | null;
   workflowEditHistory: ReadonlyArray<
     WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
@@ -726,6 +734,11 @@ export class WorkflowsScreen extends Component<
       pinnedTestOutput: null,
       outputEditor: null,
       versionDetails: null,
+      versionSearchQuery: "",
+      versionImportText: "",
+      versionRetentionKeepLatest: "25",
+      nextVersionNote: "",
+      nextVersionTags: "",
       nodeActionMenuId: null,
       workflowEditHistory: [],
       errorMessage: null,
@@ -1782,6 +1795,7 @@ export class WorkflowsScreen extends Component<
   }
 
   private renderWorkflowVersionHistoryCard(): HTMLElement {
+    const visibleVersions = this.readFilteredWorkflowVersions().slice(0, 12);
     return createElement(
       "section",
       {
@@ -1810,6 +1824,84 @@ export class WorkflowsScreen extends Component<
             ]),
           ],
         ),
+        createElement("div", { className: "mt-3 grid gap-2" }, [
+          createElement("input", {
+            "data-testid": "workflows-version-search",
+            value: this.state.versionSearchQuery,
+            placeholder: "Search versions, notes or tags",
+            className:
+              "w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+            onInput: (event: Event) => {
+              this.setState({
+                versionSearchQuery: (event.target as HTMLInputElement).value,
+              });
+            },
+          }),
+          createElement("div", { className: "grid grid-cols-2 gap-2" }, [
+            createElement("input", {
+              value: this.state.nextVersionNote,
+              placeholder: "Next save note",
+              className:
+                "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+              onInput: (event: Event) => {
+                this.setState({
+                  nextVersionNote: (event.target as HTMLInputElement).value,
+                });
+              },
+            }),
+            createElement("input", {
+              value: this.state.nextVersionTags,
+              placeholder: "Next save tags",
+              className:
+                "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+              onInput: (event: Event) => {
+                this.setState({
+                  nextVersionTags: (event.target as HTMLInputElement).value,
+                });
+              },
+            }),
+          ]),
+          createElement("textarea", {
+            "data-testid": "workflows-version-import-text",
+            value: this.state.versionImportText,
+            placeholder: "Paste exported version snapshot JSON to import",
+            className:
+              "min-h-16 rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+            onInput: (event: Event) => {
+              this.setState({
+                versionImportText: (event.target as HTMLTextAreaElement).value,
+              });
+            },
+          }),
+          createElement("div", { className: "flex flex-wrap gap-2" }, [
+            this.renderWorkflowVersionActionButton({
+              label: "Import",
+              testId: "workflows-version-import",
+              onClick: () => {
+                void this.importWorkflowVersionSnapshot();
+              },
+            }),
+            createElement("input", {
+              "data-testid": "workflows-version-retention-keep-latest",
+              value: this.state.versionRetentionKeepLatest,
+              className:
+                "w-20 rounded-md border border-border-dark bg-[#0b1117] px-2 py-1 text-xs text-white outline-none focus:border-blue-500",
+              onInput: (event: Event) => {
+                this.setState({
+                  versionRetentionKeepLatest: (event.target as HTMLInputElement)
+                    .value,
+                });
+              },
+            }),
+            this.renderWorkflowVersionActionButton({
+              label: "Cleanup",
+              testId: "workflows-version-cleanup",
+              onClick: () => {
+                void this.cleanupWorkflowVersions();
+              },
+            }),
+          ]),
+        ]),
         this.state.workflowVersions.length === 0
           ? createElement(
               "p",
@@ -1821,7 +1913,7 @@ export class WorkflowsScreen extends Component<
               {
                 className: "mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto",
               },
-              this.state.workflowVersions.slice(0, 8).map((version) =>
+              visibleVersions.map((version) =>
                 createElement(
                   "div",
                   {
@@ -1854,6 +1946,30 @@ export class WorkflowsScreen extends Component<
                       },
                       [version.snapshot.name],
                     ),
+                    createElement(
+                      "p",
+                      {
+                        className: "mt-1 truncate text-[11px] text-emerald-200",
+                      },
+                      [version.changeSummary ?? "Snapshot saved"],
+                    ),
+                    version.note || version.tags?.length
+                      ? createElement(
+                          "p",
+                          {
+                            className:
+                              "mt-1 truncate text-[11px] text-violet-200",
+                          },
+                          [
+                            [
+                              version.note ?? "",
+                              ...(version.tags ?? []).map((tag) => `#${tag}`),
+                            ]
+                              .filter((value) => value.length > 0)
+                              .join(" · "),
+                          ],
+                        )
+                      : "",
                     createElement(
                       "div",
                       { className: "mt-2 flex flex-wrap gap-1.5" },
@@ -1919,6 +2035,26 @@ export class WorkflowsScreen extends Component<
     );
   }
 
+  private readFilteredWorkflowVersions(): ReadonlyArray<WorkflowDefinitionVersionRecord> {
+    const query = this.state.versionSearchQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return this.state.workflowVersions;
+    }
+
+    return this.state.workflowVersions.filter((version) =>
+      [
+        version.snapshot.name,
+        version.note ?? "",
+        version.changeSummary ?? "",
+        version.changeType ?? "",
+        ...(version.tags ?? []),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }
+
   private renderWorkflowVersionDetailsModal(): HTMLElement | string {
     const version = this.readSelectedWorkflowVersion();
     const currentWorkflow = this.readCurrentWorkflowRecord();
@@ -1926,9 +2062,13 @@ export class WorkflowsScreen extends Component<
       return "";
     }
 
+    const compareWorkflow = this.readWorkflowVersionCompareSnapshot(
+      version,
+      currentWorkflow,
+    );
     const diffEntries = readWorkflowVersionDiffEntries(
       version.snapshot,
-      currentWorkflow,
+      compareWorkflow,
     );
 
     return createElement(
@@ -1977,6 +2117,73 @@ export class WorkflowsScreen extends Component<
                   onClick: () => this.closeWorkflowVersionDetails(),
                   className:
                     "h-8 w-8 rounded-md border border-border-dark bg-[#151c24] hover:bg-[#20262f]",
+                }),
+              ],
+            ),
+            createElement(
+              "div",
+              {
+                className:
+                  "flex flex-wrap items-center gap-2 border-b border-border-dark px-5 py-3",
+              },
+              [
+                createElement(
+                  "select",
+                  {
+                    "data-testid": "workflows-version-compare-select",
+                    value:
+                      this.state.versionDetails?.compareVersionId ?? "draft",
+                    className:
+                      "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+                    onChange: (event: Event) => {
+                      this.setState({
+                        versionDetails: {
+                          versionId: version.id,
+                          compareVersionId: (event.target as HTMLSelectElement)
+                            .value,
+                        },
+                      });
+                    },
+                  },
+                  [
+                    createElement("option", { value: "draft" }, [
+                      "Compare with current draft",
+                    ]),
+                    ...this.state.workflowVersions
+                      .filter((candidate) => candidate.id !== version.id)
+                      .map((candidate) =>
+                        createElement(
+                          "option",
+                          { key: candidate.id, value: candidate.id },
+                          [
+                            `Compare with version ${candidate.version.toString()}`,
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                this.renderWorkflowVersionActionButton({
+                  label: "Copy to editor",
+                  testId: "workflows-version-copy-to-editor",
+                  onClick: () => this.copyWorkflowVersionToEditor(version.id),
+                }),
+                this.renderWorkflowVersionActionButton({
+                  label: "Restore metadata",
+                  testId: "workflows-version-restore-metadata",
+                  onClick: () => {
+                    void this.restoreWorkflowVersionPart(version.id, {
+                      kind: "metadata",
+                    });
+                  },
+                }),
+                this.renderWorkflowVersionActionButton({
+                  label: "Restore pinned outputs",
+                  testId: "workflows-version-restore-pinned",
+                  onClick: () => {
+                    void this.restoreWorkflowVersionPart(version.id, {
+                      kind: "pinned_outputs",
+                    });
+                  },
                 }),
               ],
             ),
@@ -2152,9 +2359,55 @@ export class WorkflowsScreen extends Component<
       : undefined;
   }
 
+  private readWorkflowVersionCompareSnapshot(
+    selected: WorkflowDefinitionVersionRecord,
+    currentWorkflow: WorkflowDefinitionRecord,
+  ): WorkflowDefinitionRecord {
+    const compareVersionId = this.state.versionDetails?.compareVersionId;
+    if (!compareVersionId || compareVersionId === "draft") {
+      return currentWorkflow;
+    }
+
+    return (
+      this.state.workflowVersions.find(
+        (version) => version.id === compareVersionId,
+      )?.snapshot ?? selected.snapshot
+    );
+  }
+
+  private copyWorkflowVersionToEditor(versionId: string): void {
+    const version = this.state.workflowVersions.find(
+      (entry) => entry.id === versionId,
+    );
+    if (!version) {
+      return;
+    }
+
+    const draftWorkflow = stripDefinitionVersionFields(version.snapshot);
+    this.setState({
+      draftWorkflow,
+      dirtyWorkflow: true,
+      selection: { type: "workflow", id: draftWorkflow.id ?? null },
+      noticeMessage: null,
+      errorMessage: null,
+      versionDetails: null,
+    });
+  }
+
   private async cloneWorkflowVersion(versionId: string): Promise<void> {
     const workflow = this.readCurrentWorkflowRecord();
     if (!workflow) {
+      return;
+    }
+
+    const version = this.state.workflowVersions.find(
+      (entry) => entry.id === versionId,
+    );
+    const name = window.prompt(
+      "Cloned workflow name",
+      version ? `${version.snapshot.name} copy` : "Workflow copy",
+    );
+    if (!name || name.trim().length === 0) {
       return;
     }
 
@@ -2162,6 +2415,7 @@ export class WorkflowsScreen extends Component<
       const cloned = await this.workflowClient.cloneDefinitionVersion({
         workflowId: workflow.id,
         versionId,
+        name: name.trim(),
       });
       await this.reloadCatalog(cloned.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,
@@ -2189,12 +2443,38 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    const payload = formatOutputSnapshot(version.snapshot);
+    void this.downloadWorkflowVersionFromServer(version.workflowId, versionId);
+  }
+
+  private async downloadWorkflowVersionFromServer(
+    workflowId: string,
+    versionId: string,
+  ): Promise<void> {
+    try {
+      const exported = await this.workflowClient.exportDefinitionVersion({
+        workflowId,
+        versionId,
+      });
+      this.downloadWorkflowVersionExport(exported);
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not download workflow version.",
+        ),
+      });
+    }
+  }
+
+  private downloadWorkflowVersionExport(
+    exported: WorkflowVersionExportRecord,
+  ): void {
+    const payload = formatOutputSnapshot(exported);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${version.snapshot.name}-v${version.version.toString()}.json`;
+    link.download = `${exported.snapshot.name}-v${exported.version.toString()}.json`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
@@ -2202,6 +2482,10 @@ export class WorkflowsScreen extends Component<
   private async restoreWorkflowVersion(versionId: string): Promise<void> {
     const workflow = this.readCurrentWorkflowRecord();
     if (!workflow) {
+      return;
+    }
+
+    if (!this.confirmVersionRestore()) {
       return;
     }
 
@@ -2226,6 +2510,114 @@ export class WorkflowsScreen extends Component<
         ),
       });
     }
+  }
+
+  private async restoreWorkflowVersionPart(
+    versionId: string,
+    part: WorkflowVersionRestorePart,
+  ): Promise<void> {
+    const workflow = this.readCurrentWorkflowRecord();
+    if (!workflow || !this.confirmVersionRestore()) {
+      return;
+    }
+
+    try {
+      const restored = await this.workflowClient.restoreDefinitionVersionPart({
+        workflowId: workflow.id,
+        versionId,
+        part,
+      });
+      await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
+        preserveLocalDraft: false,
+      });
+      this.setState({
+        selection: { type: "workflow", id: restored.id },
+        noticeMessage: null,
+        errorMessage: null,
+        versionDetails: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not restore workflow version part.",
+        ),
+      });
+    }
+  }
+
+  private async importWorkflowVersionSnapshot(): Promise<void> {
+    const rawText = this.state.versionImportText.trim();
+    if (rawText.length === 0) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(rawText) as WorkflowVersionExportRecord;
+      const name = window.prompt(
+        "Imported workflow name",
+        parsed.snapshot.name,
+      );
+      const imported = await this.workflowClient.importDefinitionVersion({
+        exported: parsed,
+        ...(name && name.trim().length > 0 ? { name: name.trim() } : {}),
+      });
+      await this.reloadCatalog(imported.projectId, this.state.workspaceState, {
+        preserveLocalDraft: false,
+      });
+      this.setState({
+        selection: { type: "workflow", id: imported.id },
+        versionImportText: "",
+        noticeMessage: null,
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not import workflow version snapshot.",
+        ),
+      });
+    }
+  }
+
+  private async cleanupWorkflowVersions(): Promise<void> {
+    const workflow = this.readCurrentWorkflowRecord();
+    const keepLatest = Number.parseInt(
+      this.state.versionRetentionKeepLatest,
+      10,
+    );
+    if (!workflow || !Number.isInteger(keepLatest) || keepLatest < 1) {
+      return;
+    }
+
+    try {
+      await this.workflowClient.cleanupDefinitionVersions({
+        workflowId: workflow.id,
+        keepLatest,
+      });
+      await this.reloadCatalog(workflow.projectId, this.state.workspaceState, {
+        preserveLocalDraft: true,
+      });
+      this.setState({ noticeMessage: null, errorMessage: null });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not cleanup workflow versions.",
+        ),
+      });
+    }
+  }
+
+  private confirmVersionRestore(): boolean {
+    if (!this.state.dirtyWorkflow) {
+      return true;
+    }
+
+    return window.confirm(
+      "Current workflow has unsaved changes. Restore will replace the draft. Continue?",
+    );
   }
 
   private renderWorkflowEditHistoryCard(): HTMLElement {
@@ -10877,7 +11269,13 @@ export class WorkflowsScreen extends Component<
 
       const saved = await this.workflowClient.upsertDefinition({
         projectId: this.state.currentProject.id,
-        definition: this.state.draftWorkflow,
+        definition: {
+          ...this.state.draftWorkflow,
+          ...(this.state.nextVersionNote.trim().length > 0
+            ? { versionNote: this.state.nextVersionNote.trim() }
+            : {}),
+          ...readVersionTagsInput(this.state.nextVersionTags),
+        },
       });
       await this.reloadCatalog(this.state.currentProject.id, undefined, {
         preserveLocalDraft: false,
@@ -10887,6 +11285,8 @@ export class WorkflowsScreen extends Component<
         pendingAction: null,
         noticeMessage: "Workflow saved to the server workspace.",
         errorMessage: null,
+        nextVersionNote: "",
+        nextVersionTags: "",
       });
     } catch (error) {
       this.setState({
@@ -14168,6 +14568,16 @@ const readWorkflowVersionDiffEntries = (
   );
 
   return entries;
+};
+
+const readVersionTagsInput = (
+  value: string,
+): { versionTags?: ReadonlyArray<string> } => {
+  const tags = value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+  return tags.length > 0 ? { versionTags: tags } : {};
 };
 
 const appendWorkflowVersionDiffEntry = (

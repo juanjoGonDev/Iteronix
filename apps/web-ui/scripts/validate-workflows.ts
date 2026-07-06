@@ -44,7 +44,11 @@ const RequestPath = {
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
   DefinitionsRestoreVersion: "/workflows/definitions/restore-version",
+  DefinitionsRestoreVersionPart: "/workflows/definitions/restore-version-part",
   DefinitionsCloneVersion: "/workflows/definitions/clone-version",
+  DefinitionsExportVersion: "/workflows/definitions/export-version",
+  DefinitionsImportVersion: "/workflows/definitions/import-version",
+  DefinitionsCleanupVersions: "/workflows/definitions/cleanup-versions",
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
@@ -162,6 +166,15 @@ const WorkflowSelector = {
   WorkflowVersionRestorePrefix: "workflows-version-restore-",
   WorkflowVersionClonePrefix: "workflows-version-clone-",
   WorkflowVersionDownloadPrefix: "workflows-version-download-",
+  WorkflowVersionSearch: "workflows-version-search",
+  WorkflowVersionImportText: "workflows-version-import-text",
+  WorkflowVersionImport: "workflows-version-import",
+  WorkflowVersionCleanup: "workflows-version-cleanup",
+  WorkflowVersionRetentionKeepLatest: "workflows-version-retention-keep-latest",
+  WorkflowVersionCopyToEditor: "workflows-version-copy-to-editor",
+  WorkflowVersionRestoreMetadata: "workflows-version-restore-metadata",
+  WorkflowVersionRestorePinned: "workflows-version-restore-pinned",
+  WorkflowVersionCompareSelect: "workflows-version-compare-select",
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
   CompactCanvas: "workflows-compact-canvas",
@@ -295,6 +308,11 @@ type StubWorkflowDefinitionVersionRecord = {
   version: number;
   createdAt: string;
   snapshot: StubWorkflowDefinitionRecord;
+  checksum?: string;
+  note?: string;
+  tags?: ReadonlyArray<string>;
+  changeType?: string;
+  changeSummary?: string;
 };
 
 type StubExecutionRecord = {
@@ -368,6 +386,7 @@ type StubServerState = {
   executions: StubExecutionRecord[];
   nextWorkflowId: number;
   nextAssetId: number;
+  versionExportCount: number;
 };
 
 const fixtureProject: StubProjectRecord = {
@@ -501,7 +520,13 @@ async function validateWorkflowsScreen(): Promise<void> {
     });
 
     page.on("dialog", (dialog) => {
-      void dialog.accept();
+      const message = dialog.message();
+      const value = message.includes("Cloned workflow name")
+        ? "Browser cloned workflow"
+        : message.includes("Imported workflow name")
+          ? "Browser imported workflow"
+          : undefined;
+      void dialog.accept(value);
     });
 
     await clickByTestId(page, WorkflowSelector.WorkflowCreate);
@@ -582,6 +607,15 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       `${WorkflowSelector.WorkflowVersionDownloadPrefix}${savedVersion.id}`,
     );
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionSearch,
+      savedVersion.snapshot.name,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,
+    );
     await clickByTestId(
       page,
       `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,
@@ -589,7 +623,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsModal);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsDiff);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsSnapshot);
-    await clickButtonByTitle(page, "Close version details");
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionCompareSelect);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionCopyToEditor);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionRestoreMetadata);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionRestorePinned);
+    await clickByTestId(page, WorkflowSelector.WorkflowVersionCopyToEditor);
     await waitForMissingTestId(
       page,
       WorkflowSelector.WorkflowVersionDetailsModal,
@@ -599,6 +637,87 @@ async function validateWorkflowsScreen(): Promise<void> {
       `${WorkflowSelector.WorkflowVersionRestorePrefix}${savedVersion.id}`,
     );
     await waitForPageText(page, "Workflow restored to version");
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionClonePrefix}${savedVersion.id}`,
+    );
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.definitions.some(
+            (definition) => definition.name === "Browser cloned workflow",
+          ),
+        ),
+      "Expected cloned workflow with edited name.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    const exportCountBeforeDownload = stubServer.state.versionExportCount;
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionDownloadPrefix}${savedVersion.id}`,
+    );
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.versionExportCount > exportCountBeforeDownload,
+        ),
+      "Expected version export request after download action.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionRetentionKeepLatest,
+      "1",
+    );
+    await clickByTestId(page, WorkflowSelector.WorkflowVersionCleanup);
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.definitionVersions.filter(
+            (version) => version.workflowId === savedVersion.workflowId,
+          ).length <= 1,
+        ),
+      "Expected workflow version retention cleanup to keep one version.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportText,
+      JSON.stringify({
+        schemaVersion: 1,
+        workflowId: savedVersion.workflowId,
+        versionId: savedVersion.id,
+        version: savedVersion.version,
+        createdAt: savedVersion.createdAt,
+        checksum: savedVersion.checksum ?? "0".repeat(64),
+        snapshot: savedVersion.snapshot,
+        tags: [],
+      }),
+    );
+    await clickByTestId(page, WorkflowSelector.WorkflowVersionImport);
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.definitions.some(
+            (definition) => definition.name === "Browser imported workflow",
+          ),
+        ),
+      "Expected imported workflow with edited name.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
     const definitionWithAgent = addConnectedAgentNode(savedDefinition);
     const triggerNode = definitionWithAgent.nodes.find(
       (node) => node.kind === WorkflowNodeKind.TriggerManual,
@@ -892,6 +1011,7 @@ async function startWorkflowStubServer(): Promise<{
     executions: [],
     nextWorkflowId: 1,
     nextAssetId: 1,
+    versionExportCount: 0,
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
@@ -1011,68 +1131,7 @@ async function handleStubRequest(
     return;
   }
 
-  if (requestUrl.pathname === RequestPath.DefinitionsRestoreVersion) {
-    const workflowId = readRequiredString(body, "workflowId");
-    const versionId = readRequiredString(body, "versionId");
-    const version = state.definitionVersions.find(
-      (entry) => entry.workflowId === workflowId && entry.id === versionId,
-    );
-    if (!version) {
-      writeJson(response, 404, { message: "Not found" });
-      return;
-    }
-    const restored = {
-      ...version.snapshot,
-      id: workflowId,
-      version: version.snapshot.version + 1,
-      updatedAt: "2026-05-06T08:20:00.000Z",
-    };
-    const existingIndex = state.definitions.findIndex(
-      (entry) => entry.id === workflowId,
-    );
-    if (existingIndex >= 0) {
-      state.definitions[existingIndex] = restored;
-    } else {
-      state.definitions.push(restored);
-    }
-    state.definitionVersions.push(
-      createDefinitionVersionRecord({
-        definition: restored,
-        version: state.definitionVersions.length + 1,
-      }),
-    );
-    writeJson(response, 200, { definition: restored });
-    return;
-  }
-
-  if (requestUrl.pathname === RequestPath.DefinitionsCloneVersion) {
-    const workflowId = readRequiredString(body, "workflowId");
-    const versionId = readRequiredString(body, "versionId");
-    const version = state.definitionVersions.find(
-      (entry) => entry.workflowId === workflowId && entry.id === versionId,
-    );
-    if (!version) {
-      writeJson(response, 404, { message: "Not found" });
-      return;
-    }
-
-    const cloned = {
-      ...version.snapshot,
-      id: `workflow-${state.nextWorkflowId.toString()}`,
-      name: `${version.snapshot.name} copy`,
-      version: 1,
-      createdAt: "2026-05-06T08:25:00.000Z",
-      updatedAt: "2026-05-06T08:25:00.000Z",
-    };
-    state.nextWorkflowId += 1;
-    state.definitions.push(cloned);
-    state.definitionVersions.push(
-      createDefinitionVersionRecord({
-        definition: cloned,
-        version: cloned.version,
-      }),
-    );
-    writeJson(response, 200, { definition: cloned });
+  if (handleDefinitionVersionRequest({ requestUrl, response, state, body })) {
     return;
   }
 
@@ -1263,6 +1322,191 @@ async function handleStubRequest(
   writeJson(response, 404, {
     message: "Not found",
   });
+}
+
+function handleDefinitionVersionRequest(input: {
+  requestUrl: URL;
+  response: ServerResponse;
+  state: StubServerState;
+  body: unknown;
+}): boolean {
+  const { requestUrl, response, state, body } = input;
+
+  if (requestUrl.pathname === RequestPath.DefinitionsRestoreVersion) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    if (!version) {
+      writeJson(response, 404, { message: "Not found" });
+      return true;
+    }
+    const restored = {
+      ...version.snapshot,
+      id: workflowId,
+      version: version.snapshot.version + 1,
+      updatedAt: "2026-05-06T08:20:00.000Z",
+    };
+    const existingIndex = state.definitions.findIndex(
+      (entry) => entry.id === workflowId,
+    );
+    if (existingIndex >= 0) {
+      state.definitions[existingIndex] = restored;
+    } else {
+      state.definitions.push(restored);
+    }
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: restored,
+        version: state.definitionVersions.length + 1,
+      }),
+    );
+    writeJson(response, 200, { definition: restored });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsRestoreVersionPart) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    const current = state.definitions.find((entry) => entry.id === workflowId);
+    if (!version || !current) {
+      writeJson(response, 404, { message: "Not found" });
+      return true;
+    }
+
+    const restored = {
+      ...current,
+      name: version.snapshot.name,
+      description: version.snapshot.description,
+      updatedAt: "2026-05-06T08:22:00.000Z",
+      version: current.version + 1,
+    };
+    state.definitions = state.definitions.map((entry) =>
+      entry.id === workflowId ? restored : entry,
+    );
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: restored,
+        version: restored.version,
+      }),
+    );
+    writeJson(response, 200, { definition: restored });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsCloneVersion) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    if (!version) {
+      writeJson(response, 404, { message: "Not found" });
+      return true;
+    }
+
+    const requestedName =
+      readOptionalString(body, "name") ?? `${version.snapshot.name} copy`;
+    const cloned = {
+      ...version.snapshot,
+      id: `workflow-${state.nextWorkflowId.toString()}`,
+      name: requestedName,
+      version: 1,
+      createdAt: "2026-05-06T08:25:00.000Z",
+      updatedAt: "2026-05-06T08:25:00.000Z",
+    };
+    state.nextWorkflowId += 1;
+    state.definitions.push(cloned);
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: cloned,
+        version: cloned.version,
+      }),
+    );
+    writeJson(response, 200, { definition: cloned });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsExportVersion) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const versionId = readRequiredString(body, "versionId");
+    const version = state.definitionVersions.find(
+      (entry) => entry.workflowId === workflowId && entry.id === versionId,
+    );
+    if (!version) {
+      writeJson(response, 404, { message: "Not found" });
+      return true;
+    }
+
+    state.versionExportCount += 1;
+    writeJson(response, 200, {
+      exported: {
+        schemaVersion: 1,
+        workflowId: version.workflowId,
+        versionId: version.id,
+        version: version.version,
+        createdAt: version.createdAt,
+        checksum: version.checksum ?? "0".repeat(64),
+        snapshot: version.snapshot,
+        tags: version.tags ?? [],
+      },
+    });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsImportVersion) {
+    const exported = readRequiredRecord(body, "exported");
+
+    const snapshot = exported["snapshot"];
+    if (!isRecord(snapshot)) {
+      writeJson(response, 400, { message: "Invalid request body" });
+      return true;
+    }
+
+    const imported = {
+      ...snapshot,
+      id: `workflow-${state.nextWorkflowId.toString()}`,
+      name:
+        readOptionalString(body, "name") ??
+        readRequiredString(snapshot, "name"),
+      version: 1,
+      createdAt: "2026-05-06T08:26:00.000Z",
+      updatedAt: "2026-05-06T08:26:00.000Z",
+    } as StubWorkflowDefinitionRecord;
+    state.nextWorkflowId += 1;
+    state.definitions.push(imported);
+    state.definitionVersions.push(
+      createDefinitionVersionRecord({
+        definition: imported,
+        version: imported.version,
+      }),
+    );
+    writeJson(response, 200, { definition: imported });
+    return true;
+  }
+
+  if (requestUrl.pathname === RequestPath.DefinitionsCleanupVersions) {
+    const workflowId = readRequiredString(body, "workflowId");
+    const keepLatest = readRequiredNumber(body, "keepLatest");
+    const sorted = state.definitionVersions
+      .filter((entry) => entry.workflowId === workflowId)
+      .sort((left, right) => right.version - left.version);
+    const kept = sorted.slice(0, keepLatest);
+    const removed = sorted.slice(keepLatest);
+    state.definitionVersions = state.definitionVersions.filter(
+      (entry) =>
+        entry.workflowId !== workflowId ||
+        kept.some((version) => version.id === entry.id),
+    );
+    writeJson(response, 200, { kept, removed });
+    return true;
+  }
+
+  return false;
 }
 
 async function handleStreamNodeRequest(
@@ -2633,6 +2877,19 @@ function readOptionalRecord(
 ): Record<string, unknown> | undefined {
   const nested = value[key];
   return isRecord(nested) ? nested : undefined;
+}
+
+function readRequiredNumber(value: unknown, key: string): number {
+  if (!isRecord(value)) {
+    throw new Error(`Expected number at ${key}`);
+  }
+
+  const nested = value[key];
+  if (typeof nested !== "number" || !Number.isFinite(nested)) {
+    throw new Error(`Expected number at ${key}`);
+  }
+
+  return nested;
 }
 
 function readRequiredString(value: unknown, key: string): string {
