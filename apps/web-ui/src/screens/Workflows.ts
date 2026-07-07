@@ -30,6 +30,14 @@ import {
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
+  createWorkflowEditHistoryEntry,
+  readWorkflowEditHistoryHash,
+  redoWorkflowEditHistory,
+  restoreWorkflowEditHistoryEntry as restoreWorkflowEditHistorySnapshot,
+  undoWorkflowEditHistory,
+  type WorkflowEditHistoryEntry,
+} from "./workflows-edit-history-state.js";
+import {
   isWorkflowVersionTimelineImportSource,
   readDefaultWorkflowVersionImportVersionId,
   readWorkflowVersionImportCandidates,
@@ -62,7 +70,6 @@ import {
   type WorkflowDebugInputSource,
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
-  type WorkflowEditHistoryEntry,
   type WorkflowPinnedTestOutput,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
@@ -160,6 +167,15 @@ const WorkflowScreenSelector = {
   InspectorPanel: "workflows-inspector-panel",
   WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
+  WorkflowEditHistoryOpen: "workflows-edit-history-open",
+  WorkflowEditHistoryModal: "workflows-edit-history-modal",
+  WorkflowEditHistoryUndo: "workflows-edit-history-undo",
+  WorkflowEditHistoryRedo: "workflows-edit-history-redo",
+  WorkflowEditHistoryLocalPrefix: "workflows-edit-history-local-",
+  WorkflowEditHistoryVersionPrefix: "workflows-edit-history-version-",
+  WorkflowEditHistoryRestorePrefix: "workflows-edit-history-restore-",
+  WorkflowEditHistoryPreviewPrefix: "workflows-edit-history-preview-",
+  WorkflowEditHistoryClose: "workflows-edit-history-close",
   WorkflowDelete: "workflows-delete",
   WorkflowRun: "workflows-run",
   WorkflowSelect: "workflows-select",
@@ -740,6 +756,10 @@ interface WorkflowsScreenState {
   workflowEditHistory: ReadonlyArray<
     WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
   >;
+  workflowEditHistoryFuture: ReadonlyArray<
+    WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
+  >;
+  workflowEditHistoryOpen: boolean;
   executionNodeModal: ExecutionNodeModalState | null;
   errorMessage: string | null;
   noticeMessage: string | null;
@@ -826,6 +846,8 @@ export class WorkflowsScreen extends Component<
       nextVersionTags: "",
       nodeActionMenuId: null,
       workflowEditHistory: [],
+      workflowEditHistoryFuture: [],
+      workflowEditHistoryOpen: false,
       errorMessage: null,
       noticeMessage: null,
     });
@@ -887,6 +909,9 @@ export class WorkflowsScreen extends Component<
           : "",
         this.state.versionActionDialog
           ? this.renderWorkflowVersionActionDialog()
+          : "",
+        this.state.workflowEditHistoryOpen
+          ? this.renderWorkflowEditHistoryModal()
           : "",
       ],
     );
@@ -1006,6 +1031,17 @@ export class WorkflowsScreen extends Component<
                   : "New workflow",
               dataset: {
                 testid: WorkflowScreenSelector.WorkflowCreate,
+              },
+            }),
+            createElement(Button, {
+              variant: "secondary",
+              size: "sm",
+              disabled: currentWorkflow === null,
+              onClick: () => this.setState({ workflowEditHistoryOpen: true }),
+              icon: "history_edu",
+              children: "Edit history",
+              dataset: {
+                testid: WorkflowScreenSelector.WorkflowEditHistoryOpen,
               },
             }),
             createElement(Button, {
@@ -1787,8 +1823,11 @@ export class WorkflowsScreen extends Component<
                 ),
               ],
             ),
-            this.renderWorkflowVersionHistoryCard(),
-            this.renderWorkflowEditHistoryCard(),
+            createElement(
+              "p",
+              { className: "mt-4 text-xs leading-5 text-slate-400" },
+              ["Execution history only. Edit history moved next to Save."],
+            ),
           ],
         ),
         currentWorkflow === null
@@ -1906,7 +1945,7 @@ export class WorkflowsScreen extends Component<
               createElement(
                 "p",
                 { className: "text-sm font-medium text-white" },
-                ["Version history"],
+                ["☷ Saved versions"],
               ),
               createElement(
                 "p",
@@ -2056,7 +2095,9 @@ export class WorkflowsScreen extends Component<
                         className:
                           "mt-1 truncate text-[11px] text-text-secondary",
                       },
-                      [version.snapshot.name],
+                      [
+                        `${version.snapshot.name} · ${version.checksum ?? "no-hash"}`,
+                      ],
                     ),
                     createElement(
                       "p",
@@ -3321,12 +3362,180 @@ export class WorkflowsScreen extends Component<
     }
   }
 
-  private renderWorkflowEditHistoryCard(): HTMLElement {
+  private renderWorkflowEditHistoryModal(): HTMLElement {
+    const currentWorkflow = this.state.draftWorkflow;
+    const currentHash = currentWorkflow
+      ? readWorkflowEditHistoryHash(currentWorkflow)
+      : "--------";
     return createElement(
       "div",
       {
-        className:
-          "mt-4 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+        className: "fixed inset-0 z-[70] flex bg-[#202020] text-slate-100",
+        dataset: {
+          testid: WorkflowScreenSelector.WorkflowEditHistoryModal,
+        },
+      },
+      [
+        createElement(
+          "main",
+          {
+            className:
+              "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0,rgba(255,255,255,0.035)_2px,transparent_2px,transparent_10px)]",
+          },
+          [
+            createElement(
+              "header",
+              {
+                className:
+                  "flex items-center justify-between border-b border-[#343434] bg-[#232323] px-6 py-4",
+              },
+              [
+                createElement("div", { className: "min-w-0" }, [
+                  createElement("p", { className: "text-xs text-slate-400" }, [
+                    "Workflows / Edit history",
+                  ]),
+                  createElement(
+                    "h2",
+                    { className: "mt-1 text-lg font-semibold text-white" },
+                    [currentWorkflow?.name ?? "Workflow history"],
+                  ),
+                ]),
+                createElement("div", { className: "flex items-center gap-2" }, [
+                  this.renderWorkflowEditHistoryToolbarButton({
+                    label: "Undo",
+                    testId: WorkflowScreenSelector.WorkflowEditHistoryUndo,
+                    icon: "↶",
+                    disabled:
+                      !currentWorkflow ||
+                      this.state.workflowEditHistory.length === 0,
+                    onClick: () => this.undoWorkflowEditHistory(),
+                  }),
+                  this.renderWorkflowEditHistoryToolbarButton({
+                    label: "Redo",
+                    testId: WorkflowScreenSelector.WorkflowEditHistoryRedo,
+                    icon: "↷",
+                    disabled:
+                      !currentWorkflow ||
+                      this.state.workflowEditHistoryFuture.length === 0,
+                    onClick: () => this.redoWorkflowEditHistory(),
+                  }),
+                  this.renderWorkflowEditHistoryToolbarButton({
+                    label: "Close",
+                    testId: WorkflowScreenSelector.WorkflowEditHistoryClose,
+                    icon: "×",
+                    disabled: false,
+                    onClick: () =>
+                      this.setState({ workflowEditHistoryOpen: false }),
+                  }),
+                ]),
+              ],
+            ),
+            createElement(
+              "section",
+              {
+                className:
+                  "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] overflow-hidden",
+              },
+              [
+                createElement(
+                  "div",
+                  {
+                    className:
+                      "flex min-h-0 items-center justify-center overflow-hidden p-8",
+                  },
+                  [
+                    createElement(
+                      "div",
+                      {
+                        className:
+                          "relative h-[52vh] w-[68vw] max-w-5xl rounded border border-emerald-500/40 bg-emerald-950/60 shadow-2xl shadow-black/40",
+                      },
+                      [
+                        createElement(
+                          "div",
+                          {
+                            className:
+                              "absolute left-4 top-4 text-xs text-emerald-100",
+                          },
+                          [currentWorkflow?.name ?? "No workflow selected"],
+                        ),
+                        createElement(
+                          "div",
+                          {
+                            className:
+                              "absolute left-6 right-6 top-1/2 flex -translate-y-1/2 items-center justify-center gap-8",
+                          },
+                          currentWorkflow
+                            ? currentWorkflow.nodes.slice(0, 8).map((node) =>
+                                createElement(
+                                  "div",
+                                  {
+                                    key: node.id,
+                                    className:
+                                      "flex min-w-24 flex-col items-center gap-2 text-center text-xs text-white",
+                                  },
+                                  [
+                                    createElement(
+                                      "div",
+                                      {
+                                        className:
+                                          "flex h-14 w-14 items-center justify-center rounded-lg border border-[#555] bg-[#303030] text-xl text-orange-400 shadow-lg",
+                                      },
+                                      [readNodeIcon(node.kind)],
+                                    ),
+                                    createElement(
+                                      "span",
+                                      { className: "max-w-28 truncate" },
+                                      [node.label],
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : [
+                                createElement(
+                                  "p",
+                                  { className: "text-sm text-slate-300" },
+                                  ["No draft selected."],
+                                ),
+                              ],
+                        ),
+                        createElement(
+                          "div",
+                          {
+                            className:
+                              "absolute bottom-4 left-4 rounded bg-black/35 px-3 py-2 text-xs text-emerald-100",
+                          },
+                          [`Draft hash ${currentHash}`],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                createElement(
+                  "aside",
+                  {
+                    className:
+                      "min-h-0 overflow-y-auto border-l border-[#343434] bg-[#232323] px-4 py-5",
+                  },
+                  [
+                    this.renderWorkflowEditHistoryPanel(),
+                    this.renderWorkflowVersionHistoryCard(),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderWorkflowEditHistoryPanel(): HTMLElement {
+    const currentWorkflow = this.state.draftWorkflow;
+    return createElement(
+      "section",
+      {
+        className: "mb-4 rounded-lg border border-border-dark bg-[#191f26] p-3",
       },
       [
         createElement(
@@ -3337,12 +3546,12 @@ export class WorkflowsScreen extends Component<
               createElement(
                 "p",
                 { className: "text-sm font-medium text-white" },
-                ["Edit history"],
+                ["✎ Edit history"],
               ),
               createElement(
                 "p",
                 { className: "mt-1 text-xs text-text-secondary" },
-                ["Session changes before save, available for quick restore."],
+                ["Local draft checkpoints before save."],
               ),
             ]),
             createElement(StatusBadge, { status: "info" }, [
@@ -3350,54 +3559,170 @@ export class WorkflowsScreen extends Component<
             ]),
           ],
         ),
+        currentWorkflow
+          ? createElement(
+              "div",
+              {
+                className:
+                  "mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs",
+              },
+              [
+                createElement("p", { className: "font-medium text-white" }, [
+                  "Current draft",
+                ]),
+                createElement("p", { className: "mt-1 text-slate-300" }, [
+                  `${formatTimestamp(new Date().toISOString())} · ${readWorkflowEditHistoryHash(currentWorkflow)}`,
+                ]),
+              ],
+            )
+          : "",
         this.state.workflowEditHistory.length === 0
           ? createElement(
               "p",
               { className: "mt-3 text-xs text-text-secondary" },
-              ["No edits captured yet."],
+              ["No local edit checkpoints yet."],
             )
           : createElement(
               "div",
-              {
-                className: "mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto",
-              },
+              { className: "mt-3 grid gap-2" },
               this.state.workflowEditHistory.map((entry) =>
-                createElement(
-                  "button",
-                  {
-                    key: entry.id,
-                    type: "button",
-                    className:
-                      "rounded-md border border-border-dark bg-[#0f141a] px-3 py-2 text-left text-xs transition-colors hover:border-violet-500/50 hover:bg-violet-500/10",
-                    onClick: () => this.restoreWorkflowEditHistoryEntry(entry),
-                  },
-                  [
-                    createElement(
-                      "span",
-                      { className: "block truncate text-white" },
-                      [entry.label],
-                    ),
-                    createElement(
-                      "span",
-                      { className: "mt-1 block text-text-secondary" },
-                      [formatTimestamp(entry.changedAt)],
-                    ),
-                  ],
-                ),
+                this.renderWorkflowEditHistoryEntry(entry),
               ),
             ),
+        this.state.workflowEditHistoryFuture.length > 0
+          ? createElement("p", { className: "mt-3 text-xs text-amber-200" }, [
+              `${this.state.workflowEditHistoryFuture.length.toString()} redo checkpoint${this.state.workflowEditHistoryFuture.length === 1 ? "" : "s"} available.`,
+            ])
+          : "",
       ],
     );
+  }
+
+  private renderWorkflowEditHistoryEntry(
+    entry: WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      {
+        key: entry.id,
+        className:
+          "rounded-md border border-border-dark bg-[#10161d] px-3 py-2 text-xs",
+        dataset: {
+          testid: `${WorkflowScreenSelector.WorkflowEditHistoryLocalPrefix}${entry.id}`,
+        },
+      },
+      [
+        createElement(
+          "div",
+          { className: "flex items-start justify-between gap-2" },
+          [
+            createElement("div", { className: "min-w-0" }, [
+              createElement(
+                "p",
+                { className: "truncate font-medium text-white" },
+                [entry.label],
+              ),
+              createElement("p", { className: "mt-1 text-text-secondary" }, [
+                `${formatTimestamp(entry.changedAt)} · ${entry.hash}`,
+              ]),
+            ]),
+            this.renderWorkflowVersionActionButton({
+              label: "Restore",
+              testId: `${WorkflowScreenSelector.WorkflowEditHistoryRestorePrefix}${entry.id}`,
+              onClick: () => this.restoreWorkflowEditHistoryEntry(entry),
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderWorkflowEditHistoryToolbarButton(input: {
+    label: string;
+    testId: string;
+    icon: string;
+    disabled: boolean;
+    onClick: () => void;
+  }): HTMLElement {
+    return createElement(
+      "button",
+      {
+        type: "button",
+        title: input.label,
+        disabled: input.disabled,
+        className:
+          "rounded border border-[#454545] bg-[#2b2b2b] px-3 py-2 text-xs text-slate-100 transition hover:bg-[#333] disabled:cursor-not-allowed disabled:opacity-40",
+        dataset: { testid: input.testId },
+        onClick: input.onClick,
+      },
+      [`${input.icon} ${input.label}`],
+    );
+  }
+
+  private undoWorkflowEditHistory(): void {
+    const current = this.state.draftWorkflow;
+    if (!current) {
+      return;
+    }
+
+    const next = undoWorkflowEditHistory({
+      current,
+      history: this.state.workflowEditHistory,
+      future: this.state.workflowEditHistoryFuture,
+    });
+    this.applyWorkflowEditHistoryState(next);
+  }
+
+  private redoWorkflowEditHistory(): void {
+    const current = this.state.draftWorkflow;
+    if (!current) {
+      return;
+    }
+
+    const next = redoWorkflowEditHistory({
+      current,
+      history: this.state.workflowEditHistory,
+      future: this.state.workflowEditHistoryFuture,
+    });
+    this.applyWorkflowEditHistoryState(next);
   }
 
   private restoreWorkflowEditHistoryEntry(
     entry: WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>,
   ): void {
+    const current = this.state.draftWorkflow;
+    if (!current) {
+      return;
+    }
+
+    const next = restoreWorkflowEditHistorySnapshot({
+      current,
+      entry,
+      history: this.state.workflowEditHistory,
+      future: this.state.workflowEditHistoryFuture,
+    });
+    this.applyWorkflowEditHistoryState(next);
+  }
+
+  private applyWorkflowEditHistoryState(input: {
+    current: WorkflowDefinitionUpsertInput;
+    history: ReadonlyArray<
+      WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
+    >;
+    future: ReadonlyArray<
+      WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
+    >;
+  }): void {
     this.setState({
-      draftWorkflow: entry.workflow,
+      draftWorkflow: input.current,
+      workflowEditHistory: input.history.slice(0, WorkflowEditHistoryLimit),
+      workflowEditHistoryFuture: input.future.slice(
+        0,
+        WorkflowEditHistoryLimit,
+      ),
       dirtyWorkflow: true,
-      selection: { type: "workflow", id: entry.workflow.id ?? null },
-      noticeMessage: "Workflow restored from edit history. Save to persist it.",
+      selection: { type: "workflow", id: input.current.id ?? null },
+      noticeMessage: null,
       errorMessage: null,
     });
   }
@@ -13082,6 +13407,9 @@ export class WorkflowsScreen extends Component<
       draftWorkflow: nextDefinition,
       selection: nextSelection ?? this.state.selection,
       workflowEditHistory,
+      workflowEditHistoryFuture: isMeaningfulChange
+        ? []
+        : this.state.workflowEditHistoryFuture,
       dirtyWorkflow:
         this.state.dirtyWorkflow ||
         !currentDraft ||
@@ -14886,18 +15214,6 @@ const upsertExecutionRecord = (
   }
 
   return [execution, ...executions];
-};
-
-const createWorkflowEditHistoryEntry = (
-  workflow: WorkflowDefinitionUpsertInput,
-): WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput> => {
-  const changedAt = new Date().toISOString();
-  return {
-    id: `${changedAt}-${workflow.id ?? workflow.name}`,
-    label: workflow.name,
-    changedAt,
-    workflow,
-  };
 };
 
 const readCanvasBackgroundStyle = (

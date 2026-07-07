@@ -85,6 +85,11 @@ const WorkflowSelector = {
   EdgeHitPrefix: "workflows-edge-hit-",
   WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
+  WorkflowEditHistoryOpen: "workflows-edit-history-open",
+  WorkflowEditHistoryModal: "workflows-edit-history-modal",
+  WorkflowEditHistoryUndo: "workflows-edit-history-undo",
+  WorkflowEditHistoryRedo: "workflows-edit-history-redo",
+  WorkflowEditHistoryClose: "workflows-edit-history-close",
   WorkflowNameInput: "workflows-name-input",
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
@@ -580,6 +585,15 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickButtonByTitle(page, "Close editor");
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryOpen);
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+    await waitForPageText(page, "Current draft");
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryUndo);
+    await waitForPageText(page, "redo checkpoint");
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryRedo);
+    await waitForMissingPageText(page, "redo checkpoint");
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryClose);
+    await waitForMissingTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
 
     await page.reload({
       waitUntil: "networkidle0",
@@ -609,7 +623,10 @@ async function validateWorkflowsScreen(): Promise<void> {
         "Expected workflow definition version before history QA.",
       );
     }
-    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryOpen);
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryUndo);
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryRedo);
     await waitForTestId(
       page,
       `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,
@@ -727,7 +744,6 @@ async function validateWorkflowsScreen(): Promise<void> {
         intervalMs: ValidationConfig.UiPollingIntervalMs,
       },
     );
-    await clickByTestId(page, WorkflowSelector.SectionHistory);
     await setInputValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionRetentionKeepLatest,
@@ -791,7 +807,6 @@ async function validateWorkflowsScreen(): Promise<void> {
       },
     );
     const timelineImportPayload = createTimelineImportPayload(savedVersion);
-    await clickByTestId(page, WorkflowSelector.SectionHistory);
     await setTextAreaValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionImportText,
@@ -836,6 +851,8 @@ async function validateWorkflowsScreen(): Promise<void> {
         intervalMs: ValidationConfig.UiPollingIntervalMs,
       },
     );
+    await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryClose);
+    await waitForMissingTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
     const definitionWithAgent = addConnectedAgentNode(savedDefinition);
     const triggerNode = definitionWithAgent.nodes.find(
       (node) => node.kind === WorkflowNodeKind.TriggerManual,

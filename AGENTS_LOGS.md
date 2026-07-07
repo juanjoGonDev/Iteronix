@@ -4200,3 +4200,23 @@
   - Full build, final gates, commit, push and remote CI/CodeQL verification still pending.
 - Next
   - Run quality/build/validate again, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
+
+### 2026-07-07 10:30 (Europe/Madrid) — Workflow Edit History Redesign
+
+- Summary
+  - Split Workflows execution history from edit/version history and added a full-screen edit history surface near the Save action.
+- Decisions
+  - Keep execution runs in the left History panel only, and move edit/version history to a modal-first full-screen view launched from the toolbar.
+  - Use deterministic local draft hashes for in-session edit checkpoints and keep server version checksums visible for saved snapshots.
+- Changes
+  - `apps/web-ui/src/screens/workflows-edit-history-state.ts` now owns local edit history hashing, undo, redo and arbitrary restore transitions.
+  - `apps/web-ui/src/screens/Workflows.ts` adds the Edit history toolbar action, full-screen history modal, undo/redo, restore, current draft hash, saved version list and distinct execution/edit history icons.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates the new modal path, undo/redo controls and separated execution history path.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-edit-history-state.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - Full repository gates, commit, push and remote CI/CodeQL verification pending.
+- Next
+  - Run full gates, commit, push with hooks, and verify GitHub CI/CodeQL.

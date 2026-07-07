@@ -44,6 +44,7 @@
 ### Workflow roadmap slices
 
 - [x] Workflows timeline-bundle import UI detects multi-version exports, previews selected versions, and preserves single-version import compatibility.
+- [x] Workflows separates execution history from full-screen edit history with undo, redo, hash metadata, dates, and restore actions.
 
 Acceptance:
 

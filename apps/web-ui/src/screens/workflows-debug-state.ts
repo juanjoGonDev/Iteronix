@@ -30,13 +30,6 @@ export type WorkflowPinnedNodeVisualState = {
   tone: "normal" | "pinned";
 };
 
-export type WorkflowEditHistoryEntry<TWorkflow> = {
-  id: string;
-  label: string;
-  changedAt: string;
-  workflow: TWorkflow;
-};
-
 type WorkflowPinnedDefinitionLike = Pick<WorkflowDefinitionRecord, "nodes"> & {
   id?: string;
 };
