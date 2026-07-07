@@ -18,7 +18,8 @@
     "validate:explorer": "tsx scripts/validate-explorer.ts",
     "validate:settings": "tsx scripts/validate-settings.ts",
     "validate:server-persistence": "tsx scripts/validate-server-persistence.ts",
-    "validate:workflows": "tsx scripts/validate-workflows.ts"
+    "validate:workflows": "tsx scripts/validate-workflows.ts",
+    "seed:workflows-emulation": "tsx scripts/seed-workflows-emulation.ts"
   },
   "dependencies": {
     "express": "^4.18.2",

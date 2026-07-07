@@ -627,6 +627,12 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
     await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryUndo);
     await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryRedo);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-edit-history",
+      artifactName: "workflows",
+    });
     await waitForTestId(
       page,
       `${WorkflowSelector.WorkflowVersionDetailsPrefix}${savedVersion.id}`,

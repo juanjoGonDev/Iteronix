@@ -4220,3 +4220,24 @@
   - Full repository gates, commit, push and remote CI/CodeQL verification pending.
 - Next
   - Run full gates, commit, push with hooks, and verify GitHub CI/CodeQL.
+
+### 2026-07-07 10:57 (Europe/Madrid) — Workflow Emulation Fixture and Visual QA
+
+- Summary
+  - Added a reusable Workflows emulation fixture and seeded it into the live local server for repeatable UI/browser testing.
+- Decisions
+  - Keep the emulation project rootless (`rootPath: null`) so it does not mutate or depend on the real repository workspace.
+  - Store screenshots under `apps/web-ui/screenshots/` and keep them untracked for visual QA evidence.
+- Changes
+  - `apps/web-ui/scripts/workflows-emulation-fixture.ts` defines a stable n8n-like workflow with trigger, pinned agent output, condition branch, and response node.
+  - `apps/web-ui/scripts/seed-workflows-emulation.ts` seeds the fixture through the public API using default dev connection values or env overrides.
+  - `apps/web-ui/scripts/validate-workflows.ts` now captures the edit-history modal during browser validation.
+  - Fixed the edit-history preview icons so Material symbols render as icons instead of raw icon names.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/scripts/workflows-emulation-fixture.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui seed:workflows-emulation` PASS against the live local server.
+  - Captured `apps/web-ui/screenshots/2026-07-07_emulation-workflow_canvas_after.png` and `apps/web-ui/screenshots/2026-07-07_emulation-workflow_edit-history_after.png`.
+- Issues/Risks
+  - The first seed attempt reused the existing Iteronix project because it used the repository root; the fixture now uses a rootless logical project.
+- Next
+  - Run full gates, commit, push with hooks, and verify CI/CodeQL.

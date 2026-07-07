@@ -3481,7 +3481,16 @@ export class WorkflowsScreen extends Component<
                                         className:
                                           "flex h-14 w-14 items-center justify-center rounded-lg border border-[#555] bg-[#303030] text-xl text-orange-400 shadow-lg",
                                       },
-                                      [readNodeIcon(node.kind)],
+                                      [
+                                        createElement(
+                                          "span",
+                                          {
+                                            className:
+                                              "material-symbols-outlined text-[28px] leading-none",
+                                          },
+                                          [readNodeIcon(node.kind)],
+                                        ),
+                                      ],
                                     ),
                                     createElement(
                                       "span",

@@ -881,3 +881,5 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 - 2026-07-05: Workflows now persist server-backed definition version snapshots on save, expose list/restore API endpoints, hydrate versions in the History panel, and keep local edit history as draft-only quick restore.
 
 - [x] Workflows version timeline bundles can be imported/previewed through the existing version import flow with selected-version migration.
+
+- [x] Workflows has a reusable rootless emulation project/workflow fixture plus live screenshot QA capture path.
