@@ -4241,3 +4241,20 @@
   - The first seed attempt reused the existing Iteronix project because it used the repository root; the fixture now uses a rootless logical project.
 - Next
   - Run full gates, commit, push with hooks, and verify CI/CodeQL.
+
+### 2026-07-07 17:06 (Europe/Madrid) — URL-Addressable UI Requirement
+
+- Summary
+  - Added a project-wide requirement that every intentional modal, drawer, tab, selected section, selected entity and deep UI state must update the URL and restore after refresh.
+- Decisions
+  - Treat URL-addressable UI state as a global UI invariant, not only a Workflows requirement.
+  - Require graceful fallback to the closest valid parent route when a reload target no longer exists.
+- Changes
+  - `AGENTS.md` now defines the URL-addressable UI state contract under UI continuity.
+  - `PLAN.md` tracks the invariant as an open project-wide implementation item.
+- Commands
+  - Documentation-only change pending formatting and commit.
+- Issues/Risks
+  - Existing screens likely need an audit because many modal/section states are still component-local.
+- Next
+  - Implement URL synchronization helpers and apply them screen-by-screen, starting with Workflows modals/history views.

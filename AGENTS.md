@@ -399,6 +399,15 @@ Rules:
 - Shared tokens only
 - Same layout shell everywhere
 
+### URL-addressable UI state
+
+- Every modal, drawer, tab, selected section, selected entity, and deep UI state that a user can intentionally open MUST be reflected in the URL.
+- Refreshing the browser, opening the URL in a new tab, or returning through browser history MUST restore the same view whenever the underlying entity still exists.
+- Closing a modal or leaving a section MUST update the URL back to the parent route without losing unrelated state.
+- Prefer typed route/query/hash helpers over ad-hoc string parsing.
+- Do not store navigable UI state only in component-local memory, session memory, or implicit selection state.
+- If a state cannot be restored after reload, the UI MUST degrade to the closest valid parent route with a clear disabled/empty explanation, not a broken screen.
+
 ### No dead UI
 
 - Clickable means functional OR explicitly disabled with explanation

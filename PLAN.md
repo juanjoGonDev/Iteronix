@@ -883,3 +883,5 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 - [x] Workflows version timeline bundles can be imported/previewed through the existing version import flow with selected-version migration.
 
 - [x] Workflows has a reusable rootless emulation project/workflow fixture plus live screenshot QA capture path.
+
+- [ ] Project-wide UI navigation invariant: every intentional modal, drawer, tab, selected section, selected entity, and deep UI state must be URL-addressable and reload-restorable.
