@@ -109,6 +109,9 @@ const WorkflowSelector = {
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  DebugInputTabPrefix: "workflows-debug-input-tab-",
+  DebugOutputTabPrefix: "workflows-debug-output-tab-",
+  DebugInputSource: "workflows-debug-input-source",
   OutputPinControl: "workflows-output-pin-control",
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
@@ -572,8 +575,35 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Execute this step to inspect the current node output.",
     );
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    await clickByTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
+    await waitForUrlSearchParam(page, "inputTab", "schema");
+    await clickByTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
+    await waitForUrlSearchParam(page, "outputTab", "table");
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await waitForUrlSearchParam(page, "inputTab", "schema");
+    await waitForUrlSearchParam(page, "outputTab", "table");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-debug-tabs-reload",
+      artifactName: "workflows",
+    });
     await clickButtonByTitle(page, "Edit output for test runs");
+    await waitForUrlSearchParam(page, "editor", "output-editor");
     await waitForTestId(page, WorkflowSelector.OutputEditorTextarea);
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.OutputEditorTextarea);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-output-editor-reload",
+      artifactName: "workflows",
+    });
     await waitForTextAreaValue(page, WorkflowSelector.OutputEditorTextarea, "");
     await setTextAreaValueByTestId(
       page,
@@ -720,6 +750,18 @@ async function validateWorkflowsScreen(): Promise<void> {
       `${WorkflowSelector.WorkflowVersionClonePrefix}${savedVersion.id}`,
     );
     await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await waitForUrlSearchParam(page, "action", "clone");
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-version-action-reload",
+      artifactName: "workflows",
+    });
     await setInputValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionActionDialogInput,
@@ -913,6 +955,28 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       `${ValidationText.AccumulatedOutputsSourceLabel} · $`,
     );
+    await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
+    await waitForTestId(page, WorkflowSelector.DeepEditorModal);
+    await waitForUrlSearchParam(page, "editor", "deep-editor");
+    await clickByTestId(page, WorkflowSelector.DeepEditorTabOutput);
+    await waitForUrlSearchParam(page, "deepTab", "output");
+    await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabJson);
+    await waitForUrlSearchParam(page, "deepOutputTab", "json");
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.DeepEditorModal);
+    await waitForTestId(page, WorkflowSelector.DeepEditorRawJsonInput);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-deep-editor-reload",
+      artifactName: "workflows",
+    });
+    await clickByTestId(page, WorkflowSelector.DeepEditorTabOutput);
+    await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabVisual);
+    await clickByTestId(page, WorkflowSelector.DeepEditorClose);
+    await waitForMissingTestId(page, WorkflowSelector.DeepEditorModal);
     await clickByTestId(page, `${WorkflowSelector.DeepEditorOpenPrefix}prompt`);
     await waitForTestId(page, WorkflowSelector.DeepEditorModal);
     await setInputValueByTestId(

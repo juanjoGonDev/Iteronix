@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   WorkflowsUrlModal,
+  WorkflowsUrlDebugPanelTab,
+  WorkflowsUrlEditor,
   WorkflowsUrlPanel,
+  WorkflowsUrlVersionAction,
   applyWorkflowsUrlPatch,
   readWorkflowsUrlState,
 } from "./workflows-url-state.js";
@@ -14,6 +17,15 @@ describe("workflows URL state", () => {
       nodeId: null,
       executionId: null,
       versionId: null,
+      debugInputTab: null,
+      debugOutputTab: null,
+      debugInputSourceId: null,
+      editor: null,
+      deepEditorTab: null,
+      deepEditorOutputTab: null,
+      regexPattern: null,
+      regexFlags: null,
+      versionAction: null,
     });
   });
 
@@ -54,6 +66,81 @@ describe("workflows URL state", () => {
     });
   });
 
+  it("writes node editor debug tabs and input source", () => {
+    const nextUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.NodeEditor,
+      nodeId: "node-1",
+      debugInputTab: WorkflowsUrlDebugPanelTab.Table,
+      debugOutputTab: WorkflowsUrlDebugPanelTab.Schema,
+      debugInputSourceId: "node:trigger-1",
+    });
+
+    expect(nextUrl).toBe(
+      "/workflows?modal=node-editor&node=node-1&inputTab=table&outputTab=schema&inputSource=node%3Atrigger-1",
+    );
+    expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
+      debugInputTab: WorkflowsUrlDebugPanelTab.Table,
+      debugOutputTab: WorkflowsUrlDebugPanelTab.Schema,
+      debugInputSourceId: "node:trigger-1",
+    });
+  });
+
+  it("writes nested editor state for output and deep editor tabs", () => {
+    const outputUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.NodeEditor,
+      nodeId: "node-1",
+      editor: WorkflowsUrlEditor.OutputEditor,
+    });
+    const deepEditorUrl = applyWorkflowsUrlPatch(
+      `http://localhost${outputUrl}`,
+      {
+        editor: WorkflowsUrlEditor.DeepEditor,
+        deepEditorTab: "output",
+        deepEditorOutputTab: "json",
+      },
+    );
+
+    expect(
+      readWorkflowsUrlState(`http://localhost${deepEditorUrl}`),
+    ).toMatchObject({
+      editor: WorkflowsUrlEditor.DeepEditor,
+      deepEditorTab: "output",
+      deepEditorOutputTab: "json",
+    });
+  });
+
+  it("writes regex tester modal state without persisting test input", () => {
+    const nextUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.NodeEditor,
+      nodeId: "node-1",
+      editor: WorkflowsUrlEditor.RegexTester,
+      regexPattern: "^foo$",
+      regexFlags: "i",
+    });
+
+    expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
+      editor: WorkflowsUrlEditor.RegexTester,
+      regexPattern: "^foo$",
+      regexFlags: "i",
+    });
+  });
+
+  it("writes restore and clone version action dialog state", () => {
+    const nextUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.EditHistory,
+      versionId: "version-1",
+      versionAction: WorkflowsUrlVersionAction.Clone,
+    });
+
+    expect(nextUrl).toBe(
+      "/workflows?modal=edit-history&version=version-1&action=clone",
+    );
+    expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
+      versionId: "version-1",
+      versionAction: WorkflowsUrlVersionAction.Clone,
+    });
+  });
+
   it("clears modal scoped params without clearing the selected execution", () => {
     const nextUrl = applyWorkflowsUrlPatch(
       "http://localhost/workflows?panel=history&execution=execution-1&modal=node-editor&node=node-1",
@@ -61,6 +148,15 @@ describe("workflows URL state", () => {
         modal: null,
         nodeId: null,
         versionId: null,
+        editor: null,
+        debugInputTab: null,
+        debugOutputTab: null,
+        debugInputSourceId: null,
+        deepEditorTab: null,
+        deepEditorOutputTab: null,
+        regexPattern: null,
+        regexFlags: null,
+        versionAction: null,
       },
     );
 

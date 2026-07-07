@@ -4302,3 +4302,23 @@
   - Commit, push and remote CI/CodeQL verification still pending.
 - Next
   - Commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-07 20:34 (Europe/Madrid) — Workflows Deep URL State
+
+- Summary
+  - Continued project-wide URL-addressable UI state by covering remaining useful Workflows deep modal state.
+- Decisions
+  - Encoded reload-useful state only: debug input/output tabs, selected input source, output editor, deep editor tabs, regex tester pattern/flags, and restore/clone version action dialogs.
+  - Did not encode raw import dialog payload/test textarea drafts into the URL because they are local unsaved text and not safe/useful to restore through query params.
+- Changes
+  - `apps/web-ui/src/screens/workflows-url-state.ts` now has typed params for debug tabs, editor substate, regex metadata and version actions.
+  - `apps/web-ui/src/screens/Workflows.ts` syncs those states to URL and rehydrates them on reload/popstate/catalog reload.
+  - `apps/web-ui/scripts/validate-workflows.ts` captures reload screenshots for debug tabs, output editor, deep editor and version action dialog.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed once on stale version action URL state, then PASS after clearing action params on confirm.
+- Issues/Risks
+  - Full gates, commit, push and remote CI/CodeQL verification pending.
+- Next
+  - Run format:check, quality, build, validate:workflows; commit/push with hooks enabled; verify CI/CodeQL.

@@ -44,8 +44,10 @@ import {
   type WorkflowVersionImportCandidateRecord,
 } from "./workflows-version-import-state.js";
 import {
+  WorkflowsUrlEditor,
   WorkflowsUrlModal,
   WorkflowsUrlPanel,
+  WorkflowsUrlVersionAction,
   applyWorkflowsUrlPatch,
   readWorkflowsUrlStateFromLocation,
   type WorkflowsUrlPatch,
@@ -304,6 +306,9 @@ const WorkflowScreenSelector = {
   DeepEditorSampleOutputInput: "workflows-deep-editor-sample-output-input",
   DeepEditorRawJsonInput: "workflows-deep-editor-raw-json-input",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  DebugInputTabPrefix: "workflows-debug-input-tab-",
+  DebugOutputTabPrefix: "workflows-debug-output-tab-",
+  DebugInputSource: "workflows-debug-input-source",
   OutputPinControl: "workflows-output-pin-control",
   DeepEditorTabPrompt: "workflows-deep-editor-tab-prompt",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
@@ -1318,6 +1323,10 @@ export class WorkflowsScreen extends Component<
     const urlSelection = this.readUrlSelection(urlState);
     const urlExecutionNodeModal = this.readUrlExecutionNodeModal(urlState);
     const versionDetails = this.readUrlVersionDetails(urlState);
+    const urlOutputEditor = this.readUrlOutputEditor(urlState, urlSelection);
+    const urlDeepEditor = this.readUrlDeepEditor(urlState, urlSelection);
+    const urlRegexTester = this.readUrlRegexTester(urlState, urlSelection);
+    const urlVersionActionDialog = this.readUrlVersionActionDialog(urlState);
     const editorModalOpen =
       urlState.modal === WorkflowsUrlModal.NodeEditor &&
       urlSelection?.type === "node";
@@ -1332,21 +1341,43 @@ export class WorkflowsScreen extends Component<
       urlSelection,
     );
 
+    this.outputEditorDraftText = urlOutputEditor?.text ?? null;
+
     this.setState({
       ...(panel ? { activeSidebarSection: panel } : {}),
       ...(panel ? { compactView: CompactView.Sidebar } : {}),
       ...(urlSelection ? { selection: urlSelection } : {}),
       debugExecutionId,
+      ...(urlState.debugInputTab
+        ? { debugInputTab: urlState.debugInputTab }
+        : {}),
+      ...(urlState.debugOutputTab
+        ? { debugOutputTab: urlState.debugOutputTab }
+        : {}),
+      ...(urlState.debugInputSourceId
+        ? { debugInputSourceId: urlState.debugInputSourceId }
+        : {}),
       editorModalOpen,
       workflowEditHistoryOpen,
       executionNodeModal,
       versionDetails,
+      outputEditor: urlOutputEditor,
+      deepEditor: urlDeepEditor,
+      regexTester: urlRegexTester,
+      versionActionDialog: urlVersionActionDialog,
     });
 
     this.sanitizeWorkflowsUrlState(urlState, {
       hasSelection: urlSelection !== null,
       hasExecutionNodeModal: executionNodeModal !== null,
       hasVersionDetails: versionDetails !== null,
+      hasUrlEditor:
+        urlState.editor === null ||
+        urlOutputEditor !== null ||
+        urlDeepEditor !== null ||
+        urlRegexTester !== null,
+      hasVersionAction:
+        urlState.versionAction === null || urlVersionActionDialog !== null,
     });
   }
 
@@ -1432,6 +1463,98 @@ export class WorkflowsScreen extends Component<
     }).executionNodeModal;
   }
 
+  private readUrlOutputEditor(
+    urlState: WorkflowsUrlState,
+    selection: WorkflowSelection | null,
+  ): WorkflowOutputEditorState | null {
+    if (
+      urlState.editor !== WorkflowsUrlEditor.OutputEditor ||
+      selection?.type !== "node"
+    ) {
+      return null;
+    }
+
+    const node = this.state.draftWorkflow?.nodes.find(
+      (entry) => entry.id === selection.id,
+    );
+    if (!node) {
+      return null;
+    }
+
+    const context = this.readNodeDebugContext(node);
+    const text =
+      context?.outputValue === undefined
+        ? ""
+        : formatOutputSnapshot(context.outputValue);
+    return { nodeId: node.id, text };
+  }
+
+  private readUrlDeepEditor(
+    urlState: WorkflowsUrlState,
+    selection: WorkflowSelection | null,
+  ): DeepEditorState | null {
+    if (
+      urlState.editor !== WorkflowsUrlEditor.DeepEditor ||
+      selection?.type !== "node"
+    ) {
+      return null;
+    }
+
+    const nodeExists =
+      this.state.draftWorkflow?.nodes.some(
+        (node) => node.id === selection.id,
+      ) ?? false;
+    if (!nodeExists) {
+      return null;
+    }
+
+    return this.createDeepEditorState({
+      target: { type: "node", id: selection.id },
+      initialTab: urlState.deepEditorTab ?? "prompt",
+      outputTab: urlState.deepEditorOutputTab ?? "visual",
+    });
+  }
+
+  private readUrlRegexTester(
+    urlState: WorkflowsUrlState,
+    selection: WorkflowSelection | null,
+  ): RegexTesterState | null {
+    if (
+      urlState.editor !== WorkflowsUrlEditor.RegexTester ||
+      selection?.type !== "node"
+    ) {
+      return null;
+    }
+
+    return {
+      title: "Regex tester",
+      pattern: urlState.regexPattern ?? "",
+      flags: urlState.regexFlags ?? DefaultRegexTesterFlags,
+      testText: DefaultRegexTesterTestText,
+    };
+  }
+
+  private readUrlVersionActionDialog(
+    urlState: WorkflowsUrlState,
+  ): WorkflowVersionActionDialogState | null {
+    if (!urlState.versionId || !urlState.versionAction) {
+      return null;
+    }
+
+    const version = this.state.workflowVersions.find(
+      (entry) => entry.id === urlState.versionId,
+    );
+    if (!version) {
+      return null;
+    }
+
+    if (urlState.versionAction === WorkflowsUrlVersionAction.Clone) {
+      return this.createWorkflowVersionCloneDialogState(version);
+    }
+
+    return this.createWorkflowVersionRestoreDialogState(version.id);
+  }
+
   private readUrlVersionDetails(
     urlState: WorkflowsUrlState,
   ): WorkflowVersionDetailsState | null {
@@ -1454,6 +1577,8 @@ export class WorkflowsScreen extends Component<
       hasSelection: boolean;
       hasExecutionNodeModal: boolean;
       hasVersionDetails: boolean;
+      hasUrlEditor: boolean;
+      hasVersionAction: boolean;
     },
   ): void {
     if (
@@ -1462,7 +1587,9 @@ export class WorkflowsScreen extends Component<
       (urlState.modal === WorkflowsUrlModal.ExecutionNode &&
         !state.hasExecutionNodeModal) ||
       (urlState.modal === WorkflowsUrlModal.VersionDetails &&
-        !state.hasVersionDetails)
+        !state.hasVersionDetails) ||
+      (urlState.editor !== null && !state.hasUrlEditor) ||
+      (urlState.versionAction !== null && !state.hasVersionAction)
     ) {
       this.writeWorkflowsUrlState(
         {
@@ -1470,6 +1597,12 @@ export class WorkflowsScreen extends Component<
           nodeId: null,
           versionId: null,
           executionId: state.hasSelection ? urlState.executionId : null,
+          editor: null,
+          deepEditorTab: null,
+          deepEditorOutputTab: null,
+          regexPattern: null,
+          regexFlags: null,
+          versionAction: null,
         },
         "replace",
       );
@@ -3051,8 +3184,9 @@ export class WorkflowsScreen extends Component<
         ? WorkflowsUrlModal.EditHistory
         : null,
       versionId: null,
+      versionAction: null,
     });
-    this.setState({ versionDetails: null });
+    this.setState({ versionDetails: null, versionActionDialog: null });
   }
 
   private openWorkflowVersionDetails(versionId: string): void {
@@ -3081,6 +3215,12 @@ export class WorkflowsScreen extends Component<
   }
 
   private closeWorkflowVersionActionDialog(): void {
+    this.writeWorkflowsUrlState(
+      {
+        versionAction: null,
+      },
+      "replace",
+    );
     this.setState({ versionActionDialog: null });
   }
 
@@ -3088,17 +3228,31 @@ export class WorkflowsScreen extends Component<
     const version = this.state.workflowVersions.find(
       (entry) => entry.id === versionId,
     );
-    this.setState({
-      versionActionDialog: {
-        kind: "clone",
-        versionId,
-        title: "Clone workflow version",
-        description:
-          "Create a new workflow from this immutable server-backed snapshot.",
-        inputValue: version ? `${version.snapshot.name} copy` : "Workflow copy",
-        confirmLabel: "Clone version",
-      },
+    if (!version) {
+      return;
+    }
+
+    this.writeWorkflowsUrlState({
+      versionId,
+      versionAction: WorkflowsUrlVersionAction.Clone,
     });
+    this.setState({
+      versionActionDialog: this.createWorkflowVersionCloneDialogState(version),
+    });
+  }
+
+  private createWorkflowVersionCloneDialogState(
+    version: WorkflowDefinitionVersionRecord,
+  ): WorkflowVersionActionDialogState {
+    return {
+      kind: "clone",
+      versionId: version.id,
+      title: "Clone workflow version",
+      description:
+        "Create a new workflow from this immutable server-backed snapshot.",
+      inputValue: `${version.snapshot.name} copy`,
+      confirmLabel: "Clone version",
+    };
   }
 
   private async openWorkflowVersionImportDialog(): Promise<void> {
@@ -3222,19 +3376,40 @@ export class WorkflowsScreen extends Component<
     const version = this.state.workflowVersions.find(
       (entry) => entry.id === versionId,
     );
-    const partLabel = part ? readWorkflowVersionRestorePartLabel(part) : "all";
-    this.setState({
-      versionActionDialog: {
-        kind: "restore",
-        versionId,
-        title: part ? `Restore ${partLabel}` : "Restore workflow version",
-        description: version
-          ? `Previewed restore from version ${version.version.toString()} of ${version.snapshot.name}. Scope: ${partLabel}.`
-          : `Previewed restore scope: ${partLabel}.`,
-        ...(part ? { part } : {}),
-        confirmLabel: part ? "Restore section" : "Restore version",
-      },
+    if (!version) {
+      return;
+    }
+
+    this.writeWorkflowsUrlState({
+      versionId,
+      versionAction: WorkflowsUrlVersionAction.Restore,
     });
+    this.setState({
+      versionActionDialog: this.createWorkflowVersionRestoreDialogState(
+        versionId,
+        part,
+      ),
+    });
+  }
+
+  private createWorkflowVersionRestoreDialogState(
+    versionId: string,
+    part?: WorkflowVersionRestorePart,
+  ): WorkflowVersionActionDialogState {
+    const version = this.state.workflowVersions.find(
+      (entry) => entry.id === versionId,
+    );
+    const partLabel = part ? readWorkflowVersionRestorePartLabel(part) : "all";
+    return {
+      kind: "restore",
+      versionId,
+      title: part ? `Restore ${partLabel}` : "Restore workflow version",
+      description: version
+        ? `Previewed restore from version ${version.version.toString()} of ${version.snapshot.name}. Scope: ${partLabel}.`
+        : `Previewed restore scope: ${partLabel}.`,
+      ...(part ? { part } : {}),
+      confirmLabel: part ? "Restore section" : "Restore version",
+    };
   }
 
   private updateWorkflowVersionActionDialogInput(inputValue: string): void {
@@ -3366,6 +3541,7 @@ export class WorkflowsScreen extends Component<
       await this.reloadCatalog(cloned.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,
       });
+      this.clearWorkflowVersionActionUrlState();
       this.setState({
         selection: { type: "workflow", id: cloned.id },
         noticeMessage: "Workflow cloned from selected version.",
@@ -3380,6 +3556,15 @@ export class WorkflowsScreen extends Component<
         ),
       });
     }
+  }
+
+  private clearWorkflowVersionActionUrlState(): void {
+    this.writeWorkflowsUrlState(
+      {
+        versionAction: null,
+      },
+      "replace",
+    );
   }
 
   private downloadWorkflowVersion(versionId: string): void {
@@ -3478,6 +3663,7 @@ export class WorkflowsScreen extends Component<
       await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,
       });
+      this.clearWorkflowVersionActionUrlState();
       this.setState({
         selection: { type: "workflow", id: restored.id },
         noticeMessage: `Workflow restored to version ${restored.version.toString()}.`,
@@ -3512,6 +3698,7 @@ export class WorkflowsScreen extends Component<
       await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,
       });
+      this.clearWorkflowVersionActionUrlState();
       this.setState({
         selection: { type: "workflow", id: restored.id },
         noticeMessage: null,
@@ -3545,6 +3732,7 @@ export class WorkflowsScreen extends Component<
       await this.reloadCatalog(imported.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,
       });
+      this.clearWorkflowVersionActionUrlState();
       this.setState({
         selection: { type: "workflow", id: imported.id },
         versionImportText: "",
@@ -5297,6 +5485,11 @@ export class WorkflowsScreen extends Component<
         modal: WorkflowsUrlModal.NodeEditor,
         nodeId: selection.id,
         executionId: debugExecutionId,
+        editor: null,
+        deepEditorTab: null,
+        deepEditorOutputTab: null,
+        regexPattern: null,
+        regexFlags: null,
       });
     }
     this.setState({
@@ -5311,8 +5504,20 @@ export class WorkflowsScreen extends Component<
       modal: null,
       nodeId: null,
       versionId: null,
+      editor: null,
+      deepEditorTab: null,
+      deepEditorOutputTab: null,
+      regexPattern: null,
+      regexFlags: null,
+      versionAction: null,
     });
-    this.setState({ editorModalOpen: false });
+    this.outputEditorDraftText = null;
+    this.setState({
+      editorModalOpen: false,
+      outputEditor: null,
+      deepEditor: null,
+      regexTester: null,
+    });
   }
 
   private renderSelectionEditorModal(): HTMLElement {
@@ -7182,7 +7387,7 @@ export class WorkflowsScreen extends Component<
         this.renderWorkflowDebugDataPanel({
           title: "INPUT",
           tab: this.state.debugInputTab,
-          onTabChange: (tab) => this.setState({ debugInputTab: tab }),
+          onTabChange: (tab) => this.updateDebugInputTab(tab),
           value: context.selectedInputSource?.value,
           statusTone: context.statusTone,
           itemLabel: context.selectedInputSource
@@ -7235,7 +7440,7 @@ export class WorkflowsScreen extends Component<
         this.renderWorkflowDebugDataPanel({
           title: "OUTPUT",
           tab: this.state.debugOutputTab,
-          onTabChange: (tab) => this.setState({ debugOutputTab: tab }),
+          onTabChange: (tab) => this.updateDebugOutputTab(tab),
           value: context.outputValue,
           statusTone: context.statusTone,
           itemLabel: readWorkflowDebugItemLabel(context.outputValue),
@@ -7259,6 +7464,21 @@ export class WorkflowsScreen extends Component<
         }),
       ],
     );
+  }
+
+  private updateDebugInputTab(tab: WorkflowDebugPanelTab): void {
+    this.writeWorkflowsUrlState({ debugInputTab: tab }, "replace");
+    this.setState({ debugInputTab: tab });
+  }
+
+  private updateDebugOutputTab(tab: WorkflowDebugPanelTab): void {
+    this.writeWorkflowsUrlState({ debugOutputTab: tab }, "replace");
+    this.setState({ debugOutputTab: tab });
+  }
+
+  private updateDebugInputSource(debugInputSourceId: string): void {
+    this.writeWorkflowsUrlState({ debugInputSourceId }, "replace");
+    this.setState({ debugInputSourceId });
   }
 
   private renderPinnedOutputControl(
@@ -7480,6 +7700,7 @@ export class WorkflowsScreen extends Component<
         ? ""
         : formatOutputSnapshot(context.outputValue);
     this.outputEditorDraftText = text;
+    this.writeWorkflowsUrlState({ editor: WorkflowsUrlEditor.OutputEditor });
     this.setState({
       outputEditor: {
         nodeId: context.node.id,
@@ -7490,6 +7711,7 @@ export class WorkflowsScreen extends Component<
 
   private closeOutputEditor(): void {
     this.outputEditorDraftText = null;
+    this.writeWorkflowsUrlState({ editor: null }, "replace");
     this.setState({ outputEditor: null });
   }
 
@@ -7517,6 +7739,7 @@ export class WorkflowsScreen extends Component<
       action === "unpin" ? "pin" : action,
     );
     this.outputEditorDraftText = null;
+    this.writeWorkflowsUrlState({ editor: null }, "replace");
     this.setState({ outputEditor: null });
   }
 
@@ -7615,9 +7838,10 @@ export class WorkflowsScreen extends Component<
         value: context.selectedInputSource?.id ?? "",
         className:
           "h-8 min-w-0 rounded-md border border-border-dark bg-[#151b23] px-2 text-xs text-white outline-none focus:border-primary",
+        "data-testid": WorkflowScreenSelector.DebugInputSource,
         onChange: (event: Event) => {
           const target = event.target as HTMLSelectElement;
-          this.setState({ debugInputSourceId: target.value });
+          this.updateDebugInputSource(target.value);
         },
       },
       context.inputSources.map((source) =>
@@ -7707,6 +7931,7 @@ export class WorkflowsScreen extends Component<
                 key: `${input.title}-${tab}`,
                 className: `rounded-md px-2.5 py-1.5 text-xs ${input.tab === tab ? "bg-[#202833] text-white" : "text-text-secondary hover:bg-[#1a222b] hover:text-white"}`,
                 onClick: () => input.onTabChange(tab),
+                "data-testid": `${input.title === "INPUT" ? WorkflowScreenSelector.DebugInputTabPrefix : WorkflowScreenSelector.DebugOutputTabPrefix}${tab}`,
               },
               [formatSelectOptionLabel(tab)],
             ),
@@ -8341,33 +8566,68 @@ export class WorkflowsScreen extends Component<
     target: DeepEditorTarget,
     initialTab: DeepEditorTab = "prompt",
   ): void {
-    const contract = this.readDeepEditorContract(target);
+    if (target.type === "node") {
+      this.writeWorkflowsUrlState({
+        modal: WorkflowsUrlModal.NodeEditor,
+        nodeId: target.id,
+        editor: WorkflowsUrlEditor.DeepEditor,
+        deepEditorTab: initialTab,
+        deepEditorOutputTab: "visual",
+      });
+    }
+
     this.setState({
-      deepEditor: {
+      deepEditor: this.createDeepEditorState({
         target,
-        tab: initialTab,
-        outputTab: initialTab === "output" ? "visual" : "visual",
-        rawContractText: contract
-          ? formatJsonOutputContractDocument(contract)
-          : "",
-        rawContractError: null,
-        variableSearchQuery: "",
-        promptSelectionStart: 0,
-        promptSelectionEnd: 0,
-        sampleSelectionStart: 0,
-        sampleSelectionEnd: 0,
-      },
+        initialTab,
+        outputTab: "visual",
+      }),
       errorMessage: null,
     });
   }
 
+  private createDeepEditorState(input: {
+    target: DeepEditorTarget;
+    initialTab: DeepEditorTab;
+    outputTab: DeepEditorOutputTab;
+  }): DeepEditorState {
+    const contract = this.readDeepEditorContract(input.target);
+    return {
+      target: input.target,
+      tab: input.initialTab,
+      outputTab: input.outputTab,
+      rawContractText: contract
+        ? formatJsonOutputContractDocument(contract)
+        : "",
+      rawContractError: null,
+      variableSearchQuery: "",
+      promptSelectionStart: 0,
+      promptSelectionEnd: 0,
+      sampleSelectionStart: 0,
+      sampleSelectionEnd: 0,
+    };
+  }
+
   private closeDeepEditor(): void {
+    this.writeWorkflowsUrlState(
+      {
+        editor: null,
+        deepEditorTab: null,
+        deepEditorOutputTab: null,
+      },
+      "replace",
+    );
     this.setState({
       deepEditor: null,
     });
   }
 
   private openRegexTester(input: RegexTesterState): void {
+    this.writeWorkflowsUrlState({
+      editor: WorkflowsUrlEditor.RegexTester,
+      regexPattern: input.pattern,
+      regexFlags: input.flags,
+    });
     this.setState({
       regexTester: input,
       errorMessage: null,
@@ -8379,15 +8639,31 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    this.setState({
-      regexTester: {
-        ...this.state.regexTester,
-        ...patch,
+    const nextRegexTester = {
+      ...this.state.regexTester,
+      ...patch,
+    };
+    this.writeWorkflowsUrlState(
+      {
+        regexPattern: nextRegexTester.pattern,
+        regexFlags: nextRegexTester.flags,
       },
+      "replace",
+    );
+    this.setState({
+      regexTester: nextRegexTester,
     });
   }
 
   private closeRegexTester(): void {
+    this.writeWorkflowsUrlState(
+      {
+        editor: null,
+        regexPattern: null,
+        regexFlags: null,
+      },
+      "replace",
+    );
     this.setState({
       regexTester: null,
     });
@@ -8572,6 +8848,7 @@ export class WorkflowsScreen extends Component<
         if (!this.state.deepEditor) {
           return;
         }
+        this.writeWorkflowsUrlState({ deepEditorTab: tab }, "replace");
         this.setState({
           deepEditor: {
             ...this.state.deepEditor,
@@ -9286,6 +9563,7 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    this.writeWorkflowsUrlState({ deepEditorOutputTab: outputTab }, "replace");
     this.setState({
       deepEditor: {
         ...this.state.deepEditor,

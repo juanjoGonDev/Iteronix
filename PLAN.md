@@ -886,3 +886,4 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 
 - [ ] Project-wide UI navigation invariant: every intentional modal, drawer, tab, selected section, selected entity, and deep UI state must be URL-addressable and reload-restorable.
   - [x] Workflows URL state restores edit history, node editor, selected execution and historical node output after reload.
+  - [x] Workflows URL state restores useful deep modal state: debug input/output tabs, selected input source, output editor, deep editor tabs, regex tester pattern/flags, and restore/clone version action dialogs after reload.
