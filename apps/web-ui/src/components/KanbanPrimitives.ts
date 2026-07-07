@@ -187,6 +187,7 @@ class KanbanTaskCard extends Component<KanbanTaskCardProps> {
         key: task.id,
         className: readKanbanTaskCardClassName(columnId, selected),
         draggable: true,
+        "data-testid": `kanban-task-${task.id}`,
       },
       [
         createElement(
@@ -321,6 +322,7 @@ export class KanbanTaskModal extends Component<KanbanTaskModalProps> {
       {
         className:
           "fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4",
+        "data-testid": "kanban-task-modal",
         onClick: () => onClose(),
       },
       [

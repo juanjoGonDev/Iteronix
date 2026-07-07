@@ -4322,3 +4322,12 @@
   - Full gates, commit, push and remote CI/CodeQL verification pending.
 - Next
   - Run format:check, quality, build, validate:workflows; commit/push with hooks enabled; verify CI/CodeQL.
+
+### 2026-07-07 23:33 (Europe/Madrid) — URL-addressable UI state
+
+- Summary: Added shared typed URL state helpers and extended reload-restorable query state beyond Workflows into Settings, Projects, Explorer, Kanban, and History.
+- Decisions: Query params remain the source for small navigable UI state; secrets, payloads, drafts, absolute paths, diffs, commit messages, hover/focus internals, and file contents stay out of the URL. Entity/modal opens use pushState, while tabs, filters, search and lightweight selection use replaceState.
+- Changes: Added URL parser/unit coverage per screen, popstate reconciliation in each screen, Kanban/History test IDs, and browser validators for Kanban and History deep-link reloads.
+- Commands: `pnpm format:check` passed; `pnpm quality` passed after removing unused exports/imports surfaced by strict checks; screen validations passed during implementation for Settings, Projects git workspace, Explorer, Workflows, Kanban, and History.
+- Issues/Risks: Existing Settings and Workflows browser validators needed timing/assertion hardening because URL-restored tabs and import dialogs now persist accurately across reload/state transitions.
+- Next: Re-run full build and browser validation set, then commit and push with hooks enabled.

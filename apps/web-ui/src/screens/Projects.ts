@@ -25,6 +25,7 @@ import {
 import { createGitClient } from "../shared/git-client.js";
 import { createQualityGatesClient } from "../shared/quality-gates-client.js";
 import { readServerConnection } from "../shared/server-config.js";
+import { writeBrowserUrlState } from "../shared/url-state.js";
 import {
   countSelectedGitEntries,
   DefaultSelectedGates,
@@ -65,6 +66,10 @@ import {
   QualityGateId,
   type QualityGateId as QualityGateKey,
 } from "../shared/workbench-types.js";
+import {
+  applyProjectsUrlPatch,
+  readProjectsUrlStateFromLocation,
+} from "./projects-url-state.js";
 
 const PollIntervalMs = 2000;
 const HistoryLimit = 20;
@@ -144,15 +149,22 @@ export class ProjectsScreen extends Component<
 
   constructor(props: ComponentProps = {}) {
     const session = createProjectSessionStorage().load();
+    const urlState =
+      typeof window === "undefined"
+        ? null
+        : readProjectsUrlStateFromLocation(window.location);
 
     super(props, {
       projectRootPath: session.projectRootPath ?? "",
       projectName: session.projectName,
       currentProject: null,
       recentProjects: session.recentProjects,
-      selectedGates: [...DefaultSelectedGates],
+      selectedGates:
+        urlState && urlState.selectedGates.length > 0
+          ? urlState.selectedGates
+          : [...DefaultSelectedGates],
       runs: [],
-      selectedRunId: null,
+      selectedRunId: urlState?.selectedRunId ?? null,
       selectedRunEvents: [],
       pendingAction: null,
       streamState: StreamState.Idle,
@@ -162,9 +174,10 @@ export class ProjectsScreen extends Component<
         staged: null,
         unstaged: null,
       },
-      selectedGitDiffScope: GitDiffScope.Staged,
+      selectedGitDiffScope:
+        urlState?.selectedGitDiffScope ?? GitDiffScope.Staged,
       selectedGitPaths: [],
-      focusedGitDiffPath: null,
+      focusedGitDiffPath: urlState?.focusedGitDiffPath ?? null,
       gitBranchName: "",
       gitCommitMessage: "",
       gitPendingAction: null,
@@ -179,6 +192,16 @@ export class ProjectsScreen extends Component<
         void this.handleOpenProject(undefined, true);
       }, 0);
     }
+  }
+
+  override onMount(): void {
+    window.addEventListener("popstate", this.handleProjectsUrlStateChange);
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener("popstate", this.handleProjectsUrlStateChange);
+    this.pollGeneration += 1;
+    this.stopRunStream();
   }
 
   override render(): HTMLElement {
@@ -648,6 +671,10 @@ export class ProjectsScreen extends Component<
                     run,
                     selected: run.id === this.state.selectedRunId,
                     onClick: () => {
+                      this.writeProjectsUrlState(
+                        { selectedRunId: run.id },
+                        "push",
+                      );
                       this.setState({
                         selectedRunId: run.id,
                         selectedRunEvents: [],
@@ -1107,6 +1134,10 @@ export class ProjectsScreen extends Component<
 
       this.stopRunStream();
       this.pollGeneration += 1;
+      const urlState =
+        typeof window === "undefined"
+          ? null
+          : readProjectsUrlStateFromLocation(window.location);
 
       this.setState({
         projectRootPath: session.projectRootPath ?? "",
@@ -1114,7 +1145,7 @@ export class ProjectsScreen extends Component<
         currentProject: project,
         recentProjects: session.recentProjects,
         runs: [],
-        selectedRunId: null,
+        selectedRunId: urlState?.selectedRunId ?? null,
         selectedRunEvents: [],
         pendingAction: null,
         streamState: StreamState.Idle,
@@ -1124,9 +1155,10 @@ export class ProjectsScreen extends Component<
           staged: null,
           unstaged: null,
         },
-        selectedGitDiffScope: GitDiffScope.Staged,
+        selectedGitDiffScope:
+          urlState?.selectedGitDiffScope ?? GitDiffScope.Staged,
         selectedGitPaths: [],
-        focusedGitDiffPath: null,
+        focusedGitDiffPath: urlState?.focusedGitDiffPath ?? null,
         gitBranchName: "",
         gitCommitMessage: "",
         gitPendingAction: null,
@@ -1180,6 +1212,14 @@ export class ProjectsScreen extends Component<
     this.stopRunStream();
     this.pollGeneration += 1;
     const session = clearProjectSession();
+    this.writeProjectsUrlState(
+      {
+        selectedRunId: null,
+        selectedGitDiffScope: null,
+        focusedGitDiffPath: null,
+      },
+      "replace",
+    );
 
     this.setState({
       projectRootPath: "",
@@ -1244,6 +1284,7 @@ export class ProjectsScreen extends Component<
         noticeMessage: "Quality gates launched.",
         errorMessage: null,
       });
+      this.writeProjectsUrlState({ selectedRunId: run.id }, "push");
 
       this.ensureRunStream(run.id);
       await this.refreshSelectedRunEvents(run.id);
@@ -1285,6 +1326,9 @@ export class ProjectsScreen extends Component<
         this.state.selectedRunId,
         runs,
       );
+      if (selectedRunId !== this.state.selectedRunId) {
+        this.writeProjectsUrlState({ selectedRunId }, "replace");
+      }
       const selectedRunEvents = selectedRunId
         ? await this.qualityGatesClient.listQualityGateEvents({
             runId: selectedRunId,
@@ -1673,6 +1717,13 @@ export class ProjectsScreen extends Component<
     }
 
     const focusedPath = resolveGitFocusedPath(repository, scope, path) ?? path;
+    this.writeProjectsUrlState(
+      {
+        selectedGitDiffScope: scope,
+        focusedGitDiffPath: focusedPath,
+      },
+      "replace",
+    );
     this.setState({
       focusedGitDiffPath: focusedPath,
     });
@@ -1771,13 +1822,21 @@ export class ProjectsScreen extends Component<
 
     const repository = this.state.gitRepository;
     if (!repository || readGitDiffCount(repository, scope) === 0) {
+      const focusedGitDiffPath = resolveGitFocusedPath(
+        repository,
+        scope,
+        this.state.focusedGitDiffPath,
+      );
+      this.writeProjectsUrlState(
+        {
+          selectedGitDiffScope: scope,
+          focusedGitDiffPath,
+        },
+        "replace",
+      );
       this.setState({
         selectedGitDiffScope: scope,
-        focusedGitDiffPath: resolveGitFocusedPath(
-          repository,
-          scope,
-          this.state.focusedGitDiffPath,
-        ),
+        focusedGitDiffPath,
         gitDiffs: writeGitDiff(this.state.gitDiffs, scope, null),
         ...(manual
           ? {
@@ -1788,13 +1847,21 @@ export class ProjectsScreen extends Component<
       return;
     }
 
+    const focusedGitDiffPath = resolveGitFocusedPath(
+      repository,
+      scope,
+      this.state.focusedGitDiffPath,
+    );
+    this.writeProjectsUrlState(
+      {
+        selectedGitDiffScope: scope,
+        focusedGitDiffPath,
+      },
+      "replace",
+    );
     this.setState({
       selectedGitDiffScope: scope,
-      focusedGitDiffPath: resolveGitFocusedPath(
-        repository,
-        scope,
-        this.state.focusedGitDiffPath,
-      ),
+      focusedGitDiffPath,
       gitPendingAction: GitPendingAction.Diff,
       gitPendingPath: null,
       errorMessage: null,
@@ -1973,6 +2040,58 @@ export class ProjectsScreen extends Component<
     this.setState({
       selectedGates: sortQualityGates(selected),
     });
+    this.writeProjectsUrlState(
+      { selectedGates: sortQualityGates(selected) },
+      "replace",
+    );
+  }
+
+  private readonly handleProjectsUrlStateChange = (): void => {
+    const urlState = readProjectsUrlStateFromLocation(window.location);
+    const selectedRunId = resolveSelectedRunId(
+      urlState.selectedRunId,
+      this.state.runs,
+    );
+    const selectedGitDiffScope =
+      urlState.selectedGitDiffScope ?? this.state.selectedGitDiffScope;
+    const focusedGitDiffPath = resolveGitFocusedPath(
+      this.state.gitRepository,
+      selectedGitDiffScope,
+      urlState.focusedGitDiffPath,
+    );
+
+    this.setState({
+      selectedRunId,
+      selectedRunEvents: [],
+      selectedGates:
+        urlState.selectedGates.length > 0
+          ? urlState.selectedGates
+          : this.state.selectedGates,
+      selectedGitDiffScope,
+      focusedGitDiffPath,
+    });
+
+    if (selectedRunId) {
+      void this.refreshSelectedRunEvents(selectedRunId);
+      this.ensureRunStream(readStreamingRunId(this.state.runs, selectedRunId));
+    }
+  };
+
+  private writeProjectsUrlState(
+    patch: Parameters<typeof applyProjectsUrlPatch>[1],
+    mode: "push" | "replace",
+  ): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    writeBrowserUrlState(
+      applyProjectsUrlPatch(
+        `${window.location.pathname}${window.location.search}`,
+        patch,
+      ),
+      mode,
+    );
   }
 
   private isScreenActive(): boolean {

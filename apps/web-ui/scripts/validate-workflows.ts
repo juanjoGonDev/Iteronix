@@ -771,6 +771,10 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       WorkflowSelector.WorkflowVersionActionDialogConfirm,
     );
+    await waitForMissingTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialog,
+    );
     await waitForCondition(
       () =>
         Promise.resolve(
@@ -960,6 +964,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForUrlSearchParam(page, "editor", "deep-editor");
     await clickByTestId(page, WorkflowSelector.DeepEditorTabOutput);
     await waitForUrlSearchParam(page, "deepTab", "output");
+    await waitForTestId(page, WorkflowSelector.DeepEditorOutputTabJson);
     await clickByTestId(page, WorkflowSelector.DeepEditorOutputTabJson);
     await waitForUrlSearchParam(page, "deepOutputTab", "json");
     await page.reload({

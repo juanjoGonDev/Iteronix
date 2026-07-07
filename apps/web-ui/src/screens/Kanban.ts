@@ -29,7 +29,12 @@ import {
   readActiveProjectSessionLabel,
   readProjectSession,
 } from "../shared/project-session.js";
+import { writeBrowserUrlState } from "../shared/url-state.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
+import {
+  applyKanbanUrlPatch,
+  readKanbanUrlStateFromLocation,
+} from "./kanban-url-state.js";
 
 interface KanbanBoardState {
   columns: ReadonlyArray<{ id: KanbanTaskStatus; title: string }>;
@@ -74,8 +79,13 @@ const KanbanMessage = {
 export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
   private readonly kanbanClient: KanbanClient;
   private readonly qualityGatesClient: QualityGatesClient;
+  private requestedTaskId: string | null;
 
   constructor(props: KanbanBoardProps = {}) {
+    const urlState =
+      typeof window === "undefined"
+        ? null
+        : readKanbanUrlStateFromLocation(window.location);
     super(props, {
       columns: defaultKanbanColumnDefinitions.map((definition) => ({
         id: definition.id,
@@ -94,10 +104,16 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
     });
     this.kanbanClient = createKanbanClient();
     this.qualityGatesClient = createQualityGatesClient();
+    this.requestedTaskId = urlState?.selectedTaskId ?? null;
   }
 
   override onMount(): void {
+    window.addEventListener("popstate", this.handleKanbanUrlStateChange);
     void this.loadBoard();
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener("popstate", this.handleKanbanUrlStateChange);
   }
 
   private async loadBoard(): Promise<void> {
@@ -156,6 +172,10 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       boardId,
     });
     const view = createKanbanBoardView(columns, tasks);
+    const selectedTask =
+      this.requestedTaskId === null
+        ? null
+        : (view.tasks.find((task) => task.id === this.requestedTaskId) ?? null);
 
     this.setState({
       columns: view.columns,
@@ -164,12 +184,17 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
       project,
       boardId,
       draggedTask: null,
-      selectedTask: null,
-      taskDraft: null,
+      selectedTask,
+      taskDraft: selectedTask,
       pendingAction: null,
       errorMessage: null,
       noticeMessage,
     });
+
+    if (this.requestedTaskId !== null && selectedTask === null) {
+      this.requestedTaskId = null;
+      this.writeKanbanUrlState({ selectedTaskId: null }, "replace");
+    }
   }
 
   private async readOrCreateColumns(
@@ -293,6 +318,8 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
   }
 
   private handleTaskClick(task: KanbanTask): void {
+    this.requestedTaskId = task.id;
+    this.writeKanbanUrlState({ selectedTaskId: task.id }, "push");
     this.setState({
       selectedTask: task,
       taskDraft: task,
@@ -373,6 +400,10 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         boardId: this.state.boardId,
         taskId: task.id,
       });
+      if (this.requestedTaskId === task.id) {
+        this.requestedTaskId = null;
+        this.writeKanbanUrlState({ selectedTaskId: null }, "replace");
+      }
       await this.reloadBoardData(this.state.project, this.state.boardId, null);
     } catch {
       this.setState({
@@ -436,8 +467,7 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
         taskDraft &&
           createElement(KanbanTaskModal, {
             task: taskDraft,
-            onClose: () =>
-              this.setState({ selectedTask: null, taskDraft: null }),
+            onClose: () => this.closeTaskModal(),
             onDelete: (task: KanbanTask) => {
               void this.handleDeleteTask(task);
             },
@@ -449,6 +479,49 @@ export class KanbanBoard extends Component<KanbanBoardProps, KanbanBoardState> {
               this.handleTaskDescriptionChange(value),
           }),
       ],
+    );
+  }
+
+  private closeTaskModal(): void {
+    this.requestedTaskId = null;
+    this.writeKanbanUrlState({ selectedTaskId: null }, "push");
+    this.setState({ selectedTask: null, taskDraft: null });
+  }
+
+  private readonly handleKanbanUrlStateChange = (): void => {
+    const urlState = readKanbanUrlStateFromLocation(window.location);
+    this.requestedTaskId = urlState.selectedTaskId;
+    const selectedTask =
+      urlState.selectedTaskId === null
+        ? null
+        : (this.state.tasks.find(
+            (task) => task.id === urlState.selectedTaskId,
+          ) ?? null);
+
+    this.setState({
+      selectedTask,
+      taskDraft: selectedTask,
+    });
+
+    if (urlState.selectedTaskId !== null && selectedTask === null) {
+      this.writeKanbanUrlState({ selectedTaskId: null }, "replace");
+    }
+  };
+
+  private writeKanbanUrlState(
+    patch: Parameters<typeof applyKanbanUrlPatch>[1],
+    mode: "push" | "replace",
+  ): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    writeBrowserUrlState(
+      applyKanbanUrlPatch(
+        `${window.location.pathname}${window.location.search}`,
+        patch,
+      ),
+      mode,
     );
   }
 }

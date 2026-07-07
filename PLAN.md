@@ -884,6 +884,11 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 
 - [x] Workflows has a reusable rootless emulation project/workflow fixture plus live screenshot QA capture path.
 
-- [ ] Project-wide UI navigation invariant: every intentional modal, drawer, tab, selected section, selected entity, and deep UI state must be URL-addressable and reload-restorable.
+- [x] Project-wide UI navigation invariant: every intentional modal, drawer, tab, selected section, selected entity, and deep UI state must be URL-addressable and reload-restorable.
   - [x] Workflows URL state restores edit history, node editor, selected execution and historical node output after reload.
   - [x] Workflows URL state restores useful deep modal state: debug input/output tabs, selected input source, output editor, deep editor tabs, regex tester pattern/flags, and restore/clone version action dialogs after reload.
+  - [x] Settings URL state restores active tab and provider profile selection without exposing API keys or secrets.
+  - [x] Projects URL state restores selected quality run, gate filters, diff scope and focused relative path without encoding diff payloads or commit messages.
+  - [x] Explorer URL state restores active section, selected/open relative file path, search query, and search flags without absolute paths or file contents.
+  - [x] Kanban URL state restores the selected task modal and clears invalid task IDs safely.
+  - [x] History URL state restores selected run/evaluation and evidence source with a valid-item fallback.

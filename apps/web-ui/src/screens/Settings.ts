@@ -48,6 +48,7 @@ import {
   hydrateWorkspaceStateClients,
 } from "../shared/workspace-state-client.js";
 import { router } from "../shared/Router.js";
+import { writeBrowserUrlState } from "../shared/url-state.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   ProviderKind,
@@ -57,8 +58,13 @@ import {
   updateProviderProfile,
   type ProviderProfileRecord,
 } from "./settings-state.js";
+import {
+  applySettingsUrlPatch,
+  readSettingsUrlStateFromLocation,
+  type SettingsUrlTab,
+} from "./settings-url-state.js";
 
-type SettingsTab = "general" | "provider" | "limits" | "notifications" | "api";
+type SettingsTab = SettingsUrlTab;
 
 interface SettingsScreenState {
   activeTab: SettingsTab;
@@ -122,10 +128,22 @@ export class SettingsScreen extends Component<
       ...createDefaultSettingsSnapshot(),
       serverConnection: readServerConnection(),
     };
-    const selectedProviderId = snapshot.providerProfiles[0]?.id ?? null;
+    const urlState =
+      typeof window === "undefined"
+        ? null
+        : readSettingsUrlStateFromLocation(window.location);
+    const urlSelectedProviderId =
+      urlState?.selectedProviderId &&
+      snapshot.providerProfiles.some(
+        (profile) => profile.id === urlState.selectedProviderId,
+      )
+        ? urlState.selectedProviderId
+        : null;
+    const selectedProviderId =
+      urlSelectedProviderId ?? snapshot.providerProfiles[0]?.id ?? null;
 
     super(props, {
-      activeTab: "provider",
+      activeTab: urlState?.activeTab ?? "provider",
       profileId: snapshot.profileId,
       providerProfiles: snapshot.providerProfiles,
       selectedProviderId,
@@ -142,7 +160,12 @@ export class SettingsScreen extends Component<
   }
 
   override onMount(): void {
+    window.addEventListener("popstate", this.handleSettingsUrlStateChange);
     void this.hydrateRuntimeContext();
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener("popstate", this.handleSettingsUrlStateChange);
   }
 
   override render(): HTMLElement {
@@ -182,7 +205,10 @@ export class SettingsScreen extends Component<
       id: tab,
       label: TabLabel[tab],
       active: this.state.activeTab === tab,
-      onClick: () => this.setState({ activeTab: tab }),
+      onClick: () => {
+        this.writeSettingsUrlState({ activeTab: tab }, "replace");
+        this.setState({ activeTab: tab });
+      },
     };
   }
 
@@ -466,8 +492,13 @@ export class SettingsScreen extends Component<
               {
                 type: "button",
                 className: "flex min-w-0 flex-1 flex-col text-left",
-                onClick: () =>
-                  this.setState({ selectedProviderId: profile.id }),
+                onClick: () => {
+                  this.writeSettingsUrlState(
+                    { selectedProviderId: profile.id },
+                    "replace",
+                  );
+                  this.setState({ selectedProviderId: profile.id });
+                },
               },
               [
                 createElement(
@@ -952,10 +983,18 @@ export class SettingsScreen extends Component<
       projectSession = readProjectSession();
       hydrateSettingsSnapshot(workspaceState.settings);
       const snapshot = workspaceState.settings;
+      const urlState =
+        typeof window === "undefined"
+          ? null
+          : readSettingsUrlStateFromLocation(window.location);
+      const selectedProviderId = resolveSettingsProviderSelection(
+        urlState?.selectedProviderId ?? this.state.selectedProviderId,
+        snapshot.providerProfiles,
+      );
       this.setState({
         profileId: snapshot.profileId,
         providerProfiles: snapshot.providerProfiles,
-        selectedProviderId: snapshot.providerProfiles[0]?.id ?? null,
+        selectedProviderId,
         workflowLimits: snapshot.workflowLimits,
         notifications: snapshot.notifications,
         serverConnection: snapshot.serverConnection,
@@ -998,6 +1037,10 @@ export class SettingsScreen extends Component<
 
   private handleAddProviderProfile(kind: ProviderKind): void {
     const profile = createProviderProfile(kind);
+    this.writeSettingsUrlState(
+      { activeTab: "provider", selectedProviderId: profile.id },
+      "replace",
+    );
     this.setState({
       activeTab: "provider",
       providerProfiles: [...this.state.providerProfiles, profile],
@@ -1014,6 +1057,7 @@ export class SettingsScreen extends Component<
         ? (nextProfiles[0]?.id ?? null)
         : this.state.selectedProviderId;
 
+    this.writeSettingsUrlState({ selectedProviderId }, "replace");
     this.setState({
       providerProfiles: nextProfiles,
       selectedProviderId,
@@ -1253,6 +1297,13 @@ export class SettingsScreen extends Component<
         notifications: persistedSettings.notifications,
         serverConnection: persistedSettings.serverConnection,
       });
+      this.writeSettingsUrlState(
+        {
+          activeTab: "provider",
+          selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
+        },
+        "replace",
+      );
       this.pushToast("success", "Settings restored to defaults.");
     } catch (error) {
       this.pushToast(
@@ -1264,6 +1315,36 @@ export class SettingsScreen extends Component<
 
   private pushToast(kind: ToastKind, message: string): void {
     showGlobalToast(kind, message);
+  }
+
+  private readonly handleSettingsUrlStateChange = (): void => {
+    const urlState = readSettingsUrlStateFromLocation(window.location);
+    const selectedProviderId = resolveSettingsProviderSelection(
+      urlState.selectedProviderId,
+      this.state.providerProfiles,
+    );
+
+    this.setState({
+      activeTab: urlState.activeTab ?? this.state.activeTab,
+      selectedProviderId,
+    });
+  };
+
+  private writeSettingsUrlState(
+    patch: Parameters<typeof applySettingsUrlPatch>[1],
+    mode: "push" | "replace",
+  ): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    writeBrowserUrlState(
+      applySettingsUrlPatch(
+        `${window.location.pathname}${window.location.search}`,
+        patch,
+      ),
+      mode,
+    );
   }
 
   private readSelectedProviderProfile(): ProviderProfileRecord | null {
@@ -1306,6 +1387,20 @@ const toErrorMessage = (value: unknown, fallback: string): string => {
   }
 
   return fallback;
+};
+
+const resolveSettingsProviderSelection = (
+  selectedProviderId: string | null | undefined,
+  profiles: ReadonlyArray<ProviderProfileRecord>,
+): string | null => {
+  if (
+    selectedProviderId &&
+    profiles.some((profile) => profile.id === selectedProviderId)
+  ) {
+    return selectedProviderId;
+  }
+
+  return profiles[0]?.id ?? null;
 };
 
 const readProviderKind = (value: string): ProviderKind | null => {

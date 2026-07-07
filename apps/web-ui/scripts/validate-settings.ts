@@ -242,8 +242,10 @@ async function validateSettingsScreen(): Promise<void> {
     });
     await waitForPageTexts(page, [
       ValidationText.ScreenTitle,
-      ValidationText.AnthropicProfileName,
+      ValidationText.SettingsServerBackedNotice,
     ]);
+    await clickNamedButton(page, "Providers");
+    await waitForPageText(page, ValidationText.AnthropicProfileName);
     await clickElementContainingText(
       page,
       "button",
@@ -260,7 +262,11 @@ async function validateSettingsScreen(): Promise<void> {
       "settings-provider-model",
       ValidationText.AnthropicModelId,
     );
-    await waitForInputValue(page, "settings-provider-api-key", "");
+    await waitForInputValue(
+      page,
+      "settings-provider-api-key",
+      "anthropic-session-secret",
+    );
 
     await clickNamedButton(page, "Workflow Limits");
     await waitForInputValue(page, "settings-max-loops", "21");

@@ -26,12 +26,17 @@ import {
   createWorkspaceStateClient,
   hydrateWorkspaceStateClients,
 } from "../shared/workspace-state-client.js";
+import { writeBrowserUrlState } from "../shared/url-state.js";
 import {
   MinimalEvalDatasetPath,
   type WorkbenchEvalHistoryRecord,
   type WorkbenchHistoryState,
   type WorkbenchRunHistoryRecord,
 } from "../shared/workbench-types.js";
+import {
+  applyHistoryUrlPatch,
+  readHistoryUrlStateFromLocation,
+} from "./history-url-state.js";
 
 interface HistoryScreenState {
   history: WorkbenchHistoryState;
@@ -54,12 +59,12 @@ export class HistoryScreen extends Component<
   constructor(props: ComponentProps = {}) {
     super(props);
     const history = this.historyStore.load();
-    const selection = pickInitialSelection(history);
+    const selection = pickInitialSelectionFromUrl(history);
     this.state = {
       history,
       selectedKind: selection.kind,
       selectedId: selection.id,
-      selectedEvidenceSourceId: null,
+      selectedEvidenceSourceId: selection.sourceId,
       datasetPath: MinimalEvalDatasetPath,
       pendingAction: null,
       errorMessage: null,
@@ -68,7 +73,12 @@ export class HistoryScreen extends Component<
   }
 
   override onMount(): void {
+    window.addEventListener("popstate", this.handleHistoryUrlStateChange);
     void this.hydrateWorkspaceState();
+  }
+
+  override onUnmount(): void {
+    window.removeEventListener("popstate", this.handleHistoryUrlStateChange);
   }
 
   override render(): HTMLElement {
@@ -315,8 +325,7 @@ export class HistoryScreen extends Component<
         children: createElement(EvidenceReportPanel, {
           report: finalResult.evidenceReport,
           activeSourceId: this.state.selectedEvidenceSourceId,
-          onSourceSelect: (sourceId) =>
-            this.setState({ selectedEvidenceSourceId: sourceId }),
+          onSourceSelect: (sourceId) => this.selectEvidenceSource(sourceId),
         }),
       }),
       createElement(
@@ -330,8 +339,7 @@ export class HistoryScreen extends Component<
               citations: finalResult.citations,
               evidenceSources: finalResult.evidenceReport.retrievedSources,
               activeSourceId: this.state.selectedEvidenceSourceId,
-              onSourceSelect: (sourceId) =>
-                this.setState({ selectedEvidenceSourceId: sourceId }),
+              onSourceSelect: (sourceId) => this.selectEvidenceSource(sourceId),
               emptyLabel: "This run did not store citations.",
             }),
           }),
@@ -444,12 +452,22 @@ export class HistoryScreen extends Component<
       "button",
       {
         className: `rounded-lg border px-3 py-3 text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-border-dark bg-background-dark/40 hover:bg-surface-dark-hover"}`,
-        onClick: () =>
+        "data-testid": `history-${input.kind}-${input.id}`,
+        onClick: () => {
+          this.writeHistoryUrlState(
+            {
+              selectedKind: input.kind,
+              selectedId: input.id,
+              selectedEvidenceSourceId: null,
+            },
+            "push",
+          );
           this.setState({
             selectedKind: input.kind,
             selectedId: input.id,
             selectedEvidenceSourceId: null,
-          }),
+          });
+        },
       },
       [
         createElement(
@@ -498,6 +516,14 @@ export class HistoryScreen extends Component<
       });
       await this.persistWorkbenchHistory();
       const history = this.historyStore.load();
+      this.writeHistoryUrlState(
+        {
+          selectedKind: "eval",
+          selectedId: record.id,
+          selectedEvidenceSourceId: null,
+        },
+        "push",
+      );
       this.setState({
         history,
         selectedKind: "eval",
@@ -534,6 +560,14 @@ export class HistoryScreen extends Component<
       errorMessage: null,
       noticeMessage: null,
     });
+    this.writeHistoryUrlState(
+      {
+        selectedKind: kind,
+        selectedId,
+        selectedEvidenceSourceId: null,
+      },
+      "replace",
+    );
   }
 
   private async hydrateWorkspaceState(): Promise<void> {
@@ -541,16 +575,58 @@ export class HistoryScreen extends Component<
       const state = await this.workspaceStateClient.load();
       hydrateWorkspaceStateClients(state);
       const history = this.historyStore.load();
-      const selection = pickInitialSelection(history);
+      const selection = pickInitialSelectionFromUrl(history);
       this.setState({
         history,
         selectedKind: selection.kind,
         selectedId: selection.id,
-        selectedEvidenceSourceId: null,
+        selectedEvidenceSourceId: selection.sourceId,
       });
+      this.writeHistoryUrlState(
+        {
+          selectedKind: selection.kind,
+          selectedId: selection.id,
+          selectedEvidenceSourceId: selection.sourceId,
+        },
+        "replace",
+      );
     } catch {
       return;
     }
+  }
+
+  private readonly handleHistoryUrlStateChange = (): void => {
+    const selection = pickInitialSelectionFromUrl(this.state.history);
+    this.setState({
+      selectedKind: selection.kind,
+      selectedId: selection.id,
+      selectedEvidenceSourceId: selection.sourceId,
+    });
+  };
+
+  private selectEvidenceSource(sourceId: string | null): void {
+    this.writeHistoryUrlState(
+      { selectedEvidenceSourceId: sourceId },
+      "replace",
+    );
+    this.setState({ selectedEvidenceSourceId: sourceId });
+  }
+
+  private writeHistoryUrlState(
+    patch: Parameters<typeof applyHistoryUrlPatch>[1],
+    mode: "push" | "replace",
+  ): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    writeBrowserUrlState(
+      applyHistoryUrlPatch(
+        `${window.location.pathname}${window.location.search}`,
+        patch,
+      ),
+      mode,
+    );
   }
 
   private async persistWorkbenchHistory(): Promise<void> {
@@ -589,6 +665,52 @@ const pickInitialSelection = (
   return {
     kind: "eval",
     id: history.evals[0]?.id ?? null,
+  };
+};
+
+const pickInitialSelectionFromUrl = (
+  history: WorkbenchHistoryState,
+): {
+  kind: "run" | "eval";
+  id: string | null;
+  sourceId: string | null;
+} => {
+  const fallback = pickInitialSelection(history);
+  if (typeof window === "undefined") {
+    return {
+      ...fallback,
+      sourceId: null,
+    };
+  }
+
+  const urlState = readHistoryUrlStateFromLocation(window.location);
+  if (
+    urlState.selectedKind === "run" &&
+    urlState.selectedId !== null &&
+    history.runs.some((run) => run.id === urlState.selectedId)
+  ) {
+    return {
+      kind: "run",
+      id: urlState.selectedId,
+      sourceId: urlState.selectedEvidenceSourceId,
+    };
+  }
+
+  if (
+    urlState.selectedKind === "eval" &&
+    urlState.selectedId !== null &&
+    history.evals.some((evaluation) => evaluation.id === urlState.selectedId)
+  ) {
+    return {
+      kind: "eval",
+      id: urlState.selectedId,
+      sourceId: null,
+    };
+  }
+
+  return {
+    ...fallback,
+    sourceId: null,
   };
 };
 

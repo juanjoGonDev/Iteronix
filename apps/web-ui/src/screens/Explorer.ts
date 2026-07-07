@@ -20,6 +20,7 @@ import {
 } from "../shared/explorer-workspace-session.js";
 import { readProjectSession } from "../shared/project-session.js";
 import { router } from "../shared/Router.js";
+import { writeBrowserUrlState } from "../shared/url-state.js";
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   buildExplorerTreeNodes,
@@ -50,6 +51,11 @@ import {
   ExplorerPreviewLoadDirection,
   type ExplorerTreeNode,
 } from "./explorer-state.js";
+import {
+  applyExplorerUrlPatch,
+  readExplorerUrlStateFromLocation,
+  type ExplorerUrlPatch,
+} from "./explorer-url-state.js";
 
 const ExplorerPendingAction = {
   Open: "open",
@@ -183,14 +189,31 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     const session = readProjectSession();
     const sessionRootPath = session.projectRootPath ?? "";
     const workspaceState = readExplorerWorkspaceState(sessionRootPath);
+    const urlState =
+      typeof window === "undefined"
+        ? null
+        : readExplorerUrlStateFromLocation(window.location);
+    const searchSettings = {
+      isRegex: urlState?.regex ?? false,
+      matchCase: urlState?.matchCase ?? false,
+      wholeWord: urlState?.wholeWord ?? false,
+    };
 
     super(props, {
       sessionRootPath,
       sessionProjectName: session.projectName,
       currentProject: null,
       treeNodes: [],
-      openFiles: workspaceState.openFiles,
-      selectedFilePath: workspaceState.activeFilePath,
+      openFiles:
+        urlState?.selectedFilePath !== null &&
+        urlState?.selectedFilePath !== undefined
+          ? openExplorerFile(
+              workspaceState.openFiles,
+              urlState.selectedFilePath,
+            )
+          : workspaceState.openFiles,
+      selectedFilePath:
+        urlState?.selectedFilePath ?? workspaceState.activeFilePath,
       ...createEmptyExplorerFileViewState(),
       highlightedLineNumber: null,
       openTabContextMenuPath: null,
@@ -199,20 +222,18 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       errorMessage: null,
       noticeMessage: null,
       isCompactViewport: readIsCompactViewport(),
-      activeSidebarSection: ExplorerSidebarSection.Explorer,
+      activeSidebarSection:
+        urlState?.activeSidebarSection ?? ExplorerSidebarSection.Explorer,
       isSidebarVisible: true,
       compactView: ExplorerCompactView.Panel,
-      searchQuery: "",
+      searchQuery: urlState?.searchQuery ?? "",
       searchResults: [],
       searchIsLoading: false,
-      searchSettings: {
-        isRegex: false,
-        matchCase: false,
-        wholeWord: false,
-      },
+      searchSettings,
       collapsedSearchResultPaths: [],
       hiddenSearchResultPaths: [],
     });
+    this.searchDraftValue = urlState?.searchQuery ?? "";
 
     if (session.projectRootPath !== null) {
       requestAnimationFrame(() => {
@@ -243,6 +264,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
   override onMount(): void {
     window.addEventListener("resize", this.handleViewportResize);
     window.addEventListener("click", this.handleWindowClick);
+    window.addEventListener("popstate", this.handleExplorerUrlStateChange);
   }
 
   override onUnmount(): void {
@@ -250,6 +272,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     this.clearLineHighlight();
     window.removeEventListener("resize", this.handleViewportResize);
     window.removeEventListener("click", this.handleWindowClick);
+    window.removeEventListener("popstate", this.handleExplorerUrlStateChange);
   }
 
   private renderLineHighlightStyle(): HTMLElement {
@@ -1800,11 +1823,25 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       }
       const nextTreeNodes = buildExplorerTreeNodes(entries);
       const workspaceState = readExplorerWorkspaceState(project.rootPath);
-      const nextOpenFiles = workspaceState.openFiles;
+      const urlState = readExplorerUrlStateFromLocation(window.location);
+      const nextOpenFiles =
+        urlState.selectedFilePath === null
+          ? workspaceState.openFiles
+          : openExplorerFile(
+              workspaceState.openFiles,
+              urlState.selectedFilePath,
+            );
       const nextActiveFilePath = resolveNextExplorerActiveFilePath(
         nextOpenFiles,
-        workspaceState.activeFilePath,
+        urlState.selectedFilePath ?? workspaceState.activeFilePath,
       );
+      const nextSearchSettings = {
+        isRegex: urlState.regex ?? this.state.searchSettings.isRegex,
+        matchCase: urlState.matchCase ?? this.state.searchSettings.matchCase,
+        wholeWord: urlState.wholeWord ?? this.state.searchSettings.wholeWord,
+      };
+      const nextSearchQuery = urlState.searchQuery ?? this.searchDraftValue;
+      this.searchDraftValue = nextSearchQuery;
 
       this.setState({
         currentProject: project,
@@ -1818,6 +1855,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         activePath: null,
         errorMessage: null,
         noticeMessage: silent ? null : `${project.name} loaded in Explorer.`,
+        activeSidebarSection:
+          urlState.activeSidebarSection ?? this.state.activeSidebarSection,
+        searchQuery: nextSearchQuery,
+        searchSettings: nextSearchSettings,
       });
 
       if (nextActiveFilePath) {
@@ -1828,6 +1869,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
           true,
           nextTreeNodes,
         );
+      }
+      if (nextSearchQuery.trim().length > 0) {
+        this.queueSearch(nextSearchQuery, nextSearchSettings);
       }
     } catch (error: unknown) {
       this.setState({
@@ -1913,6 +1957,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       this.setState({
         isSidebarVisible: false,
       });
+      this.writeExplorerUrlState({ activeSidebarSection: null }, "replace");
       return;
     }
 
@@ -1923,6 +1968,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         ? ExplorerCompactView.Panel
         : this.state.compactView,
     });
+    this.writeExplorerUrlState({ activeSidebarSection: section }, "replace");
   }
 
   private handleSidebarHide(): void {
@@ -1932,6 +1978,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         ? ExplorerCompactView.Editor
         : this.state.compactView,
     });
+    this.writeExplorerUrlState({ activeSidebarSection: null }, "replace");
   }
 
   private setCompactPanelView(section: ExplorerSidebarSection): void {
@@ -1940,6 +1987,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       isSidebarVisible: true,
       compactView: ExplorerCompactView.Panel,
     });
+    this.writeExplorerUrlState({ activeSidebarSection: section }, "replace");
   }
 
   private async handleExpandAllDirectories(): Promise<void> {
@@ -2005,6 +2053,13 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     this.searchSelectionStart = input.selectionStart;
     this.searchSelectionEnd = input.selectionEnd;
     this.searchShouldRestoreFocus = true;
+    this.writeExplorerUrlState(
+      {
+        activeSidebarSection: ExplorerSidebarSection.Search,
+        searchQuery: input.value.trim().length === 0 ? null : input.value,
+      },
+      "replace",
+    );
     this.queueSearch(input.value, this.state.searchSettings);
   }
 
@@ -2022,6 +2077,19 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         ? ExplorerCompactView.Panel
         : this.state.compactView,
     });
+    this.writeExplorerUrlState(
+      {
+        activeSidebarSection: ExplorerSidebarSection.Search,
+        regex: nextSearchSettings.isRegex,
+        matchCase: nextSearchSettings.matchCase,
+        wholeWord: nextSearchSettings.wholeWord,
+        searchQuery:
+          this.searchDraftValue.trim().length === 0
+            ? null
+            : this.searchDraftValue,
+      },
+      "replace",
+    );
 
     if (this.searchDraftValue.trim().length > 0) {
       this.queueSearch(this.searchDraftValue, nextSearchSettings);
@@ -2215,6 +2283,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
     path: string,
     revealInTree: boolean,
     targetLineNumber?: number,
+    syncUrl = true,
   ): Promise<void> {
     if (this.state.currentProject === null || path.trim().length === 0) {
       return;
@@ -2222,6 +2291,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
 
     const nextOpenFiles = openExplorerFile(this.state.openFiles, path);
     const treeScrollTop = !revealInTree ? this.readTreeScrollTop() : null;
+    if (syncUrl) {
+      this.writeExplorerUrlState({ selectedFilePath: path }, "push");
+    }
 
     this.setState({
       pendingAction: ExplorerPendingAction.File,
@@ -2280,6 +2352,9 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         });
       }
     } catch (error: unknown) {
+      if (syncUrl) {
+        this.writeExplorerUrlState({ selectedFilePath: null }, "replace");
+      }
       this.setState({
         pendingAction: null,
         activePath: null,
@@ -2306,6 +2381,7 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
         highlightedLineNumber: null,
       });
     } catch {
+      this.writeExplorerUrlState({ selectedFilePath: null }, "replace");
       this.setState({
         selectedFilePath: null,
         ...createEmptyExplorerFileViewState(),
@@ -2463,6 +2539,10 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       openTabContextMenuPath: null,
     });
     this.persistWorkspaceState(nextOpenFiles, nextActiveFilePath);
+    this.writeExplorerUrlState(
+      { selectedFilePath: nextActiveFilePath },
+      "replace",
+    );
 
     if (
       nextActiveFilePath &&
@@ -2496,6 +2576,63 @@ export class Explorer extends Component<ExplorerProps, ExplorerState> {
       openTabContextMenuPath: null,
     });
     this.persistWorkspaceState(nextOpenFiles, this.state.selectedFilePath);
+  }
+
+  private readonly handleExplorerUrlStateChange = (): void => {
+    const urlState = readExplorerUrlStateFromLocation(window.location);
+    const nextSearchSettings = {
+      isRegex: urlState.regex ?? this.state.searchSettings.isRegex,
+      matchCase: urlState.matchCase ?? this.state.searchSettings.matchCase,
+      wholeWord: urlState.wholeWord ?? this.state.searchSettings.wholeWord,
+    };
+    const nextSearchQuery = urlState.searchQuery ?? "";
+    this.searchDraftValue = nextSearchQuery;
+    this.setState({
+      activeSidebarSection:
+        urlState.activeSidebarSection ?? this.state.activeSidebarSection,
+      isSidebarVisible: urlState.activeSidebarSection
+        ? true
+        : this.state.isSidebarVisible,
+      searchQuery: nextSearchQuery,
+      searchSettings: nextSearchSettings,
+    });
+
+    if (nextSearchQuery.trim().length > 0) {
+      this.queueSearch(nextSearchQuery, nextSearchSettings);
+    } else {
+      this.clearSearchDebounce();
+      this.setState({
+        searchResults: [],
+        searchIsLoading: false,
+        collapsedSearchResultPaths: [],
+        hiddenSearchResultPaths: [],
+      });
+    }
+
+    if (
+      urlState.selectedFilePath !== null &&
+      urlState.selectedFilePath !== this.state.selectedFilePath
+    ) {
+      void this.handleFilePathSelect(
+        urlState.selectedFilePath,
+        false,
+        undefined,
+        false,
+      );
+    }
+  };
+
+  private writeExplorerUrlState(
+    patch: ExplorerUrlPatch,
+    mode: "push" | "replace",
+  ): void {
+    writeBrowserUrlState(
+      applyExplorerUrlPatch(
+        `${window.location.pathname}${window.location.search}`,
+        patch,
+      ),
+      mode,
+    );
   }
 
   private handleTabContextMenu(event: Event, path: string): void {
