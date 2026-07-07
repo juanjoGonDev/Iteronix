@@ -103,3 +103,13 @@ curl -X POST http://localhost:4000/ai/skills/run \
 - `docs/DEPLOYMENT.md`: deployment and infrastructure notes.
 - `docs/AI_WORKBENCH.md`: workbench architecture and API details.
 - `CHANGELOG.md`: release notes template.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=juanjoGonDev%2FIteronix&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&theme=dark&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
+ </picture>
+</a>
