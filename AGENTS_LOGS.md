@@ -3925,6 +3925,10 @@
   - `corepack pnpm@10.18.3 quality` timed out once locally at 124s, then PASS with a longer timeout, then PASS again after docs.
   - `corepack pnpm@10.18.3 build` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
 - Issues/Risks
   - Local git-related tests still emit expected Windows CRLF warnings in temporary repositories.
 - Next
@@ -3947,6 +3951,10 @@
   - `corepack pnpm@10.18.3 typecheck` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
 - Issues/Risks
   - Full repository gates and CI verification still pending for this slice.
 - Next
@@ -4027,6 +4035,10 @@
   - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-editor-state.test.ts` failed first on missing helper, then PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui build` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
 - Issues/Risks
   - Full repository gates and CI verification still pending for this slice.
 - Next
@@ -4102,6 +4114,10 @@
   - `corepack pnpm@10.18.3 typecheck` PASS.
   - `corepack pnpm@10.18.3 lint` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
 - Issues/Risks
   - First UI commit attempt failed the pre-commit hook on validate-workflows complexity; refactored route handling and recommitted with hooks enabled.
 - Next
@@ -4216,6 +4232,10 @@
   - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-edit-history-state.test.ts` failed first, then PASS.
   - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
   - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
 - Issues/Risks
   - Full repository gates, commit, push and remote CI/CodeQL verification pending.
 - Next
@@ -4258,3 +4278,27 @@
   - Existing screens likely need an audit because many modal/section states are still component-local.
 - Next
   - Implement URL synchronization helpers and apply them screen-by-screen, starting with Workflows modals/history views.
+
+### 2026-07-07 18:39 (Europe/Madrid) — Workflows URL-State Deep Links
+
+- Summary
+  - Added typed URL query state for Workflows and restored edit history, node editor and selected execution context after browser reload.
+- Decisions
+  - Keep Workflows deep UI state in `/workflows` query parameters (`panel`, `modal`, `node`, `execution`, `version`) so the existing Router path matcher remains unchanged.
+  - Treat version-details closing from edit history as returning to the edit-history URL state instead of dropping the parent modal context.
+- Changes
+  - `apps/web-ui/src/screens/workflows-url-state.ts` owns typed read/write helpers with unit coverage.
+  - `apps/web-ui/src/screens/Workflows.ts` syncs sidebar history, node editor, edit history, version details and selected execution to URL state and applies it on mount/popstate/catalog reload.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates deep-link reload restoration with screenshots for node editor, edit history, selected execution and historical node output.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts` failed first, then PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS after full gates.
+- Issues/Risks
+  - Commit, push and remote CI/CodeQL verification still pending.
+- Next
+  - Commit, push with hooks enabled and verify GitHub CI/CodeQL.

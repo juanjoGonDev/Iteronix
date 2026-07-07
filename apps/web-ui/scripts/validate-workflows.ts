@@ -555,6 +555,18 @@ async function validateWorkflowsScreen(): Promise<void> {
     const responseCardTestId = await readNodeCardTestIdByText(page, "Response");
     await doubleClickByTestId(page, responseCardTestId);
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await waitForUrlSearchParam(page, "modal", "node-editor");
+    await waitForUrlSearchParamExists(page, "node");
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-node-editor-reload",
+      artifactName: "workflows",
+    });
     await waitForPageText(
       page,
       "Execute this step to inspect the current node output.",
@@ -587,11 +599,22 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
     await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryOpen);
     await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+    await waitForUrlSearchParam(page, "modal", "edit-history");
     await waitForPageText(page, "Current draft");
     await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryUndo);
     await waitForPageText(page, "redo checkpoint");
     await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryRedo);
     await waitForMissingPageText(page, "redo checkpoint");
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-edit-history-reload",
+      artifactName: "workflows",
+    });
     await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryClose);
     await waitForMissingTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
 
@@ -1041,12 +1064,47 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPinnedId}`,
     );
+    await waitForUrlSearchParam(page, "panel", "history");
+    await waitForUrlSearchParam(
+      page,
+      "execution",
+      ValidationText.ExecutionPinnedId,
+    );
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForExecutionCardSelected(
+      page,
+      `${WorkflowSelector.ExecutionCardPrefix}${ValidationText.ExecutionPinnedId}`,
+    );
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-execution-reload",
+      artifactName: "workflows",
+    });
     await waitForPageText(page, "Autosave");
     const selectedHistoryResponseCardTestId = await readNodeCardTestIdByText(
       page,
       "Response",
     );
     await mouseClickByTestId(page, selectedHistoryResponseCardTestId);
+    await waitForUrlSearchParam(page, "modal", "node-editor");
+    await waitForUrlSearchParam(
+      page,
+      "execution",
+      ValidationText.ExecutionPinnedId,
+    );
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-history-node-reload",
+      artifactName: "workflows",
+    });
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await clickByTestId(page, WorkflowSelector.NodeModalPrevious);
     await waitForPageText(page, "2026-05-06T08:30:00.000Z");
@@ -2519,6 +2577,39 @@ async function waitForPageTexts(
     },
   );
 }
+
+async function waitForUrlSearchParam(
+  page: Page,
+  key: string,
+  expectedValue: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => new URL(page.url()).searchParams.get(key) === expectedValue,
+    `url search param ${key}=${expectedValue}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForUrlSearchParamExists(
+  page: Page,
+  key: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const value = new URL(page.url()).searchParams.get(key);
+      return value !== null && value.trim().length > 0;
+    },
+    `url search param ${key} exists`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function waitForExecutionWithOutput(
   state: StubServerState,
   expectedNeedle: string,

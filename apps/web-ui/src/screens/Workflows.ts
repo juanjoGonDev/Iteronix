@@ -44,6 +44,14 @@ import {
   type WorkflowVersionImportCandidateRecord,
 } from "./workflows-version-import-state.js";
 import {
+  WorkflowsUrlModal,
+  WorkflowsUrlPanel,
+  applyWorkflowsUrlPatch,
+  readWorkflowsUrlStateFromLocation,
+  type WorkflowsUrlPatch,
+  type WorkflowsUrlState,
+} from "./workflows-url-state.js";
+import {
   buildWorkflowDebugInputSources,
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
@@ -861,6 +869,7 @@ export class WorkflowsScreen extends Component<
     window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
     window.addEventListener("keyup", this.handleGlobalKeyUp);
+    window.addEventListener("popstate", this.handleWorkflowUrlStateChange);
     void this.hydrateState();
   }
 
@@ -872,6 +881,7 @@ export class WorkflowsScreen extends Component<
     window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
     window.removeEventListener("keyup", this.handleGlobalKeyUp);
+    window.removeEventListener("popstate", this.handleWorkflowUrlStateChange);
     this.cancelLiveExecutionStream();
     this.stopExecutionRefreshPolling();
   }
@@ -1037,7 +1047,7 @@ export class WorkflowsScreen extends Component<
               variant: "secondary",
               size: "sm",
               disabled: currentWorkflow === null,
-              onClick: () => this.setState({ workflowEditHistoryOpen: true }),
+              onClick: () => this.openWorkflowEditHistory(),
               icon: "history_edu",
               children: "Edit history",
               dataset: {
@@ -1275,11 +1285,195 @@ export class WorkflowsScreen extends Component<
   }
 
   private showSidebarSection(section: SidebarSection): void {
+    this.writeWorkflowsUrlState({
+      panel: toWorkflowsUrlPanel(section),
+    });
     this.setState({
       activeSidebarSection: section,
       compactView: CompactView.Sidebar,
       desktopSidebarCollapsed: false,
     });
+  }
+
+  private writeWorkflowsUrlState(
+    patch: WorkflowsUrlPatch,
+    mode: "push" | "replace" = "push",
+  ): void {
+    const nextPath = applyWorkflowsUrlPatch(window.location.href, patch);
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (nextPath === currentPath) {
+      return;
+    }
+
+    if (mode === "replace") {
+      window.history.replaceState({}, "", nextPath);
+      return;
+    }
+
+    window.history.pushState({}, "", nextPath);
+  }
+
+  private applyWorkflowsUrlState(urlState: WorkflowsUrlState): void {
+    const panel = toSidebarSection(urlState.panel);
+    const urlSelection = this.readUrlSelection(urlState);
+    const urlExecutionNodeModal = this.readUrlExecutionNodeModal(urlState);
+    const versionDetails = this.readUrlVersionDetails(urlState);
+    const editorModalOpen =
+      urlState.modal === WorkflowsUrlModal.NodeEditor &&
+      urlSelection?.type === "node";
+    const workflowEditHistoryOpen =
+      urlState.modal === WorkflowsUrlModal.EditHistory;
+    const executionNodeModal =
+      urlState.modal === WorkflowsUrlModal.ExecutionNode
+        ? urlExecutionNodeModal
+        : null;
+    const debugExecutionId = this.readUrlDebugExecutionId(
+      urlState,
+      urlSelection,
+    );
+
+    this.setState({
+      ...(panel ? { activeSidebarSection: panel } : {}),
+      ...(panel ? { compactView: CompactView.Sidebar } : {}),
+      ...(urlSelection ? { selection: urlSelection } : {}),
+      debugExecutionId,
+      editorModalOpen,
+      workflowEditHistoryOpen,
+      executionNodeModal,
+      versionDetails,
+    });
+
+    this.sanitizeWorkflowsUrlState(urlState, {
+      hasSelection: urlSelection !== null,
+      hasExecutionNodeModal: executionNodeModal !== null,
+      hasVersionDetails: versionDetails !== null,
+    });
+  }
+
+  private readUrlDebugExecutionId(
+    urlState: WorkflowsUrlState,
+    selection: WorkflowSelection | null,
+  ): string | null {
+    if (
+      urlState.executionId &&
+      this.state.executions.some(
+        (execution) => execution.id === urlState.executionId,
+      )
+    ) {
+      return urlState.executionId;
+    }
+
+    return selection?.type === "execution" ? selection.id : null;
+  }
+
+  private readUrlSelection(
+    urlState: WorkflowsUrlState,
+  ): WorkflowSelection | null {
+    if (
+      urlState.modal === WorkflowsUrlModal.NodeEditor &&
+      urlState.nodeId &&
+      this.state.draftWorkflow?.nodes.some(
+        (node) => node.id === urlState.nodeId,
+      )
+    ) {
+      return { type: "node", id: urlState.nodeId };
+    }
+
+    if (
+      urlState.executionId &&
+      this.state.executions.some(
+        (execution) => execution.id === urlState.executionId,
+      )
+    ) {
+      return { type: "execution", id: urlState.executionId };
+    }
+
+    if (
+      urlState.nodeId &&
+      this.state.draftWorkflow?.nodes.some(
+        (node) => node.id === urlState.nodeId,
+      )
+    ) {
+      return { type: "node", id: urlState.nodeId };
+    }
+
+    return null;
+  }
+
+  private readUrlExecutionNodeModal(
+    urlState: WorkflowsUrlState,
+  ): ExecutionNodeModalState | null {
+    if (!urlState.nodeId) {
+      return null;
+    }
+
+    const nodeExists =
+      this.state.draftWorkflow?.nodes.some(
+        (node) => node.id === urlState.nodeId,
+      ) ?? false;
+    if (!nodeExists) {
+      return null;
+    }
+
+    const executionId =
+      urlState.executionId ??
+      (this.state.selection.type === "execution"
+        ? this.state.selection.id
+        : null) ??
+      this.state.liveExecution?.workflowRunId ??
+      null;
+    if (!executionId) {
+      return null;
+    }
+
+    return readWorkflowExecutionNodeOpenState({
+      executionId,
+      nodeId: urlState.nodeId,
+    }).executionNodeModal;
+  }
+
+  private readUrlVersionDetails(
+    urlState: WorkflowsUrlState,
+  ): WorkflowVersionDetailsState | null {
+    if (
+      urlState.modal !== WorkflowsUrlModal.VersionDetails ||
+      !urlState.versionId ||
+      !this.state.workflowVersions.some(
+        (version) => version.id === urlState.versionId,
+      )
+    ) {
+      return null;
+    }
+
+    return { versionId: urlState.versionId };
+  }
+
+  private sanitizeWorkflowsUrlState(
+    urlState: WorkflowsUrlState,
+    state: {
+      hasSelection: boolean;
+      hasExecutionNodeModal: boolean;
+      hasVersionDetails: boolean;
+    },
+  ): void {
+    if (
+      (urlState.modal === WorkflowsUrlModal.NodeEditor &&
+        !state.hasSelection) ||
+      (urlState.modal === WorkflowsUrlModal.ExecutionNode &&
+        !state.hasExecutionNodeModal) ||
+      (urlState.modal === WorkflowsUrlModal.VersionDetails &&
+        !state.hasVersionDetails)
+    ) {
+      this.writeWorkflowsUrlState(
+        {
+          modal: null,
+          nodeId: null,
+          versionId: null,
+          executionId: state.hasSelection ? urlState.executionId : null,
+        },
+        "replace",
+      );
+    }
   }
 
   private renderSidebarPanel(): HTMLElement {
@@ -2130,10 +2324,9 @@ export class WorkflowsScreen extends Component<
                         this.renderWorkflowVersionActionButton({
                           label: "Details",
                           testId: `${WorkflowScreenSelector.WorkflowVersionDetailsPrefix}${version.id}`,
-                          onClick: () =>
-                            this.setState({
-                              versionDetails: { versionId: version.id },
-                            }),
+                          onClick: () => {
+                            this.openWorkflowVersionDetails(version.id);
+                          },
                         }),
                         this.renderWorkflowVersionActionButton({
                           label: "Restore",
@@ -2206,6 +2399,22 @@ export class WorkflowsScreen extends Component<
         .toLowerCase()
         .includes(query),
     );
+  }
+
+  private openWorkflowEditHistory(): void {
+    this.writeWorkflowsUrlState({
+      modal: WorkflowsUrlModal.EditHistory,
+    });
+    this.setState({ workflowEditHistoryOpen: true });
+  }
+
+  private closeWorkflowEditHistory(): void {
+    this.writeWorkflowsUrlState({
+      modal: null,
+      nodeId: null,
+      versionId: null,
+    });
+    this.setState({ workflowEditHistoryOpen: false });
   }
 
   private renderWorkflowVersionDetailsModal(): HTMLElement | string {
@@ -2837,7 +3046,21 @@ export class WorkflowsScreen extends Component<
   }
 
   private closeWorkflowVersionDetails(): void {
+    this.writeWorkflowsUrlState({
+      modal: this.state.workflowEditHistoryOpen
+        ? WorkflowsUrlModal.EditHistory
+        : null,
+      versionId: null,
+    });
     this.setState({ versionDetails: null });
+  }
+
+  private openWorkflowVersionDetails(versionId: string): void {
+    this.writeWorkflowsUrlState({
+      modal: WorkflowsUrlModal.VersionDetails,
+      versionId,
+    });
+    this.setState({ versionDetails: { versionId } });
   }
 
   private updateWorkflowVersionDetails(input: {
@@ -3104,6 +3327,12 @@ export class WorkflowsScreen extends Component<
     }
 
     const draftWorkflow = stripDefinitionVersionFields(version.snapshot);
+    this.writeWorkflowsUrlState({
+      modal: this.state.workflowEditHistoryOpen
+        ? WorkflowsUrlModal.EditHistory
+        : null,
+      versionId: null,
+    });
     this.setState({
       draftWorkflow,
       dirtyWorkflow: true,
@@ -3424,8 +3653,7 @@ export class WorkflowsScreen extends Component<
                     testId: WorkflowScreenSelector.WorkflowEditHistoryClose,
                     icon: "×",
                     disabled: false,
-                    onClick: () =>
-                      this.setState({ workflowEditHistoryOpen: false }),
+                    onClick: () => this.closeWorkflowEditHistory(),
                   }),
                 ]),
               ],
@@ -5064,6 +5292,13 @@ export class WorkflowsScreen extends Component<
       selection?.type === "node" && this.state.selection.type === "execution"
         ? this.state.selection.id
         : this.state.debugExecutionId;
+    if (selection?.type === "node") {
+      this.writeWorkflowsUrlState({
+        modal: WorkflowsUrlModal.NodeEditor,
+        nodeId: selection.id,
+        executionId: debugExecutionId,
+      });
+    }
     this.setState({
       ...(selection ? { selection } : {}),
       debugExecutionId,
@@ -5072,6 +5307,11 @@ export class WorkflowsScreen extends Component<
   }
 
   private closeSelectionEditorModal(): void {
+    this.writeWorkflowsUrlState({
+      modal: null,
+      nodeId: null,
+      versionId: null,
+    });
     this.setState({ editorModalOpen: false });
   }
 
@@ -5239,6 +5479,11 @@ export class WorkflowsScreen extends Component<
   }
 
   private openNodeEditorModal(nodeId: string): void {
+    this.writeWorkflowsUrlState({
+      modal: WorkflowsUrlModal.NodeEditor,
+      nodeId,
+      executionId: this.state.debugExecutionId,
+    });
     this.setState({
       selection: { type: "node", id: nodeId },
       editorModalOpen: true,
@@ -6369,6 +6614,11 @@ export class WorkflowsScreen extends Component<
 
   private openExecutionNodeModal(nodeId: string): void {
     if (this.state.selection.type === "execution") {
+      this.writeWorkflowsUrlState({
+        modal: WorkflowsUrlModal.NodeEditor,
+        nodeId,
+        executionId: this.state.selection.id,
+      });
       this.setState(
         readWorkflowExecutionNodeOpenState({
           executionId: this.state.selection.id,
@@ -6379,6 +6629,11 @@ export class WorkflowsScreen extends Component<
     }
 
     if (this.state.liveExecution) {
+      this.writeWorkflowsUrlState({
+        modal: WorkflowsUrlModal.NodeEditor,
+        nodeId,
+        executionId: this.state.liveExecution.workflowRunId,
+      });
       this.setState(
         readWorkflowExecutionNodeOpenState({
           executionId: this.state.liveExecution.workflowRunId,
@@ -6389,6 +6644,10 @@ export class WorkflowsScreen extends Component<
   }
 
   private closeExecutionNodeModal(): void {
+    this.writeWorkflowsUrlState({
+      modal: null,
+      nodeId: null,
+    });
     this.setState({ executionNodeModal: null });
   }
 
@@ -6418,6 +6677,9 @@ export class WorkflowsScreen extends Component<
         ...modal,
         nodeId: nextNode.id,
       },
+    });
+    this.writeWorkflowsUrlState({
+      nodeId: nextNode.id,
     });
   }
 
@@ -11967,6 +12229,9 @@ export class WorkflowsScreen extends Component<
 
       if (currentProject) {
         await this.reloadCatalog(currentProject.id, workspaceState);
+        this.applyWorkflowsUrlState(
+          readWorkflowsUrlStateFromLocation(window.location),
+        );
         await this.refreshServerLogs();
       }
     } catch (error) {
@@ -12056,6 +12321,9 @@ export class WorkflowsScreen extends Component<
       dirtyWorkflow: draftState.dirtyWorkflow,
       dirtyAssetIds: draftState.dirtyAssetIds,
     });
+    this.applyWorkflowsUrlState(
+      readWorkflowsUrlStateFromLocation(window.location),
+    );
     this.syncExecutionRefreshPolling();
   }
 
@@ -12702,6 +12970,13 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
+    this.writeWorkflowsUrlState({
+      panel: WorkflowsUrlPanel.History,
+      executionId,
+      modal: null,
+      nodeId: null,
+      versionId: null,
+    });
     this.setState({
       selection: { type: "execution", id: executionId },
       debugExecutionId: executionId,
@@ -12835,6 +13110,11 @@ export class WorkflowsScreen extends Component<
       this.state.liveExecution !== null
     ) {
       if (this.state.selection.type === "execution") {
+        this.writeWorkflowsUrlState({
+          modal: WorkflowsUrlModal.NodeEditor,
+          nodeId,
+          executionId: this.state.selection.id,
+        });
         this.setState({
           debugExecutionId: this.state.selection.id,
           executionNodeModal: null,
@@ -14168,6 +14448,12 @@ export class WorkflowsScreen extends Component<
     this.panning = false;
     this.panOrigin = null;
     this.panViewportOrigin = null;
+  };
+
+  private readonly handleWorkflowUrlStateChange = (): void => {
+    this.applyWorkflowsUrlState(
+      readWorkflowsUrlStateFromLocation(window.location),
+    );
   };
 
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
@@ -15799,6 +16085,37 @@ const readContractPathLabel = (path: ReadonlyArray<string>): string =>
 
 const formatTimeoutMinutes = (timeoutMs: number): string =>
   `${Math.round(timeoutMs / WorkflowAssetTimeoutMinuteMs).toString()} min`;
+
+const toWorkflowsUrlPanel = (section: SidebarSection): WorkflowsUrlPanel => {
+  if (section === SidebarSection.Nodes) {
+    return WorkflowsUrlPanel.Nodes;
+  }
+  if (section === SidebarSection.Assets) {
+    return WorkflowsUrlPanel.Assets;
+  }
+  if (section === SidebarSection.History) {
+    return WorkflowsUrlPanel.History;
+  }
+  return WorkflowsUrlPanel.Workflows;
+};
+
+const toSidebarSection = (
+  panel: WorkflowsUrlPanel | null,
+): SidebarSection | null => {
+  if (panel === WorkflowsUrlPanel.Nodes) {
+    return SidebarSection.Nodes;
+  }
+  if (panel === WorkflowsUrlPanel.Assets) {
+    return SidebarSection.Assets;
+  }
+  if (panel === WorkflowsUrlPanel.History) {
+    return SidebarSection.History;
+  }
+  if (panel === WorkflowsUrlPanel.Workflows) {
+    return SidebarSection.Workflows;
+  }
+  return null;
+};
 
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" &&

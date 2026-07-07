@@ -885,3 +885,4 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
 - [x] Workflows has a reusable rootless emulation project/workflow fixture plus live screenshot QA capture path.
 
 - [ ] Project-wide UI navigation invariant: every intentional modal, drawer, tab, selected section, selected entity, and deep UI state must be URL-addressable and reload-restorable.
+  - [x] Workflows URL state restores edit history, node editor, selected execution and historical node output after reload.
