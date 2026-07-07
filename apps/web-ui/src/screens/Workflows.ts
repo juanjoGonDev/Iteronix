@@ -30,6 +30,12 @@ import {
 import type { ProjectRecord } from "../shared/workbench-types.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
+  isWorkflowVersionTimelineImportSource,
+  readDefaultWorkflowVersionImportVersionId,
+  readWorkflowVersionImportCandidates,
+  type WorkflowVersionImportCandidateRecord,
+} from "./workflows-version-import-state.js";
+import {
   buildWorkflowDebugInputSources,
   readExecutionRefreshPollingAction,
   readWorkflowExecutionIsActive,
@@ -306,6 +312,11 @@ const WorkflowScreenSelector = {
   WorkflowVersionImportPreview: "workflows-version-import-preview",
   WorkflowVersionImportPreviewMessage:
     "workflows-version-import-preview-message",
+  WorkflowVersionImportVersionSelect: "workflows-version-import-version-select",
+  WorkflowVersionImportVersionOptionPrefix:
+    "workflows-version-import-version-option-",
+  WorkflowVersionImportVersionSummary:
+    "workflows-version-import-version-summary",
   WorkflowDeleteDialog: "workflows-delete-dialog",
   WorkflowDeleteConfirm: "workflows-delete-confirm",
   NodeRenameDialog: "workflows-node-rename-dialog",
@@ -534,6 +545,9 @@ type WorkflowVersionActionDialogState =
       inputValue: string;
       preview: WorkflowVersionImportPreviewRecord;
       confirmLabel: string;
+      selectedVersionId?: string;
+      importCandidates: ReadonlyArray<WorkflowVersionImportCandidateRecord>;
+      isTimelineImport: boolean;
     }
   | {
       kind: "restore";
@@ -2560,6 +2574,9 @@ export class WorkflowsScreen extends Component<
               { className: "mt-2 text-xs leading-5 text-text-secondary" },
               [dialog.description],
             ),
+            dialog.kind === "import"
+              ? this.renderWorkflowVersionImportSelector(dialog)
+              : "",
             dialog.kind === "clone" || dialog.kind === "import"
               ? createElement(
                   "label",
@@ -2635,6 +2652,95 @@ export class WorkflowsScreen extends Component<
           ],
         ),
       ],
+    );
+  }
+
+  private renderWorkflowVersionImportSelector(
+    dialog: Extract<WorkflowVersionActionDialogState, { kind: "import" }>,
+  ): HTMLElement | string {
+    if (!dialog.isTimelineImport) {
+      return "";
+    }
+
+    const selectedCandidate =
+      this.readWorkflowVersionImportSelectedCandidate(dialog);
+    return createElement("div", { className: "mt-4 grid gap-3" }, [
+      createElement(
+        "label",
+        {
+          className:
+            "block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary",
+        },
+        [
+          "Timeline version",
+          createElement(
+            "select",
+            {
+              value: dialog.selectedVersionId ?? "",
+              className:
+                "mt-2 h-10 w-full rounded-md border border-border-dark bg-[#0b1117] px-3 text-sm text-white outline-none focus:border-blue-500",
+              dataset: {
+                testid:
+                  WorkflowScreenSelector.WorkflowVersionImportVersionSelect,
+              },
+              onChange: (event: Event) => {
+                void this.updateWorkflowVersionImportVersion(
+                  (event.target as HTMLSelectElement).value,
+                );
+              },
+            },
+            dialog.importCandidates.map((candidate) =>
+              createElement(
+                "option",
+                {
+                  key: candidate.versionId,
+                  value: candidate.versionId,
+                  dataset: {
+                    testid: `${WorkflowScreenSelector.WorkflowVersionImportVersionOptionPrefix}${candidate.versionId}`,
+                  },
+                },
+                [
+                  `v${candidate.version.toString()} · ${candidate.snapshotName}`,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      selectedCandidate
+        ? createElement(
+            "div",
+            {
+              className:
+                "rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-xs leading-5 text-blue-100",
+              dataset: {
+                testid:
+                  WorkflowScreenSelector.WorkflowVersionImportVersionSummary,
+              },
+            },
+            [
+              createElement("p", { className: "font-semibold text-white" }, [
+                `${selectedCandidate.snapshotName} · v${selectedCandidate.version.toString()}`,
+              ]),
+              createElement("p", { className: "mt-1 text-blue-100/80" }, [
+                `${selectedCandidate.createdAt} · ${selectedCandidate.summary}`,
+              ]),
+              selectedCandidate.tags.length > 0
+                ? createElement("p", { className: "mt-1 text-blue-100/80" }, [
+                    `Tags: ${selectedCandidate.tags.join(", ")}`,
+                  ])
+                : "",
+            ],
+          )
+        : "",
+    ]);
+  }
+
+  private readWorkflowVersionImportSelectedCandidate(
+    dialog: Extract<WorkflowVersionActionDialogState, { kind: "import" }>,
+  ): WorkflowVersionImportCandidateRecord | undefined {
+    return dialog.importCandidates.find(
+      (candidate) => candidate.versionId === dialog.selectedVersionId,
     );
   }
 
@@ -2743,21 +2849,34 @@ export class WorkflowsScreen extends Component<
       if (!target) {
         return;
       }
+      const selectedVersionId =
+        readDefaultWorkflowVersionImportVersionId(parsed);
+      const importCandidates = readWorkflowVersionImportCandidates(parsed);
       const preview = await this.workflowClient.previewDefinitionVersionImport({
         exported: parsed,
         targetWorkspaceId: target.workspaceId,
         targetProjectId: target.projectId,
+        ...(selectedVersionId ? { versionId: selectedVersionId } : {}),
       });
+      const isTimelineImport = isWorkflowVersionTimelineImportSource(parsed);
       this.setState({
         versionActionDialog: {
           kind: "import",
-          title: "Import workflow snapshot",
-          description:
-            "Validate the exported snapshot and choose the workflow name before creating it.",
+          title: isTimelineImport
+            ? "Import workflow timeline"
+            : "Import workflow snapshot",
+          description: isTimelineImport
+            ? "Choose a timeline version, preview the selected snapshot, and name the imported workflow."
+            : "Validate the exported snapshot and choose the workflow name before creating it.",
           rawText,
           inputValue: preview.suggestedName,
           preview,
-          confirmLabel: "Import snapshot",
+          confirmLabel: isTimelineImport
+            ? "Import selected version"
+            : "Import snapshot",
+          ...(selectedVersionId ? { selectedVersionId } : {}),
+          importCandidates,
+          isTimelineImport,
         },
         errorMessage: null,
       });
@@ -2766,6 +2885,44 @@ export class WorkflowsScreen extends Component<
         errorMessage: readErrorMessage(
           error,
           "Could not parse workflow version snapshot.",
+        ),
+      });
+    }
+  }
+
+  private async updateWorkflowVersionImportVersion(
+    selectedVersionId: string,
+  ): Promise<void> {
+    const dialog = this.state.versionActionDialog;
+    const target = this.readCurrentWorkflowRecord();
+    if (!dialog || dialog.kind !== "import" || !target) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(
+        dialog.rawText,
+      ) as WorkflowVersionImportSourceRecord;
+      const preview = await this.workflowClient.previewDefinitionVersionImport({
+        exported: parsed,
+        targetWorkspaceId: target.workspaceId,
+        targetProjectId: target.projectId,
+        versionId: selectedVersionId,
+      });
+      this.setState({
+        versionActionDialog: {
+          ...dialog,
+          selectedVersionId,
+          preview,
+          inputValue: preview.suggestedName,
+        },
+        errorMessage: null,
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not preview selected workflow timeline version.",
         ),
       });
     }
@@ -2859,6 +3016,7 @@ export class WorkflowsScreen extends Component<
       await this.importWorkflowVersionSnapshot(
         dialog.rawText,
         dialog.inputValue,
+        dialog.selectedVersionId,
       );
       return;
     }
@@ -3104,6 +3262,7 @@ export class WorkflowsScreen extends Component<
   private async importWorkflowVersionSnapshot(
     rawText: string,
     requestedName: string,
+    selectedVersionId?: string | undefined,
   ): Promise<void> {
     try {
       const parsed = JSON.parse(rawText) as WorkflowVersionImportSourceRecord;
@@ -3111,6 +3270,7 @@ export class WorkflowsScreen extends Component<
       const imported = await this.workflowClient.importDefinitionVersion({
         exported: parsed,
         ...(name.length > 0 ? { name } : {}),
+        ...(selectedVersionId ? { versionId: selectedVersionId } : {}),
       });
       await this.reloadCatalog(imported.projectId, this.state.workspaceState, {
         preserveLocalDraft: false,

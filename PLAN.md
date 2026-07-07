@@ -41,6 +41,10 @@
 - [x] Add AGENTS.md and AGENTS_LOGS.md
 - [x] Establish test structure for domain and shared packages (TDD-ready)
 
+### Workflow roadmap slices
+
+- [x] Workflows timeline-bundle import UI detects multi-version exports, previews selected versions, and preserves single-version import compatibility.
+
 Acceptance:
 
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass.

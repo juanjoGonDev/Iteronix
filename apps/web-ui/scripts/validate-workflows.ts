@@ -181,6 +181,9 @@ const WorkflowSelector = {
   WorkflowVersionImportPreview: "workflows-version-import-preview",
   WorkflowVersionImportPreviewMessage:
     "workflows-version-import-preview-message",
+  WorkflowVersionImportVersionSelect: "workflows-version-import-version-select",
+  WorkflowVersionImportVersionSummary:
+    "workflows-version-import-version-summary",
   WorkflowVersionImport: "workflows-version-import",
   WorkflowVersionCleanup: "workflows-version-cleanup",
   WorkflowVersionRetentionKeepLatest: "workflows-version-retention-keep-latest",
@@ -782,6 +785,52 @@ async function validateWorkflowsScreen(): Promise<void> {
           ),
         ),
       "Expected imported workflow with edited name.",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    const timelineImportPayload = createTimelineImportPayload(savedVersion);
+    await clickByTestId(page, WorkflowSelector.SectionHistory);
+    await setTextAreaValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportText,
+      JSON.stringify(timelineImportPayload),
+    );
+    await clickByTestId(page, WorkflowSelector.WorkflowVersionImport);
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
+    await waitForTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportVersionSelect,
+    );
+    await waitForTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportVersionSummary,
+    );
+    await page.select(
+      `[data-testid="${WorkflowSelector.WorkflowVersionImportVersionSelect}"]`,
+      "timeline-import-v1",
+    );
+    await waitForPageText(page, "Timeline selected v1");
+    await setInputValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogInput,
+      "Browser timeline imported workflow",
+    );
+    await clickByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogConfirm,
+    );
+    await waitForCondition(
+      () =>
+        Promise.resolve(
+          stubServer.state.definitions.some(
+            (definition) =>
+              definition.name === "Browser timeline imported workflow" &&
+              definition.description === "timeline-v1-description",
+          ),
+        ),
+      "Expected selected timeline version import to create a workflow.",
       {
         timeoutMs: ValidationConfig.UiPollingTimeoutMs,
         intervalMs: ValidationConfig.UiPollingIntervalMs,
@@ -1399,6 +1448,57 @@ async function handleStubRequest(
   });
 }
 
+function readVersionImportSnapshot(body: unknown): {
+  exported: Record<string, unknown>;
+  snapshot: Record<string, unknown>;
+  checksumValid: boolean;
+  schemaSupported: boolean;
+} {
+  const exported = readRequiredRecord(body, "exported");
+  const timelineVersions = exported["versions"];
+  if (Array.isArray(timelineVersions)) {
+    const requestedVersionId = readOptionalString(body, "versionId");
+    const versionRecords = timelineVersions.filter(isRecord);
+    const selectedVersion =
+      versionRecords.find(
+        (version) =>
+          requestedVersionId !== undefined &&
+          readOptionalString(version, "versionId") === requestedVersionId,
+      ) ??
+      versionRecords.reduce<Record<string, unknown> | undefined>(
+        (latest, version) => {
+          if (!latest) {
+            return version;
+          }
+          return readRequiredNumber(version, "version") >
+            readRequiredNumber(latest, "version")
+            ? version
+            : latest;
+        },
+        undefined,
+      );
+
+    if (!selectedVersion) {
+      throw new Error("Timeline import has no versions.");
+    }
+
+    const snapshot = readRequiredRecord(selectedVersion, "snapshot");
+    return {
+      exported,
+      snapshot,
+      checksumValid: typeof selectedVersion["checksum"] === "string",
+      schemaSupported: selectedVersion["schemaVersion"] === 1,
+    };
+  }
+
+  return {
+    exported,
+    snapshot: readRequiredRecord(exported, "snapshot"),
+    checksumValid: typeof exported["checksum"] === "string",
+    schemaSupported: exported["schemaVersion"] === 1,
+  };
+}
+
 function handleDefinitionVersionRequest(input: {
   requestUrl: URL;
   response: ServerResponse;
@@ -1576,12 +1676,8 @@ function handleDefinitionVersionRequest(input: {
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsPreviewImportVersion) {
-    const exported = readRequiredRecord(body, "exported");
-    const snapshot = exported["snapshot"];
-    if (!isRecord(snapshot)) {
-      writeJson(response, 400, { message: "Invalid request body" });
-      return true;
-    }
+    const { snapshot, checksumValid, schemaSupported } =
+      readVersionImportSnapshot(body);
 
     const targetWorkspaceId = readRequiredString(body, "targetWorkspaceId");
     const targetProjectId = readRequiredString(body, "targetProjectId");
@@ -1625,8 +1721,8 @@ function handleDefinitionVersionRequest(input: {
     writeJson(response, 200, {
       preview: {
         status: messages.length > 0 ? "warning" : "valid",
-        schemaSupported: exported["schemaVersion"] === 1,
-        checksumValid: typeof exported["checksum"] === "string",
+        schemaSupported,
+        checksumValid,
         workspaceMismatch,
         projectMismatch,
         workflowIdCollision,
@@ -1639,13 +1735,7 @@ function handleDefinitionVersionRequest(input: {
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsImportVersion) {
-    const exported = readRequiredRecord(body, "exported");
-
-    const snapshot = exported["snapshot"];
-    if (!isRecord(snapshot)) {
-      writeJson(response, 400, { message: "Invalid request body" });
-      return true;
-    }
+    const { snapshot } = readVersionImportSnapshot(body);
 
     const imported = {
       ...snapshot,
@@ -1875,6 +1965,69 @@ function createDefinitionVersionRecord(input: {
     version: input.version,
     createdAt: input.definition.updatedAt,
     snapshot: input.definition,
+  };
+}
+
+function createTimelineImportPayload(
+  savedVersion: StubWorkflowDefinitionVersionRecord,
+): Record<string, unknown> {
+  const firstSnapshot: StubWorkflowDefinitionRecord = {
+    ...savedVersion.snapshot,
+    name: "Timeline selected v1",
+    description: "timeline-v1-description",
+    updatedAt: "2026-05-06T08:31:00.000Z",
+  };
+  const secondSnapshot: StubWorkflowDefinitionRecord = {
+    ...savedVersion.snapshot,
+    name: "Timeline selected v2",
+    description: "timeline-v2-description",
+    updatedAt: "2026-05-06T08:32:00.000Z",
+  };
+
+  return {
+    schemaVersion: 1,
+    workflowId: savedVersion.workflowId,
+    exportedAt: "2026-05-06T08:33:00.000Z",
+    versions: [
+      {
+        schemaVersion: 1,
+        workflowId: savedVersion.workflowId,
+        versionId: "timeline-import-v1",
+        version: 1,
+        createdAt: "2026-05-06T08:31:00.000Z",
+        checksum: "1".repeat(64),
+        snapshot: firstSnapshot,
+        tags: ["seed"],
+      },
+      {
+        schemaVersion: 1,
+        workflowId: savedVersion.workflowId,
+        versionId: "timeline-import-v2",
+        version: 2,
+        createdAt: "2026-05-06T08:32:00.000Z",
+        checksum: "2".repeat(64),
+        snapshot: secondSnapshot,
+        tags: ["release"],
+      },
+    ],
+    timeline: [
+      {
+        versionId: "timeline-import-v1",
+        version: 1,
+        createdAt: "2026-05-06T08:31:00.000Z",
+        checksum: "1".repeat(64),
+        changeSummary: "Initial timeline import",
+        tags: ["seed"],
+      },
+      {
+        versionId: "timeline-import-v2",
+        version: 2,
+        createdAt: "2026-05-06T08:32:00.000Z",
+        checksum: "2".repeat(64),
+        changeSummary: "Selected timeline import",
+        tags: ["release"],
+      },
+    ],
   };
 }
 

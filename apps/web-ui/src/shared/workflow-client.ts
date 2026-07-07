@@ -239,10 +239,12 @@ export type WorkflowClient = {
     exported: WorkflowVersionImportSourceRecord;
     targetWorkspaceId: string;
     targetProjectId: string;
+    versionId?: string;
   }) => Promise<WorkflowVersionImportPreviewRecord>;
   importDefinitionVersion: (input: {
     exported: WorkflowVersionImportSourceRecord;
     name?: string;
+    versionId?: string;
   }) => Promise<WorkflowDefinitionRecord>;
   cleanupDefinitionVersions: (input: {
     workflowId: string;
@@ -393,6 +395,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
         exported: input.exported,
         targetWorkspaceId: input.targetWorkspaceId,
         targetProjectId: input.targetProjectId,
+        ...(input.versionId ? { versionId: input.versionId } : {}),
       },
       parse: parseWorkflowDefinitionImportPreviewResponse,
     }),
@@ -402,6 +405,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
       body: {
         exported: input.exported,
         ...(input.name ? { name: input.name } : {}),
+        ...(input.versionId ? { versionId: input.versionId } : {}),
       },
       parse: parseWorkflowDefinitionResponse,
     }),

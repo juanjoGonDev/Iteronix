@@ -4177,3 +4177,26 @@
 - Commands: `corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts`; `corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts`; `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/workflow-client.test.ts apps/server-api/src/workflows.test.ts packages/agents/src/workflow-versioning.test.ts`.
 - Issues/Risks: Full gates and push pending for this second slice.
 - Next: Run formatting, quality, build, workflow browser validation, then commit/push with hooks and verify remote CI/CodeQL.
+
+### 2026-07-07 10:05 (Europe/Madrid) — Workflow Timeline Import UI Polish
+
+- Summary
+  - Added a modal-first timeline-bundle import polish slice for Workflows, preserving single-version snapshot import compatibility.
+- Decisions
+  - Keep timeline bundle detection in a small UI state helper and pass the selected version id through the existing preview/import API contract.
+  - Keep browser validation server stubs timeline-aware so the UI path verifies non-default version selection before import.
+- Changes
+  - `apps/web-ui/src/screens/workflows-version-import-state.ts` exposes timeline import candidates and default latest-version selection.
+  - `apps/web-ui/src/screens/Workflows.ts` renders a compact timeline version selector/metadata panel inside the existing import modal and previews/imports the selected version.
+  - `apps/web-ui/src/shared/workflow-client.ts` forwards optional `versionId` for import preview/import.
+  - `apps/web-ui/scripts/validate-workflows.ts` validates single-version import plus timeline-bundle selection/import.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-version-import-state.test.ts` PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS before formatting-only cleanup.
+  - `corepack pnpm@10.18.3 format:check` PASS after Prettier cleanup.
+- Issues/Risks
+  - Full build, final gates, commit, push and remote CI/CodeQL verification still pending.
+- Next
+  - Run quality/build/validate again, commit, push with hooks enabled, and verify GitHub CI/CodeQL.
