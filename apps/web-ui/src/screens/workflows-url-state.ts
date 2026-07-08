@@ -53,6 +53,8 @@ export type WorkflowsUrlState = {
   nodeId: string | null;
   executionId: string | null;
   versionId: string | null;
+  compareVersionId: string | null;
+  diffQuery: string | null;
   debugInputTab: WorkflowsUrlDebugPanelTab | null;
   debugOutputTab: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId: string | null;
@@ -70,6 +72,8 @@ export type WorkflowsUrlPatch = {
   nodeId?: string | null;
   executionId?: string | null;
   versionId?: string | null;
+  compareVersionId?: string | null;
+  diffQuery?: string | null;
   debugInputTab?: WorkflowsUrlDebugPanelTab | null;
   debugOutputTab?: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId?: string | null;
@@ -88,6 +92,8 @@ const UrlParam = {
   Node: "node",
   Execution: "execution",
   Version: "version",
+  Compare: "compare",
+  Diff: "diff",
   InputTab: "inputTab",
   OutputTab: "outputTab",
   InputSource: "inputSource",
@@ -107,6 +113,8 @@ export const readWorkflowsUrlState = (urlInput: string): WorkflowsUrlState => {
     nodeId: readNonEmptyParam(url.searchParams.get(UrlParam.Node)),
     executionId: readNonEmptyParam(url.searchParams.get(UrlParam.Execution)),
     versionId: readNonEmptyParam(url.searchParams.get(UrlParam.Version)),
+    compareVersionId: readNonEmptyParam(url.searchParams.get(UrlParam.Compare)),
+    diffQuery: readNonEmptyParam(url.searchParams.get(UrlParam.Diff)),
     debugInputTab: readDebugPanelTab(url.searchParams.get(UrlParam.InputTab)),
     debugOutputTab: readDebugPanelTab(url.searchParams.get(UrlParam.OutputTab)),
     debugInputSourceId: readNonEmptyParam(
@@ -140,6 +148,12 @@ export const applyWorkflowsUrlPatch = (
   writeOptionalParam(url.searchParams, UrlParam.Node, patch.nodeId);
   writeOptionalParam(url.searchParams, UrlParam.Execution, patch.executionId);
   writeOptionalParam(url.searchParams, UrlParam.Version, patch.versionId);
+  writeOptionalParam(
+    url.searchParams,
+    UrlParam.Compare,
+    patch.compareVersionId,
+  );
+  writeOptionalParam(url.searchParams, UrlParam.Diff, patch.diffQuery);
   writeOptionalParam(url.searchParams, UrlParam.InputTab, patch.debugInputTab);
   writeOptionalParam(
     url.searchParams,

@@ -4379,3 +4379,43 @@
   - Commit, push and remote CI/CodeQL verification remain pending.
 - Next
   - Commit, push with hooks enabled and verify GitHub CI/CodeQL.
+
+### 2026-07-08 10:42 (Europe/Madrid) — Workflows version details URL state
+
+- Summary
+  - Implemented the next focused Workflows slice: version details compare and diff filter state now survives reload.
+- Decisions
+  - Kept the slice limited to existing modal-first version details UX and query params; no new panels or unrelated UI changes.
+  - Stored only compare target and compact diff search in the URL, not snapshot payloads or raw diff contents.
+- Changes
+  - `workflows-url-state.ts` now reads/writes `compare` and `diff` params for version details.
+  - `Workflows.ts` rehydrates compare/diff state and keeps edit-history open as the parent context when restoring a version-details URL.
+  - `validate-workflows.ts` now reload-validates version details compare/diff state and captures a screenshot.
+  - URL-state registry and docs include the new Workflows params.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts` failed first, then PASS after implementation.
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts apps/web-ui/src/shared/url-state-registry.test.ts` PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed once because reload restored the details modal without edit-history parent context, then PASS after keeping the parent open.
+- Issues/Risks
+  - Full root gates, commit, push and CI/CodeQL verification pending.
+- Next
+  - Run format:check, quality, build, validate:workflows; commit and push with hooks; verify CI/CodeQL.
+
+### 2026-07-08 10:47 (Europe/Madrid) — Workflows version details validation
+
+- Summary
+  - Completed local validation for the Workflows version-details URL-state slice.
+- Decisions
+  - Kept the browser validation focused on the affected Workflows route because the slice only changes Workflows version-details state and shared URL policy metadata.
+- Changes
+  - No additional code changes after validation; formatter normalized logs, URL-state helper file and docs.
+- Commands
+  - `corepack pnpm@10.18.3 format:check` PASS after Prettier normalization.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+- Issues/Risks
+  - Commit, push and CI/CodeQL verification pending.
+- Next
+  - Commit and push with hooks enabled, then verify GitHub CI/CodeQL.

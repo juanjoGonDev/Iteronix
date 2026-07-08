@@ -17,6 +17,8 @@ describe("workflows URL state", () => {
       nodeId: null,
       executionId: null,
       versionId: null,
+      compareVersionId: null,
+      diffQuery: null,
       debugInputTab: null,
       debugOutputTab: null,
       debugInputSourceId: null,
@@ -141,6 +143,25 @@ describe("workflows URL state", () => {
     });
   });
 
+  it("writes version compare and diff query state", () => {
+    const nextUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.VersionDetails,
+      versionId: "version-2",
+      compareVersionId: "version-1",
+      diffQuery: "pinned output",
+    });
+
+    expect(nextUrl).toBe(
+      "/workflows?modal=version-details&version=version-2&compare=version-1&diff=pinned+output",
+    );
+    expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
+      modal: WorkflowsUrlModal.VersionDetails,
+      versionId: "version-2",
+      compareVersionId: "version-1",
+      diffQuery: "pinned output",
+    });
+  });
+
   it("clears modal scoped params without clearing the selected execution", () => {
     const nextUrl = applyWorkflowsUrlPatch(
       "http://localhost/workflows?panel=history&execution=execution-1&modal=node-editor&node=node-1",
@@ -148,6 +169,8 @@ describe("workflows URL state", () => {
         modal: null,
         nodeId: null,
         versionId: null,
+        compareVersionId: null,
+        diffQuery: null,
         editor: null,
         debugInputTab: null,
         debugOutputTab: null,

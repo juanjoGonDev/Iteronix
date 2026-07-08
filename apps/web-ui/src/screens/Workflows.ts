@@ -1331,7 +1331,9 @@ export class WorkflowsScreen extends Component<
       urlState.modal === WorkflowsUrlModal.NodeEditor &&
       urlSelection?.type === "node";
     const workflowEditHistoryOpen =
-      urlState.modal === WorkflowsUrlModal.EditHistory;
+      urlState.modal === WorkflowsUrlModal.EditHistory ||
+      versionDetails !== null ||
+      urlVersionActionDialog !== null;
     const executionNodeModal =
       urlState.modal === WorkflowsUrlModal.ExecutionNode
         ? urlExecutionNodeModal
@@ -1568,7 +1570,22 @@ export class WorkflowsScreen extends Component<
       return null;
     }
 
-    return { versionId: urlState.versionId };
+    const versionDetails: WorkflowVersionDetailsState = {
+      versionId: urlState.versionId,
+    };
+    if (
+      urlState.compareVersionId &&
+      (urlState.compareVersionId === "draft" ||
+        this.state.workflowVersions.some(
+          (version) => version.id === urlState.compareVersionId,
+        ))
+    ) {
+      versionDetails.compareVersionId = urlState.compareVersionId;
+    }
+    if (urlState.diffQuery) {
+      versionDetails.diffQuery = urlState.diffQuery;
+    }
+    return versionDetails;
   }
 
   private sanitizeWorkflowsUrlState(
@@ -1596,6 +1613,8 @@ export class WorkflowsScreen extends Component<
           modal: null,
           nodeId: null,
           versionId: null,
+          compareVersionId: null,
+          diffQuery: null,
           executionId: state.hasSelection ? urlState.executionId : null,
           editor: null,
           deepEditorTab: null,
@@ -3184,6 +3203,8 @@ export class WorkflowsScreen extends Component<
         ? WorkflowsUrlModal.EditHistory
         : null,
       versionId: null,
+      compareVersionId: null,
+      diffQuery: null,
       versionAction: null,
     });
     this.setState({ versionDetails: null, versionActionDialog: null });
@@ -3193,6 +3214,8 @@ export class WorkflowsScreen extends Component<
     this.writeWorkflowsUrlState({
       modal: WorkflowsUrlModal.VersionDetails,
       versionId,
+      compareVersionId: null,
+      diffQuery: null,
     });
     this.setState({ versionDetails: { versionId } });
   }
@@ -3211,6 +3234,17 @@ export class WorkflowsScreen extends Component<
     if (input.diffQuery !== undefined) {
       versionDetails.diffQuery = input.diffQuery;
     }
+    this.writeWorkflowsUrlState(
+      {
+        modal: WorkflowsUrlModal.VersionDetails,
+        versionId: input.versionId,
+        compareVersionId: versionDetails.compareVersionId ?? null,
+        diffQuery: versionDetails.diffQuery?.trim()
+          ? versionDetails.diffQuery
+          : null,
+      },
+      "replace",
+    );
     this.setState({ versionDetails });
   }
 

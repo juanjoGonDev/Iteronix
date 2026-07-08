@@ -725,8 +725,25 @@ async function validateWorkflowsScreen(): Promise<void> {
       WorkflowSelector.WorkflowVersionDiffSearch,
       "nodes",
     );
+    await waitForUrlSearchParam(page, "diff", "nodes");
     await waitForPageText(page, "nodes");
     await waitForTestId(page, WorkflowSelector.WorkflowVersionCompareSelect);
+    await selectValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionCompareSelect,
+      "draft",
+    );
+    await waitForUrlSearchParam(page, "compare", "draft");
+    await page.reload({ waitUntil: "networkidle0" });
+    await waitForTestId(page, WorkflowSelector.WorkflowVersionDetailsModal);
+    await waitForUrlSearchParam(page, "diff", "nodes");
+    await waitForUrlSearchParam(page, "compare", "draft");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-version-details-url-compare",
+      artifactName: "workflows",
+    });
     await waitForTestId(page, WorkflowSelector.WorkflowVersionCopyToEditor);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionRestoreMetadata);
     await waitForTestId(page, WorkflowSelector.WorkflowVersionRestorePinned);

@@ -65,6 +65,8 @@ const UrlStatePolicies = [
       "node",
       "execution",
       "version",
+      "compare",
+      "diff",
       "inputTab",
       "outputTab",
       "inputSource",
