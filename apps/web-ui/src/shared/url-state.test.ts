@@ -6,6 +6,7 @@ import {
   readEnumUrlParam,
   readListUrlParam,
   readNonEmptyUrlParam,
+  sanitizeUrlStateUrl,
 } from "./url-state.js";
 
 describe("url state helpers", () => {
@@ -40,5 +41,19 @@ describe("url state helpers", () => {
         profile: null,
       }),
     ).toBe("/settings?tab=provider");
+  });
+
+  it("strips sensitive parameter names from URL state operations", () => {
+    expect(
+      sanitizeUrlStateUrl(
+        "/settings?tab=provider&apiKey=secret&token=secret&password=secret",
+      ),
+    ).toBe("/settings?tab=provider");
+
+    expect(
+      applyUrlStatePatch("/settings?secret=1&tab=general", "/settings", {
+        profile: "safe-profile",
+      }),
+    ).toBe("/settings?tab=general&profile=safe-profile");
   });
 });

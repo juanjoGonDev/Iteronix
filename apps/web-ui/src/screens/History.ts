@@ -172,6 +172,7 @@ export class HistoryScreen extends Component<
             variant:
               this.state.selectedKind === "run" ? "primary" : "secondary",
             size: "sm",
+            "data-testid": "history-kind-run",
             onClick: () => this.selectFirst("run"),
             children: `Runs ${this.state.history.runs.length}`,
           }),
@@ -179,6 +180,7 @@ export class HistoryScreen extends Component<
             variant:
               this.state.selectedKind === "eval" ? "primary" : "secondary",
             size: "sm",
+            "data-testid": "history-kind-eval",
             onClick: () => this.selectFirst("eval"),
             children: `Evals ${this.state.history.evals.length}`,
           }),
@@ -668,6 +670,21 @@ const pickInitialSelection = (
   };
 };
 
+const pickValidRunSourceId = (
+  run: WorkbenchRunHistoryRecord,
+  requestedSourceId: string | null,
+): string | null => {
+  if (requestedSourceId === null) {
+    return null;
+  }
+
+  const finalResult = run.kind === "skill" ? run.result : run.result.final;
+  const sourceExists = finalResult.evidenceReport.retrievedSources.some(
+    (source) => source.sourceId === requestedSourceId,
+  );
+  return sourceExists ? requestedSourceId : null;
+};
+
 const pickInitialSelectionFromUrl = (
   history: WorkbenchHistoryState,
 ): {
@@ -684,16 +701,15 @@ const pickInitialSelectionFromUrl = (
   }
 
   const urlState = readHistoryUrlStateFromLocation(window.location);
-  if (
-    urlState.selectedKind === "run" &&
-    urlState.selectedId !== null &&
-    history.runs.some((run) => run.id === urlState.selectedId)
-  ) {
-    return {
-      kind: "run",
-      id: urlState.selectedId,
-      sourceId: urlState.selectedEvidenceSourceId,
-    };
+  if (urlState.selectedKind === "run" && urlState.selectedId !== null) {
+    const run = history.runs.find((item) => item.id === urlState.selectedId);
+    if (run) {
+      return {
+        kind: "run",
+        id: urlState.selectedId,
+        sourceId: pickValidRunSourceId(run, urlState.selectedEvidenceSourceId),
+      };
+    }
   }
 
   if (

@@ -4331,3 +4331,51 @@
 - Commands: `pnpm format:check` passed; `pnpm quality` passed after removing unused exports/imports surfaced by strict checks; screen validations passed during implementation for Settings, Projects git workspace, Explorer, Workflows, Kanban, and History.
 - Issues/Risks: Existing Settings and Workflows browser validators needed timing/assertion hardening because URL-restored tabs and import dialogs now persist accurately across reload/state transitions.
 - Next: Re-run full build and browser validation set, then commit and push with hooks enabled.
+
+### 2026-07-08 09:40 (Europe/Madrid) — URL-addressable UI state governance
+
+- Summary
+  - Finalized the project-wide URL state governance layer before closing the URL-addressable UI invariant.
+- Decisions
+  - Kept query params as the only URL-state transport and documented Overview/Dashboard as no-state until real reload-useful state exists.
+  - Centralized sensitive query cleanup in shared URL helpers instead of duplicating per screen.
+- Changes
+  - Added a route policy registry for URL-state coverage, allowed params, forbidden state, and route restore rationale.
+  - Added defensive URL sanitization for API keys, tokens, secrets, passwords, credentials, bearer and authorization-like params on startup and writes.
+  - Hardened Projects path parsing against UNC-style paths.
+  - Hardened History evidence-source selection so invalid source IDs fall back instead of staying stale.
+  - Expanded Kanban and History browser validations with invalid fallback and back/forward restoration screenshots.
+  - Added `docs/url-addressable-ui-state.md` as the operational checklist.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/url-state.test.ts apps/web-ui/src/shared/url-state-registry.test.ts`
+- Issues/Risks
+  - Full validation and remote CI verification still pending in this change set.
+- Next
+  - Run focused tests, format/quality/build, all URL-relevant browser validators, then commit/push with hooks and verify CI/CodeQL.
+
+### 2026-07-08 10:25 (Europe/Madrid) — URL-addressable UI final validation
+
+- Summary
+  - Completed the final local validation sweep for URL-addressable UI state governance.
+- Decisions
+  - No extra feature scope added after the governance layer; only validator stabilization for Workflows timeline import was required.
+- Changes
+  - Stabilized the Workflows timeline import browser validator so the selected version preview cannot overwrite the custom clone/import name during the test.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/shared/url-state.test.ts apps/web-ui/src/shared/url-state-registry.test.ts apps/web-ui/src/screens/projects-url-state.test.ts apps/web-ui/src/screens/history-url-state.test.ts apps/web-ui/src/screens/kanban-url-state.test.ts` PASS.
+  - `corepack pnpm@10.18.3 format:check` PASS.
+  - `corepack pnpm@10.18.3 quality` PASS.
+  - `corepack pnpm@10.18.3 build` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:settings` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:git-workspace` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:explorer` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:kanban` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:history` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:source-linking` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:quality-gates` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:server-persistence` PASS.
+- Issues/Risks
+  - Commit, push and remote CI/CodeQL verification remain pending.
+- Next
+  - Commit, push with hooks enabled and verify GitHub CI/CodeQL.

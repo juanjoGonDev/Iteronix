@@ -216,6 +216,40 @@ async function validateHistoryUrlState(): Promise<void> {
       suffix: "history-run-source-reload",
       artifactName: "history",
     });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.Route}?kind=run&id=${RunId}&source=missing-source&secret=hidden`,
+      { waitUntil: "networkidle0" },
+    );
+    await waitForPageText(page, "History selected detail restored");
+    await waitForLocation(
+      page,
+      `${ValidationConfig.Route}?kind=run&id=${RunId}`,
+    );
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "history-invalid-source-fallback",
+      artifactName: "history",
+    });
+    await clickSelector(page, '[data-testid="history-kind-eval"]');
+    await clickSelector(page, '[data-testid="history-eval-eval-url-1"]');
+    await waitForPageText(page, "case-url-1");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "history-eval-pushstate",
+      artifactName: "history",
+    });
+    await page.goBack({ waitUntil: "networkidle0" });
+    await waitForPageText(page, "History selected detail restored");
+    await page.goForward({ waitUntil: "networkidle0" });
+    await waitForPageText(page, "case-url-1");
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "history-eval-forwardstate",
+      artifactName: "history",
+    });
     console.log("History URL validation passed.");
   } finally {
     await browser?.close();
@@ -311,6 +345,37 @@ async function waitForPageText(page: Page, value: string): Promise<void> {
       intervalMs: ValidationConfig.PollingIntervalMs,
     },
   );
+}
+
+async function waitForLocation(
+  page: Page,
+  expectedPath: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const location = await page.evaluate(
+        () => `${window.location.pathname}${window.location.search}`,
+      );
+      return location === expectedPath;
+    },
+    `location ${expectedPath}`,
+    {
+      timeoutMs: ValidationConfig.PollingTimeoutMs,
+      intervalMs: ValidationConfig.PollingIntervalMs,
+    },
+  );
+}
+
+async function clickSelector(page: Page, selector: string): Promise<void> {
+  await waitForCondition(
+    async () => (await page.$(selector)) !== null,
+    `selector ${selector}`,
+    {
+      timeoutMs: ValidationConfig.PollingTimeoutMs,
+      intervalMs: ValidationConfig.PollingIntervalMs,
+    },
+  );
+  await page.click(selector);
 }
 
 async function closeServer(

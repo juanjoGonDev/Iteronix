@@ -892,3 +892,6 @@ Sistema de versionado de prompts con trazabilidad entre prompts, variables de en
   - [x] Explorer URL state restores active section, selected/open relative file path, search query, and search flags without absolute paths or file contents.
   - [x] Kanban URL state restores the selected task modal and clears invalid task IDs safely.
   - [x] History URL state restores selected run/evaluation and evidence source with a valid-item fallback.
+  - [x] Shared URL registry documents every route policy, allowed query params, forbidden state, and Overview/Dashboard no-state rationale.
+  - [x] Shared URL helpers sanitize sensitive query parameter names on startup and every URL-state write.
+  - [x] Kanban and History browser validations now cover invalid URL fallback plus browser back/forward restoration.

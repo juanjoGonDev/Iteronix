@@ -897,11 +897,17 @@ async function validateWorkflowsScreen(): Promise<void> {
       page,
       WorkflowSelector.WorkflowVersionImportVersionSummary,
     );
-    await page.select(
-      `[data-testid="${WorkflowSelector.WorkflowVersionImportVersionSelect}"]`,
+    await selectValueByTestId(
+      page,
+      WorkflowSelector.WorkflowVersionImportVersionSelect,
       "timeline-import-v1",
     );
     await waitForPageText(page, "Timeline selected v1");
+    await waitForInputToContain(
+      page,
+      WorkflowSelector.WorkflowVersionActionDialogInput,
+      "Timeline selected v1",
+    );
     await setInputValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionActionDialogInput,

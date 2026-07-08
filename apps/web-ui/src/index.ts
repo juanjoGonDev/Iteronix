@@ -11,6 +11,7 @@ import {
   ROUTES,
 } from "./shared/constants.js";
 import { router } from "./shared/Router.js";
+import { sanitizeBrowserUrlState } from "./shared/url-state.js";
 import { installClientLogForwarder } from "./shared/logger-impl.js";
 import {
   ProjectSessionEventName,
@@ -82,6 +83,7 @@ export class App extends Component<AppProps, AppState> {
     });
 
     installClientLogForwarder();
+    sanitizeBrowserUrlState();
     this.setupRouter();
 
     console.info("Application started", {

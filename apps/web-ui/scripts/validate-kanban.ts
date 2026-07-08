@@ -167,6 +167,36 @@ async function validateKanbanUrlState(): Promise<void> {
       suffix: "kanban-task-modal-reload",
       artifactName: "kanban",
     });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.Route}?task=missing-task&token=secret`,
+      { waitUntil: "networkidle0" },
+    );
+    await waitForNoSelector(page, '[data-testid="kanban-task-modal"]');
+    await waitForLocation(page, `${ValidationConfig.Route}`);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "kanban-invalid-task-fallback",
+      artifactName: "kanban",
+    });
+    await clickSelector(page, `[data-testid="kanban-task-${Task.id}"]`);
+    await waitForSelector(page, '[data-testid="kanban-task-modal"]');
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "kanban-task-modal-pushstate",
+      artifactName: "kanban",
+    });
+    await page.goBack({ waitUntil: "networkidle0" });
+    await waitForNoSelector(page, '[data-testid="kanban-task-modal"]');
+    await page.goForward({ waitUntil: "networkidle0" });
+    await waitForSelector(page, '[data-testid="kanban-task-modal"]');
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "kanban-task-modal-forwardstate",
+      artifactName: "kanban",
+    });
     console.log("Kanban URL validation passed.");
   } finally {
     await browser?.close();
@@ -290,6 +320,41 @@ async function waitForSelector(page: Page, selector: string): Promise<void> {
       intervalMs: ValidationConfig.PollingIntervalMs,
     },
   );
+}
+
+async function waitForNoSelector(page: Page, selector: string): Promise<void> {
+  await waitForCondition(
+    async () => (await page.$(selector)) === null,
+    `missing selector ${selector}`,
+    {
+      timeoutMs: ValidationConfig.PollingTimeoutMs,
+      intervalMs: ValidationConfig.PollingIntervalMs,
+    },
+  );
+}
+
+async function waitForLocation(
+  page: Page,
+  expectedPath: string,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const location = await page.evaluate(
+        () => `${window.location.pathname}${window.location.search}`,
+      );
+      return location === expectedPath;
+    },
+    `location ${expectedPath}`,
+    {
+      timeoutMs: ValidationConfig.PollingTimeoutMs,
+      intervalMs: ValidationConfig.PollingIntervalMs,
+    },
+  );
+}
+
+async function clickSelector(page: Page, selector: string): Promise<void> {
+  await waitForSelector(page, selector);
+  await page.click(selector);
 }
 
 async function waitForTextareaValue(page: Page, value: string): Promise<void> {

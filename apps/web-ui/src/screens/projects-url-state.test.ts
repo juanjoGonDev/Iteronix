@@ -19,7 +19,7 @@ describe("projects url state", () => {
     });
   });
 
-  it("rejects invalid diff scope and blank values", () => {
+  it("rejects invalid diff scope, blank values and unsafe paths", () => {
     expect(
       readProjectsUrlState("http://localhost/projects?run=&diff=all&path="),
     ).toEqual({
@@ -28,6 +28,12 @@ describe("projects url state", () => {
       selectedGitDiffScope: null,
       focusedGitDiffPath: null,
     });
+
+    expect(
+      readProjectsUrlState(
+        "http://localhost/projects?path=%5C%5Cserver%5Cshare%5Csecret.ts",
+      ).focusedGitDiffPath,
+    ).toBeNull();
   });
 
   it("applies projects query patches", () => {

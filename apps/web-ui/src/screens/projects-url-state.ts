@@ -75,9 +75,14 @@ export const readProjectsUrlStateFromLocation = (
 
 const readRelativePathParam = (value: string | null): string | null => {
   const path = readNonEmptyUrlParam(value);
-  if (path === null || path.includes(":") || path.startsWith("/")) {
+  if (
+    path === null ||
+    path.includes(":") ||
+    path.startsWith("/") ||
+    path.startsWith("\\\\")
+  ) {
     return null;
   }
 
-  return path;
+  return path.replaceAll("\\", "/");
 };
