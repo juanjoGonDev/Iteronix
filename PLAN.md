@@ -46,6 +46,7 @@
 - [x] Workflows timeline-bundle import UI detects multi-version exports, previews selected versions, and preserves single-version import compatibility.
 - [x] Workflows separates execution history from full-screen edit history with undo, redo, hash metadata, dates, and restore actions.
 - [x] Workflows version-details modal preserves compare target and diff search in URL state across reload while keeping edit-history parent context.
+- [x] Workflows reusable asset editor modal is URL-addressable and reload-restorable with safe invalid-asset fallback.
 
 Acceptance:
 

@@ -15,6 +15,7 @@ describe("workflows URL state", () => {
       panel: null,
       modal: null,
       nodeId: null,
+      assetId: null,
       executionId: null,
       versionId: null,
       compareVersionId: null,
@@ -52,6 +53,19 @@ describe("workflows URL state", () => {
     expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
       modal: WorkflowsUrlModal.NodeEditor,
       nodeId: "node-1",
+    });
+  });
+
+  it("writes asset editor deep links with selected asset id", () => {
+    const nextUrl = applyWorkflowsUrlPatch("http://localhost/workflows", {
+      modal: WorkflowsUrlModal.AssetEditor,
+      assetId: "asset-1",
+    });
+
+    expect(nextUrl).toBe("/workflows?modal=asset-editor&asset=asset-1");
+    expect(readWorkflowsUrlState(`http://localhost${nextUrl}`)).toMatchObject({
+      modal: WorkflowsUrlModal.AssetEditor,
+      assetId: "asset-1",
     });
   });
 
@@ -168,6 +182,7 @@ describe("workflows URL state", () => {
       {
         modal: null,
         nodeId: null,
+        assetId: null,
         versionId: null,
         compareVersionId: null,
         diffQuery: null,

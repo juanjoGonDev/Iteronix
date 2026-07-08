@@ -201,6 +201,8 @@ const WorkflowSelector = {
   WorkflowVersionCompareSelect: "workflows-version-compare-select",
   SectionNodes: "workflows-section-nodes",
   SectionAssets: "workflows-section-assets",
+  AssetCreatePrefix: "workflows-asset-create-",
+  AssetCardPrefix: "workflows-asset-card-",
   CompactCanvas: "workflows-compact-canvas",
   NodeCardPrefix: "workflows-node-card-",
   NodePalettePrefix: "workflows-node-palette-",
@@ -647,6 +649,44 @@ async function validateWorkflowsScreen(): Promise<void> {
     });
     await clickByTestId(page, WorkflowSelector.WorkflowEditHistoryClose);
     await waitForMissingTestId(page, WorkflowSelector.WorkflowEditHistoryModal);
+
+    await clickByTestId(page, WorkflowSelector.SectionAssets);
+    await waitForUrlSearchParam(page, "panel", "assets");
+    await waitForTestId(page, `${WorkflowSelector.AssetCreatePrefix}prompt`);
+    await clickByTestId(page, `${WorkflowSelector.AssetCreatePrefix}prompt`);
+    await waitForCondition(
+      () => Promise.resolve(stubServer.state.assets.length > 0),
+      "prompt asset created",
+      {
+        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+        intervalMs: ValidationConfig.UiPollingIntervalMs,
+      },
+    );
+    const promptAsset = stubServer.state.assets[0];
+    if (!promptAsset) {
+      throw new Error("Expected prompt asset after creating it.");
+    }
+    await clickByTestId(
+      page,
+      `${WorkflowSelector.AssetCardPrefix}${promptAsset.id}`,
+    );
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await waitForUrlSearchParam(page, "modal", "asset-editor");
+    await waitForUrlSearchParam(page, "asset", promptAsset.id);
+    await page.reload({
+      waitUntil: "networkidle0",
+    });
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await waitForUrlSearchParam(page, "modal", "asset-editor");
+    await waitForUrlSearchParam(page, "asset", promptAsset.id);
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-url-asset-editor-reload",
+      artifactName: "workflows",
+    });
+    await clickButtonByTitle(page, "Close editor");
+    await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
 
     await page.reload({
       waitUntil: "networkidle0",
@@ -1100,14 +1140,19 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForMissingTestId(page, WorkflowSelector.DeepEditorModal);
     await clickByTestId(page, WorkflowSelector.GuardrailNewForNode);
     await waitForCondition(
-      () => Promise.resolve(stubServer.state.assets.length > 0),
+      () =>
+        Promise.resolve(
+          stubServer.state.assets.some((asset) => asset.kind === "guardrail"),
+        ),
       "guardrail asset created",
       {
         timeoutMs: ValidationConfig.UiPollingTimeoutMs,
         intervalMs: ValidationConfig.UiPollingIntervalMs,
       },
     );
-    const guardrailAsset = stubServer.state.assets[0];
+    const guardrailAsset = stubServer.state.assets.find(
+      (asset) => asset.kind === "guardrail",
+    );
     if (!guardrailAsset) {
       throw new Error("Expected guardrail asset after creating it.");
     }

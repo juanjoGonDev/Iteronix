@@ -63,6 +63,7 @@ const UrlStatePolicies = [
       "panel",
       "modal",
       "node",
+      "asset",
       "execution",
       "version",
       "compare",

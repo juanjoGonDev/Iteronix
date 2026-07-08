@@ -1328,8 +1328,10 @@ export class WorkflowsScreen extends Component<
     const urlRegexTester = this.readUrlRegexTester(urlState, urlSelection);
     const urlVersionActionDialog = this.readUrlVersionActionDialog(urlState);
     const editorModalOpen =
-      urlState.modal === WorkflowsUrlModal.NodeEditor &&
-      urlSelection?.type === "node";
+      (urlState.modal === WorkflowsUrlModal.NodeEditor &&
+        urlSelection?.type === "node") ||
+      (urlState.modal === WorkflowsUrlModal.AssetEditor &&
+        urlSelection?.type === "asset");
     const workflowEditHistoryOpen =
       urlState.modal === WorkflowsUrlModal.EditHistory ||
       versionDetails !== null ||
@@ -1338,6 +1340,12 @@ export class WorkflowsScreen extends Component<
       urlState.modal === WorkflowsUrlModal.ExecutionNode
         ? urlExecutionNodeModal
         : null;
+    const hasUrlSelection =
+      urlState.modal === WorkflowsUrlModal.NodeEditor
+        ? urlSelection?.type === "node"
+        : urlState.modal === WorkflowsUrlModal.AssetEditor
+          ? urlSelection?.type === "asset"
+          : urlSelection !== null;
     const debugExecutionId = this.readUrlDebugExecutionId(
       urlState,
       urlSelection,
@@ -1370,7 +1378,7 @@ export class WorkflowsScreen extends Component<
     });
 
     this.sanitizeWorkflowsUrlState(urlState, {
-      hasSelection: urlSelection !== null,
+      hasSelection: hasUrlSelection,
       hasExecutionNodeModal: executionNodeModal !== null,
       hasVersionDetails: versionDetails !== null,
       hasUrlEditor:
@@ -1419,6 +1427,14 @@ export class WorkflowsScreen extends Component<
       )
     ) {
       return { type: "execution", id: urlState.executionId };
+    }
+
+    if (
+      urlState.modal === WorkflowsUrlModal.AssetEditor &&
+      urlState.assetId &&
+      this.state.assets.some((asset) => asset.id === urlState.assetId)
+    ) {
+      return { type: "asset", id: urlState.assetId };
     }
 
     if (
@@ -1601,6 +1617,8 @@ export class WorkflowsScreen extends Component<
     if (
       (urlState.modal === WorkflowsUrlModal.NodeEditor &&
         !state.hasSelection) ||
+      (urlState.modal === WorkflowsUrlModal.AssetEditor &&
+        !state.hasSelection) ||
       (urlState.modal === WorkflowsUrlModal.ExecutionNode &&
         !state.hasExecutionNodeModal) ||
       (urlState.modal === WorkflowsUrlModal.VersionDetails &&
@@ -1612,6 +1630,7 @@ export class WorkflowsScreen extends Component<
         {
           modal: null,
           nodeId: null,
+          assetId: null,
           versionId: null,
           compareVersionId: null,
           diffQuery: null,
@@ -5518,7 +5537,21 @@ export class WorkflowsScreen extends Component<
       this.writeWorkflowsUrlState({
         modal: WorkflowsUrlModal.NodeEditor,
         nodeId: selection.id,
+        assetId: null,
         executionId: debugExecutionId,
+        editor: null,
+        deepEditorTab: null,
+        deepEditorOutputTab: null,
+        regexPattern: null,
+        regexFlags: null,
+      });
+    }
+    if (selection?.type === "asset") {
+      this.writeWorkflowsUrlState({
+        modal: WorkflowsUrlModal.AssetEditor,
+        nodeId: null,
+        assetId: selection.id,
+        executionId: null,
         editor: null,
         deepEditorTab: null,
         deepEditorOutputTab: null,
@@ -5537,6 +5570,7 @@ export class WorkflowsScreen extends Component<
     this.writeWorkflowsUrlState({
       modal: null,
       nodeId: null,
+      assetId: null,
       versionId: null,
       editor: null,
       deepEditorTab: null,

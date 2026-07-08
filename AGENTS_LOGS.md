@@ -4419,3 +4419,25 @@
   - Commit, push and CI/CodeQL verification pending.
 - Next
   - Commit and push with hooks enabled, then verify GitHub CI/CodeQL.
+
+### 2026-07-08 15:05 (Europe/Madrid) — Workflows asset editor URL state
+
+- Summary
+  - Implemented the next focused Workflows slice: reusable asset editor modals now survive reload through typed URL state.
+- Decisions
+  - Kept the slice limited to existing modal-first asset editing and query params; no right sidebar inspector or payload-in-URL state was added.
+  - Added only the asset id as reload-useful state and kept drafts/body content out of the URL.
+- Changes
+  - `workflows-url-state.ts` now reads/writes `modal=asset-editor&asset=<id>`.
+  - `Workflows.ts` rehydrates asset editor URLs, opens the existing modal, and clears invalid asset-editor URLs safely.
+  - `validate-workflows.ts` now creates a prompt asset, opens it, reloads, and captures the restored asset editor screenshot.
+  - URL-state registry/docs and PLAN were updated for the asset param.
+- Commands
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts` failed first, then PASS after implementation.
+  - `corepack pnpm@10.18.3 exec vitest run apps/web-ui/src/screens/workflows-url-state.test.ts apps/web-ui/src/shared/url-state-registry.test.ts` PASS.
+  - `corepack pnpm@10.18.3 exec tsc --noEmit --project apps/web-ui/tsconfig.json` PASS.
+  - `corepack pnpm@10.18.3 -C apps/web-ui validate:workflows` failed once on stale build, once on an existing validator asset ordering assumption, then PASS after rebuilding and looking up guardrail assets by kind.
+- Issues/Risks
+  - Full root gates, commit, push and CI/CodeQL verification pending.
+- Next
+  - Run format:check, quality, build and validate:workflows; commit/push with hooks enabled; verify CI/CodeQL.

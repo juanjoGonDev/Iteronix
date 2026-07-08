@@ -11,6 +11,7 @@ export type WorkflowsUrlPanel =
 export const WorkflowsUrlModal = {
   EditHistory: "edit-history",
   NodeEditor: "node-editor",
+  AssetEditor: "asset-editor",
   ExecutionNode: "execution-node",
   VersionDetails: "version-details",
 } as const;
@@ -51,6 +52,7 @@ export type WorkflowsUrlState = {
   panel: WorkflowsUrlPanel | null;
   modal: WorkflowsUrlModal | null;
   nodeId: string | null;
+  assetId: string | null;
   executionId: string | null;
   versionId: string | null;
   compareVersionId: string | null;
@@ -70,6 +72,7 @@ export type WorkflowsUrlPatch = {
   panel?: WorkflowsUrlPanel | null;
   modal?: WorkflowsUrlModal | null;
   nodeId?: string | null;
+  assetId?: string | null;
   executionId?: string | null;
   versionId?: string | null;
   compareVersionId?: string | null;
@@ -90,6 +93,7 @@ const UrlParam = {
   Panel: "panel",
   Modal: "modal",
   Node: "node",
+  Asset: "asset",
   Execution: "execution",
   Version: "version",
   Compare: "compare",
@@ -111,6 +115,7 @@ export const readWorkflowsUrlState = (urlInput: string): WorkflowsUrlState => {
     panel: readPanel(url.searchParams.get(UrlParam.Panel)),
     modal: readModal(url.searchParams.get(UrlParam.Modal)),
     nodeId: readNonEmptyParam(url.searchParams.get(UrlParam.Node)),
+    assetId: readNonEmptyParam(url.searchParams.get(UrlParam.Asset)),
     executionId: readNonEmptyParam(url.searchParams.get(UrlParam.Execution)),
     versionId: readNonEmptyParam(url.searchParams.get(UrlParam.Version)),
     compareVersionId: readNonEmptyParam(url.searchParams.get(UrlParam.Compare)),
@@ -146,6 +151,7 @@ export const applyWorkflowsUrlPatch = (
   writeOptionalParam(url.searchParams, UrlParam.Panel, patch.panel);
   writeOptionalParam(url.searchParams, UrlParam.Modal, patch.modal);
   writeOptionalParam(url.searchParams, UrlParam.Node, patch.nodeId);
+  writeOptionalParam(url.searchParams, UrlParam.Asset, patch.assetId);
   writeOptionalParam(url.searchParams, UrlParam.Execution, patch.executionId);
   writeOptionalParam(url.searchParams, UrlParam.Version, patch.versionId);
   writeOptionalParam(
@@ -222,6 +228,9 @@ const readModal = (value: string | null): WorkflowsUrlModal | null => {
   }
   if (value === WorkflowsUrlModal.NodeEditor) {
     return WorkflowsUrlModal.NodeEditor;
+  }
+  if (value === WorkflowsUrlModal.AssetEditor) {
+    return WorkflowsUrlModal.AssetEditor;
   }
   if (value === WorkflowsUrlModal.ExecutionNode) {
     return WorkflowsUrlModal.ExecutionNode;
