@@ -1273,7 +1273,7 @@ export class WorkflowsScreen extends Component<
         type: "button",
         title,
         ...(testId ? { "data-testid": testId } : {}),
-        className: `flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border leading-none transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
+        className: `flex h-10 items-center justify-center overflow-hidden rounded-md border leading-none transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
         onClick,
       },
       [
@@ -2299,7 +2299,7 @@ export class WorkflowsScreen extends Component<
       "section",
       {
         className:
-          "mt-4 rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+          "mt-4 min-w-0 overflow-hidden rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
       },
       [
         createElement(
@@ -2323,49 +2323,53 @@ export class WorkflowsScreen extends Component<
             ]),
           ],
         ),
-        createElement("div", { className: "mt-3 grid gap-2" }, [
+        createElement("div", { className: "mt-3 grid min-w-0 gap-2" }, [
           createElement("input", {
             "data-testid": "workflows-version-search",
             value: this.state.versionSearchQuery,
             placeholder: "Search versions, notes or tags",
             className:
-              "w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+              "block w-full min-w-0 max-w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
             onInput: (event: Event) => {
               this.setState({
                 versionSearchQuery: (event.target as HTMLInputElement).value,
               });
             },
           }),
-          createElement("div", { className: "grid grid-cols-2 gap-2" }, [
-            createElement("input", {
-              value: this.state.nextVersionNote,
-              placeholder: "Next save note",
-              className:
-                "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
-              onInput: (event: Event) => {
-                this.setState({
-                  nextVersionNote: (event.target as HTMLInputElement).value,
-                });
-              },
-            }),
-            createElement("input", {
-              value: this.state.nextVersionTags,
-              placeholder: "Next save tags",
-              className:
-                "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
-              onInput: (event: Event) => {
-                this.setState({
-                  nextVersionTags: (event.target as HTMLInputElement).value,
-                });
-              },
-            }),
-          ]),
+          createElement(
+            "div",
+            { className: "grid min-w-0 grid-cols-2 gap-2" },
+            [
+              createElement("input", {
+                value: this.state.nextVersionNote,
+                placeholder: "Next save note",
+                className:
+                  "block w-full min-w-0 max-w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+                onInput: (event: Event) => {
+                  this.setState({
+                    nextVersionNote: (event.target as HTMLInputElement).value,
+                  });
+                },
+              }),
+              createElement("input", {
+                value: this.state.nextVersionTags,
+                placeholder: "Next save tags",
+                className:
+                  "block w-full min-w-0 max-w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+                onInput: (event: Event) => {
+                  this.setState({
+                    nextVersionTags: (event.target as HTMLInputElement).value,
+                  });
+                },
+              }),
+            ],
+          ),
           createElement("textarea", {
             "data-testid": "workflows-version-import-text",
             value: this.state.versionImportText,
             placeholder: "Paste exported version snapshot JSON to import",
             className:
-              "min-h-16 rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+              "block min-h-16 w-full min-w-0 max-w-full resize-y rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
             onInput: (event: Event) => {
               this.setState({
                 versionImportText: (event.target as HTMLTextAreaElement).value,
@@ -2377,46 +2381,51 @@ export class WorkflowsScreen extends Component<
             type: "file",
             accept: "application/json,.json",
             className:
-              "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-text-secondary file:mr-3 file:rounded-md file:border-0 file:bg-[#151c24] file:px-3 file:py-1.5 file:text-xs file:text-slate-200",
+              "block w-full min-w-0 max-w-full overflow-hidden rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-text-secondary file:mr-3 file:max-w-full file:rounded-md file:border-0 file:bg-[#151c24] file:px-3 file:py-1.5 file:text-xs file:text-slate-200",
             onChange: (event: Event) => {
               void this.readWorkflowVersionImportFile(event);
             },
           }),
-          createElement("div", { className: "flex flex-wrap gap-2" }, [
-            this.renderWorkflowVersionActionButton({
-              label: "Import",
-              testId: "workflows-version-import",
-              onClick: () => {
-                void this.openWorkflowVersionImportDialog();
-              },
-            }),
-            this.renderWorkflowVersionActionButton({
-              label: "Download timeline",
-              testId: WorkflowScreenSelector.WorkflowVersionTimelineDownload,
-              onClick: () => {
-                void this.downloadWorkflowVersionTimeline();
-              },
-            }),
-            createElement("input", {
-              "data-testid": "workflows-version-retention-keep-latest",
-              value: this.state.versionRetentionKeepLatest,
-              className:
-                "w-20 rounded-md border border-border-dark bg-[#0b1117] px-2 py-1 text-xs text-white outline-none focus:border-blue-500",
-              onInput: (event: Event) => {
-                this.setState({
-                  versionRetentionKeepLatest: (event.target as HTMLInputElement)
-                    .value,
-                });
-              },
-            }),
-            this.renderWorkflowVersionActionButton({
-              label: "Cleanup",
-              testId: "workflows-version-cleanup",
-              onClick: () => {
-                void this.cleanupWorkflowVersions();
-              },
-            }),
-          ]),
+          createElement(
+            "div",
+            { className: "flex min-w-0 max-w-full flex-wrap gap-2" },
+            [
+              this.renderWorkflowVersionActionButton({
+                label: "Import",
+                testId: "workflows-version-import",
+                onClick: () => {
+                  void this.openWorkflowVersionImportDialog();
+                },
+              }),
+              this.renderWorkflowVersionActionButton({
+                label: "Download timeline",
+                testId: WorkflowScreenSelector.WorkflowVersionTimelineDownload,
+                onClick: () => {
+                  void this.downloadWorkflowVersionTimeline();
+                },
+              }),
+              createElement("input", {
+                "data-testid": "workflows-version-retention-keep-latest",
+                value: this.state.versionRetentionKeepLatest,
+                className:
+                  "w-20 min-w-0 rounded-md border border-border-dark bg-[#0b1117] px-2 py-1 text-xs text-white outline-none focus:border-blue-500",
+                onInput: (event: Event) => {
+                  this.setState({
+                    versionRetentionKeepLatest: (
+                      event.target as HTMLInputElement
+                    ).value,
+                  });
+                },
+              }),
+              this.renderWorkflowVersionActionButton({
+                label: "Cleanup",
+                testId: "workflows-version-cleanup",
+                onClick: () => {
+                  void this.cleanupWorkflowVersions();
+                },
+              }),
+            ],
+          ),
         ]),
         this.state.workflowVersions.length === 0
           ? createElement(
@@ -2672,7 +2681,7 @@ export class WorkflowsScreen extends Component<
                     value:
                       this.state.versionDetails?.compareVersionId ?? "draft",
                     className:
-                      "rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
+                      "block w-full min-w-0 max-w-full rounded-md border border-border-dark bg-[#0b1117] px-3 py-2 text-xs text-white outline-none focus:border-blue-500",
                     onChange: (event: Event) => {
                       this.updateWorkflowVersionDetails({
                         versionId: version.id,
@@ -2918,21 +2927,25 @@ export class WorkflowsScreen extends Component<
   private renderWorkflowVersionMetricGrid(
     version: WorkflowDefinitionVersionRecord,
   ): HTMLElement {
-    return createElement("div", { className: "grid grid-cols-2 gap-2" }, [
-      this.renderWorkflowVersionMetric("Version", version.version.toString()),
-      this.renderWorkflowVersionMetric(
-        "Nodes",
-        version.snapshot.nodes.length.toString(),
-      ),
-      this.renderWorkflowVersionMetric(
-        "Connections",
-        version.snapshot.edges.length.toString(),
-      ),
-      this.renderWorkflowVersionMetric(
-        "Status",
-        formatSelectOptionLabel(version.snapshot.status),
-      ),
-    ]);
+    return createElement(
+      "div",
+      { className: "grid min-w-0 grid-cols-2 gap-2" },
+      [
+        this.renderWorkflowVersionMetric("Version", version.version.toString()),
+        this.renderWorkflowVersionMetric(
+          "Nodes",
+          version.snapshot.nodes.length.toString(),
+        ),
+        this.renderWorkflowVersionMetric(
+          "Connections",
+          version.snapshot.edges.length.toString(),
+        ),
+        this.renderWorkflowVersionMetric(
+          "Status",
+          formatSelectOptionLabel(version.snapshot.status),
+        ),
+      ],
+    );
   }
 
   private renderWorkflowVersionMetric(
@@ -4062,7 +4075,7 @@ export class WorkflowsScreen extends Component<
             )
           : createElement(
               "div",
-              { className: "mt-3 grid gap-2" },
+              { className: "mt-3 grid min-w-0 gap-2" },
               this.state.workflowEditHistory.map((entry) =>
                 this.renderWorkflowEditHistoryEntry(entry),
               ),
@@ -11812,21 +11825,25 @@ export class WorkflowsScreen extends Component<
           ),
       this.state.guardrailValidationKind === "json_schema"
         ? ""
-        : createElement("div", { className: "flex flex-wrap gap-2" }, [
-            readGuardrailVariableTokens().map((token) =>
-              createElement(Button, {
-                key: token.id,
-                variant: "secondary",
-                size: "sm",
-                onClick: () =>
-                  this.handleGuardrailVariableInsert(token.reference),
-                children: token.label,
-                dataset: {
-                  testid: `${WorkflowScreenSelector.GuardrailValidationVariablePrefix}${token.id}`,
-                },
-              }),
-            ),
-          ]),
+        : createElement(
+            "div",
+            { className: "flex min-w-0 max-w-full flex-wrap gap-2" },
+            [
+              readGuardrailVariableTokens().map((token) =>
+                createElement(Button, {
+                  key: token.id,
+                  variant: "secondary",
+                  size: "sm",
+                  onClick: () =>
+                    this.handleGuardrailVariableInsert(token.reference),
+                  children: token.label,
+                  dataset: {
+                    testid: `${WorkflowScreenSelector.GuardrailValidationVariablePrefix}${token.id}`,
+                  },
+                }),
+              ),
+            ],
+          ),
     ]);
   }
 
