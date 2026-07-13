@@ -4667,3 +4667,18 @@
 - Commands: RED focused suite (8 expected failures); PASS focused suite (14 tests), focused lint, `pnpm typecheck`, `validate:workflows`, and `validate:settings`.
 - Issues/Risks: No production or validator request remains for `/workspace/state/get` or `/workspace/state/update`.
 - Next: Include this boundary replacement in the next scoped review and atomic commit.
+
+### 2026-07-13 22:18 (Europe/Madrid) — Browser authentication bootstrap and stale bundle correction
+
+- Summary: Prevented the browser from executing an obsolete workspace-state bundle or bootstrapping workflow settings before a local bearer token is configured.
+- Decisions: The server connection remains browser-local; an absent or rejected token routes Workflows to Settings recovery rather than issuing a protected deprecated request.
+- Changes: Cleans web build output before compilation, removes the baked development token, passes the local connection explicitly to the settings client, and adds bootstrap/authentication regressions.
+- Commands: RED reproduced the stale `/workspace/state/get` request and unauthenticated bootstrap failure; GREEN `pnpm typecheck`, 27 focused browser auth/settings/workflow tests, and a clean web build passed.
+- Issues/Risks: Browser validators were not run in this correction handoff; no secret values were recorded.
+- Next: Run browser validators and full gates, then review and commit the correction with the workflow-only cutover.
+
+### 2026-07-13 22:23 (Europe/Madrid) — Settings validator alignment
+
+- Summary: Aligned Settings browser validation with browser-local authentication and snapshot-only provider profiles.
+- Changes: The validator expects zero runtime provider-sync requests for a snapshot-only profile without a token, and requires Check connection before Save in the second tab.
+- Next: Run the updated Settings validator with the final browser correction gates.

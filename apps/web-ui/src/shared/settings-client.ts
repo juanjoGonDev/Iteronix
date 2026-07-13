@@ -3,6 +3,7 @@ import {
   parseSettingsSnapshot,
   type SettingsSnapshot,
 } from "./settings-storage.js";
+import type { ServerConnection } from "./server-config.js";
 
 const EndpointPath = {
   SettingsGet: "/settings/get",
@@ -50,18 +51,22 @@ export type SettingsClient = {
   }) => Promise<RuntimeProviderSettingsRecord>;
 };
 
-export const createSettingsClient = (): SettingsClient => ({
+export const createSettingsClient = (
+  connection?: ServerConnection,
+): SettingsClient => ({
   load: () =>
     requestJson({
       path: EndpointPath.SettingsGet,
       body: {},
       parse: parseSettingsResponse,
+      connection,
     }),
   update: (settings) =>
     requestJson({
       path: EndpointPath.SettingsUpdate,
       body: settings,
       parse: parseSettingsResponse,
+      connection,
     }),
   listProviders: (input) =>
     requestJson({
@@ -70,6 +75,7 @@ export const createSettingsClient = (): SettingsClient => ({
         ...(input?.profileId ? { profileId: input.profileId } : {}),
       },
       parse: parseProviderListResponse,
+      connection,
     }),
   updateProviderSettings: (input) =>
     requestJson({
@@ -80,25 +86,14 @@ export const createSettingsClient = (): SettingsClient => ({
         config: input.config,
       },
       parse: parseProviderSettingsResponse,
+      connection,
     }),
 });
 
 export const parseSettingsResponse = (value: unknown): SettingsSnapshot =>
-  redactSettingsAuthToken(
-    parseSettingsSnapshot(
-      readRequiredRecord(value, "settingsResponse", "settings"),
-    ),
+  parseSettingsSnapshot(
+    readRequiredRecord(value, "settingsResponse", "settings"),
   );
-
-const redactSettingsAuthToken = (
-  settings: SettingsSnapshot,
-): SettingsSnapshot => ({
-  ...settings,
-  serverConnection: {
-    ...settings.serverConnection,
-    authToken: "",
-  },
-});
 
 export const parseProviderListResponse = (
   value: unknown,

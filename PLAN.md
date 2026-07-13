@@ -29,6 +29,8 @@
   - [x] Delete the server project, file, git, Kanban, history, logs, quality-gate, session, sandbox, and AI workbench modules with their tests.
   - [x] Delete the browser project, overview, explorer, kanban, standalone history, git, quality-gate, logging, and workbench modules with their tests and validators.
 - [x] Replace the residual public workspace-state API with typed settings endpoints and remove browser workspace-state requests.
+- [x] Clean stale browser build output and guard workflow bootstrap on the locally configured bearer token, recovering to Settings instead of issuing deprecated workspace-state requests after authentication failures.
+- [x] Require a checked browser-local connection before saving settings and keep snapshot-only provider profiles out of runtime provider synchronization.
 
 Acceptance:
 

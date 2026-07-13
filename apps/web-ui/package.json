@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -w exec concurrently -k -n build,serve \"pnpm -C apps/web-ui run build:watch\" \"pnpm -C apps/web-ui run serve:express\"",
-    "build": "tsx scripts/update-version.ts && pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json",
-    "build:watch": "pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json --watch",
+    "clean:dist": "tsx scripts/clean-dist.ts",
+    "build": "tsx scripts/update-version.ts && pnpm run clean:dist && pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json",
+    "build:watch": "pnpm run clean:dist && pnpm -w exec tsc -p apps/web-ui/tsconfig.build.json --watch",
     "serve": "tsx scripts/serve.ts",
     "serve:express": "tsx scripts/serve.ts",
     "preview": "tsx scripts/simple-serve.ts",

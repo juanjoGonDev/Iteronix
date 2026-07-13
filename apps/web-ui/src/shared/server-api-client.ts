@@ -1,4 +1,7 @@
-import { readServerConnection } from "./server-config.js";
+import {
+  readServerConnection,
+  type ServerConnection,
+} from "./server-config.js";
 
 const HeaderName = {
   Authorization: "Authorization",
@@ -15,8 +18,9 @@ export const requestJson = async <TResult>(input: {
   method?: "GET" | "POST";
   body?: Readonly<Record<string, unknown>>;
   parse: (value: unknown) => TResult;
+  connection?: ServerConnection | undefined;
 }): Promise<TResult> => {
-  const connection = readServerConnection();
+  const connection = input.connection ?? readServerConnection();
   const response = await fetch(`${connection.serverUrl}${input.path}`, {
     method: input.method ?? "POST",
     headers: createHeaders(connection.authToken, input.body !== undefined),
@@ -35,8 +39,9 @@ export const streamText = async (input: {
   path: string;
   signal?: AbortSignal;
   onChunk: (chunk: string) => void;
+  connection?: ServerConnection | undefined;
 }): Promise<void> => {
-  const connection = readServerConnection();
+  const connection = input.connection ?? readServerConnection();
   const response = await fetch(`${connection.serverUrl}${input.path}`, {
     method: "GET",
     headers: createHeaders(connection.authToken, false),

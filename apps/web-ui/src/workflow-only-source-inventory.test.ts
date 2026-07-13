@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -98,4 +98,29 @@ describe("workflow-only web source inventory", () => {
     expect(source).not.toContain("/workspace/state/get");
     expect(source).not.toContain("workspace-state-client");
   });
+
+  it("does not retain removed workspace-state artifacts in the emitted browser output", () => {
+    const emittedPaths = readEmittedPaths(join(WebUiRoot, "dist"));
+    const emittedSource = emittedPaths
+      .filter((path) => path.endsWith(".js"))
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
+    expect(emittedPaths).not.toContain(
+      join(WebUiRoot, "dist", "shared", "workspace-state-client.js"),
+    );
+    expect(emittedSource).not.toContain("/workspace/state/get");
+    expect(emittedSource).not.toContain("workspace-state-client");
+  });
 });
+
+const readEmittedPaths = (directory: string): ReadonlyArray<string> => {
+  if (!existsSync(directory)) {
+    return [];
+  }
+
+  return readdirSync(directory).flatMap((entry) => {
+    const path = join(directory, entry);
+    return statSync(path).isDirectory() ? readEmittedPaths(path) : [path];
+  });
+};

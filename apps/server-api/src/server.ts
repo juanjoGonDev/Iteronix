@@ -829,13 +829,7 @@ export const parseSettingsUpdateRequest = (
       ...currentState,
       settings: value,
     }).settings;
-    return ok({
-      ...settings,
-      serverConnection: {
-        ...settings.serverConnection,
-        authToken: "",
-      },
-    });
+    return ok(settings);
   } catch {
     return err({
       status: HttpStatus.BadRequest,
@@ -846,13 +840,7 @@ export const parseSettingsUpdateRequest = (
 
 const redactSettingsForClient = (
   settings: WorkspaceSettingsSnapshot,
-): WorkspaceSettingsSnapshot => ({
-  ...settings,
-  serverConnection: {
-    ...settings.serverConnection,
-    authToken: "",
-  },
-});
+): WorkspaceSettingsSnapshot => settings;
 const handleProvidersList = async (
   req: IncomingMessage,
   res: ServerResponse,

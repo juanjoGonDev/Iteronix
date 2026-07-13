@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run --passWithNoTests",
     "eval:min": "vitest run packages/eval/src/ci-eval.test.ts",
-    "build": "tsc -p tsconfig.build.json && tsc -p apps/web-ui/tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && pnpm -C apps/web-ui run build",
     "start": "pnpm -C apps/server-api start",
     "preview:web": "pnpm -C apps/web-ui preview",
     "deadcode": "knip",

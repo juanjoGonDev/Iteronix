@@ -21,6 +21,7 @@ import {
 } from "../shared/Component.js";
 import {
   DefaultServerConnection,
+  hasServerAuthToken,
   readServerConnection,
   writeServerConnection,
   type ServerConnection,
@@ -38,6 +39,10 @@ import {
   type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
 import { writeBrowserUrlState } from "../shared/url-state.js";
+import {
+  checkSettingsConnection,
+  readSaveConnection,
+} from "./settings-save-connection.js";
 import {
   ProviderKind,
   ProviderPromptMode,
@@ -62,6 +67,7 @@ interface SettingsScreenState {
   workflowLimits: WorkflowLimitsSettings;
   notifications: NotificationsSettings;
   serverConnection: ServerConnection;
+  validatedServerConnection: ServerConnection | null;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
@@ -135,6 +141,7 @@ export class SettingsScreen extends Component<
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
       serverConnection: snapshot.serverConnection,
+      validatedServerConnection: null,
       runtimeProviders: [],
       isSaving: false,
       isTestingConnection: false,
@@ -291,7 +298,7 @@ export class SettingsScreen extends Component<
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+                    "Provider profiles, workflow limits, and notifications persist on the current server workspace. Server access remains local to this browser.",
                   ],
                 ),
               ]),
@@ -317,10 +324,6 @@ export class SettingsScreen extends Component<
               renderReadOnlyCell(
                 "External calls",
                 this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked",
-              ),
-              renderReadOnlyCell(
-                "Workspace server",
-                this.state.serverConnection.serverUrl,
               ),
             ],
           ),
@@ -796,7 +799,7 @@ export class SettingsScreen extends Component<
             ["API access"],
           ),
           createElement("p", { className: "text-sm text-text-secondary" }, [
-            "These values are part of the shared workspace snapshot so every client connected to the same server sees the same API target and token.",
+            "This browser keeps the server URL and token locally. The token is never sent in settings data or stored by the server.",
           ]),
         ]),
         createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
@@ -811,8 +814,9 @@ export class SettingsScreen extends Component<
           createElement(SettingsTextField, {
             label: "Auth token",
             value: this.state.serverConnection.authToken,
-            placeholder: DefaultServerConnection.authToken,
+            placeholder: "Paste the server bearer token",
             testId: "settings-auth-token",
+            type: "password",
             onChange: (value: string) =>
               this.handleServerConnectionChange("authToken", value),
           }),
@@ -925,11 +929,12 @@ export class SettingsScreen extends Component<
       this.state.runtimeProviders;
     let message: string | null = null;
 
+    if (!hasServerAuthToken(this.state.serverConnection)) {
+      return;
+    }
+
     try {
-      const snapshot = mergeSettingsServerConnection(
-        await this.settingsClient.load(),
-        this.state.serverConnection,
-      );
+      const snapshot = await this.settingsClient.load();
       hydrateSettingsSnapshot(snapshot);
       const urlState =
         typeof window === "undefined"
@@ -945,7 +950,6 @@ export class SettingsScreen extends Component<
         selectedProviderId,
         workflowLimits: snapshot.workflowLimits,
         notifications: snapshot.notifications,
-        serverConnection: snapshot.serverConnection,
       });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
@@ -1063,6 +1067,7 @@ export class SettingsScreen extends Component<
         ...this.state.serverConnection,
         [key]: value,
       },
+      validatedServerConnection: null,
     });
   }
 
@@ -1072,14 +1077,36 @@ export class SettingsScreen extends Component<
     });
 
     try {
-      writeServerConnection(this.state.serverConnection);
-      const response = await this.settingsClient.listProviders();
+      const candidateClient = createSettingsClient(this.state.serverConnection);
+      const checkedConnection = await checkSettingsConnection(
+        this.state.serverConnection,
+        candidateClient,
+      );
+      const serverConnection = writeServerConnection(
+        checkedConnection.serverConnection,
+      );
+      hydrateSettingsSnapshot(checkedConnection.settings);
+      const urlState =
+        typeof window === "undefined"
+          ? null
+          : readSettingsUrlStateFromLocation(window.location);
+      const selectedProviderId = resolveSettingsProviderSelection(
+        urlState?.selectedProviderId ?? this.state.selectedProviderId,
+        checkedConnection.settings.providerProfiles,
+      );
       this.setState({
-        runtimeProviders: response.providers,
+        profileId: checkedConnection.settings.profileId,
+        providerProfiles: checkedConnection.settings.providerProfiles,
+        selectedProviderId,
+        workflowLimits: checkedConnection.settings.workflowLimits,
+        notifications: checkedConnection.settings.notifications,
+        runtimeProviders: checkedConnection.runtimeProviders,
+        serverConnection,
+        validatedServerConnection: serverConnection,
       });
       this.pushToast(
         "success",
-        `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`,
+        `Connection OK. Runtime exposes ${checkedConnection.runtimeProviders.length} provider${checkedConnection.runtimeProviders.length === 1 ? "" : "s"}.`,
       );
     } catch (error) {
       this.pushToast("error", toErrorMessage(error, "Connection test failed."));
@@ -1130,19 +1157,30 @@ export class SettingsScreen extends Component<
       isSaving: true,
     });
 
+    const saveConnection = readSaveConnection(
+      this.state.serverConnection,
+      this.state.validatedServerConnection,
+    );
+
+    if (!saveConnection || !hasServerAuthToken(saveConnection)) {
+      this.pushToast(
+        "error",
+        "Configure the local server URL and auth token, then use Check connection before saving.",
+      );
+      this.setState({ isSaving: false });
+      return;
+    }
+
     try {
       const snapshot: SettingsSnapshot = {
         profileId: this.state.profileId || DefaultSettingsProfileId,
         providerProfiles: this.state.providerProfiles,
         workflowLimits: this.state.workflowLimits,
         notifications: this.state.notifications,
-        serverConnection: this.state.serverConnection,
       };
 
-      const persistedSettings = mergeSettingsServerConnection(
-        await this.settingsClient.update(snapshot),
-        this.state.serverConnection,
-      );
+      const candidateClient = createSettingsClient(saveConnection);
+      const persistedSettings = await candidateClient.update(snapshot);
       hydrateSettingsSnapshot(persistedSettings);
       const selectedProviderId = persistedSettings.providerProfiles.some(
         (profile) => profile.id === this.state.selectedProviderId,
@@ -1155,7 +1193,6 @@ export class SettingsScreen extends Component<
         selectedProviderId,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection,
       });
 
       let syncedCount = 0;
@@ -1164,7 +1201,7 @@ export class SettingsScreen extends Component<
       );
 
       for (const request of syncRequests) {
-        await this.settingsClient.updateProviderSettings({
+        await candidateClient.updateProviderSettings({
           profileId: request.profileId,
           providerId: request.providerId,
           config: request.config,
@@ -1200,10 +1237,7 @@ export class SettingsScreen extends Component<
     const snapshot = createDefaultSettingsSnapshot();
 
     try {
-      const persistedSettings = mergeSettingsServerConnection(
-        await this.settingsClient.update(snapshot),
-        this.state.serverConnection,
-      );
+      const persistedSettings = await this.settingsClient.update(snapshot);
       hydrateSettingsSnapshot(persistedSettings);
       this.setState({
         activeTab: "provider",
@@ -1212,7 +1246,6 @@ export class SettingsScreen extends Component<
         selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection,
       });
       this.writeSettingsUrlState(
         {
@@ -1305,14 +1338,6 @@ const toErrorMessage = (value: unknown, fallback: string): string => {
 
   return fallback;
 };
-
-const mergeSettingsServerConnection = (
-  settings: SettingsSnapshot,
-  serverConnection: ServerConnection,
-): SettingsSnapshot => ({
-  ...settings,
-  serverConnection,
-});
 
 const resolveSettingsProviderSelection = (
   selectedProviderId: string | null | undefined,

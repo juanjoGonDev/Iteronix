@@ -7,10 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
-import {
-  DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey,
-} from "../src/shared/server-config.js";
+import { LocalStorageKey as ServerStorageKey } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
@@ -65,6 +62,8 @@ const RequestPath = {
   ExecutionsDelete: "/workflows/executions/delete",
   ExecutionsStreamNode: "/workflows/executions/stream-node",
 } as const;
+
+const ValidationAuthToken = "workflows-validation-token";
 
 const ResponseHeader = {
   AllowOrigin: "Access-Control-Allow-Origin",
@@ -2052,10 +2051,6 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
       soundEnabled: true,
       webhookUrl: "",
     },
-    serverConnection: {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-    },
   };
 }
 
@@ -2251,7 +2246,7 @@ async function seedBrowserStorage(page: Page): Promise<void> {
     },
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
+      authToken: ValidationAuthToken,
       serverKeys: ServerStorageKey,
     },
   );
@@ -3340,10 +3335,7 @@ function normalizeRequestChunk(chunk: unknown): Buffer | null {
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
-  return (
-    request.headers.authorization ===
-    `Bearer ${DefaultServerConnection.authToken}`
-  );
+  return request.headers.authorization === `Bearer ${ValidationAuthToken}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

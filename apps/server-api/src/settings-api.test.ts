@@ -37,10 +37,7 @@ describe("settings API contract", () => {
     expect(result.value.notifications.webhookUrl).toBe(
       "https://hooks.example.com/iteronix",
     );
-    expect(result.value.serverConnection.serverUrl).toBe(
-      "https://server.example.com",
-    );
-    expect(result.value.serverConnection.authToken).toBe("");
+    expect(result.value).not.toHaveProperty("serverConnection");
   });
 
   it("rejects invalid settings update bodies as typed bad requests", () => {

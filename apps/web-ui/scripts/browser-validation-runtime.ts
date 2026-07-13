@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { constants as FsConstants } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
@@ -11,6 +11,8 @@ const RuntimeFlag = {
 const ScreenshotArtifact = {
   Extension: ".png",
 } as const;
+
+const DeprecatedWorkspaceRequest = "/workspace/state/";
 
 const ProcessStop = {
   GraceMs: 1000,
@@ -91,6 +93,29 @@ export const assertBrowserValidationBuildOutput = async (
       `Build output missing at ${buildOutputPath}. Run pnpm build before this validation.`,
     );
   }
+
+  const emittedSource = await readEmittedJavaScript(
+    join(buildOutputPath, ".."),
+  );
+  if (emittedSource.includes(DeprecatedWorkspaceRequest)) {
+    throw new Error(
+      "Build output retains a deprecated workspace-state browser request. Run the clean web build before validation.",
+    );
+  }
+};
+
+const readEmittedJavaScript = async (directory: string): Promise<string> => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const chunks = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        return readEmittedJavaScript(path);
+      }
+      return entry.name.endsWith(".js") ? readFile(path, "utf8") : "";
+    }),
+  );
+  return chunks.join("\n");
 };
 
 export const startPreviewServer = (projectRoot: string): ChildProcess =>

@@ -7,10 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
-import {
-  DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey,
-} from "../src/shared/server-config.js";
+import { LocalStorageKey as ServerStorageKey } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
@@ -63,7 +60,7 @@ const ValidationText = {
   NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
   SaveNotice: "Settings saved.",
   SettingsServerBackedNotice:
-    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+    "Provider profiles, workflow limits, and notifications persist on the current server workspace.",
   WebhookNotice: "Webhook test payload delivered successfully.",
   ConnectionNotice: "Connection OK.",
 } as const;
@@ -74,6 +71,8 @@ const ProviderKind = {
   Anthropic: "anthropic",
   Ollama: "ollama",
 } as const;
+
+const ValidationAuthToken = "settings-validation-token";
 
 type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
@@ -136,7 +135,7 @@ async function validateSettingsScreen(): Promise<void> {
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(page);
+    await seedBrowserStorage(page, false);
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -155,7 +154,18 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    await clickNamedButton(page, "Add Anthropic");
+    await clickNamedButton(page, "API Access");
+    await waitForTestId(page, "settings-server-url");
+    await setInputValueByTestId(
+      page,
+      "settings-auth-token",
+      ValidationAuthToken,
+    );
+    await clickNamedButton(page, ValidationText.CheckConnection);
+    await waitForPageText(page, ValidationText.ConnectionNotice);
+
+    await clickNamedButton(page, "Providers");
+    await waitForPageText(page, ValidationText.AnthropicProfileName);
     await waitForPageText(page, readProviderCardLabel(ProviderKind.Anthropic));
     await waitForTestId(page, "settings-provider-api-key-env-var");
     await setInputValueByTestId(
@@ -191,21 +201,11 @@ async function validateSettingsScreen(): Promise<void> {
     await clickNamedButton(page, ValidationText.TestPayload);
     await waitForPageText(page, ValidationText.WebhookNotice);
 
-    await clickNamedButton(page, "API Access");
-    await waitForTestId(page, "settings-server-url");
-    await clickNamedButton(page, ValidationText.CheckConnection);
-    await waitForPageText(page, ValidationText.ConnectionNotice);
-
     await clickNamedButton(page, "Providers");
     await clickNamedButton(page, ValidationText.SaveChanges);
     await waitForPageText(page, ValidationText.SaveNotice);
-    await waitForCondition(
-      async () => stubServer.state.providerSettingsRequests.length === 1,
-      "provider settings sync",
-      {
-        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-        intervalMs: ValidationConfig.UiPollingIntervalMs,
-      },
+    assertNoRuntimeProviderSyncRequests(
+      stubServer.state.providerSettingsRequests,
     );
     assertPersistedWorkspaceSettings(stubServer.state.workspaceSettings);
     await captureBrowserValidationScreenshot({
@@ -266,11 +266,7 @@ async function validateSettingsScreen(): Promise<void> {
       "settings-server-url",
       ValidationConfig.StubApiBaseUrl,
     );
-    await waitForInputValue(
-      page,
-      "settings-auth-token",
-      DefaultServerConnection.authToken,
-    );
+    await waitForInputValue(page, "settings-auth-token", ValidationAuthToken);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -284,7 +280,7 @@ async function validateSettingsScreen(): Promise<void> {
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(secondPage);
+    await seedBrowserStorage(secondPage, true);
     await secondPage.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -315,8 +311,11 @@ async function validateSettingsScreen(): Promise<void> {
     await waitForInputValue(
       secondPage,
       "settings-auth-token",
-      DefaultServerConnection.authToken,
+      ValidationAuthToken,
     );
+    await waitForButtonEnabled(secondPage, ValidationText.CheckConnection);
+    await clickNamedButton(secondPage, ValidationText.CheckConnection);
+    await waitForPageText(secondPage, ValidationText.ConnectionNotice);
     await clickNamedButton(secondPage, "Providers");
     await waitForPageText(secondPage, ValidationText.AnthropicProfileName);
     await clickElementContainingText(
@@ -430,7 +429,9 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    assertProviderSyncRequest(stubServer.state.providerSettingsRequests[0]);
+    assertNoRuntimeProviderSyncRequests(
+      stubServer.state.providerSettingsRequests,
+    );
     if (stubServer.state.webhookPayloadCount !== 1) {
       throw new Error(
         `Expected exactly one webhook test payload, received ${stubServer.state.webhookPayloadCount}.`,
@@ -603,31 +604,33 @@ async function handleStubRequest(
 }
 
 function isAuthorized(request: IncomingMessage): boolean {
-  return (
-    request.headers.authorization ===
-    `Bearer ${DefaultServerConnection.authToken}`
-  );
+  return request.headers.authorization === `Bearer ${ValidationAuthToken}`;
 }
 
-async function seedBrowserStorage(page: Page): Promise<void> {
+async function seedBrowserStorage(
+  page: Page,
+  includeAuthToken: boolean,
+): Promise<void> {
   await page.evaluateOnNewDocument(
     (payload: {
       serverUrl: string;
-      authToken: string;
+      authToken?: string;
       serverKeys: typeof ServerStorageKey;
     }) => {
       window.localStorage.setItem(
         payload.serverKeys.ServerUrl,
         payload.serverUrl,
       );
-      window.localStorage.setItem(
-        payload.serverKeys.AuthToken,
-        payload.authToken,
-      );
+      if (payload.authToken) {
+        window.localStorage.setItem(
+          payload.serverKeys.AuthToken,
+          payload.authToken,
+        );
+      }
     },
     {
       serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
+      ...(includeAuthToken ? { authToken: ValidationAuthToken } : {}),
       serverKeys: ServerStorageKey,
     },
   );
@@ -638,12 +641,13 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
     profileId: "default",
     providerProfiles: [
       {
-        id: "codex-cli-default",
-        name: "Codex CLI",
-        providerKind: "codex-cli",
-        modelId: "",
-        endpointUrl: "",
-        command: "codex",
+        id: "anthropic-remote-profile",
+        name: "Claude Coder",
+        providerKind: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        endpointUrl: "https://api.anthropic.com",
+        apiKeyEnvVar: "ANTHROPIC_API_KEY",
+        command: "",
         promptMode: "stdin",
       },
     ],
@@ -656,23 +660,15 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
       soundEnabled: true,
       webhookUrl: "",
     },
-    serverConnection: {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-    },
   };
 }
 
-function assertProviderSyncRequest(
-  request: ProviderSettingsRequestRecord | undefined,
+function assertNoRuntimeProviderSyncRequests(
+  requests: ReadonlyArray<ProviderSettingsRequestRecord>,
 ): void {
-  if (!request) {
-    throw new Error("Expected one provider sync request.");
-  }
-
-  if (request.providerId !== ProviderKind.CodexCli) {
+  if (requests.length > 0) {
     throw new Error(
-      `Unexpected provider id in provider sync: ${request.providerId}`,
+      `Expected the snapshot-only Anthropic profile to skip runtime sync, received ${requests.length} request(s).`,
     );
   }
 }
@@ -713,21 +709,9 @@ function assertPersistedWorkspaceSettings(
     throw new Error("Expected persisted soundEnabled to remain true.");
   }
 
-  if (!isRecord(settings["serverConnection"])) {
+  if ("serverConnection" in settings) {
     throw new Error(
-      "Expected serverConnection to persist in workspace settings.",
-    );
-  }
-
-  const serverConnection = settings["serverConnection"];
-  if (serverConnection["serverUrl"] !== ValidationConfig.StubApiBaseUrl) {
-    throw new Error(
-      `Expected persisted serverUrl to be ${ValidationConfig.StubApiBaseUrl}.`,
-    );
-  }
-  if (serverConnection["authToken"] !== DefaultServerConnection.authToken) {
-    throw new Error(
-      `Expected persisted authToken to be ${DefaultServerConnection.authToken}.`,
+      "Server URL and auth token must remain local to the browser.",
     );
   }
 }

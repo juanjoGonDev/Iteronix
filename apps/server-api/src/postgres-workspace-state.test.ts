@@ -68,17 +68,19 @@ describe("PostgreSQL workspace state store", () => {
     const store = createPostgresWorkspaceStateStore(client);
     const state = createDefaultWorkspaceState();
 
-    const [first, second] = await Promise.all([
-      store.save({
-        ...state,
-        settings: {
-          ...state.settings,
-          serverConnection: {
-            ...state.settings.serverConnection,
-            authToken: "private-token",
-          },
+    const legacyConnectionState = parseWorkspaceState({
+      ...state,
+      settings: {
+        ...state.settings,
+        serverConnection: {
+          serverUrl: "http://localhost:4000",
+          authToken: "private-token",
         },
-      }),
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      store.save(legacyConnectionState),
       store.save(state),
     ]);
 

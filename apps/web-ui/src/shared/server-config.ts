@@ -20,13 +20,16 @@ export const LocalStorageKey = {
 
 export const DefaultServerConnection = {
   serverUrl: `http://${RuntimeHost.Localhost}:${RuntimePort.ApiDefault}`,
-  authToken: "dev-token",
+  authToken: "",
 } as const;
 
 export type ServerConnection = {
   serverUrl: string;
   authToken: string;
 };
+
+export const hasServerAuthToken = (connection: ServerConnection): boolean =>
+  connection.authToken.trim().length > 0;
 
 export const readServerConnection = (
   storage: StorageLike = window.localStorage,
@@ -79,9 +82,7 @@ const normalizeServerUrl = (
 
 const normalizeAuthToken = (value: string | null | undefined): string => {
   const trimmed = value?.trim();
-  return trimmed && trimmed.length > 0
-    ? trimmed
-    : DefaultServerConnection.authToken;
+  return trimmed && trimmed.length > 0 ? trimmed : "";
 };
 
 const readDefaultServerUrl = (location: LocationLike | undefined): string => {

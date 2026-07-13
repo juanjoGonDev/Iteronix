@@ -9,7 +9,7 @@ describe("server config", () => {
     );
 
     expect(connection.serverUrl).toBe("http://localhost:4001");
-    expect(connection.authToken).toBe("dev-token");
+    expect(connection.authToken).toBe("");
   });
 
   it("migrates a stored local web UI dev origin to the backend dev port", () => {
@@ -40,6 +40,15 @@ describe("server config", () => {
 
     expect(connection.serverUrl).toBe("https://api.example.com");
     expect(connection.authToken).toBe("remote-token");
+  });
+
+  it("keeps an absent authentication token empty instead of inventing a development credential", () => {
+    const connection = readServerConnection(
+      createMemoryStorage(),
+      createLocation("https://app.example.com"),
+    );
+
+    expect(connection.authToken).toBe("");
   });
 });
 

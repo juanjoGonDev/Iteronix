@@ -28,8 +28,7 @@ describe("settings storage", () => {
     expect(snapshot.providerProfiles).toEqual([]);
     expect(snapshot.workflowLimits.maxLoops).toBe(50);
     expect(snapshot.notifications.soundEnabled).toBe(true);
-    expect(snapshot.serverConnection.serverUrl).toBe("http://localhost:4000");
-    expect(snapshot.serverConnection.authToken).toBe("dev-token");
+    expect(snapshot).not.toHaveProperty("serverConnection");
   });
 
   it("persists settings without storing secrets", () => {
@@ -61,10 +60,6 @@ describe("settings storage", () => {
           soundEnabled: false,
           webhookUrl: "https://example.com/webhook",
         },
-        serverConnection: {
-          serverUrl: "https://server.example.com",
-          authToken: "server-token",
-        },
       },
       storage,
     );
@@ -78,10 +73,7 @@ describe("settings storage", () => {
     expect(reloaded.notifications.webhookUrl).toBe(
       "https://example.com/webhook",
     );
-    expect(reloaded.serverConnection.serverUrl).toBe(
-      "https://server.example.com",
-    );
-    expect(reloaded.serverConnection.authToken).toBe("server-token");
+    expect(reloaded).not.toHaveProperty("serverConnection");
     expect(JSON.stringify(reloaded)).not.toContain('"apiKey"');
   });
 

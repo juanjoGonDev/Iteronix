@@ -10,16 +10,10 @@ describe("settings client codecs", () => {
   it("parses the settings-only response without a workspace wrapper", () => {
     const settings = createDefaultSettingsSnapshot();
 
-    expect(parseSettingsResponse({ settings })).toEqual({
-      ...settings,
-      serverConnection: {
-        ...settings.serverConnection,
-        authToken: "",
-      },
-    });
+    expect(parseSettingsResponse({ settings })).toEqual(settings);
   });
 
-  it("does not read an API auth token from the settings response", () => {
+  it("ignores an API connection sent by an older settings response", () => {
     const settings = createDefaultSettingsSnapshot();
 
     expect(
@@ -27,12 +21,12 @@ describe("settings client codecs", () => {
         settings: {
           ...settings,
           serverConnection: {
-            ...settings.serverConnection,
+            serverUrl: "https://server.example.com",
             authToken: "server-secret",
           },
         },
-      }).serverConnection.authToken,
-    ).toBe("");
+      }),
+    ).not.toHaveProperty("serverConnection");
   });
 
   it("parses runtime providers and optional workflow scope selection metadata", () => {

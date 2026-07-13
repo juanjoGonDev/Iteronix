@@ -7,7 +7,8 @@ import {
   createElement,
   type ComponentProps,
 } from "../shared/Component.js";
-import { COMPACT_VIEWPORT_MAX_WIDTH } from "../shared/constants.js";
+import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
+import { readServerConnection } from "../shared/server-config.js";
 import {
   createWorkflowClient,
   WorkflowRunStreamEventType,
@@ -75,6 +76,10 @@ import {
   type WorkflowPinnedTestOutput,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
+import {
+  isWorkflowAuthenticationFailure,
+  readWorkflowBootstrapDecision,
+} from "./workflows-auth-bootstrap.js";
 import {
   WorkflowAssetKind,
   WorkflowAssetScope,
@@ -1106,6 +1111,10 @@ export class WorkflowsScreen extends Component<
   }
 
   private renderSurface(): HTMLElement {
+    if (this.state.settingsSnapshot === null && this.state.errorMessage) {
+      return this.renderConnectionRecovery();
+    }
+
     return createElement(
       "div",
       {
@@ -1115,6 +1124,34 @@ export class WorkflowsScreen extends Component<
         this.renderActivityRail(),
         this.shouldShowSidebar() ? this.renderSidebarPanel() : "",
         this.shouldShowCanvas() ? this.renderCanvasPanel() : "",
+      ],
+    );
+  }
+
+  private renderConnectionRecovery(): HTMLElement {
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center",
+        "data-testid": "workflows-connection-recovery",
+      },
+      [
+        createElement(EmptyStatePanel, {
+          icon: "vpn_key",
+          title: "Connect this browser to Iteronix",
+          description: this.state.errorMessage ?? "Authentication is required.",
+        }),
+        createElement(
+          "a",
+          {
+            href: `${ROUTES.SETTINGS}?tab=api`,
+            className:
+              "rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50",
+            "data-testid": "workflows-open-settings",
+          },
+          ["Open Settings"],
+        ),
       ],
     );
   }
@@ -12526,6 +12563,15 @@ export class WorkflowsScreen extends Component<
       noticeMessage: null,
     });
 
+    if (readWorkflowBootstrapDecision(readServerConnection()) === "configure") {
+      this.setState({
+        pendingAction: null,
+        errorMessage:
+          "Authentication is required. Open Settings to configure this browser's server URL and auth token.",
+      });
+      return;
+    }
+
     try {
       const settingsSnapshot = await this.settingsClient.load();
       this.setState({
@@ -12542,10 +12588,9 @@ export class WorkflowsScreen extends Component<
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: readErrorMessage(
-          error,
-          "Could not load the workflow editor.",
-        ),
+        errorMessage: isWorkflowAuthenticationFailure(error)
+          ? "Authentication was rejected. Open Settings to check this browser's server URL and auth token."
+          : readErrorMessage(error, "Could not load the workflow editor."),
         noticeMessage: null,
       });
     }

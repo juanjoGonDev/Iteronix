@@ -1,4 +1,3 @@
-import { DefaultServerConnection } from "../src/shared/server-config.js";
 import { createWorkflowsEmulationDefinition } from "./workflows-emulation-fixture.js";
 
 const RoutePath = {
@@ -37,8 +36,13 @@ const seedWorkflowsEmulation = async (): Promise<void> => {
 const readServerUrl = (): string =>
   trimTrailingSlash(process.env[EnvKey.ServerUrl] ?? "http://127.0.0.1:4001");
 
-const readAuthToken = (): string =>
-  process.env[EnvKey.AuthToken] ?? DefaultServerConnection.authToken;
+const readAuthToken = (): string => {
+  const authToken = process.env[EnvKey.AuthToken]?.trim();
+  if (!authToken) {
+    throw new Error(`${EnvKey.AuthToken} is required.`);
+  }
+  return authToken;
+};
 
 const postJson = async (input: {
   serverUrl: string;
