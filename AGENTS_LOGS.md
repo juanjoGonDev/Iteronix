@@ -4633,3 +4633,19 @@
   - Docker Compose runtime remains unverified because the Docker Desktop Linux engine pipe is unavailable.
 - Next
   - Preserve the approved reviewed content and create the atomic cutover commit.
+
+### 2026-07-13 20:21 (Europe/Madrid) — Docker delivery
+
+- Summary: Fixed the container build failure before starting the PostgreSQL workflow-only stack.
+- Decisions: Kept the root `postinstall` lifecycle active during installation; Docker copies its required `scripts/install-hooks.ts` before `pnpm install`. The final production prune skips scripts only after `tsx` is removed, because the TypeScript postinstall loader cannot run without that development dependency. Compose uses the native project name `iteronix`.
+- Changes: Added the Dockerfile copy layer, non-interactive production prune, and top-level Compose name.
+- Commands: Reproduced the original failure, then passed `docker compose build --no-cache server-api`. `iteronix-postgres-1` reached healthy status and an internal authenticated `POST /workspace/state/get` returned HTTP 200 from `iteronix-server-api-validation`.
+- Issues/Risks: The normal server-api service cannot bind host port 4000 while the local Iteronix watcher owns it; the watcher was preserved. Existing `.atl/skill-registry.md` remains user-owned and unstaged.
+- Next: Use a free host port (or stop the local watcher) for the normal published Compose server, then run full quality gates and native review validation before committing.
+
+### 2026-07-13 20:23 (Europe/Madrid) — Docker delivery validation
+
+- Summary: Validated the corrected production image and PostgreSQL-backed server in the native `iteronix` Compose network.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (54 files, 270 tests), `pnpm build`, and `git diff --check`.
+- Issues/Risks: Host port 4000 remains intentionally untouched because a local Iteronix watcher owns it; the server container was verified without publishing that port.
+- Next: Include the Docker delivery files in the next reviewed atomic commit after validating the scope-bound receipt.

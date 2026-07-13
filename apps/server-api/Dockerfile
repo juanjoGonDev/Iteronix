@@ -3,11 +3,12 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.18.3 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.build.json ./
 COPY apps/server-api/package.json ./apps/server-api/package.json
+COPY scripts/install-hooks.ts ./scripts/install-hooks.ts
 COPY apps/server-api ./apps/server-api
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
 RUN pnpm exec tsc -p tsconfig.build.json
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod --ignore-scripts
 
 FROM node:20-alpine
 WORKDIR /app
