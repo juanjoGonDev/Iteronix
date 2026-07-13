@@ -5,7 +5,7 @@ import {
 } from "./settings-client.js";
 
 describe("settings client codecs", () => {
-  it("parses runtime providers and optional project selection metadata", () => {
+  it("parses runtime providers and optional workflow scope selection metadata", () => {
     const parsed = parseProviderListResponse({
       providers: [
         {
@@ -21,7 +21,6 @@ describe("settings client codecs", () => {
         },
       ],
       selection: {
-        projectId: "project-1",
         profileId: "coding",
         providerId: "codex-cli",
         updatedAt: "2026-04-28T10:00:00.000Z",
@@ -35,7 +34,6 @@ describe("settings client codecs", () => {
   it("parses provider settings update responses", () => {
     const parsed = parseProviderSettingsResponse({
       settings: {
-        projectId: "project-1",
         profileId: "coding",
         providerId: "codex-cli",
         config: {

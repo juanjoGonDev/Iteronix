@@ -4441,3 +4441,195 @@
   - Full root gates, commit, push and CI/CodeQL verification pending.
 - Next
   - Run format:check, quality, build and validate:workflows; commit/push with hooks enabled; verify CI/CodeQL.
+
+### 2026-07-13 13:36 (Europe/Madrid) — Workflow-only PostgreSQL cutover
+
+- Summary
+  - Started the approved destructive cutover on `refactor/workflow-only-postgres` after restoring process execution.
+- Decisions
+  - PostgreSQL is now the only workspace-state persistence adapter; no file-state fallback remains.
+  - The public server boundary now accepts only workflow plus provider/settings paths, and the browser shell registers only Workflows and Settings.
+  - A single internal workflow scope keeps the retained workflow editor usable without exposing project selection or project routes.
+- Changes
+  - Added `postgres-workspace-state.ts` with PostgreSQL table initialization, empty-state loading, and atomic JSONB upserts.
+  - Added `DATABASE_URL` configuration validation, PostgreSQL Docker Compose startup, reset documentation, and focused persistence/config tests.
+  - Removed file workspace persistence, the project selector sidebar footer, and product navigation for Overview, Projects, Explorer, Kanban, and History.
+- Commands
+  - `pnpm vitest run apps/server-api/src/config.test.ts apps/server-api/src/postgres-workspace-state.test.ts` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (80 files, 370 tests).
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` PASS.
+  - `docker compose config` PASS.
+- Issues/Risks
+  - Deprecated implementation modules and project fields remain reachable internally only; their physical deletion requires a focused workflow-catalog scope-native follow-up.
+- Next
+  - Delete remaining project-centric modules and internal fields, then rerun the complete quality gate suite and Docker startup validation.
+
+### 2026-07-13 13:55 (Europe/Madrid) — Workflow-only PostgreSQL corrective hardening
+
+- Summary
+  - Hardened the PostgreSQL cutover against stale writes, persisted credential leakage, Docker credential exposure, and rejected log endpoint requests.
+- Decisions
+  - PostgreSQL state uses a serialized local save queue plus optimistic database revisions; a conflict fails instead of silently overwriting state.
+  - Persisted workspace JSON drops auth, token, password, secret, and API-key fields; client-side log forwarding is local only and workflow logs are derived from execution history.
+  - Compose requires operator-supplied credentials, keeps PostgreSQL private to the Compose network, and restarts recoverable services deliberately.
+- Changes
+  - Added PostgreSQL revision, redaction, configuration, and workflow-boundary coverage.
+  - Added startup failure cleanup for the PostgreSQL pool, production dependency pruning in Docker, and a constrained Docker build context.
+  - Removed the web logs client and its rejected `/logs/*` calls from the retained Workflows UI.
+- Commands
+  - `pnpm vitest run apps/server-api/src/config.test.ts apps/server-api/src/postgres-workspace-state.test.ts apps/server-api/src/workflow-boundary.test.ts` PASS.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` PASS (80 files, 373 tests).
+  - `docker compose config` PASS with explicit test-only environment variables.
+  - `docker compose build server-api` could not run because Docker Desktop's Linux engine pipe was unavailable.
+- Issues/Risks
+  - The destructive deletion of remaining project-centric implementation modules and `projectId` fields is still pending; the server boundary rejects their public routes but the internal code has not yet been removed.
+- Next
+  - Make the workflow catalog scope-native, delete the project-centric modules and tests, then repeat all quality gates and Docker engine validation.
+
+### 2026-07-13 14:24 (Europe/Madrid) — Workflow scope corrective hardening
+
+- Summary
+  - Closed the review defects in the scope-native workflow cutover without reintroducing project selection.
+- Decisions
+  - PostgreSQL `BIGINT` revisions accept safe integer strings returned by the driver and reject unsafe or invalid values.
+  - Workflows and provider settings use a single workflow workspace scope; no retained client, DTO, or API request needs `projectId`.
+- Changes
+  - Added a realistic string-revision persistence regression test and safe revision decoding.
+  - Removed project state guards and project-scoped asset choices from the Workflows UI; empty PostgreSQL state loads catalog and draft operations directly.
+  - Removed provider/settings project keys from server parsing, store records, workspace persistence decoding, settings client contracts, and runtime synchronization.
+- Commands
+  - `pnpm vitest run apps/server-api/src/postgres-workspace-state.test.ts apps/server-api/src/providers.test.ts apps/web-ui/src/shared/settings-client.test.ts apps/web-ui/src/screens/settings-state.test.ts apps/web-ui/src/shared/workflow-client.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` PASS (80 files, 375 tests).
+- Issues/Risks
+  - Fresh bounded review remains required before committing; the earlier receipt is absent.
+- Next
+  - Run the fresh review for the corrected staged vertical unit, then validate the receipt before the atomic commit.
+
+### 2026-07-13 14:37 (Europe/Madrid) — Workflow-only server catalog deletion
+
+- Summary
+  - Removed the project-centric server catalog; the remaining API server now owns only workflow execution, workflow persistence, and provider/settings routes.
+- Decisions
+  - Workflow execution correlation IDs remain runtime metadata; legacy session management and session routes were removed.
+  - Server startup requires only host/port, bearer authentication, and PostgreSQL; workspace root, command allowlist, and server log persistence configuration were removed with their consumers.
+- Changes
+  - Deleted project, files, git, Kanban, history, logs, quality-gates, sessions, sandbox, AI workbench, and server-log modules with their tests.
+  - Rebuilt `server.ts` around PostgreSQL workspace state, provider settings, and workflow endpoints; pruned legacy route/constants/config surface and deleted the obsolete evaluation integration test.
+  - Added source-inventory coverage for every deleted server module and test; updated workspace-state API coverage for settings-only state updates.
+- Commands
+  - `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts` RED before deletion.
+  - `pnpm vitest run apps/server-api/src/config.test.ts` RED before removing workspace-root configuration.
+  - `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts apps/server-api/src/config.test.ts apps/server-api/src/workspace-state-api.test.ts apps/server-api/src/workflow-boundary.test.ts` PASS (8 tests).
+  - `pnpm typecheck` PASS.
+- Issues/Risks
+  - Browser-side legacy screen/client removal and final full quality gates remain pending in the broader destructive cutover.
+- Next
+  - Remove the remaining browser legacy surface, then run the full suite and bounded review before atomic commits.
+
+### 2026-07-13 14:49 (Europe/Madrid) — Workflow-only browser catalog deletion
+
+- Summary
+  - Removed the obsolete browser catalog so the PWA retains only workflow authoring/execution and provider/settings configuration.
+- Decisions
+  - The workspace-state client now decodes only settings; workflow catalog requests derive the single workflow workspace scope from retained workflow data.
+  - Workflow execution/edit history remains inside the Workflows screen; the standalone History product surface was deleted.
+- Changes
+  - Deleted the Dashboard, Projects, Explorer, Kanban, standalone History, associated state/URL helpers, git/quality/log/workbench clients, obsolete components, and their browser validators.
+  - Pruned route constants and URL registry policy to `/workflows` and `/settings`, removed client log forwarding, and reduced the retained empty-state primitive to its only consumer contract.
+  - Updated settings/workflow emulation browser stubs to use workflow workspace state without project identifiers; added a failing-first source inventory test that prevents legacy module restoration.
+- Commands
+  - `pnpm vitest run apps/web-ui/src/workflow-only-source-inventory.test.ts` RED before deletion; PASS after deletion.
+  - `pnpm vitest run apps/web-ui/src/workflow-only-source-inventory.test.ts apps/web-ui/src/shared/url-state-registry.test.ts apps/web-ui/src/components/WorkbenchPanels.test.ts apps/web-ui/scripts/workflows-emulation-fixture.test.ts apps/web-ui/src/shared/settings-client.test.ts apps/web-ui/src/screens/settings-state.test.ts apps/web-ui/src/shared/workflow-client.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS (50 tests).
+  - `pnpm typecheck` PASS.
+  - `pnpm -C apps/web-ui build` PASS.
+  - `pnpm -C apps/web-ui validate:settings` PASS.
+  - `pnpm -C apps/web-ui validate:workflows` PASS after adding the missing timeline-version option synchronization in the validator.
+- Issues/Risks
+  - Root lint, full test/build gates, Docker runtime validation, review receipt, and atomic commits remain owned by the full cutover sequence.
+- Next
+  - Run the full quality gates and bounded review, then create the planned atomic commits.
+
+### 2026-07-13 15:00 (Europe/Madrid) — Workflow-only catalog and secret-reference hardening
+
+- Summary
+  - Completed the scope-native workflow catalog cutover and replaced durable provider API-key handling with environment-secret references.
+- Decisions
+  - Workflows, assets, imports, and previews now use one global catalog with no workspace identifier or request filter.
+  - Provider configuration retains only `apiKeyEnvVar`; plaintext API keys are removed from UI state and stripped from direct settings updates before persistence or runtime use.
+- Changes
+  - Removed workspace identifiers from shared records, catalog filtering, import-preview payloads, server execution lookup, retained UI state, fixtures, validators, and tests.
+  - Centralized workspace-state secret redaction so PostgreSQL persistence and direct update parsing preserve environment references while dropping raw credentials.
+- Commands
+  - RED: `pnpm vitest run packages/agents/src/workflow-catalog.test.ts apps/server-api/src/workflow-runtime.test.ts` failed before implementation.
+  - RED: `pnpm vitest run apps/server-api/src/workspace-state-api.test.ts` failed before direct-update redaction.
+  - PASS: focused secret/catalog regression suite (25 tests) and `pnpm typecheck`.
+- Issues/Risks
+  - Root lint, complete test/build suite, Docker runtime validation, bounded review receipt, and atomic commits remain required for the full cutover.
+- Next
+  - Run lint and the complete test suite, then hand the corrected review blockers back to the cutover sequence.
+
+### 2026-07-13 15:07 (Europe/Madrid) — Fresh-stack provider configuration
+
+- Summary
+  - Removed the unavailable implicit Codex CLI profile from fresh PostgreSQL and browser settings state.
+- Decisions
+  - A new workflow-only installation has no provider profile; execution requires a user-configured CLI executable or API provider with environment-backed credentials.
+- Changes
+  - Removed the server and browser Codex defaults, made the workflow editor render an explicit Settings configuration message, and reject empty Codex CLI commands before adapter construction.
+  - Documented the provider bootstrap requirement and recorded the completed scope in `PLAN.md`.
+- Commands
+  - RED: `pnpm vitest run apps/server-api/src/postgres-workspace-state.test.ts apps/web-ui/src/shared/settings-storage.test.ts` failed because both layers seeded Codex.
+  - PASS: `pnpm vitest run apps/server-api/src/workflow-runtime.test.ts apps/server-api/src/postgres-workspace-state.test.ts apps/web-ui/src/shared/settings-storage.test.ts` (13 tests), focused ESLint, and `pnpm typecheck`.
+- Issues/Risks
+  - Full gates and Docker Compose runtime verification remain owned by the parent cutover sequence.
+- Next
+  - Run focused lint/typecheck and return the provider correction for integrated review.
+
+### 2026-07-13 15:15 (Europe/Madrid) — Revision-conflict rollback for workflow persistence
+
+- Summary
+  - Made workflow catalog and provider mutations deterministic after a rejected PostgreSQL optimistic-revision write.
+- Decisions
+  - The persistence boundary rolls mutable in-memory stores back to the last committed workspace snapshot when PostgreSQL rejects a state revision; later saves cannot include rejected data.
+- Changes
+  - Added restore operations to provider and workflow catalog stores and invoked them from the server persistence failure path.
+  - Added failing-first regressions for workflow definition and provider selection conflicts, including a later-save assertion.
+- Commands
+  - RED: `pnpm vitest run apps/server-api/src/workspace-persistence.test.ts` failed before exporting and adding rollback behavior.
+  - PASS: `pnpm vitest run apps/server-api/src/workspace-persistence.test.ts` (2 tests).
+  - PASS: `pnpm lint -- apps/server-api/src/server.ts apps/server-api/src/providers.ts packages/agents/src/workflow-catalog.ts apps/server-api/src/workspace-persistence.test.ts`.
+  - PASS: `pnpm typecheck`.
+- Issues/Risks
+  - Full quality gates, bounded review, Docker runtime validation, and atomic commits remain owned by the parent cutover sequence.
+- Next
+  - Integrate this rollback correction into the review transaction and continue the cutover validation.
+
+### 2026-07-13 15:36 (Europe/Madrid) — Durable workflow SSE terminal events
+
+- Summary
+  - Corrected SSE execution reporting so a PostgreSQL progress-save failure cannot be reported as a completed workflow or node execution.
+- Decisions
+  - Terminal runtime events remain buffered until queued progress writes and the final workspace save complete successfully.
+- Changes
+  - Propagated save-scheduler failures through both workflow execution stream handlers and emitted `workflow_failed` from their failure boundary.
+  - Added HTTP SSE regressions for `/workflows/executions/stream` and `/workflows/executions/stream-node`; each injects a failing PostgreSQL state store and asserts failure without completion.
+- Commands
+  - RED then PASS: `pnpm vitest run apps/server-api/src/workflow-stream-persistence.test.ts` (2 tests).
+  - PASS: focused ESLint, `pnpm -C apps/server-api run build`, and `pnpm vitest run apps/server-api/src` (42 tests).
+- Issues/Risks
+  - Full quality gates, bounded review receipt, Docker runtime validation, and atomic commits remain owned by the parent cutover sequence.
+- Next
+  - Re-run the final 4R review over the corrected diff, then validate the staged receipt before committing.
+
+### 2026-07-13 15:47 (Europe/Madrid) — Persistence concurrency correction R3-001
+
+- Summary
+  - Closed R3-001: a failed queued PostgreSQL progress write now reports `workflow_failed` and never a false terminal completion.
+- Commands
+  - RED then PASS: `pnpm vitest run apps/server-api/src/workflow-stream-persistence.test.ts` (2 tests).
+  - Native receipt approved: `gentle-ai review validate --gate pre-commit --cwd D:\projects\Iteronix` returned `allow` for `review-c5e950263b53f654`.
+- Issues/Risks
+  - Docker Compose runtime remains unverified because the Docker Desktop Linux engine pipe is unavailable.
+- Next
+  - Preserve the approved reviewed content and create the atomic cutover commit.

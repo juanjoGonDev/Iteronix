@@ -5,7 +5,6 @@ import { openAiCompatibleProviderDescriptor } from "../../../packages/adapters/s
 import { ResultType } from "./result";
 import { ProviderStoreErrorCode, createProviderStore } from "./providers";
 
-const ProjectId = "project-1";
 const ProfileId = "default";
 const UnknownProviderId = "unknown-provider";
 const ConfigKey = "command";
@@ -25,7 +24,6 @@ describe("provider store", () => {
   it("selects and reads provider selection", () => {
     const store = createProviderStore();
     const selected = store.selectProvider({
-      projectId: ProjectId,
       profileId: ProfileId,
       providerId: codexCliProviderDescriptor.id,
     });
@@ -36,7 +34,6 @@ describe("provider store", () => {
     }
 
     const selection = store.getSelection({
-      projectId: ProjectId,
       profileId: ProfileId,
     });
 
@@ -49,7 +46,6 @@ describe("provider store", () => {
   it("rejects unknown provider selection", () => {
     const store = createProviderStore();
     const result = store.selectProvider({
-      projectId: ProjectId,
       profileId: ProfileId,
       providerId: UnknownProviderId,
     });
@@ -63,7 +59,6 @@ describe("provider store", () => {
   it("updates provider settings", () => {
     const store = createProviderStore();
     const result = store.updateSettings({
-      projectId: ProjectId,
       profileId: ProfileId,
       providerId: codexCliProviderDescriptor.id,
       config: {

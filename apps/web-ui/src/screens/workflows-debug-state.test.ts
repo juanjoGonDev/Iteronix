@@ -66,7 +66,6 @@ describe("workflows debug state", () => {
 
   it("builds selectable input sources from previous connected outputs", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Debug",
     });
     const sourceNode = definition.nodes[0];
@@ -98,7 +97,6 @@ describe("workflows debug state", () => {
   it("builds reusable step seed outputs from previous runs and one pinned output", () => {
     const definition = addWorkflowNode(
       createEmptyWorkflowDefinition({
-        projectId: "project-1",
         name: "Debug",
       }),
       WorkflowNodeKind.AiAgent,
@@ -210,7 +208,6 @@ describe("workflows debug state", () => {
 
   it("persists a single pinned test output in the workflow definition", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Pinned",
     });
     const firstNodeId = definition.nodes[0]?.id ?? "";
@@ -330,7 +327,6 @@ describe("workflows debug state", () => {
 
   it("preserves dirty canvas edits while execution auto-refresh reloads catalog data", () => {
     const serverWorkflow = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Saved",
     });
     const savedWorkflow = { ...serverWorkflow, id: "workflow-1" };
@@ -353,7 +349,6 @@ describe("workflows debug state", () => {
 
   it("accepts the server workflow after catalog reload when the local draft is clean", () => {
     const serverWorkflow = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Server update",
     });
 
@@ -523,7 +518,6 @@ describe("workflows debug state", () => {
   it("finds connected modal neighbors and keeps the active run when navigating", () => {
     const definition = addWorkflowNode(
       createEmptyWorkflowDefinition({
-        projectId: "project-1",
         name: "Debug",
       }),
       WorkflowNodeKind.AiAgent,

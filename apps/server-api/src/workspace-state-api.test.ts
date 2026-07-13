@@ -6,22 +6,10 @@ import { createDefaultWorkspaceState } from "./workspace-state";
 
 describe("workspace state API contract", () => {
   it("accepts typed workspace state updates", () => {
-    const currentState = {
-      ...createDefaultWorkspaceState(),
-      projects: [
-        {
-          id: "project-1",
-          name: "Iteronix",
-          rootPath: "D:/projects/Iteronix",
-          createdAt: "2026-04-29T10:00:00.000Z",
-          updatedAt: "2026-04-29T10:00:00.000Z",
-        },
-      ],
-    };
+    const currentState = createDefaultWorkspaceState();
 
     const result = parseWorkspaceStateUpdateRequest(
       {
-        activeProjectId: "project-1",
         settings: {
           ...currentState.settings,
           workflowLimits: {
@@ -38,15 +26,6 @@ describe("workspace state API contract", () => {
             authToken: "server-token",
           },
         },
-        workbenchHistory: {
-          runs: [
-            {
-              id: "run-1",
-              kind: "skill",
-            },
-          ],
-          evals: [],
-        },
       },
       currentState,
     );
@@ -56,7 +35,6 @@ describe("workspace state API contract", () => {
       throw new Error("Expected workspace update to parse.");
     }
 
-    expect(result.value.activeProjectId).toBe("project-1");
     expect(result.value.settings?.workflowLimits.maxLoops).toBe(21);
     expect(result.value.settings?.notifications.webhookUrl).toBe(
       "https://hooks.example.com/iteronix",
@@ -64,7 +42,6 @@ describe("workspace state API contract", () => {
     expect(result.value.settings?.serverConnection.serverUrl).toBe(
       "https://server.example.com",
     );
-    expect(result.value.workbenchHistory?.runs).toHaveLength(1);
   });
 
   it("rejects invalid workspace state update bodies as typed bad requests", () => {
@@ -80,5 +57,35 @@ describe("workspace state API contract", () => {
         message: ErrorMessage.InvalidBody,
       },
     });
+  });
+
+  it("keeps provider environment references while dropping plaintext API keys", () => {
+    const currentState = createDefaultWorkspaceState();
+
+    const result = parseWorkspaceStateUpdateRequest(
+      {
+        settings: {
+          ...currentState.settings,
+          providerProfiles: [
+            {
+              id: "openai",
+              providerKind: "openai",
+              apiKey: "raw-provider-key",
+              apiKeyEnvVar: "WORKFLOW_PROVIDER_KEY",
+            },
+          ],
+        },
+      },
+      currentState,
+    );
+
+    expect(result.type).toBe(ResultType.Ok);
+    if (result.type !== ResultType.Ok) {
+      return;
+    }
+
+    const profile = result.value.settings?.providerProfiles[0];
+    expect(profile?.["apiKey"]).toBeUndefined();
+    expect(profile?.["apiKeyEnvVar"]).toBe("WORKFLOW_PROVIDER_KEY");
   });
 });

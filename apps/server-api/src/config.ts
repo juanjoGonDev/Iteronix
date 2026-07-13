@@ -4,45 +4,42 @@ export type ServerConfig = {
   port: number;
   host: string;
   authToken: string;
-  workspaceRoots: ReadonlyArray<string>;
-  commandAllowlist: ReadonlyArray<string>;
-  logDir: string;
-  logMaxEntries: number;
-  workspaceStateFile: string;
+  databaseUrl: string;
 };
 
 export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   const port = parsePort(env[EnvKey.Port]);
   const host = env[EnvKey.Host] ?? DefaultServerConfig.Host;
   const authToken = env[EnvKey.AuthToken];
-  const workspaceRoots = parseAllowlist(env[EnvKey.WorkspaceRoots]);
-  const commandAllowlist = parseAllowlist(env[EnvKey.CommandAllowlist]);
-  const logDir = env[EnvKey.LogDir] ?? DefaultServerConfig.LogDir;
-  const logMaxEntries = parsePositiveInteger(
-    env[EnvKey.LogMaxEntries],
-    DefaultServerConfig.LogMaxEntries,
-  );
-  const workspaceStateFile =
-    env[EnvKey.WorkspaceStateFile] ?? DefaultServerConfig.WorkspaceStateFile;
+  const databaseUrl = env[EnvKey.DatabaseUrl];
 
   if (!authToken || authToken.trim().length === 0) {
     throw new Error(ErrorMessage.AuthTokenMissing);
   }
 
-  if (workspaceRoots.length === 0) {
-    throw new Error(ErrorMessage.WorkspaceRootsMissing);
+  if (!databaseUrl || databaseUrl.trim().length === 0) {
+    throw new Error(ErrorMessage.DatabaseUrlMissing);
+  }
+
+  if (!isPostgresUrl(databaseUrl)) {
+    throw new Error(ErrorMessage.DatabaseUrlInvalid);
   }
 
   return {
     port,
     host,
     authToken,
-    workspaceRoots,
-    commandAllowlist,
-    logDir,
-    logMaxEntries,
-    workspaceStateFile,
+    databaseUrl,
   };
+};
+
+const isPostgresUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "postgres:" || url.protocol === "postgresql:";
+  } catch {
+    return false;
+  }
 };
 
 const parsePort = (value: string | undefined): number => {
@@ -53,40 +50,6 @@ const parsePort = (value: string | undefined): number => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`${ErrorMessage.InvalidPort}: ${value}`);
-  }
-
-  return parsed;
-};
-
-const parseAllowlist = (value: string | undefined): ReadonlyArray<string> => {
-  if (!value) {
-    return [];
-  }
-
-  const entries = value.split(/[;,]/);
-  const normalized: string[] = [];
-
-  for (const entry of entries) {
-    const trimmed = entry.trim();
-    if (trimmed.length > 0) {
-      normalized.push(trimmed);
-    }
-  }
-
-  return normalized;
-};
-
-const parsePositiveInteger = (
-  value: string | undefined,
-  fallback: number,
-): number => {
-  if (value === undefined) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${ErrorMessage.InvalidBody}: ${value}`);
   }
 
   return parsed;

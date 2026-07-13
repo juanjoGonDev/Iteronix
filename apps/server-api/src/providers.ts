@@ -23,32 +23,27 @@ export type ProviderStoreError = {
 };
 
 type ProviderSelectionKey = {
-  projectId: string;
   profileId: string;
 };
 
 export type ProviderSelection = {
-  projectId: string;
   profileId: string;
   providerId: string;
   updatedAt: string;
 };
 
 type ProviderSelectInput = {
-  projectId: string;
   profileId: string;
   providerId: string;
 };
 
 type ProviderSettingsInput = {
-  projectId: string;
   profileId: string;
   providerId: string;
   config: Record<string, unknown>;
 };
 
 export type ProviderSettingsRecord = {
-  projectId: string;
   profileId: string;
   providerId: string;
   config: Record<string, unknown>;
@@ -73,9 +68,10 @@ export type ProviderStore = {
     input: ProviderSettingsInput,
   ) => Result<ProviderSettingsRecord, ProviderStoreError>;
   snapshot: () => ProviderStoreSnapshot;
+  restore: (snapshot: ProviderStoreSnapshot) => void;
 };
 
-type ProviderStoreSnapshot = {
+export type ProviderStoreSnapshot = {
   selections: ReadonlyArray<ProviderSelection>;
   settings: ReadonlyArray<ProviderSettingsRecord>;
 };
@@ -100,10 +96,7 @@ export const createProviderStore = (
   if (seed.selections) {
     for (const selection of seed.selections) {
       if (providersById.has(selection.providerId)) {
-        selectionsByKey.set(
-          createSelectionKey(selection.projectId, selection.profileId),
-          selection,
-        );
+        selectionsByKey.set(createSelectionKey(selection.profileId), selection);
       }
     }
   }
@@ -113,11 +106,7 @@ export const createProviderStore = (
     for (const setting of seed.settings) {
       if (providersById.has(setting.providerId)) {
         settingsByKey.set(
-          createSettingsKey(
-            setting.projectId,
-            setting.profileId,
-            setting.providerId,
-          ),
+          createSettingsKey(setting.profileId, setting.providerId),
           setting,
         );
       }
@@ -146,12 +135,32 @@ export const createProviderStore = (
     settings: Array.from(settingsByKey.values()),
   });
 
+  const restore = (snapshot: ProviderStoreSnapshot): void => {
+    selectionsByKey.clear();
+    for (const selection of snapshot.selections) {
+      if (providersById.has(selection.providerId)) {
+        selectionsByKey.set(createSelectionKey(selection.profileId), selection);
+      }
+    }
+
+    settingsByKey.clear();
+    for (const setting of snapshot.settings) {
+      if (providersById.has(setting.providerId)) {
+        settingsByKey.set(
+          createSettingsKey(setting.profileId, setting.providerId),
+          setting,
+        );
+      }
+    }
+  };
+
   return {
     listProviders,
     getSelection,
     selectProvider,
     updateSettings,
     snapshot,
+    restore,
   };
 };
 
@@ -159,14 +168,6 @@ const readSelection = (
   selectionsByKey: Map<string, ProviderSelection>,
   input: ProviderSelectionKey,
 ): Result<ProviderSelection | undefined, ProviderStoreError> => {
-  const projectId = normalizeId(input.projectId);
-  if (!projectId) {
-    return err({
-      code: ProviderStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId,
-    });
-  }
-
   const profileId = normalizeId(input.profileId);
   if (!profileId) {
     return err({
@@ -175,9 +176,7 @@ const readSelection = (
     });
   }
 
-  const selection = selectionsByKey.get(
-    createSelectionKey(projectId, profileId),
-  );
+  const selection = selectionsByKey.get(createSelectionKey(profileId));
   return ok(selection);
 };
 
@@ -186,14 +185,6 @@ const writeSelection = (
   selectionsByKey: Map<string, ProviderSelection>,
   input: ProviderSelectInput,
 ): Result<ProviderSelection, ProviderStoreError> => {
-  const projectId = normalizeId(input.projectId);
-  if (!projectId) {
-    return err({
-      code: ProviderStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId,
-    });
-  }
-
   const profileId = normalizeId(input.profileId);
   if (!profileId) {
     return err({
@@ -218,11 +209,10 @@ const writeSelection = (
   }
 
   const selection = createSelection({
-    projectId,
     profileId,
     providerId,
   });
-  selectionsByKey.set(createSelectionKey(projectId, profileId), selection);
+  selectionsByKey.set(createSelectionKey(profileId), selection);
   return ok(selection);
 };
 
@@ -231,14 +221,6 @@ const writeSettings = (
   settingsByKey: Map<string, ProviderSettingsRecord>,
   input: ProviderSettingsInput,
 ): Result<ProviderSettingsRecord, ProviderStoreError> => {
-  const projectId = normalizeId(input.projectId);
-  if (!projectId) {
-    return err({
-      code: ProviderStoreErrorCode.InvalidInput,
-      message: ErrorMessage.MissingProjectId,
-    });
-  }
-
   const profileId = normalizeId(input.profileId);
   if (!profileId) {
     return err({
@@ -263,20 +245,15 @@ const writeSettings = (
   }
 
   const settings = createSettingsRecord({
-    projectId,
     profileId,
     providerId,
     config: input.config,
   });
-  settingsByKey.set(
-    createSettingsKey(projectId, profileId, providerId),
-    settings,
-  );
+  settingsByKey.set(createSettingsKey(profileId, providerId), settings);
   return ok(settings);
 };
 
 const createSelection = (input: ProviderSelectInput): ProviderSelection => ({
-  projectId: input.projectId,
   profileId: input.profileId,
   providerId: input.providerId,
   updatedAt: new Date().toISOString(),
@@ -285,21 +262,16 @@ const createSelection = (input: ProviderSelectInput): ProviderSelection => ({
 const createSettingsRecord = (
   input: ProviderSettingsInput,
 ): ProviderSettingsRecord => ({
-  projectId: input.projectId,
   profileId: input.profileId,
   providerId: input.providerId,
   config: input.config,
   updatedAt: new Date().toISOString(),
 });
 
-const createSelectionKey = (projectId: string, profileId: string): string =>
-  [projectId, profileId].join(ProviderKeySeparator);
+const createSelectionKey = (profileId: string): string => profileId;
 
-const createSettingsKey = (
-  projectId: string,
-  profileId: string,
-  providerId: string,
-): string => [projectId, profileId, providerId].join(ProviderKeySeparator);
+const createSettingsKey = (profileId: string, providerId: string): string =>
+  [profileId, providerId].join(ProviderKeySeparator);
 
 const normalizeId = (value: string | undefined): string | undefined => {
   if (!value) {

@@ -548,8 +548,6 @@ const createWorkflowDefinitionRecord = (
   } = {},
 ): WorkflowDefinitionRecord => ({
   id: "workflow-1",
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   name: "Workflow 06.6",
   description: "Workflow runtime continuity",
   status: WorkflowRecordStatus.Draft,
@@ -851,10 +849,8 @@ const createDynamicExpressionReferenceWorkflowDefinitionRecord =
 
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   kind: "prompt",
-  scope: "project",
+  scope: "workspace",
   name: "Prompt asset",
   slug: "prompt-asset",
   description: "",
@@ -873,10 +869,8 @@ const createGuardrailAssetRecord = (input: {
   message: string;
 }): WorkflowAssetRecord => ({
   id: input.id,
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   kind: "guardrail",
-  scope: "project",
+  scope: "workspace",
   name: input.id,
   slug: input.id,
   description: "",

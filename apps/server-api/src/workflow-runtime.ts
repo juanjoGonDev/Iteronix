@@ -31,7 +31,7 @@ type ProviderProfile = {
   command: string;
   endpointUrl: string;
   promptMode: "stdin" | "arg";
-  apiKey: string;
+  apiKeyEnvVar: string;
 };
 
 export type WorkflowRuntimeService = {
@@ -131,7 +131,6 @@ export const createWorkflowRuntimeService = (input: {
         {
           workflowId: request.workflow.id,
           workflowRunId: `provider-test-${request.node.id}`,
-          projectId: request.workflow.projectId,
           node: request.node,
           provider: request.node.config.provider ?? {
             providerId: profile.id,
@@ -199,6 +198,11 @@ const executeProviderNode = async (
 
 const createProvider = (profile: ProviderProfile): LLMProviderPort => {
   if (profile.providerKind === "codex-cli") {
+    if (profile.command.length === 0) {
+      throw new Error(
+        `Workflow provider profile ${profile.id} is missing a CLI command.`,
+      );
+    }
     return createCodexCliProvider({
       command: profile.command,
       promptMode: profile.promptMode,
@@ -226,7 +230,7 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
     if (
       (profile.providerKind === "openai" ||
         profile.providerKind === "custom") &&
-      profile.apiKey.length === 0
+      resolveProviderApiKey(profile).length === 0
     ) {
       throw new Error(
         `Workflow provider profile ${profile.id} is missing a bearer API key.`,
@@ -235,7 +239,7 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
 
     return createOpenAiCompatibleProvider({
       baseUrl: profile.endpointUrl,
-      apiKey: profile.apiKey,
+      apiKey: resolveProviderApiKey(profile),
       models: profile.modelId
         ? [
             {
@@ -347,10 +351,10 @@ const readProviderProfile = (value: unknown): ProviderProfile | null => {
     id,
     providerKind,
     modelId: readString(value["modelId"]),
-    command: readString(value["command"]) || "codex",
+    command: readString(value["command"]),
     endpointUrl: readString(value["endpointUrl"]),
     promptMode,
-    apiKey: readProviderApiKey(value),
+    apiKeyEnvVar: readString(value["apiKeyEnvVar"]),
   };
 };
 
@@ -360,16 +364,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-const readProviderApiKey = (value: Record<string, unknown>): string => {
-  const explicitApiKey = readString(value["apiKey"]);
-  if (explicitApiKey.length > 0) {
-    return explicitApiKey;
-  }
-
-  const envKey = readString(value["apiKeyEnvVar"]);
+export const resolveProviderApiKey = (
+  value: { apiKeyEnvVar: string },
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string => {
+  const envKey = value.apiKeyEnvVar;
   if (envKey.length > 0) {
-    return readString(process.env[envKey]);
+    return readString(environment[envKey]);
   }
 
-  return readString(process.env["OPENAI_API_KEY"]);
+  return readString(environment["OPENAI_API_KEY"]);
 };

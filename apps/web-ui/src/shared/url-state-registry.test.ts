@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { ROUTES } from "./constants.js";
 import {
-  getUrlStateRoutePolicy,
   listUrlStateRoutePolicies,
   validateUrlStateRegistryCoverage,
 } from "./url-state-registry.js";
@@ -11,21 +10,9 @@ describe("url state registry", () => {
   it("documents every application route with an explicit URL-state decision", () => {
     expect(validateUrlStateRegistryCoverage()).toEqual([]);
     expect(listUrlStateRoutePolicies().map((policy) => policy.route)).toEqual([
-      ROUTES.OVERVIEW,
-      ROUTES.PROJECTS,
-      ROUTES.EXPLORER,
-      ROUTES.KANBAN,
       ROUTES.WORKFLOWS,
-      ROUTES.HISTORY,
       ROUTES.SETTINGS,
     ]);
-  });
-
-  it("marks Dashboard/Overview as intentionally having no deep URL state", () => {
-    expect(getUrlStateRoutePolicy(ROUTES.OVERVIEW)).toMatchObject({
-      status: "none",
-      reason: "Static overview has no reload-useful deep state yet.",
-    });
   });
 
   it("keeps sensitive parameter names out of every allowed route policy", () => {

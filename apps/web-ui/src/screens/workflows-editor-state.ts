@@ -64,7 +64,6 @@ export type WorkflowAssetKind =
 
 export const WorkflowAssetScope = {
   Workspace: "workspace",
-  Project: "project",
 } as const;
 
 export type WorkflowAssetScope =
@@ -415,8 +414,6 @@ type WorkflowContextPolicyRecord = {
 
 export type WorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: WorkflowRecordStatus;
@@ -435,7 +432,6 @@ export type WorkflowDefinitionRecord = {
 export type WorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: WorkflowDefinitionRecord;
@@ -449,8 +445,6 @@ export type WorkflowDefinitionVersionRecord = {
 
 export type WorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: WorkflowAssetKind;
   scope: WorkflowAssetScope;
   name: string;
@@ -471,7 +465,6 @@ export type WorkflowAssetRecord = {
 export type WorkflowAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: "primary" | "guardrail" | "instruction";
@@ -526,7 +519,6 @@ export type WorkflowNodeExecutionRecord = {
 export type WorkflowExecutionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   triggerKind: WorkflowTriggerKind;
   status:
     | "queued"
@@ -547,7 +539,7 @@ export type WorkflowExecutionRecord = {
 
 export type WorkflowDefinitionUpsertInput = Omit<
   WorkflowDefinitionRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
   versionNote?: string;
@@ -556,10 +548,9 @@ export type WorkflowDefinitionUpsertInput = Omit<
 
 export type WorkflowAssetUpsertInput = Omit<
   WorkflowAssetRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
-  projectId?: string;
 };
 
 const DefaultNodeWidth = 264;
@@ -572,7 +563,6 @@ const DefaultWorkflowViewport = {
 const DefaultNodeGridColumnWidth = 312;
 const DefaultNodeGridRowHeight = 168;
 const DefaultWorkflowLanguage = "en";
-const DefaultWorkspaceId = "iteronix-workspace";
 const DefaultReasoningLevel = WorkflowReasoningLevel.Medium;
 const DefaultVerbosity = WorkflowVerbosity.Medium;
 const DefaultTemperature = 0.2;
@@ -615,8 +605,6 @@ export type WorkflowRegexEvaluationResult =
       flags: string;
       error: string;
     };
-
-export const readDefaultWorkflowWorkspaceId = (): string => DefaultWorkspaceId;
 
 export const normalizeWorkflowAssetExecutionPolicy = (
   value: WorkflowAssetExecutionPolicyRecord | undefined,
@@ -689,11 +677,8 @@ export const evaluateWorkflowRegex = (input: {
 };
 
 export const createEmptyWorkflowDefinition = (input: {
-  workspaceId?: string;
-  projectId: string;
   name: string;
 }): WorkflowDefinitionUpsertInput => ({
-  workspaceId: input.workspaceId ?? DefaultWorkspaceId,
   name: input.name.trim().length > 0 ? input.name.trim() : "Untitled workflow",
   description: "",
   status: WorkflowRecordStatus.Draft,
@@ -722,8 +707,6 @@ export const createEmptyWorkflowDefinition = (input: {
 
 export const createWorkflowAssetDraft = (input: {
   kind: WorkflowAssetKind;
-  projectId: string;
-  workspaceId?: string;
   name?: string;
   idFactory?: () => string;
   now?: () => string;
@@ -735,12 +718,8 @@ export const createWorkflowAssetDraft = (input: {
 
   const draft: WorkflowAssetUpsertInput = {
     id: idFactory(),
-    workspaceId: input.workspaceId ?? DefaultWorkspaceId,
-    ...(input.kind === WorkflowAssetKind.Guardrail
-      ? { projectId: input.projectId }
-      : { projectId: input.projectId }),
     kind: input.kind,
-    scope: WorkflowAssetScope.Project,
+    scope: WorkflowAssetScope.Workspace,
     name: baseName,
     slug: toSlug(baseName),
     description: "",
@@ -1764,7 +1743,6 @@ export const stripDefinitionVersionFields = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
 ): WorkflowDefinitionUpsertInput => ({
   ...(definition.id ? { id: definition.id } : {}),
-  workspaceId: definition.workspaceId,
   name: definition.name,
   description: definition.description,
   status: definition.status,
@@ -1781,8 +1759,6 @@ const stripAssetPersistenceFields = (
   asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
 ): WorkflowAssetUpsertInput => ({
   ...(asset.id ? { id: asset.id } : {}),
-  workspaceId: asset.workspaceId,
-  ...(asset.projectId ? { projectId: asset.projectId } : {}),
   kind: asset.kind,
   scope: asset.scope,
   name: asset.name,
@@ -2048,8 +2024,7 @@ export const readAssetKindLabel = (kind: WorkflowAssetKind): string => {
   return "Guardrail";
 };
 
-export const readAssetScopeLabel = (scope: WorkflowAssetScope): string =>
-  scope === WorkflowAssetScope.Workspace ? "Workspace" : "Project";
+export const readAssetScopeLabel = (): string => "Workspace";
 
 export const readNodeAssetKind = (
   kind: WorkflowNodeKind,

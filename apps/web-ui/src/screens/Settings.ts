@@ -10,7 +10,6 @@ import {
 } from "../components/PageScaffold.js";
 import {
   SettingsNumberField,
-  SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
   SettingsToggleField,
@@ -20,11 +19,6 @@ import {
   createElement,
   type ComponentProps,
 } from "../shared/Component.js";
-import { ROUTES } from "../shared/constants.js";
-import {
-  type ProjectSessionState,
-  readProjectSession,
-} from "../shared/project-session.js";
 import {
   DefaultServerConnection,
   readServerConnection,
@@ -47,9 +41,7 @@ import {
   createWorkspaceStateClient,
   hydrateWorkspaceStateClients,
 } from "../shared/workspace-state-client.js";
-import { router } from "../shared/Router.js";
 import { writeBrowserUrlState } from "../shared/url-state.js";
-import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   ProviderKind,
   ProviderPromptMode,
@@ -74,8 +66,6 @@ interface SettingsScreenState {
   workflowLimits: WorkflowLimitsSettings;
   notifications: NotificationsSettings;
   serverConnection: ServerConnection;
-  currentProject: ProjectRecord | null;
-  projectSession: ProjectSessionState;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
@@ -150,8 +140,6 @@ export class SettingsScreen extends Component<
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
       serverConnection: snapshot.serverConnection,
-      currentProject: null,
-      projectSession: readProjectSession(),
       runtimeProviders: [],
       isSaving: false,
       isTestingConnection: false,
@@ -233,7 +221,6 @@ export class SettingsScreen extends Component<
   }
 
   private renderGeneralTab(): HTMLElement {
-    const currentProject = this.state.currentProject;
     const runtimeProviders = this.state.runtimeProviders;
 
     return createElement("div", { className: "grid gap-6 lg:grid-cols-2" }, [
@@ -258,44 +245,25 @@ export class SettingsScreen extends Component<
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Settings read the active project session so provider profiles can later be reused by workflows without hardcoding a single provider.",
+                    "Settings persist provider profiles in the workflow workspace so workflow execution can resolve them without project setup.",
                   ],
                 ),
               ]),
-              createElement(
-                StatusBadge,
-                { status: currentProject ? "success" : "warning" },
-                [currentProject ? "project ready" : "project missing"],
-              ),
+              createElement(StatusBadge, { status: "success" }, [
+                "workflow scope ready",
+              ]),
             ],
           ),
           createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
-            renderReadOnlyCell(
-              "Project",
-              currentProject?.name ?? "No project selected",
-            ),
-            renderReadOnlyCell(
-              "Root path",
-              currentProject?.rootPath ??
-                this.state.projectSession.projectRootPath ??
-                "Workflow-only project",
-            ),
-            renderReadOnlyCell(
-              "Recent projects",
-              String(this.state.projectSession.recentProjects.length),
-            ),
+            renderReadOnlyCell("Scope", "Workflow workspace"),
+            renderReadOnlyCell("Storage", "PostgreSQL workspace state"),
+            renderReadOnlyCell("Runtime mode", "Workflow only"),
             renderReadOnlyCell(
               "Runtime providers",
               String(runtimeProviders.length),
             ),
           ]),
           createElement("div", { className: "mt-5 flex flex-wrap gap-3" }, [
-            createElement(Button, {
-              variant: "secondary",
-              size: "sm",
-              onClick: () => router.navigate(ROUTES.PROJECTS),
-              children: currentProject ? "Change project" : "Open project",
-            }),
             createElement(Button, {
               variant: "ghost",
               size: "sm",
@@ -667,18 +635,7 @@ export class SettingsScreen extends Component<
                 onChange: (value: string) =>
                   this.handleProviderPromptModeChange(profile.id, value),
               })
-            : createElement(SettingsSecretField, {
-                label: "API key",
-                value: profile.apiKey,
-                placeholder: "Bearer token",
-                testId: "settings-provider-api-key",
-                onChange: (value: string) =>
-                  this.handleProviderProfileTextChange(
-                    profile.id,
-                    "apiKey",
-                    value,
-                  ),
-              }),
+            : "",
         ]),
         createElement(
           "div",
@@ -688,9 +645,7 @@ export class SettingsScreen extends Component<
           },
           [
             profile.providerKind === ProviderKind.CodexCli
-              ? this.state.currentProject
-                ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
-                : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
+              ? "This Codex CLI profile will be pushed to the workflow workspace backend on save so future flow work can resolve it server-side."
               : runtimeAvailable
                 ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
                 : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
@@ -971,8 +926,6 @@ export class SettingsScreen extends Component<
   }
 
   private async hydrateRuntimeContext(): Promise<void> {
-    let projectSession = readProjectSession();
-    let currentProject: ProjectRecord | null = null;
     let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> =
       this.state.runtimeProviders;
     let message: string | null = null;
@@ -980,7 +933,6 @@ export class SettingsScreen extends Component<
     try {
       const workspaceState = await this.workspaceStateClient.load();
       hydrateWorkspaceStateClients(workspaceState);
-      projectSession = readProjectSession();
       hydrateSettingsSnapshot(workspaceState.settings);
       const snapshot = workspaceState.settings;
       const urlState =
@@ -1005,28 +957,7 @@ export class SettingsScreen extends Component<
       message = toErrorMessage(error, "Could not load runtime providers.");
     }
 
-    if (
-      projectSession.projectRootPath !== null ||
-      projectSession.projectName.length > 0
-    ) {
-      try {
-        currentProject = await this.settingsClient.openProject({
-          rootPath: projectSession.projectRootPath,
-          ...(projectSession.projectName
-            ? { name: projectSession.projectName }
-            : {}),
-        });
-      } catch (error) {
-        message = toErrorMessage(
-          error,
-          "Could not resolve the active project for settings.",
-        );
-      }
-    }
-
     this.setState({
-      projectSession,
-      currentProject,
       runtimeProviders,
     });
 
@@ -1066,13 +997,7 @@ export class SettingsScreen extends Component<
 
   private handleProviderProfileTextChange(
     profileId: string,
-    key:
-      | "name"
-      | "modelId"
-      | "endpointUrl"
-      | "apiKey"
-      | "apiKeyEnvVar"
-      | "command",
+    key: "name" | "modelId" | "endpointUrl" | "apiKeyEnvVar" | "command",
     value: string,
   ): void {
     const nextProfiles = this.state.providerProfiles.map((profile) =>
@@ -1238,21 +1163,17 @@ export class SettingsScreen extends Component<
       });
 
       let syncedCount = 0;
-      if (this.state.currentProject) {
-        const syncRequests = createProviderSyncRequests(
-          this.state.providerProfiles,
-          this.state.currentProject.id,
-        );
+      const syncRequests = createProviderSyncRequests(
+        this.state.providerProfiles,
+      );
 
-        for (const request of syncRequests) {
-          await this.settingsClient.updateProviderSettings({
-            projectId: request.projectId,
-            profileId: request.profileId,
-            providerId: request.providerId,
-            config: request.config,
-          });
-          syncedCount += 1;
-        }
+      for (const request of syncRequests) {
+        await this.settingsClient.updateProviderSettings({
+          profileId: request.profileId,
+          providerId: request.providerId,
+          config: request.config,
+        });
+        syncedCount += 1;
       }
 
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;

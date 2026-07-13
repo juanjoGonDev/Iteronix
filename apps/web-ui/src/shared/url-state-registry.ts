@@ -28,35 +28,6 @@ const ForbiddenUrlState = [
 
 const UrlStatePolicies = [
   {
-    route: ROUTES.OVERVIEW,
-    status: "none",
-    allowedParams: [],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Static overview has no reload-useful deep state yet.",
-  },
-  {
-    route: ROUTES.PROJECTS,
-    status: "mixed",
-    allowedParams: ["run", "gates", "diff", "path"],
-    forbiddenState: ForbiddenUrlState,
-    reason:
-      "Restores selected quality run, gate filters and focused diff path.",
-  },
-  {
-    route: ROUTES.EXPLORER,
-    status: "mixed",
-    allowedParams: ["section", "file", "q", "regex", "case", "word"],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Restores sidebar section, relative file path and search flags.",
-  },
-  {
-    route: ROUTES.KANBAN,
-    status: "push",
-    allowedParams: ["task"],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Restores selected task modal.",
-  },
-  {
     route: ROUTES.WORKFLOWS,
     status: "mixed",
     allowedParams: [
@@ -80,13 +51,6 @@ const UrlStatePolicies = [
     ],
     forbiddenState: ForbiddenUrlState,
     reason: "Restores workflow panels, modals and useful debug/editor state.",
-  },
-  {
-    route: ROUTES.HISTORY,
-    status: "mixed",
-    allowedParams: ["kind", "id", "source"],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Restores selected run/evaluation and evidence source.",
   },
   {
     route: ROUTES.SETTINGS,

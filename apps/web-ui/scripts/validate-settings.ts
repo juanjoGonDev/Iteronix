@@ -40,7 +40,6 @@ const ValidationConfig = {
 const RequestPath = {
   WorkspaceStateGet: "/workspace/state/get",
   WorkspaceStateUpdate: "/workspace/state/update",
-  ProjectOpen: "/projects/open",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
   Webhook: "/webhook/test",
@@ -78,16 +77,7 @@ const ProviderKind = {
 
 type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
-type StubProjectRecord = {
-  id: string;
-  name: string;
-  rootPath: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
 type ProviderSettingsRequestRecord = {
-  projectId: string;
   profileId: string;
   providerId: string;
   config: Record<string, unknown>;
@@ -99,20 +89,12 @@ type StubServerState = {
   workspaceSettings: Record<string, unknown>;
 };
 
-const fixtureProject: StubProjectRecord = {
-  id: "settings-project",
-  name: "Iteronix",
-  rootPath: "D:\\projects\\Iteronix",
-  createdAt: "2026-04-28T08:00:00.000Z",
-  updatedAt: "2026-04-28T08:00:00.000Z",
-};
-
 const runtimeOptions = parseBrowserValidationRuntimeOptions(
   process.argv.slice(2),
 );
-const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const screenshotDirectory = join(projectRoot, "screenshots");
-const buildOutputPath = join(projectRoot, "dist", "index.js");
+const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const screenshotDirectory = join(appRoot, "screenshots");
+const buildOutputPath = join(appRoot, "dist", "index.js");
 
 await validateSettingsScreen();
 
@@ -123,7 +105,7 @@ async function validateSettingsScreen(): Promise<void> {
     preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
-  const previewServer = startPreviewServer(projectRoot);
+  const previewServer = startPreviewServer(appRoot);
   const stubServer = await startSettingsStubServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
@@ -165,7 +147,6 @@ async function validateSettingsScreen(): Promise<void> {
     await waitForPageTexts(page, [
       ValidationText.ScreenTitle,
       ValidationText.ProviderHeading,
-      fixtureProject.name,
     ]);
     await captureBrowserValidationScreenshot({
       page,
@@ -559,26 +540,6 @@ async function handleStubRequest(
 
   if (
     request.method === "POST" &&
-    requestUrl.pathname === RequestPath.ProjectOpen
-  ) {
-    const body = await readJsonBody(request);
-    const rootPath = readRequiredString(body, "rootPath");
-
-    if (rootPath !== fixtureProject.rootPath) {
-      writeJson(response, 400, {
-        message: "Unexpected project root",
-      });
-      return;
-    }
-
-    writeJson(response, 200, {
-      project: fixtureProject,
-    });
-    return;
-  }
-
-  if (
-    request.method === "POST" &&
     requestUrl.pathname === RequestPath.ProvidersList
   ) {
     writeJson(response, 200, {
@@ -604,13 +565,11 @@ async function handleStubRequest(
     requestUrl.pathname === RequestPath.ProvidersSettings
   ) {
     const body = await readJsonBody(request);
-    const projectId = readRequiredString(body, "projectId");
     const profileId = readRequiredString(body, "profileId");
     const providerId = readRequiredString(body, "providerId");
     const config = readRequiredRecord(body, "config");
 
     state.providerSettingsRequests.push({
-      projectId,
       profileId,
       providerId,
       config,
@@ -618,7 +577,6 @@ async function handleStubRequest(
 
     writeJson(response, 200, {
       settings: {
-        projectId,
         profileId,
         providerId,
         config,
@@ -679,13 +637,7 @@ function createWorkspaceState(
   settings: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    activeProjectId: fixtureProject.id,
-    projects: [fixtureProject],
     settings,
-    workbenchHistory: {
-      runs: [],
-      evals: [],
-    },
   };
 }
 
@@ -724,12 +676,6 @@ function assertProviderSyncRequest(
 ): void {
   if (!request) {
     throw new Error("Expected one provider sync request.");
-  }
-
-  if (request.projectId !== fixtureProject.id) {
-    throw new Error(
-      `Unexpected project id in provider sync: ${request.projectId}`,
-    );
   }
 
   if (request.providerId !== ProviderKind.CodexCli) {

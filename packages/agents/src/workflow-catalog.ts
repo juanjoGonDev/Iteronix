@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  WorkflowAssetScope,
   WorkflowAssetUsageRole,
   WorkflowNodeKind,
   type WorkflowAssetRecord,
@@ -28,20 +27,18 @@ import {
 
 export type WorkflowDefinitionUpsertInput = Omit<
   WorkflowDefinitionRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
-  projectId?: string;
   versionNote?: string;
   versionTags?: ReadonlyArray<string>;
 };
 
 export type WorkflowAssetUpsertInput = Omit<
   WorkflowAssetRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
-  projectId?: string;
 };
 
 export type WorkflowExecutionUpsertInput = Omit<
@@ -55,9 +52,7 @@ export type WorkflowCatalogStore = {
   upsertWorkflow: (
     input: WorkflowDefinitionUpsertInput,
   ) => WorkflowDefinitionRecord;
-  listWorkflows: (input: {
-    projectId: string;
-  }) => ReadonlyArray<WorkflowDefinitionRecord>;
+  listWorkflows: () => ReadonlyArray<WorkflowDefinitionRecord>;
   getWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
   listWorkflowVersions: (input: {
     workflowId: string;
@@ -91,8 +86,6 @@ export type WorkflowCatalogStore = {
   }) => WorkflowDefinitionRecord | undefined;
   previewWorkflowVersionImport: (input: {
     exported: WorkflowVersionExportRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
   }) => WorkflowVersionImportPreviewRecord;
   cleanupWorkflowVersions: (input: {
     workflowId: string;
@@ -103,27 +96,23 @@ export type WorkflowCatalogStore = {
   };
   deleteWorkflow: (id: string) => WorkflowDefinitionRecord | undefined;
   upsertAsset: (input: WorkflowAssetUpsertInput) => WorkflowAssetRecord;
-  listAssets: (input: {
-    workspaceId: string;
-    projectId: string;
-  }) => ReadonlyArray<WorkflowAssetRecord>;
+  listAssets: () => ReadonlyArray<WorkflowAssetRecord>;
   getAsset: (id: string) => WorkflowAssetRecord | undefined;
   deleteAsset: (id: string) => WorkflowAssetRecord;
   listAssetUsages: (input?: {
     assetId?: string;
     workflowId?: string;
-    projectId?: string;
   }) => ReadonlyArray<WorkflowAssetUsageRecord>;
   upsertExecution: (
     input: WorkflowExecutionUpsertInput,
   ) => WorkflowExecutionRecord;
-  listExecutions: (input: {
-    projectId: string;
+  listExecutions: (input?: {
     workflowId?: string;
   }) => ReadonlyArray<WorkflowExecutionRecord>;
   getExecution: (id: string) => WorkflowExecutionRecord | undefined;
   deleteExecution: (id: string) => WorkflowExecutionRecord | undefined;
   snapshot: () => WorkflowCatalogState;
+  restore: (snapshot: WorkflowCatalogState) => void;
 };
 
 export const createWorkflowCatalogStore = (
@@ -189,12 +178,8 @@ export const createWorkflowCatalogStore = (
     return next;
   };
 
-  const listWorkflows = (input: {
-    projectId: string;
-  }): ReadonlyArray<WorkflowDefinitionRecord> =>
-    Array.from(definitionsById.values()).filter(
-      (definition) => definition.projectId === input.projectId,
-    );
+  const listWorkflows = (): ReadonlyArray<WorkflowDefinitionRecord> =>
+    Array.from(definitionsById.values());
 
   const getWorkflow = (id: string): WorkflowDefinitionRecord | undefined =>
     definitionsById.get(id);
@@ -219,7 +204,6 @@ export const createWorkflowCatalogStore = (
     return upsertWorkflow({
       ...version.snapshot,
       id: current.id,
-      projectId: current.projectId,
     });
   };
 
@@ -237,7 +221,6 @@ export const createWorkflowCatalogStore = (
     return upsertWorkflow({
       ...restoreWorkflowVersionPart(current, version.snapshot, input.part),
       id: current.id,
-      projectId: current.projectId,
     });
   };
 
@@ -254,8 +237,6 @@ export const createWorkflowCatalogStore = (
 
     const snapshot = version.snapshot;
     return upsertWorkflow({
-      workspaceId: snapshot.workspaceId,
-      projectId: current.projectId,
       name: input.name ?? `${snapshot.name} copy`,
       description: snapshot.description,
       status: snapshot.status,
@@ -311,8 +292,6 @@ export const createWorkflowCatalogStore = (
 
   const previewWorkflowVersionImportInStore = (input: {
     exported: WorkflowVersionExportRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
   }): WorkflowVersionImportPreviewRecord =>
     previewWorkflowVersionImport({
       ...input,
@@ -357,21 +336,8 @@ export const createWorkflowCatalogStore = (
     return next;
   };
 
-  const listAssets = (input: {
-    workspaceId: string;
-    projectId: string;
-  }): ReadonlyArray<WorkflowAssetRecord> =>
-    Array.from(assetsById.values()).filter((asset) => {
-      if (asset.workspaceId !== input.workspaceId) {
-        return false;
-      }
-
-      if (asset.scope === WorkflowAssetScope.Workspace) {
-        return true;
-      }
-
-      return asset.projectId === input.projectId;
-    });
+  const listAssets = (): ReadonlyArray<WorkflowAssetRecord> =>
+    Array.from(assetsById.values());
 
   const getAsset = (id: string): WorkflowAssetRecord | undefined =>
     assetsById.get(id);
@@ -393,7 +359,6 @@ export const createWorkflowCatalogStore = (
   const listAssetUsages = (input?: {
     assetId?: string;
     workflowId?: string;
-    projectId?: string;
   }): ReadonlyArray<WorkflowAssetUsageRecord> =>
     assetUsages.filter((usage) => {
       if (input?.assetId && usage.assetId !== input.assetId) {
@@ -401,10 +366,6 @@ export const createWorkflowCatalogStore = (
       }
 
       if (input?.workflowId && usage.workflowId !== input.workflowId) {
-        return false;
-      }
-
-      if (input?.projectId && usage.projectId !== input.projectId) {
         return false;
       }
 
@@ -422,16 +383,11 @@ export const createWorkflowCatalogStore = (
     return next;
   };
 
-  const listExecutions = (input: {
-    projectId: string;
+  const listExecutions = (input?: {
     workflowId?: string;
   }): ReadonlyArray<WorkflowExecutionRecord> =>
     Array.from(executionsById.values()).filter((execution) => {
-      if (execution.projectId !== input.projectId) {
-        return false;
-      }
-
-      if (input.workflowId && execution.workflowId !== input.workflowId) {
+      if (input?.workflowId && execution.workflowId !== input.workflowId) {
         return false;
       }
 
@@ -459,6 +415,30 @@ export const createWorkflowCatalogStore = (
     executions: Array.from(executionsById.values()),
   });
 
+  const restore = (snapshot: WorkflowCatalogState): void => {
+    definitionsById.clear();
+    for (const definition of snapshot.definitions) {
+      definitionsById.set(definition.id, definition);
+    }
+
+    definitionVersionsById.clear();
+    for (const version of snapshot.definitionVersions ?? []) {
+      definitionVersionsById.set(version.id, version);
+    }
+
+    assetsById.clear();
+    for (const asset of snapshot.assets) {
+      assetsById.set(asset.id, asset);
+    }
+
+    executionsById.clear();
+    for (const execution of snapshot.executions) {
+      executionsById.set(execution.id, execution);
+    }
+
+    assetUsages = snapshot.assetUsages;
+  };
+
   return {
     upsertWorkflow,
     listWorkflows,
@@ -483,6 +463,7 @@ export const createWorkflowCatalogStore = (
     getExecution,
     deleteExecution,
     snapshot,
+    restore,
   };
 };
 
@@ -494,8 +475,6 @@ const createWorkflowRecord = (
   const timestamp = now().toISOString();
   return {
     id: current?.id ?? input.id ?? randomUUID(),
-    workspaceId: input.workspaceId,
-    projectId: input.projectId ?? current?.projectId ?? "",
     name: input.name,
     description: input.description,
     status: input.status,
@@ -518,8 +497,6 @@ const createImportedWorkflowInput = (
   WorkflowDefinitionUpsertInput,
   "name" | "versionNote" | "versionTags"
 > => ({
-  workspaceId: snapshot.workspaceId,
-  projectId: snapshot.projectId,
   description: snapshot.description,
   status: snapshot.status,
   trigger: snapshot.trigger,
@@ -545,7 +522,6 @@ const createWorkflowVersionRecord = (input: {
   return {
     id: randomUUID(),
     workflowId: input.workflow.id,
-    projectId: input.workflow.projectId,
     version: input.workflow.version,
     createdAt: input.now().toISOString(),
     snapshot: input.workflow,
@@ -575,7 +551,6 @@ const createAssetRecord = (
   const timestamp = now().toISOString();
   const next: WorkflowAssetRecord = {
     id: current?.id ?? input.id ?? randomUUID(),
-    workspaceId: input.workspaceId,
     kind: input.kind,
     scope: input.scope,
     name: input.name,
@@ -588,10 +563,6 @@ const createAssetRecord = (
     createdAt: current?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
-
-  if (input.projectId !== undefined) {
-    next.projectId = input.projectId;
-  }
 
   if (input.outputContract !== undefined) {
     next.outputContract = input.outputContract;
@@ -615,7 +586,6 @@ const createExecutionRecord = (
   const next: WorkflowExecutionRecord = {
     id: current?.id ?? input.id ?? randomUUID(),
     workflowId: input.workflowId,
-    projectId: input.projectId,
     triggerKind: input.triggerKind,
     status: input.status,
     startedAt: input.startedAt,
@@ -652,7 +622,6 @@ const createAssetUsages = (
           usages.push({
             assetId: node.config.assetId,
             workflowId: definition.id,
-            projectId: definition.projectId,
             nodeId: node.id,
             nodeKind: node.kind,
             role,
@@ -665,7 +634,6 @@ const createAssetUsages = (
         usages.push({
           assetId: guardrail.assetId,
           workflowId: definition.id,
-          projectId: definition.projectId,
           nodeId: node.id,
           nodeKind: node.kind,
           role: WorkflowAssetUsageRole.Guardrail,

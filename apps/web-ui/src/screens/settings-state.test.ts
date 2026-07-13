@@ -39,7 +39,6 @@ describe("settings state", () => {
         name: "Planner",
         modelId: "gpt-5",
         endpointUrl: "https://example.com/openai",
-        apiKey: "secret",
         apiKeyEnvVar: "LOCAL_AI_API_KEY",
       },
       updatedAt,
@@ -47,7 +46,6 @@ describe("settings state", () => {
 
     expect(updated.name).toBe("Planner");
     expect(updated.modelId).toBe("gpt-5");
-    expect(updated.apiKey).toBe("secret");
     expect(updated.apiKeyEnvVar).toBe("LOCAL_AI_API_KEY");
     expect(updated.updatedAt).toBe(updatedAt);
   });
@@ -77,21 +75,16 @@ describe("settings state", () => {
         name: "Local gateway",
         modelId: "llama-3.1",
         endpointUrl: "http://192.168.1.223:3001",
-        apiKey: "secret",
       },
       "2026-04-28T11:00:00.000Z",
     );
 
-    const requests = createProviderSyncRequests(
-      [codex, openai, custom],
-      "project-1",
-    );
+    const requests = createProviderSyncRequests([codex, openai, custom]);
 
     expect(requests).toEqual([
       {
         profileId: codex.id,
         providerId: ProviderKind.CodexCli,
-        projectId: "project-1",
         config: {
           command: "codex",
           promptMode: "arg",
@@ -106,7 +99,6 @@ describe("settings state", () => {
       {
         profileId: openai.id,
         providerId: ProviderKind.OpenAI,
-        projectId: "project-1",
         config: {
           endpointUrl: "https://api.openai.com/v1",
           apiKeyEnvVar: "OPENAI_API_KEY",
@@ -121,10 +113,8 @@ describe("settings state", () => {
       {
         profileId: custom.id,
         providerId: ProviderKind.Custom,
-        projectId: "project-1",
         config: {
           endpointUrl: "http://192.168.1.223:3001",
-          apiKey: "secret",
           models: [
             {
               id: "llama-3.1",

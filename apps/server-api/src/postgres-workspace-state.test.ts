@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+import {
+  createDefaultWorkspaceState,
+  parseWorkspaceState,
+} from "./workspace-state";
+import { createPostgresWorkspaceStateStore } from "./postgres-workspace-state";
+import { resolveProviderApiKey } from "./workflow-runtime";
+
+type QueryCall = {
+  text: string;
+  values?: ReadonlyArray<unknown>;
+};
+
+const StateKey = "workspace";
+
+describe("PostgreSQL workspace state store", () => {
+  it("creates the empty workflow baseline when PostgreSQL has no state", async () => {
+    const client = createClient([]);
+    const store = createPostgresWorkspaceStateStore(client);
+
+    await store.initialize();
+    const state = await store.load();
+
+    expect(state.workflows.definitions).toEqual([]);
+    expect(state.settings.providerProfiles).toEqual([]);
+    expect(client.calls[0]?.text).toContain(
+      "CREATE TABLE IF NOT EXISTS app_state",
+    );
+    expect(client.calls[1]).toEqual({
+      text: "SELECT value, revision FROM app_state WHERE key = $1",
+      values: [StateKey],
+    });
+  });
+
+  it("parses PostgreSQL BIGINT revisions returned as strings", async () => {
+    const client = createClient([
+      {
+        value: createDefaultWorkspaceState(),
+        revision: "9007199254740991",
+      },
+    ]);
+    const store = createPostgresWorkspaceStateStore(client);
+
+    await expect(store.load()).resolves.toMatchObject({
+      revision: 9007199254740991,
+    });
+  });
+
+  it("upserts normalized state into PostgreSQL instead of a local file", async () => {
+    const client = createClient([]);
+    const store = createPostgresWorkspaceStateStore(client);
+    const state = createDefaultWorkspaceState();
+
+    const saved = await store.save(state);
+    const saveCall = client.calls.find((call) =>
+      call.text.includes("INSERT INTO app_state"),
+    );
+
+    expect(saved).toEqual({ ...state, revision: 1 });
+    expect(saveCall?.values?.[0]).toBe(StateKey);
+    expect(saveCall?.values?.[2]).toBe(1);
+    expect(saveCall?.values?.[3]).toBe(0);
+    expect(String(saveCall?.values?.[1])).not.toContain("dev-token");
+  });
+
+  it("serializes saves, advances revisions, and does not persist credentials", async () => {
+    const client = createRevisionedClient();
+    const store = createPostgresWorkspaceStateStore(client);
+    const state = createDefaultWorkspaceState();
+
+    const [first, second] = await Promise.all([
+      store.save({
+        ...state,
+        settings: {
+          ...state.settings,
+          serverConnection: {
+            ...state.settings.serverConnection,
+            authToken: "private-token",
+          },
+        },
+      }),
+      store.save(state),
+    ]);
+
+    expect(first.revision).toBe(1);
+    expect(second.revision).toBe(2);
+    expect(client.maxConcurrentWrites).toBe(1);
+    expect(JSON.stringify(client.savedValues)).not.toContain("private-token");
+  });
+
+  it("retains provider environment references across persistence while removing raw keys", async () => {
+    const client = createClient([]);
+    const store = createPostgresWorkspaceStateStore(client);
+    const state = createDefaultWorkspaceState();
+
+    await store.save({
+      ...state,
+      settings: {
+        ...state.settings,
+        providerProfiles: [
+          {
+            id: "openai",
+            providerKind: "openai",
+            apiKey: "raw-provider-key",
+            apiKeyEnvVar: "WORKFLOW_PROVIDER_KEY",
+          },
+        ],
+      },
+    });
+
+    const saveCall = client.calls.find((call) =>
+      call.text.includes("INSERT INTO app_state"),
+    );
+    const persisted = parseWorkspaceState(
+      JSON.parse(String(saveCall?.values?.[1])),
+    );
+    const reference = persisted.settings.providerProfiles[0]?.["apiKeyEnvVar"];
+
+    expect(String(saveCall?.values?.[1])).not.toContain("raw-provider-key");
+    expect(reference).toBe("WORKFLOW_PROVIDER_KEY");
+    expect(
+      resolveProviderApiKey(
+        {
+          apiKeyEnvVar: typeof reference === "string" ? reference : "",
+        },
+        { WORKFLOW_PROVIDER_KEY: "restarted-provider-key" },
+      ),
+    ).toBe("restarted-provider-key");
+  });
+
+  it("rejects a stale PostgreSQL state revision instead of overwriting it", async () => {
+    const client = createRevisionedClient({ rejectWrites: true });
+    const store = createPostgresWorkspaceStateStore(client);
+
+    await expect(store.save(createDefaultWorkspaceState())).rejects.toThrow(
+      "Workspace state revision conflict",
+    );
+  });
+});
+
+const createClient = (
+  rows: ReadonlyArray<{ value: unknown; revision?: unknown }>,
+) => {
+  const calls: QueryCall[] = [];
+  return {
+    calls,
+    query: async (text: string, values?: ReadonlyArray<unknown>) => {
+      calls.push({ text, ...(values ? { values } : {}) });
+      return text.includes("INSERT INTO app_state")
+        ? { rows: [{ revision: 1 }] }
+        : { rows };
+    },
+  };
+};
+
+const createRevisionedClient = (options: { rejectWrites?: boolean } = {}) => {
+  let revision = 0;
+  let activeWrites = 0;
+  const savedValues: unknown[] = [];
+  const client = {
+    maxConcurrentWrites: 0,
+    savedValues,
+    query: async (text: string, values?: ReadonlyArray<unknown>) => {
+      if (!text.includes("INSERT INTO app_state")) {
+        return { rows: [] };
+      }
+
+      activeWrites += 1;
+      client.maxConcurrentWrites = Math.max(
+        client.maxConcurrentWrites,
+        activeWrites,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      activeWrites -= 1;
+      savedValues.push(values?.[1]);
+      if (options.rejectWrites) {
+        return { rows: [] };
+      }
+
+      revision += 1;
+      return { rows: [{ revision }] };
+    },
+  };
+
+  return client;
+};

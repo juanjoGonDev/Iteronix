@@ -12,32 +12,11 @@ import {
 } from "./shared/constants.js";
 import { router } from "./shared/Router.js";
 import { sanitizeBrowserUrlState } from "./shared/url-state.js";
-import { installClientLogForwarder } from "./shared/logger-impl.js";
-import {
-  ProjectSessionEventName,
-  readActiveProjectSessionLabel,
-  readProjectSession,
-  type ProjectSessionState,
-} from "./shared/project-session.js";
-import {
-  createWorkspaceStateClient,
-  hydrateWorkspaceStateClients,
-} from "./shared/workspace-state-client.js";
-import { DashboardScreen } from "./screens/Dashboard.js";
-import { Explorer } from "./screens/Explorer.js";
-import { KanbanBoard } from "./screens/Kanban.js";
 import { SettingsScreen } from "./screens/Settings.js";
 import { WorkflowsScreen } from "./screens/Workflows.js";
-import { HistoryScreen } from "./screens/History.js";
-import { ProjectsScreen } from "./screens/Projects.js";
 
 const ScreenId = {
-  Overview: "overview",
-  Projects: "projects",
-  Explorer: "explorer",
-  Kanban: "kanban",
   Workflows: "workflows",
-  History: "history",
   Settings: "settings",
 } as const;
 
@@ -46,19 +25,13 @@ type ScreenId = (typeof ScreenId)[keyof typeof ScreenId];
 const RootRoute = "/";
 
 const ScreenLabel: Record<ScreenId, string> = {
-  overview: "Overview",
-  projects: "Projects",
-  explorer: "Explorer",
-  kanban: "Kanban",
   workflows: "Workflows",
-  history: "History",
   settings: "Settings",
 };
 
 interface AppState {
   currentScreen: ScreenId;
   sidebarCollapsed: boolean;
-  projectSession: ProjectSessionState;
   isCompactViewport: boolean;
 }
 
@@ -72,23 +45,20 @@ export class App extends Component<AppProps, AppState> {
   private activeScreenInstance: Component<ComponentProps, unknown> | null =
     null;
   private activeScreenId: ScreenId | null = null;
-  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: AppProps) {
     super(props, {
-      currentScreen: ScreenId.Overview,
+      currentScreen: ScreenId.Workflows,
       sidebarCollapsed: readIsCompactViewport(),
-      projectSession: readProjectSession(),
       isCompactViewport: readIsCompactViewport(),
     });
 
-    installClientLogForwarder();
     sanitizeBrowserUrlState();
     this.setupRouter();
 
     console.info("Application started", {
       version: APP_VERSION,
-      screen: ScreenId.Overview,
+      screen: ScreenId.Workflows,
     });
   }
 
@@ -100,11 +70,6 @@ export class App extends Component<AppProps, AppState> {
   }
 
   override render(): HTMLElement {
-    const projectLabel = readActiveProjectSessionLabel(
-      this.state.projectSession,
-    );
-    const hasProject = projectLabel.length > 0;
-
     return createElement(MainLayout, {
       sidebar: createElement(Sidebar, {
         brand: {
@@ -112,13 +77,6 @@ export class App extends Component<AppProps, AppState> {
           icon: "terminal",
           version: `v${APP_VERSION}`,
         },
-        project: hasProject
-          ? {
-              label: projectLabel,
-              rootPath: this.state.projectSession.projectRootPath,
-            }
-          : null,
-        onProjectClick: () => router.navigate(ROUTES.PROJECTS),
         navigation: this.buildNavigationItems(),
         onToggle: () =>
           this.setState({ sidebarCollapsed: !this.state.sidebarCollapsed }),
@@ -132,20 +90,11 @@ export class App extends Component<AppProps, AppState> {
   }
 
   override onMount(): void {
-    window.addEventListener(
-      ProjectSessionEventName.Changed,
-      this.handleProjectSessionChanged,
-    );
     window.addEventListener("resize", this.handleViewportResize);
-    void this.hydrateWorkspaceState();
     this.mountActiveScreenInstance();
   }
 
   override onUnmount(): void {
-    window.removeEventListener(
-      ProjectSessionEventName.Changed,
-      this.handleProjectSessionChanged,
-    );
     window.removeEventListener("resize", this.handleViewportResize);
     this.activeScreenInstance?.unmount();
     this.activeScreenInstance = null;
@@ -153,21 +102,10 @@ export class App extends Component<AppProps, AppState> {
   }
 
   private setupRouter(): void {
-    router.register(RootRoute, () => this.updateScreen(ScreenId.Overview));
-    router.register(ROUTES.OVERVIEW, () =>
-      this.updateScreen(ScreenId.Overview),
-    );
-    router.register(ROUTES.PROJECTS, () =>
-      this.updateScreen(ScreenId.Projects),
-    );
-    router.register(ROUTES.EXPLORER, () =>
-      this.updateScreen(ScreenId.Explorer),
-    );
-    router.register(ROUTES.KANBAN, () => this.updateScreen(ScreenId.Kanban));
+    router.register(RootRoute, () => this.updateScreen(ScreenId.Workflows));
     router.register(ROUTES.WORKFLOWS, () =>
       this.updateScreen(ScreenId.Workflows),
     );
-    router.register(ROUTES.HISTORY, () => this.updateScreen(ScreenId.History));
     router.register(ROUTES.SETTINGS, () =>
       this.updateScreen(ScreenId.Settings),
     );
@@ -183,40 +121,10 @@ export class App extends Component<AppProps, AppState> {
   }> {
     return [
       this.createNavigationItem(
-        ScreenId.Overview,
-        "dashboard",
-        ScreenLabel.overview,
-        ROUTES.OVERVIEW,
-      ),
-      this.createNavigationItem(
-        ScreenId.Projects,
-        "folder_open",
-        ScreenLabel.projects,
-        ROUTES.PROJECTS,
-      ),
-      this.createNavigationItem(
-        ScreenId.Explorer,
-        "code",
-        ScreenLabel.explorer,
-        ROUTES.EXPLORER,
-      ),
-      this.createNavigationItem(
-        ScreenId.Kanban,
-        "view_kanban",
-        ScreenLabel.kanban,
-        ROUTES.KANBAN,
-      ),
-      this.createNavigationItem(
         ScreenId.Workflows,
         "account_tree",
         ScreenLabel.workflows,
         ROUTES.WORKFLOWS,
-      ),
-      this.createNavigationItem(
-        ScreenId.History,
-        "history",
-        ScreenLabel.history,
-        ROUTES.HISTORY,
       ),
       this.createNavigationItem(
         ScreenId.Settings,
@@ -252,26 +160,18 @@ export class App extends Component<AppProps, AppState> {
   }
 
   private renderHeader(): HTMLElement {
-    const actions = buildHeaderActions(
-      this.state.currentScreen,
-      this.state.isCompactViewport,
-    );
+    const actions = buildHeaderActions();
 
     return createElement(Header, {
-      title:
-        this.state.currentScreen === ScreenId.Overview ||
-        this.state.isCompactViewport
-          ? null
-          : ScreenLabel[this.state.currentScreen],
-      breadcrumbs:
-        this.state.currentScreen === ScreenId.Overview
-          ? []
-          : this.state.isCompactViewport
-            ? [{ label: ScreenLabel[this.state.currentScreen] }]
-            : [
-                { label: "Iteronix", href: ROUTES.OVERVIEW },
-                { label: ScreenLabel[this.state.currentScreen] },
-              ],
+      title: this.state.isCompactViewport
+        ? null
+        : ScreenLabel[this.state.currentScreen],
+      breadcrumbs: this.state.isCompactViewport
+        ? [{ label: ScreenLabel[this.state.currentScreen] }]
+        : [
+            { label: "Iteronix", href: ROUTES.WORKFLOWS },
+            { label: ScreenLabel[this.state.currentScreen] },
+          ],
       actions,
       user: {
         name: "John Doe",
@@ -295,24 +195,6 @@ export class App extends Component<AppProps, AppState> {
     }
   }
 
-  private readonly handleProjectSessionChanged = (): void => {
-    const nextSession = readProjectSession();
-    if (
-      nextSession.projectRootPath ===
-        this.state.projectSession.projectRootPath &&
-      nextSession.projectName === this.state.projectSession.projectName &&
-      JSON.stringify(nextSession.recentProjects) ===
-        JSON.stringify(this.state.projectSession.recentProjects)
-    ) {
-      return;
-    }
-
-    this.invalidateActiveScreenInstance();
-    this.setState({
-      projectSession: nextSession,
-    });
-  };
-
   private readonly handleViewportResize = (): void => {
     const isCompactViewport = readIsCompactViewport();
     if (isCompactViewport === this.state.isCompactViewport) {
@@ -324,25 +206,6 @@ export class App extends Component<AppProps, AppState> {
       sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed,
     });
   };
-
-  private async hydrateWorkspaceState(): Promise<void> {
-    try {
-      const state = await this.workspaceStateClient.load();
-      hydrateWorkspaceStateClients(state);
-      this.invalidateActiveScreenInstance();
-      this.setState({
-        projectSession: readProjectSession(),
-      });
-    } catch {
-      return;
-    }
-  }
-
-  private invalidateActiveScreenInstance(): void {
-    this.activeScreenInstance?.unmount();
-    this.activeScreenInstance = null;
-    this.activeScreenId = null;
-  }
 
   private mountActiveScreenInstance(): void {
     const screenHost = this.element?.querySelector(
@@ -379,86 +242,19 @@ export class App extends Component<AppProps, AppState> {
   private createScreenInstance(
     screen: ScreenId,
   ): Component<ComponentProps, unknown> {
-    if (screen === ScreenId.Overview) {
-      return new DashboardScreen({});
-    }
-
-    if (screen === ScreenId.Explorer) {
-      return new Explorer({});
-    }
-
-    if (screen === ScreenId.Kanban) {
-      return new KanbanBoard({});
-    }
-
     if (screen === ScreenId.Workflows) {
       return new WorkflowsScreen({});
-    }
-
-    if (screen === ScreenId.History) {
-      return new HistoryScreen({});
     }
 
     if (screen === ScreenId.Settings) {
       return new SettingsScreen({});
     }
 
-    if (screen === ScreenId.Projects) {
-      return new ProjectsScreen({});
-    }
-
-    return new PlaceholderScreen({
-      title: "Unavailable screen",
-      description: `The route for ${screen} is not wired yet.`,
-    });
+    return new SettingsScreen({});
   }
 }
 
-interface PlaceholderScreenProps extends ComponentProps {
-  title: string;
-  description: string;
-}
-
-class PlaceholderScreen extends Component<PlaceholderScreenProps> {
-  override render(): HTMLElement {
-    return createElement(
-      "div",
-      {
-        className:
-          "mx-auto flex h-full w-full max-w-[960px] items-center justify-center p-8",
-      },
-      [
-        createElement(
-          "div",
-          {
-            className:
-              "rounded-xl border border-border-dark bg-surface-dark px-8 py-10 text-left",
-          },
-          [
-            createElement(
-              "h1",
-              { className: "text-2xl font-semibold text-white" },
-              [this.props.title],
-            ),
-            createElement(
-              "p",
-              {
-                className:
-                  "mt-3 max-w-xl text-sm leading-6 text-text-secondary",
-              },
-              [this.props.description],
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-const buildHeaderActions = (
-  screen: ScreenId,
-  isCompactViewport: boolean,
-): {
+const buildHeaderActions = (): {
   notifications: {
     unread: number;
     onClick: () => void;
@@ -490,21 +286,9 @@ const buildHeaderActions = (
   } = {
     notifications: {
       unread: 0,
-      onClick: () => router.navigate(ROUTES.HISTORY),
+      onClick: () => router.navigate(ROUTES.WORKFLOWS),
     },
   };
-
-  if (screen === ScreenId.Overview && !isCompactViewport) {
-    actions.status = {
-      api: "API online",
-      runners: "workbench ready",
-    };
-    actions.primary = {
-      icon: "smart_toy",
-      label: "Open Workbench",
-      onClick: () => router.navigate(ROUTES.WORKFLOWS),
-    };
-  }
 
   return actions;
 };

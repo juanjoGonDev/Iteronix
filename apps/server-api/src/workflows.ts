@@ -24,7 +24,6 @@ import {
   WorkflowNodeKind,
 } from "../../../packages/shared/src/workflows";
 import { ErrorMessage, HttpStatus } from "./constants";
-import type { ProjectStore } from "./projects";
 import { ResultType, err, ok, type Result } from "./result";
 
 const WorkflowCancelAlertId = "workflow-execution-canceled";
@@ -45,53 +44,19 @@ export type WorkflowNodeProviderTestResult = {
 
 export const executeWorkflowDefinitionUpsert = (
   input: {
-    projectId: string;
     definition: WorkflowDefinitionUpsertInput;
   },
   dependencies: {
-    projectStore: ProjectStore;
     catalog: WorkflowCatalogStore;
   },
 ): Result<WorkflowDefinitionRecord, ApiError> => {
-  const project = dependencies.projectStore.getById(input.projectId);
-  if (project.type === ResultType.Err) {
-    return err({
-      status: HttpStatus.NotFound,
-      message: project.error.message,
-    });
-  }
-
-  return ok(
-    dependencies.catalog.upsertWorkflow({
-      ...input.definition,
-      projectId: project.value.id,
-    }),
-  );
+  return ok(dependencies.catalog.upsertWorkflow(input.definition));
 };
 
-export const executeWorkflowDefinitionList = (
-  input: {
-    projectId: string;
-  },
-  dependencies: {
-    projectStore: ProjectStore;
-    catalog: WorkflowCatalogStore;
-  },
-): Result<ReadonlyArray<WorkflowDefinitionRecord>, ApiError> => {
-  const project = dependencies.projectStore.getById(input.projectId);
-  if (project.type === ResultType.Err) {
-    return err({
-      status: HttpStatus.NotFound,
-      message: project.error.message,
-    });
-  }
-
-  return ok(
-    dependencies.catalog.listWorkflows({
-      projectId: project.value.id,
-    }),
-  );
-};
+export const executeWorkflowDefinitionList = (dependencies: {
+  catalog: WorkflowCatalogStore;
+}): Result<ReadonlyArray<WorkflowDefinitionRecord>, ApiError> =>
+  ok(dependencies.catalog.listWorkflows());
 
 export const executeWorkflowDefinitionGet = (
   input: {
@@ -274,8 +239,6 @@ export const executeWorkflowDefinitionImportVersion = (
 export const executeWorkflowDefinitionPreviewImportVersion = (
   input: {
     exported: WorkflowVersionExportRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
@@ -330,57 +293,21 @@ export const executeWorkflowDefinitionDelete = (
 
 export const executeWorkflowAssetUpsert = (
   input: {
-    projectId: string;
     asset: WorkflowAssetUpsertInput;
   },
   dependencies: {
-    projectStore: ProjectStore;
     catalog: WorkflowCatalogStore;
   },
-): Result<WorkflowAssetRecord, ApiError> => {
-  const project = dependencies.projectStore.getById(input.projectId);
-  if (project.type === ResultType.Err) {
-    return err({
-      status: HttpStatus.NotFound,
-      message: project.error.message,
-    });
-  }
-
-  const assetInput: WorkflowAssetUpsertInput = {
-    ...input.asset,
-  };
-  if (input.asset.scope === "project") {
-    assetInput.projectId = project.value.id;
-  }
-
-  return ok(dependencies.catalog.upsertAsset(assetInput));
-};
+): Result<WorkflowAssetRecord, ApiError> =>
+  ok(dependencies.catalog.upsertAsset(input.asset));
 
 export const executeWorkflowAssetList = (
-  input: {
-    projectId: string;
-    workspaceId: string;
-  },
+  _input: Record<string, never>,
   dependencies: {
-    projectStore: ProjectStore;
     catalog: WorkflowCatalogStore;
   },
-): Result<ReadonlyArray<WorkflowAssetRecord>, ApiError> => {
-  const project = dependencies.projectStore.getById(input.projectId);
-  if (project.type === ResultType.Err) {
-    return err({
-      status: HttpStatus.NotFound,
-      message: project.error.message,
-    });
-  }
-
-  return ok(
-    dependencies.catalog.listAssets({
-      workspaceId: input.workspaceId,
-      projectId: project.value.id,
-    }),
-  );
-};
+): Result<ReadonlyArray<WorkflowAssetRecord>, ApiError> =>
+  ok(dependencies.catalog.listAssets());
 
 export const executeWorkflowAssetGet = (
   input: {
@@ -427,7 +354,6 @@ export const executeWorkflowAssetUsageList = (
   input: {
     assetId?: string;
     workflowId?: string;
-    projectId?: string;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
@@ -437,7 +363,6 @@ export const executeWorkflowAssetUsageList = (
 
 export const executeWorkflowExecutionList = (
   input: {
-    projectId: string;
     workflowId?: string;
   },
   dependencies: {
@@ -568,10 +493,7 @@ export const executeWorkflowExecutionRun = async (
     });
   }
 
-  const assets = dependencies.catalog.listAssets({
-    workspaceId: workflow.workspaceId,
-    projectId: workflow.projectId,
-  });
+  const assets = dependencies.catalog.listAssets();
   const execution = await dependencies.runWorkflow({
     definition: workflow,
     assets,
@@ -621,10 +543,7 @@ export const executeWorkflowNodeExecutionRun = async (
     });
   }
 
-  const assets = dependencies.catalog.listAssets({
-    workspaceId: workflow.workspaceId,
-    projectId: workflow.projectId,
-  });
+  const assets = dependencies.catalog.listAssets();
   const execution = await dependencies.runNode({
     definition: workflow,
     assets,
@@ -682,10 +601,7 @@ export const executeWorkflowNodeProviderTest = async (
     return invalidBody();
   }
 
-  const assets = dependencies.catalog.listAssets({
-    workspaceId: workflow.workspaceId,
-    projectId: workflow.projectId,
-  });
+  const assets = dependencies.catalog.listAssets();
   const outcome = await dependencies.testProviderNode({
     workflow,
     node,
@@ -711,21 +627,13 @@ export const executeWorkflowNodeProviderTest = async (
 
 export const parseWorkflowDefinitionUpsertRequest = (
   value: unknown,
-): Result<
-  { projectId: string; definition: WorkflowDefinitionUpsertInput },
-  ApiError
-> => {
+): Result<{ definition: WorkflowDefinitionUpsertInput }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
   }
 
-  const projectId = readRequiredString(
-    value,
-    "projectId",
-    ErrorMessage.MissingProjectId,
-  );
   const definition = value["definition"];
-  if (projectId.type === ResultType.Err || !isRecord(definition)) {
+  if (!isRecord(definition)) {
     return invalidBody();
   }
 
@@ -735,7 +643,6 @@ export const parseWorkflowDefinitionUpsertRequest = (
   }
 
   return ok({
-    projectId: projectId.value,
     definition: candidate,
   });
 };
@@ -747,7 +654,13 @@ export const parseWorkflowDefinitionDeleteRequest = (
 
 export const parseWorkflowDefinitionListRequest = (
   value: unknown,
-): Result<{ projectId: string }, ApiError> => parseProjectRequest(value);
+): Result<Record<never, never>, ApiError> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  return ok({});
+};
 
 export const parseWorkflowDefinitionGetRequest = (
   value: unknown,
@@ -899,29 +812,10 @@ export const parseWorkflowDefinitionPreviewImportVersionRequest = (
 ): Result<
   {
     exported: WorkflowVersionExportRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
   },
   ApiError
 > => {
   if (!isRecord(value) || !isRecord(value["exported"])) {
-    return invalidBody();
-  }
-
-  const targetWorkspaceId = readRequiredString(
-    value,
-    "targetWorkspaceId",
-    ErrorMessage.InvalidBody,
-  );
-  const targetProjectId = readRequiredString(
-    value,
-    "targetProjectId",
-    ErrorMessage.InvalidBody,
-  );
-  if (
-    targetWorkspaceId.type === ResultType.Err ||
-    targetProjectId.type === ResultType.Err
-  ) {
     return invalidBody();
   }
 
@@ -932,8 +826,6 @@ export const parseWorkflowDefinitionPreviewImportVersionRequest = (
         value["exported"],
         versionId,
       ),
-      targetWorkspaceId: targetWorkspaceId.value,
-      targetProjectId: targetProjectId.value,
     });
   } catch {
     return invalidBody();
@@ -970,23 +862,17 @@ export const parseWorkflowDefinitionCleanupVersionsRequest = (
 
 export const parseWorkflowAssetUpsertRequest = (
   value: unknown,
-): Result<{ projectId: string; asset: WorkflowAssetUpsertInput }, ApiError> => {
+): Result<{ asset: WorkflowAssetUpsertInput }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
   }
 
-  const projectId = readRequiredString(
-    value,
-    "projectId",
-    ErrorMessage.MissingProjectId,
-  );
   const asset = value["asset"];
-  if (projectId.type === ResultType.Err || !isRecord(asset)) {
+  if (!isRecord(asset)) {
     return invalidBody();
   }
 
   return ok({
-    projectId: projectId.value,
     asset: asset as unknown as WorkflowAssetUpsertInput,
   });
 };
@@ -998,32 +884,12 @@ export const parseWorkflowAssetDeleteRequest = (
 
 export const parseWorkflowAssetListRequest = (
   value: unknown,
-): Result<{ projectId: string; workspaceId: string }, ApiError> => {
+): Result<Record<string, never>, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
   }
 
-  const projectId = readRequiredString(
-    value,
-    "projectId",
-    ErrorMessage.MissingProjectId,
-  );
-  const workspaceId = readRequiredString(
-    value,
-    "workspaceId",
-    ErrorMessage.InvalidBody,
-  );
-  if (
-    projectId.type === ResultType.Err ||
-    workspaceId.type === ResultType.Err
-  ) {
-    return invalidBody();
-  }
-
-  return ok({
-    projectId: projectId.value,
-    workspaceId: workspaceId.value,
-  });
+  return ok({});
 };
 
 export const parseWorkflowAssetGetRequest = (
@@ -1033,19 +899,14 @@ export const parseWorkflowAssetGetRequest = (
 
 export const parseWorkflowAssetUsageListRequest = (
   value: unknown,
-): Result<
-  { assetId?: string; workflowId?: string; projectId?: string },
-  ApiError
-> => {
+): Result<{ assetId?: string; workflowId?: string }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
   }
 
-  const parsed: { assetId?: string; workflowId?: string; projectId?: string } =
-    {};
+  const parsed: { assetId?: string; workflowId?: string } = {};
   const assetId = readOptionalString(value, "assetId");
   const workflowId = readOptionalString(value, "workflowId");
-  const projectId = readOptionalString(value, "projectId");
 
   if (assetId !== undefined) {
     parsed.assetId = assetId;
@@ -1055,32 +916,17 @@ export const parseWorkflowAssetUsageListRequest = (
     parsed.workflowId = workflowId;
   }
 
-  if (projectId !== undefined) {
-    parsed.projectId = projectId;
-  }
-
   return ok(parsed);
 };
 
 export const parseWorkflowExecutionListRequest = (
   value: unknown,
-): Result<{ projectId: string; workflowId?: string }, ApiError> => {
+): Result<{ workflowId?: string }, ApiError> => {
   if (!isRecord(value)) {
     return invalidBody();
   }
 
-  const projectId = readRequiredString(
-    value,
-    "projectId",
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const parsed: { projectId: string; workflowId?: string } = {
-    projectId: projectId.value,
-  };
+  const parsed: { workflowId?: string } = {};
   const workflowId = readOptionalString(value, "workflowId");
   if (workflowId !== undefined) {
     parsed.workflowId = workflowId;
@@ -1183,27 +1029,6 @@ export const parseWorkflowNodeProviderTestRequest = (
   return ok({
     workflowId: workflowId.value,
     nodeId: nodeId.value,
-  });
-};
-
-const parseProjectRequest = (
-  value: unknown,
-): Result<{ projectId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return invalidBody();
-  }
-
-  const projectId = readRequiredString(
-    value,
-    "projectId",
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  return ok({
-    projectId: projectId.value,
   });
 };
 

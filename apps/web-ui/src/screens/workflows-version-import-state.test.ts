@@ -82,8 +82,6 @@ const createExport = (
   checksum: version.toString().repeat(64),
   snapshot: {
     id: "workflow-1",
-    workspaceId: "workspace-1",
-    projectId: "project-1",
     name,
     description: "",
     status: "draft",

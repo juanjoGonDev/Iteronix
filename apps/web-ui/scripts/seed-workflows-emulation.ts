@@ -1,26 +1,14 @@
 import { DefaultServerConnection } from "../src/shared/server-config.js";
-import {
-  WorkflowsEmulationFixture,
-  createWorkflowsEmulationDefinition,
-} from "./workflows-emulation-fixture.js";
+import { createWorkflowsEmulationDefinition } from "./workflows-emulation-fixture.js";
 
 const RoutePath = {
-  ProjectsOpen: "/projects/open",
   WorkflowDefinitionsUpsert: "/workflows/definitions/upsert",
 } as const;
 
 const EnvKey = {
   ServerUrl: "ITERONIX_SERVER_URL",
   AuthToken: "ITERONIX_AUTH_TOKEN",
-  ProjectRoot: "ITERONIX_EMULATION_PROJECT_ROOT",
 } as const;
-
-type ProjectResponse = {
-  project: {
-    id: string;
-    name: string;
-  };
-};
 
 type WorkflowResponse = {
   definition: {
@@ -32,35 +20,18 @@ type WorkflowResponse = {
 const seedWorkflowsEmulation = async (): Promise<void> => {
   const serverUrl = readServerUrl();
   const authToken = readAuthToken();
-  const project = readProjectResponse(
-    await postJson({
-      serverUrl,
-      authToken,
-      path: RoutePath.ProjectsOpen,
-      body: {
-        rootPath: readProjectRoot(),
-        name: WorkflowsEmulationFixture.ProjectName,
-      },
-    }),
-  );
   const workflow = readWorkflowResponse(
     await postJson({
       serverUrl,
       authToken,
       path: RoutePath.WorkflowDefinitionsUpsert,
       body: {
-        projectId: project.project.id,
-        definition: createWorkflowsEmulationDefinition({
-          projectId: project.project.id,
-          workspaceId: project.project.id,
-        }),
+        definition: createWorkflowsEmulationDefinition(),
       },
     }),
   );
 
-  console.log(
-    `Seeded ${project.project.name} / ${workflow.definition.name} (${workflow.definition.id})`,
-  );
+  console.log(`Seeded ${workflow.definition.name} (${workflow.definition.id})`);
 };
 
 const readServerUrl = (): string =>
@@ -68,9 +39,6 @@ const readServerUrl = (): string =>
 
 const readAuthToken = (): string =>
   process.env[EnvKey.AuthToken] ?? DefaultServerConnection.authToken;
-
-const readProjectRoot = (): string | null =>
-  process.env[EnvKey.ProjectRoot] ?? WorkflowsEmulationFixture.ProjectRootPath;
 
 const postJson = async (input: {
   serverUrl: string;
@@ -94,18 +62,6 @@ const postJson = async (input: {
   }
 
   return await response.json();
-};
-
-const readProjectResponse = (value: unknown): ProjectResponse => {
-  const record = readRecord(value);
-  const project = readRecord(record["project"]);
-
-  return {
-    project: {
-      id: readString(project["id"], "project.id"),
-      name: readString(project["name"], "project.name"),
-    },
-  };
 };
 
 const readWorkflowResponse = (value: unknown): WorkflowResponse => {

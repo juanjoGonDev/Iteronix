@@ -52,7 +52,6 @@ import {
 describe("workflows editor state", () => {
   it("creates a default workflow with trigger and terminal nodes", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Review PR",
     });
 
@@ -63,20 +62,18 @@ describe("workflows editor state", () => {
     ]);
   });
 
-  it("creates project-scoped prompt and guardrail assets", () => {
+  it("creates workflow workspace prompt and guardrail assets", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
-      projectId: "project-1",
       idFactory: () => "prompt-asset",
     });
     const guardrail = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Guardrail,
-      projectId: "project-1",
       idFactory: () => "guardrail-asset",
     });
 
     expect(prompt.kind).toBe(WorkflowAssetKind.Prompt);
-    expect(prompt.scope).toBe("project");
+    expect(prompt.scope).toBe("workspace");
     expect(prompt.outputContract?.schema.properties?.["result"]?.type).toBe(
       "string",
     );
@@ -188,7 +185,6 @@ describe("workflows editor state", () => {
     let index = 0;
     const nextId = (): string => seedIds[index++] ?? `generated-${index}`;
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Review PR",
     });
     const triggerNode = definition.nodes[0];
@@ -247,7 +243,6 @@ describe("workflows editor state", () => {
 
   it("creates merge nodes with one input port that accepts many upstream connections", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Merge inputs",
     });
     const withMerge = addWorkflowNode(
@@ -268,7 +263,6 @@ describe("workflows editor state", () => {
 
   it("keeps multiple incoming edges when the target port accepts many", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Multi input",
     });
     const withPrompt = addWorkflowNode(
@@ -323,7 +317,6 @@ describe("workflows editor state", () => {
 
   it("removes a selected edge without touching other connections", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Removable edge",
     });
     const triggerNode = definition.nodes[0];
@@ -372,7 +365,6 @@ describe("workflows editor state", () => {
 
   it("attaches guardrails and removes node edges when a node is deleted", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Review PR",
     });
     const triggerNode = definition.nodes[0];
@@ -416,7 +408,6 @@ describe("workflows editor state", () => {
 
   it("clamps viewport zoom and maps asset-backed node kinds", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Review PR",
     });
     const viewport = setWorkflowViewport(definition, {
@@ -438,7 +429,6 @@ describe("workflows editor state", () => {
 
   it("detects viewport-only edits without treating content as changed", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Viewport",
     });
     const zoomOnly = setWorkflowViewport(definition, {
@@ -461,7 +451,6 @@ describe("workflows editor state", () => {
 
   it("updates node JSON output contracts and validates required object fields", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Contracts",
     });
     const withAgent = addWorkflowNode(
@@ -501,7 +490,6 @@ describe("workflows editor state", () => {
 
   it("adds edge mapping entries for prior node outputs", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Mapped workflow",
     });
     const triggerNode = definition.nodes[0];
@@ -544,7 +532,6 @@ describe("workflows editor state", () => {
   it("limits guardrail validations to four and treats warnings as permissive", () => {
     const guardrail = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Guardrail,
-      projectId: "project-1",
       idFactory: createSequentialIdFactory("guardrail"),
     });
     const warnGuardrail = updateWorkflowAssetGuardrail(
@@ -584,7 +571,6 @@ describe("workflows editor state", () => {
   it("supports nested contract editing, zod validation, and compact provider serialization", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
-      projectId: "project-1",
       idFactory: createSequentialIdFactory("contract"),
     });
     const contract = prompt.outputContract;
@@ -681,7 +667,6 @@ describe("workflows editor state", () => {
   it("supports date string formats with runtime validation and provider serialization", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
-      projectId: "project-1",
       idFactory: createSequentialIdFactory("date-contract"),
     });
     const contract = prompt.outputContract;
@@ -789,7 +774,6 @@ describe("workflows editor state", () => {
   it("flags invalid schema constraints before save", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
-      projectId: "project-1",
       idFactory: createSequentialIdFactory("invalid"),
     });
     const contract = prompt.outputContract;
@@ -1003,7 +987,6 @@ describe("workflows editor state", () => {
 
   it("exposes manual trigger metadata as selectable output paths", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Review PR",
     });
     const triggerNode = definition.nodes.find(
@@ -1045,7 +1028,6 @@ describe("workflows editor state", () => {
 
   it("scopes node output variables to connected upstream nodes", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Scoped variables",
     });
     const withPrompt = addWorkflowNode(
@@ -1115,7 +1097,6 @@ describe("workflows editor state", () => {
   it("round-trips raw contract documents through canonical schema parsing", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
-      projectId: "project-1",
       idFactory: createSequentialIdFactory("raw-contract"),
     });
     const contract = prompt.outputContract;

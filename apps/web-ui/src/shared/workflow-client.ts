@@ -98,10 +98,8 @@ export type WorkflowVersionImportSourceRecord =
 type WorkflowVersionImportPreviewMessage = {
   code:
     | "checksum_mismatch"
-    | "project_mismatch"
     | "unsupported_schema_version"
-    | "workflow_id_collision"
-    | "workspace_mismatch";
+    | "workflow_id_collision";
   severity: "error" | "warning";
   message: string;
 };
@@ -110,8 +108,6 @@ export type WorkflowVersionImportPreviewRecord = {
   status: "valid" | "warning" | "invalid";
   schemaSupported: boolean;
   checksumValid: boolean;
-  workspaceMismatch: boolean;
-  projectMismatch: boolean;
   workflowIdCollision: boolean;
   recommendedIdMode: "keep_ids" | "regenerate_ids";
   suggestedName: string;
@@ -204,9 +200,7 @@ export type WorkflowRunStreamEvent =
     };
 
 export type WorkflowClient = {
-  listDefinitions: (input: {
-    projectId: string;
-  }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
+  listDefinitions: () => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
   getDefinition: (input: {
     workflowId: string;
   }) => Promise<WorkflowDefinitionRecord>;
@@ -237,8 +231,6 @@ export type WorkflowClient = {
   }) => Promise<WorkflowVersionTimelineExportRecord>;
   previewDefinitionVersionImport: (input: {
     exported: WorkflowVersionImportSourceRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
     versionId?: string;
   }) => Promise<WorkflowVersionImportPreviewRecord>;
   importDefinitionVersion: (input: {
@@ -254,29 +246,22 @@ export type WorkflowClient = {
     removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   }>;
   upsertDefinition: (input: {
-    projectId: string;
     definition: WorkflowDefinitionUpsertInput;
   }) => Promise<WorkflowDefinitionRecord>;
   deleteDefinition: (input: {
     workflowId: string;
   }) => Promise<WorkflowDefinitionRecord>;
-  listAssets: (input: {
-    projectId: string;
-    workspaceId: string;
-  }) => Promise<ReadonlyArray<WorkflowAssetRecord>>;
+  listAssets: () => Promise<ReadonlyArray<WorkflowAssetRecord>>;
   getAsset: (input: { assetId: string }) => Promise<WorkflowAssetRecord>;
   upsertAsset: (input: {
-    projectId: string;
     asset: WorkflowAssetUpsertInput;
   }) => Promise<WorkflowAssetRecord>;
   deleteAsset: (input: { assetId: string }) => Promise<WorkflowAssetRecord>;
   listAssetUsages: (input: {
     assetId?: string;
     workflowId?: string;
-    projectId?: string;
   }) => Promise<ReadonlyArray<WorkflowAssetUsageRecord>>;
-  listExecutions: (input: {
-    projectId: string;
+  listExecutions: (input?: {
     workflowId?: string;
   }) => Promise<ReadonlyArray<WorkflowExecutionRecord>>;
   getExecution: (input: {
@@ -317,12 +302,10 @@ export type WorkflowClient = {
 };
 
 export const createWorkflowClient = (): WorkflowClient => ({
-  listDefinitions: (input) =>
+  listDefinitions: () =>
     requestJson({
       path: EndpointPath.DefinitionsList,
-      body: {
-        projectId: input.projectId,
-      },
+      body: {},
       parse: parseWorkflowDefinitionListResponse,
     }),
   getDefinition: (input) =>
@@ -393,8 +376,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.DefinitionsPreviewImportVersion,
       body: {
         exported: input.exported,
-        targetWorkspaceId: input.targetWorkspaceId,
-        targetProjectId: input.targetProjectId,
         ...(input.versionId ? { versionId: input.versionId } : {}),
       },
       parse: parseWorkflowDefinitionImportPreviewResponse,
@@ -422,7 +403,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.DefinitionsUpsert,
       body: {
-        projectId: input.projectId,
         definition: input.definition,
       },
       parse: parseWorkflowDefinitionResponse,
@@ -435,13 +415,10 @@ export const createWorkflowClient = (): WorkflowClient => ({
       },
       parse: parseWorkflowDefinitionResponse,
     }),
-  listAssets: (input) =>
+  listAssets: () =>
     requestJson({
       path: EndpointPath.AssetsList,
-      body: {
-        projectId: input.projectId,
-        workspaceId: input.workspaceId,
-      },
+      body: {},
       parse: parseWorkflowAssetListResponse,
     }),
   getAsset: (input) =>
@@ -456,7 +433,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.AssetsUpsert,
       body: {
-        projectId: input.projectId,
         asset: input.asset,
       },
       parse: parseWorkflowAssetResponse,
@@ -474,8 +450,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.AssetsUsage,
       body: {
         ...(input.assetId ? { assetId: input.assetId } : {}),
-        ...(input.workflowId ? { workflowId: input.workflowId } : {}),
-        ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input?.workflowId ? { workflowId: input?.workflowId } : {}),
       },
       parse: parseWorkflowAssetUsageListResponse,
     }),
@@ -483,8 +458,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.ExecutionsList,
       body: {
-        projectId: input.projectId,
-        ...(input.workflowId ? { workflowId: input.workflowId } : {}),
+        ...(input?.workflowId ? { workflowId: input?.workflowId } : {}),
       },
       parse: parseWorkflowExecutionListResponse,
     }),
@@ -764,16 +738,6 @@ export const parseWorkflowDefinitionImportPreviewResponse = (
       "workflowVersionImportPreview",
       "checksumValid",
     ),
-    workspaceMismatch: readRequiredBoolean(
-      record,
-      "workflowVersionImportPreview",
-      "workspaceMismatch",
-    ),
-    projectMismatch: readRequiredBoolean(
-      record,
-      "workflowVersionImportPreview",
-      "projectMismatch",
-    ),
     workflowIdCollision: readRequiredBoolean(
       record,
       "workflowVersionImportPreview",
@@ -866,10 +830,8 @@ const parseWorkflowVersionImportMessageCode = (
 ): WorkflowVersionImportPreviewMessage["code"] => {
   if (
     value === "checksum_mismatch" ||
-    value === "project_mismatch" ||
     value === "unsupported_schema_version" ||
-    value === "workflow_id_collision" ||
-    value === "workspace_mismatch"
+    value === "workflow_id_collision"
   ) {
     return value;
   }
@@ -1255,12 +1217,6 @@ const parseWorkflowDefinitionRecord = (
   value: Record<string, unknown>,
 ): WorkflowDefinitionRecord => ({
   id: readRequiredString(value, "workflowDefinitionRecord", "id"),
-  workspaceId: readRequiredString(
-    value,
-    "workflowDefinitionRecord",
-    "workspaceId",
-  ),
-  projectId: readRequiredString(value, "workflowDefinitionRecord", "projectId"),
   name: readRequiredString(value, "workflowDefinitionRecord", "name"),
   description: readRequiredString(
     value,
@@ -1325,11 +1281,6 @@ const parseWorkflowDefinitionVersionRecord = (
       "workflowDefinitionVersionRecord",
       "workflowId",
     ),
-    projectId: readRequiredString(
-      value,
-      "workflowDefinitionVersionRecord",
-      "projectId",
-    ),
     version: readRequiredNumber(
       value,
       "workflowDefinitionVersionRecord",
@@ -1379,7 +1330,6 @@ const parseWorkflowVersionChangeType = (
 const parseWorkflowAssetRecord = (
   value: Record<string, unknown>,
 ): WorkflowAssetRecord => {
-  const projectId = readOptionalString(value, "projectId");
   const archivedAt = readOptionalString(value, "archivedAt");
   const outputContract = hasDefinedProperty(value, "outputContract")
     ? (readRequiredRecord(
@@ -1398,12 +1348,6 @@ const parseWorkflowAssetRecord = (
 
   return {
     id: readRequiredString(value, "workflowAssetRecord", "id"),
-    workspaceId: readRequiredString(
-      value,
-      "workflowAssetRecord",
-      "workspaceId",
-    ),
-    ...(projectId ? { projectId } : {}),
     kind: readRequiredString(
       value,
       "workflowAssetRecord",
@@ -1442,7 +1386,6 @@ const parseWorkflowAssetUsageRecord = (
     "workflowAssetUsageRecord",
     "workflowId",
   ),
-  projectId: readRequiredString(value, "workflowAssetUsageRecord", "projectId"),
   nodeId: readRequiredString(value, "workflowAssetUsageRecord", "nodeId"),
   nodeKind: readRequiredString(
     value,
@@ -1469,11 +1412,6 @@ const parseWorkflowExecutionRecord = (
       value,
       "workflowExecutionRecord",
       "workflowId",
-    ),
-    projectId: readRequiredString(
-      value,
-      "workflowExecutionRecord",
-      "projectId",
     ),
     triggerKind: readRequiredString(
       value,

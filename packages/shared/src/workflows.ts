@@ -52,7 +52,6 @@ export type WorkflowAssetKind =
 
 export const WorkflowAssetScope = {
   Workspace: "workspace",
-  Project: "project",
 } as const;
 
 export type WorkflowAssetScope =
@@ -339,8 +338,6 @@ export type WorkflowEdgeRecord = {
 
 export type WorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: WorkflowRecordStatus;
@@ -359,7 +356,6 @@ export type WorkflowDefinitionRecord = {
 export type WorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: WorkflowDefinitionRecord;
@@ -373,8 +369,6 @@ export type WorkflowDefinitionVersionRecord = {
 
 export type WorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: WorkflowAssetKind;
   scope: WorkflowAssetScope;
   name: string;
@@ -404,7 +398,6 @@ export type WorkflowAssetUsageRole =
 export type WorkflowAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: WorkflowAssetUsageRole;
@@ -452,7 +445,6 @@ export type WorkflowNodeExecutionRecord = {
 export type WorkflowExecutionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   triggerKind: WorkflowTriggerKind;
   status: WorkflowExecutionStatus;
   startedAt: string;

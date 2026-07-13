@@ -1,9 +1,6 @@
 import { requestJson } from "./server-api-client.js";
-import { parseProjectOpenResponse } from "./quality-gates-client.js";
-import type { ProjectRecord } from "./workbench-types.js";
 
 const EndpointPath = {
-  ProjectOpen: "/projects/open",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
 } as const;
@@ -17,7 +14,6 @@ export type RuntimeProviderRecord = {
 };
 
 type RuntimeProviderSelectionRecord = {
-  projectId: string;
   profileId: string;
   providerId: string;
   updatedAt: string;
@@ -29,7 +25,6 @@ export type RuntimeProviderListResponse = {
 };
 
 export type RuntimeProviderSettingsRecord = {
-  projectId: string;
   profileId: string;
   providerId: string;
   config: Record<string, unknown>;
@@ -37,16 +32,10 @@ export type RuntimeProviderSettingsRecord = {
 };
 
 export type SettingsClient = {
-  openProject: (input: {
-    rootPath: string | null;
-    name?: string;
-  }) => Promise<ProjectRecord>;
   listProviders: (input?: {
-    projectId?: string;
     profileId?: string;
   }) => Promise<RuntimeProviderListResponse>;
   updateProviderSettings: (input: {
-    projectId: string;
     profileId: string;
     providerId: string;
     config: Record<string, unknown>;
@@ -54,20 +43,10 @@ export type SettingsClient = {
 };
 
 export const createSettingsClient = (): SettingsClient => ({
-  openProject: (input) =>
-    requestJson({
-      path: EndpointPath.ProjectOpen,
-      body: {
-        rootPath: input.rootPath,
-        ...(input.name ? { name: input.name } : {}),
-      },
-      parse: parseProjectOpenResponse,
-    }),
   listProviders: (input) =>
     requestJson({
       path: EndpointPath.ProvidersList,
       body: {
-        ...(input?.projectId ? { projectId: input.projectId } : {}),
         ...(input?.profileId ? { profileId: input.profileId } : {}),
       },
       parse: parseProviderListResponse,
@@ -76,7 +55,6 @@ export const createSettingsClient = (): SettingsClient => ({
     requestJson({
       path: EndpointPath.ProvidersSettings,
       body: {
-        projectId: input.projectId,
         profileId: input.profileId,
         providerId: input.providerId,
         config: input.config,
@@ -137,11 +115,6 @@ const parseRuntimeProviderRecord = (
 const parseRuntimeProviderSettingsRecord = (
   value: Record<string, unknown>,
 ): RuntimeProviderSettingsRecord => ({
-  projectId: readRequiredString(
-    value,
-    "runtimeProviderSettingsRecord",
-    "projectId",
-  ),
   profileId: readRequiredString(
     value,
     "runtimeProviderSettingsRecord",
@@ -171,11 +144,6 @@ const readOptionalSelection = (
   const record = ensureRecord(selection, "runtimeProviderSelectionRecord");
   return {
     selection: {
-      projectId: readRequiredString(
-        record,
-        "runtimeProviderSelectionRecord",
-        "projectId",
-      ),
       profileId: readRequiredString(
         record,
         "runtimeProviderSelectionRecord",

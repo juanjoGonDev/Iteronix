@@ -43,7 +43,6 @@ const DefaultWorkflowNodeExecutionInputSource = {
 export type WorkflowProviderRunRequest = {
   workflowId: string;
   workflowRunId: string;
-  projectId: string;
   node: WorkflowNodeRecord;
   provider: WorkflowProviderSelectionRecord;
   envelope: WorkflowContextEnvelope;
@@ -426,7 +425,6 @@ export const createWorkflowRuntime = (input: {
     const execution = {
       id: workflowRunId,
       workflowId: request.definition.id,
-      projectId: request.definition.projectId,
       triggerKind: request.definition.trigger.kind,
       status,
       startedAt,
@@ -646,7 +644,6 @@ const runProviderWithOutputContract = async (input: {
     const providerResult = await input.runProviderNode({
       workflowId: input.definition.id,
       workflowRunId: input.workflowRunId,
-      projectId: input.definition.projectId,
       node: input.node,
       provider: input.provider,
       envelope: input.envelope,

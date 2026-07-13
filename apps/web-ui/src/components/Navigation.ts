@@ -41,11 +41,6 @@ interface SidebarProps extends ComponentProps {
     avatar?: string | null;
     role?: string;
   } | null;
-  project?: {
-    label: string;
-    rootPath: string | null;
-  } | null;
-  onProjectClick?: () => void;
   onToggle?: () => void;
   collapsed?: boolean;
   className?: string;
@@ -173,8 +168,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
     const {
       brand = { name: "Iteronix", icon: "terminal", version: null },
       navigation = [],
-      project = null,
-      onProjectClick,
       onToggle,
       collapsed = false,
       className = "",
@@ -277,14 +270,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
             }),
           ],
         ),
-
-        createElement(
-          "div",
-          {
-            className: `${collapsed ? "p-3" : "p-4"} border-t border-border-dark`,
-          },
-          [renderProjectButton({ project, collapsed, onProjectClick })],
-        ),
       ],
     );
   }
@@ -300,82 +285,3 @@ export const readSidebarRootClassName = (className: string): string =>
 
 export const readSidebarNavigationClassName = (collapsed: boolean): string =>
   `min-h-0 flex-1 overflow-y-auto overscroll-contain ${collapsed ? "py-4 px-1" : "py-6 px-3"} flex flex-col gap-1`;
-
-const renderProjectButton = (input: {
-  project: {
-    label: string;
-    rootPath: string | null;
-  } | null;
-  collapsed: boolean;
-  onProjectClick: (() => void) | undefined;
-}): HTMLElement =>
-  createElement(
-    "button",
-    {
-      type: "button",
-      className: `flex w-full items-center rounded-xl border border-border-dark bg-surface-dark/60 transition-colors hover:bg-surface-dark-hover ${
-        input.collapsed
-          ? "justify-center px-0 py-3"
-          : "gap-3 px-3 py-3 text-left"
-      }`,
-      "data-testid": "sidebar-project-button",
-      onClick: input.onProjectClick,
-    },
-    [
-      createElement(
-        "span",
-        {
-          className: `material-symbols-outlined shrink-0 text-[20px] ${
-            input.project ? "text-primary" : "text-text-secondary"
-          }`,
-        },
-        [input.project ? "folder_open" : "folder"],
-      ),
-      !input.collapsed &&
-        createElement(
-          "div",
-          {
-            className: "flex min-w-0 flex-1 flex-col",
-          },
-          [
-            createElement(
-              "span",
-              {
-                className:
-                  "text-xs font-semibold uppercase tracking-wide text-text-secondary",
-              },
-              [input.project ? "Active project" : "Project"],
-            ),
-            createElement(
-              "span",
-              {
-                className: "truncate text-sm font-medium text-white",
-                "data-testid": "sidebar-project-label",
-              },
-              [input.project?.label ?? "Select project"],
-            ),
-            createElement(
-              "span",
-              {
-                className: "truncate text-xs text-text-secondary",
-              },
-              [
-                input.project?.rootPath ??
-                  (input.project
-                    ? "Workflow-only project"
-                    : "Open or create a project"),
-              ],
-            ),
-          ],
-        ),
-      !input.collapsed &&
-        createElement(
-          "span",
-          {
-            className:
-              "material-symbols-outlined ml-auto text-[18px] text-text-secondary",
-          },
-          ["chevron_right"],
-        ),
-    ],
-  );

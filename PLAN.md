@@ -11,6 +11,28 @@
   - Default provider MUST be `opencode-cli` once implemented.
   - `codex-cli` remains optional to install/configure.
 
+## Workflow-only PostgreSQL cutover
+
+- [x] Create `refactor/workflow-only-postgres` from `master`.
+- [x] Replace the file-backed workspace state adapter with PostgreSQL-only persistence.
+- [x] Require `DATABASE_URL` and provide Docker Compose PostgreSQL startup with a clean reset procedure.
+- [x] Restrict the browser shell to Workflows and Settings and remove project selection from the sidebar.
+- [x] Reject deprecated project, overview, explorer, kanban, history, file, git, session, log, and quality-gate API paths at the server boundary.
+- [x] Serialize PostgreSQL state writes with optimistic revisions, redact persisted credentials, and require non-default Compose credentials without publishing PostgreSQL to the host.
+- [x] Roll back in-memory workflow catalog and provider state when an optimistic PostgreSQL revision write is rejected, so rejected mutations cannot leak into later saves.
+- [x] Make workflow and node SSE terminal events depend on durable PostgreSQL progress writes, reporting `workflow_failed` instead of a false `workflow_completed` when persistence fails.
+  - [x] R3-001: buffer terminal SSE events until PostgreSQL progress persistence succeeds.
+- [x] Start fresh server and browser state without a provider profile; require an explicitly configured runnable CLI or API provider before workflow execution.
+- [x] Delete remaining deprecated project-centric implementation modules, tests, and internal type fields after the workflow catalog is made scope-native.
+  - [x] Delete the server project, file, git, Kanban, history, logs, quality-gate, session, sandbox, and AI workbench modules with their tests.
+  - [x] Delete the browser project, overview, explorer, kanban, standalone history, git, quality-gate, logging, and workbench modules with their tests and validators.
+
+Acceptance:
+
+- PostgreSQL starts with an empty workflow catalog and stores all server workspace state.
+- Only `/`, `/workflows`, and `/settings` are registered by the browser shell.
+- Only workflow and provider/settings API paths are accepted by the server.
+
 ---
 
 ## Milestone 0 — Repo bootstrap (empty folder → healthy monorepo)

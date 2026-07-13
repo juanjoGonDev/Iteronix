@@ -190,6 +190,8 @@ const WorkflowSelector = {
   WorkflowVersionImportPreviewMessage:
     "workflows-version-import-preview-message",
   WorkflowVersionImportVersionSelect: "workflows-version-import-version-select",
+  WorkflowVersionImportVersionOptionPrefix:
+    "workflows-version-import-version-option-",
   WorkflowVersionImportVersionSummary:
     "workflows-version-import-version-summary",
   WorkflowVersionImport: "workflows-version-import",
@@ -224,20 +226,10 @@ const WorkflowNodeKind = {
 type WorkflowNodeKind =
   (typeof WorkflowNodeKind)[keyof typeof WorkflowNodeKind];
 
-type StubProjectRecord = {
-  id: string;
-  name: string;
-  rootPath: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
 type StubWorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: "prompt" | "instruction" | "guardrail";
-  scope: "workspace" | "project";
+  scope: "workspace";
   name: string;
   slug: string;
   description: string;
@@ -285,8 +277,6 @@ type StubWorkflowNodeRecord = {
 
 type StubWorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: "draft" | "published" | "archived";
@@ -330,7 +320,6 @@ type StubWorkflowDefinitionRecord = {
 type StubWorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: StubWorkflowDefinitionRecord;
@@ -344,7 +333,6 @@ type StubWorkflowDefinitionVersionRecord = {
 type StubExecutionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   triggerKind: "manual";
   status: "running" | "completed" | "failed" | "awaiting_review" | "canceled";
   startedAt: string;
@@ -397,7 +385,6 @@ type StubExecutionRecord = {
 type StubAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: "primary" | "instruction" | "guardrail";
@@ -416,17 +403,8 @@ type StubServerState = {
   versionTimelineExportCount: number;
 };
 
-const fixtureProject: StubProjectRecord = {
-  id: "workflows-project",
-  name: "Iteronix",
-  rootPath: "D:\\projects\\Iteronix",
-  createdAt: "2026-05-06T08:00:00.000Z",
-  updatedAt: "2026-05-06T08:00:00.000Z",
-};
-
 const ValidationText = {
   ScreenTitle: "Workflows",
-  CurrentProject: fixtureProject.name,
   WorkflowName: "Daily updates workflow",
   WorkflowDescription: "Server-backed workflow for the integrated editor.",
   PromptNodeLabel: "Primary prompt",
@@ -483,9 +461,9 @@ const ValidationText = {
 const runtimeOptions = parseBrowserValidationRuntimeOptions(
   process.argv.slice(2),
 );
-const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const screenshotDirectory = join(projectRoot, "screenshots");
-const buildOutputPath = join(projectRoot, "dist", "index.js");
+const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const screenshotDirectory = join(appRoot, "screenshots");
+const buildOutputPath = join(appRoot, "dist", "index.js");
 
 await validateWorkflowsScreen();
 
@@ -496,7 +474,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
-  const previewServer = startPreviewServer(projectRoot);
+  const previewServer = startPreviewServer(appRoot);
   const stubServer = await startWorkflowStubServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
@@ -535,10 +513,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
 
     await waitForTestId(page, WorkflowSelector.Root);
-    await waitForPageTexts(page, [
-      ValidationText.ScreenTitle,
-      ValidationText.CurrentProject,
-    ]);
+    await waitForPageTexts(page, [ValidationText.ScreenTitle]);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -953,6 +928,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(
       page,
       WorkflowSelector.WorkflowVersionImportVersionSummary,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionImportVersionOptionPrefix}timeline-import-v1`,
     );
     await selectValueByTestId(
       page,
@@ -1441,11 +1420,8 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsList) {
-    const projectId = readRequiredString(body, "projectId");
     writeJson(response, 200, {
-      definitions: state.definitions.filter(
-        (definition) => definition.projectId === projectId,
-      ),
+      definitions: state.definitions,
     });
     return;
   }
@@ -1478,7 +1454,6 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsUpsert) {
-    const projectId = readRequiredString(body, "projectId");
     const definitionInput = readRequiredRecord(body, "definition");
     const now = "2026-05-06T08:15:00.000Z";
     const existingId = readOptionalString(definitionInput, "id");
@@ -1487,7 +1462,6 @@ async function handleStubRequest(
       : -1;
     const nextDefinition = createDefinitionRecord({
       definitionInput,
-      projectId,
       ...(existingIndex >= 0 && state.definitions[existingIndex]
         ? { existing: state.definitions[existingIndex] }
         : {}),
@@ -1537,14 +1511,8 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.AssetsList) {
-    const projectId = readRequiredString(body, "projectId");
-    const workspaceId = readRequiredString(body, "workspaceId");
     writeJson(response, 200, {
-      assets: state.assets.filter(
-        (asset) =>
-          asset.workspaceId === workspaceId &&
-          (asset.projectId === undefined || asset.projectId === projectId),
-      ),
+      assets: state.assets,
     });
     return;
   }
@@ -1561,7 +1529,6 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.AssetsUpsert) {
-    const projectId = readRequiredString(body, "projectId");
     const assetInput = readRequiredRecord(body, "asset");
     const now = "2026-05-06T08:15:30.000Z";
     const existingId = readOptionalString(assetInput, "id");
@@ -1570,7 +1537,6 @@ async function handleStubRequest(
       : -1;
     const nextAsset = createAssetRecord({
       assetInput,
-      projectId,
       ...(existingIndex >= 0 && state.assets[existingIndex]
         ? { existing: state.assets[existingIndex] }
         : {}),
@@ -1609,26 +1575,22 @@ async function handleStubRequest(
   if (requestUrl.pathname === RequestPath.AssetsUsage) {
     const assetId = readOptionalString(body, "assetId");
     const workflowId = readOptionalString(body, "workflowId");
-    const projectId = readOptionalString(body, "projectId");
     writeJson(response, 200, {
       usages: readAssetUsages(state).filter(
         (usage) =>
           (assetId === undefined || usage.assetId === assetId) &&
-          (workflowId === undefined || usage.workflowId === workflowId) &&
-          (projectId === undefined || usage.projectId === projectId),
+          (workflowId === undefined || usage.workflowId === workflowId),
       ),
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.ExecutionsList) {
-    const projectId = readRequiredString(body, "projectId");
     const workflowId = readOptionalString(body, "workflowId");
     writeJson(response, 200, {
       executions: state.executions.filter(
         (execution) =>
-          execution.projectId === projectId &&
-          (workflowId === undefined || execution.workflowId === workflowId),
+          workflowId === undefined || execution.workflowId === workflowId,
       ),
     });
     return;
@@ -1897,15 +1859,9 @@ function handleDefinitionVersionRequest(input: {
     const { snapshot, checksumValid, schemaSupported } =
       readVersionImportSnapshot(body);
 
-    const targetWorkspaceId = readRequiredString(body, "targetWorkspaceId");
-    const targetProjectId = readRequiredString(body, "targetProjectId");
     const workflowIdCollision = state.definitions.some(
       (definition) => definition.id === readRequiredString(snapshot, "id"),
     );
-    const workspaceMismatch =
-      readRequiredString(snapshot, "workspaceId") !== targetWorkspaceId;
-    const projectMismatch =
-      readRequiredString(snapshot, "projectId") !== targetProjectId;
     const messages = [
       ...(workflowIdCollision
         ? [
@@ -1917,32 +1873,12 @@ function handleDefinitionVersionRequest(input: {
             },
           ]
         : []),
-      ...(workspaceMismatch
-        ? [
-            {
-              code: "workspace_mismatch",
-              severity: "warning",
-              message: "Snapshot workspace differs from the current workspace.",
-            },
-          ]
-        : []),
-      ...(projectMismatch
-        ? [
-            {
-              code: "project_mismatch",
-              severity: "warning",
-              message: "Snapshot project differs from the current project.",
-            },
-          ]
-        : []),
     ];
     writeJson(response, 200, {
       preview: {
         status: messages.length > 0 ? "warning" : "valid",
         schemaSupported,
         checksumValid,
-        workspaceMismatch,
-        projectMismatch,
         workflowIdCollision,
         recommendedIdMode: workflowIdCollision ? "regenerate_ids" : "keep_ids",
         suggestedName: readRequiredString(snapshot, "name"),
@@ -2097,13 +2033,7 @@ function createWorkspaceState(
   settings: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    activeProjectId: fixtureProject.id,
-    projects: [fixtureProject],
     settings,
-    workbenchHistory: {
-      runs: [],
-      evals: [],
-    },
   };
 }
 
@@ -2139,7 +2069,6 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
 
 function createDefinitionRecord(input: {
   definitionInput: Record<string, unknown>;
-  projectId: string;
   existing?: StubWorkflowDefinitionRecord;
   workflowId: string;
   updatedAt: string;
@@ -2148,8 +2077,6 @@ function createDefinitionRecord(input: {
   const version = input.existing ? input.existing.version + 1 : 1;
   return {
     id: input.workflowId,
-    workspaceId: readRequiredString(input.definitionInput, "workspaceId"),
-    projectId: input.projectId,
     name: readRequiredString(input.definitionInput, "name"),
     description: readStringValue(input.definitionInput, "description"),
     status: readStatusValue(input.definitionInput, "status"),
@@ -2179,7 +2106,6 @@ function createDefinitionVersionRecord(input: {
   return {
     id: `${input.definition.id}-version-${input.version}`,
     workflowId: input.definition.id,
-    projectId: input.definition.projectId,
     version: input.version,
     createdAt: input.definition.updatedAt,
     snapshot: input.definition,
@@ -2251,7 +2177,6 @@ function createTimelineImportPayload(
 
 function createAssetRecord(input: {
   assetInput: Record<string, unknown>;
-  projectId: string;
   existing?: StubWorkflowAssetRecord;
   assetId: string;
   updatedAt: string;
@@ -2259,15 +2184,12 @@ function createAssetRecord(input: {
   const createdAt = input.existing?.createdAt ?? input.updatedAt;
   const version = input.existing ? input.existing.version + 1 : 1;
   const scope = readAssetScopeValue(input.assetInput, "scope");
-  const projectId = scope === "project" ? input.projectId : undefined;
   const outputContract = readOptionalRecord(input.assetInput, "outputContract");
   const guardrail = readOptionalRecord(input.assetInput, "guardrail");
   const archivedAt = readOptionalString(input.assetInput, "archivedAt");
 
   return {
     id: input.assetId,
-    workspaceId: readRequiredString(input.assetInput, "workspaceId"),
-    ...(projectId ? { projectId } : {}),
     kind: readAssetKindValue(input.assetInput, "kind"),
     scope,
     name: readRequiredString(input.assetInput, "name"),
@@ -2295,7 +2217,6 @@ function readAssetUsages(
             {
               assetId: node.config.assetId,
               workflowId: definition.id,
-              projectId: definition.projectId,
               nodeId: node.id,
               nodeKind: node.kind,
               role:
@@ -2309,7 +2230,6 @@ function readAssetUsages(
       const guardrailUsages = node.attachedGuardrails.map((guardrail) => ({
         assetId: guardrail.assetId,
         workflowId: definition.id,
-        projectId: definition.projectId,
         nodeId: node.id,
         nodeKind: node.kind,
         role: "guardrail" as const,
@@ -3064,7 +2984,6 @@ function createPinnedOutputExecutionFixture(
   return {
     id: ValidationText.ExecutionPinnedId,
     workflowId: definition.id,
-    projectId: definition.projectId,
     triggerKind: "manual",
     status: "completed",
     startedAt: "2026-05-06T08:30:00.000Z",
@@ -3150,7 +3069,6 @@ function createStepExecutionFixture(
   return {
     id: "execution-step-response",
     workflowId: definition.id,
-    projectId: definition.projectId,
     triggerKind: "manual",
     status: "completed",
     startedAt: "2026-05-06T08:45:00.000Z",
@@ -3209,7 +3127,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionCleanId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "completed",
       startedAt: ValidationText.ExecutionCleanStartedAt,
@@ -3262,7 +3179,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionPrimaryId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "completed",
       startedAt: ValidationText.ExecutionPrimaryStartedAt,
@@ -3330,7 +3246,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionSecondaryId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "failed",
       startedAt: ValidationText.ExecutionSecondaryStartedAt,
@@ -3833,7 +3748,7 @@ function readAssetScopeValue(
   key: string,
 ): StubWorkflowAssetRecord["scope"] {
   const nested = readRequiredString(value, key);
-  if (nested === "workspace" || nested === "project") {
+  if (nested === "workspace") {
     return nested;
   }
   throw new Error(`Invalid ${key}`);
