@@ -1,5 +1,7 @@
 import { config } from "dotenv";
-config();
+import { resolveRepositoryEnvPath } from "./environment";
+
+config({ path: resolveRepositoryEnvPath(__dirname) });
 import { startServer } from "./server";
 
 void startServer().catch((error: unknown) => {

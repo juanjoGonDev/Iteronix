@@ -16,6 +16,7 @@
 - [x] Create `refactor/workflow-only-postgres` from `master`.
 - [x] Replace the file-backed workspace state adapter with PostgreSQL-only persistence.
 - [x] Require `DATABASE_URL` and provide Docker Compose PostgreSQL startup with a clean reset procedure.
+- [x] Resolve the server environment from the repository-root `.env` for both source and compiled entrypoints.
 - [x] Preserve root lifecycle scripts in the Docker build context and group Compose services under the native `iteronix` project name.
 - [x] Restrict the browser shell to Workflows and Settings and remove project selection from the sidebar.
 - [x] Reject deprecated project, overview, explorer, kanban, history, file, git, session, log, and quality-gate API paths at the server boundary.

@@ -4649,3 +4649,12 @@
 - Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (54 files, 270 tests), `pnpm build`, and `git diff --check`.
 - Issues/Risks: Host port 4000 remains intentionally untouched because a local Iteronix watcher owns it; the server container was verified without publishing that port.
 - Next: Include the Docker delivery files in the next reviewed atomic commit after validating the scope-bound receipt.
+
+### 2026-07-13 20:54 (Europe/Madrid) — Root environment loading
+
+- Summary: Corrected local server startup so the compiled entrypoint reads the repository-root `.env`, independent of the `apps/server-api` working directory.
+- Decisions: Environment resolution walks upward from the executing source or compiled directory to the `pnpm-workspace.yaml` root, then loads only that root `.env`; it never reads the obsolete server-local file.
+- Changes: Added a failing-first source/compiled path regression and wired `src/index.ts` to the explicit root path resolver.
+- Commands: RED `pnpm vitest run apps/server-api/src/environment.test.ts`; PASS focused Vitest (5 tests), focused ESLint, `pnpm typecheck`, and a controlled 12-second `pnpm dev:server` probe.
+- Issues/Risks: The probe no longer reports `DATABASE_URL is required`; PostgreSQL now rejects the configured credentials, so the database password in the root URL must match the running PostgreSQL service.
+- Next: Align the root `DATABASE_URL` credentials with PostgreSQL, then commit this startup correction with its regression.
