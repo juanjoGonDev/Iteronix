@@ -18,10 +18,8 @@ import {
   type WorkflowVersionRestorePart,
   type WorkflowVersionTimelineExportRecord,
 } from "../shared/workflow-client.js";
-import {
-  createWorkspaceStateClient,
-  type WorkspaceStateSnapshot,
-} from "../shared/workspace-state-client.js";
+import { createSettingsClient } from "../shared/settings-client.js";
+import type { SettingsSnapshot } from "../shared/settings-storage.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
   createWorkflowEditHistoryEntry,
@@ -711,7 +709,7 @@ const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
 };
 
 interface WorkflowsScreenState {
-  workspaceState: WorkspaceStateSnapshot | null;
+  settingsSnapshot: SettingsSnapshot | null;
   workflows: ReadonlyArray<WorkflowDefinitionRecord>;
   assets: ReadonlyArray<WorkflowAssetRecord>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
@@ -781,7 +779,7 @@ export class WorkflowsScreen extends Component<
   ComponentProps,
   WorkflowsScreenState
 > {
-  private readonly workspaceStateClient = createWorkspaceStateClient();
+  private readonly settingsClient = createSettingsClient();
   private readonly workflowClient = createWorkflowClient();
   private draggingNodeId: string | null = null;
   private dragPointerOffset: { x: number; y: number } | null = null;
@@ -798,7 +796,7 @@ export class WorkflowsScreen extends Component<
 
   constructor(props: ComponentProps = {}) {
     super(props, {
-      workspaceState: null,
+      settingsSnapshot: null,
       workflows: [],
       assets: [],
       assetUsages: [],
@@ -12529,9 +12527,9 @@ export class WorkflowsScreen extends Component<
     });
 
     try {
-      const workspaceState = await this.workspaceStateClient.load();
+      const settingsSnapshot = await this.settingsClient.load();
       this.setState({
-        workspaceState,
+        settingsSnapshot,
         pendingAction: null,
         compactView: CompactView.Canvas,
       });
@@ -14251,7 +14249,7 @@ export class WorkflowsScreen extends Component<
   private readProviderProfileOptions(
     currentProviderId: string,
   ): ReadonlyArray<{ value: string; label: string }> {
-    const profiles = this.state.workspaceState?.settings.providerProfiles ?? [];
+    const profiles = this.state.settingsSnapshot?.providerProfiles ?? [];
     const profileOptions = profiles.map((profile) => ({
       value: profile.id,
       label: formatProviderProfileLabel(profile),

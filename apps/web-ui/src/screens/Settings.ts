@@ -37,10 +37,6 @@ import {
   createSettingsClient,
   type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
-import {
-  createWorkspaceStateClient,
-  hydrateWorkspaceStateClients,
-} from "../shared/workspace-state-client.js";
 import { writeBrowserUrlState } from "../shared/url-state.js";
 import {
   ProviderKind,
@@ -111,7 +107,6 @@ export class SettingsScreen extends Component<
   SettingsScreenState
 > {
   private readonly settingsClient = createSettingsClient();
-  private readonly workspaceStateClient = createWorkspaceStateClient();
 
   constructor(props: ComponentProps = {}) {
     const snapshot = {
@@ -931,10 +926,11 @@ export class SettingsScreen extends Component<
     let message: string | null = null;
 
     try {
-      const workspaceState = await this.workspaceStateClient.load();
-      hydrateWorkspaceStateClients(workspaceState);
-      hydrateSettingsSnapshot(workspaceState.settings);
-      const snapshot = workspaceState.settings;
+      const snapshot = mergeSettingsServerConnection(
+        await this.settingsClient.load(),
+        this.state.serverConnection,
+      );
+      hydrateSettingsSnapshot(snapshot);
       const urlState =
         typeof window === "undefined"
           ? null
@@ -1143,11 +1139,11 @@ export class SettingsScreen extends Component<
         serverConnection: this.state.serverConnection,
       };
 
-      const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot,
-      });
-      hydrateWorkspaceStateClients(workspaceState);
-      const persistedSettings = workspaceState.settings;
+      const persistedSettings = mergeSettingsServerConnection(
+        await this.settingsClient.update(snapshot),
+        this.state.serverConnection,
+      );
+      hydrateSettingsSnapshot(persistedSettings);
       const selectedProviderId = persistedSettings.providerProfiles.some(
         (profile) => profile.id === this.state.selectedProviderId,
       )
@@ -1204,11 +1200,11 @@ export class SettingsScreen extends Component<
     const snapshot = createDefaultSettingsSnapshot();
 
     try {
-      const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot,
-      });
-      hydrateWorkspaceStateClients(workspaceState);
-      const persistedSettings = workspaceState.settings;
+      const persistedSettings = mergeSettingsServerConnection(
+        await this.settingsClient.update(snapshot),
+        this.state.serverConnection,
+      );
+      hydrateSettingsSnapshot(persistedSettings);
       this.setState({
         activeTab: "provider",
         profileId: persistedSettings.profileId,
@@ -1309,6 +1305,14 @@ const toErrorMessage = (value: unknown, fallback: string): string => {
 
   return fallback;
 };
+
+const mergeSettingsServerConnection = (
+  settings: SettingsSnapshot,
+  serverConnection: ServerConnection,
+): SettingsSnapshot => ({
+  ...settings,
+  serverConnection,
+});
 
 const resolveSettingsProviderSelection = (
   selectedProviderId: string | null | undefined,

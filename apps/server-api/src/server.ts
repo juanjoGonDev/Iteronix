@@ -110,8 +110,8 @@ import {
   createPostgresWorkspaceStateStore,
 } from "./postgres-workspace-state";
 const WorkflowOnlyRoutePaths = new Set<string>([
-  RoutePath.WorkspaceStateGet,
-  RoutePath.WorkspaceStateUpdate,
+  RoutePath.SettingsGet,
+  RoutePath.SettingsUpdate,
   RoutePath.ProvidersList,
   RoutePath.ProvidersSelect,
   RoutePath.ProvidersSettings,
@@ -342,23 +342,23 @@ const handleRequest = async (
     return;
   }
 
-  if (path === RoutePath.WorkspaceStateGet) {
+  if (path === RoutePath.SettingsGet) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleWorkspaceStateGet(res, workspacePersistence);
+    await handleSettingsGet(res, workspacePersistence);
     return;
   }
 
-  if (path === RoutePath.WorkspaceStateUpdate) {
+  if (path === RoutePath.SettingsUpdate) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleWorkspaceStateUpdate(req, res, workspacePersistence);
+    await handleSettingsUpdate(req, res, workspacePersistence);
     return;
   }
   if (path === RoutePath.ProvidersList) {
@@ -768,14 +768,16 @@ const handleRequest = async (
   });
 };
 
-const handleWorkspaceStateGet = async (
+const handleSettingsGet = async (
   res: ServerResponse,
   workspacePersistence: WorkspacePersistence,
 ): Promise<void> => {
-  respondJson(res, HttpStatus.Ok, { state: workspacePersistence.read() });
+  respondJson(res, HttpStatus.Ok, {
+    settings: redactSettingsForClient(workspacePersistence.read().settings),
+  });
 };
 
-const handleWorkspaceStateUpdate = async (
+const handleSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   workspacePersistence: WorkspacePersistence,
@@ -786,7 +788,7 @@ const handleWorkspaceStateUpdate = async (
     return;
   }
 
-  const parsed = parseWorkspaceStateUpdateRequest(
+  const parsed = parseSettingsUpdateRequest(
     bodyResult.value,
     workspacePersistence.read(),
   );
@@ -796,8 +798,12 @@ const handleWorkspaceStateUpdate = async (
   }
 
   try {
-    const state = await workspacePersistence.updateUiState(parsed.value);
-    respondJson(res, HttpStatus.Ok, { state });
+    const state = await workspacePersistence.updateUiState({
+      settings: parsed.value,
+    });
+    respondJson(res, HttpStatus.Ok, {
+      settings: redactSettingsForClient(state.settings),
+    });
   } catch (error) {
     respondError(res, {
       status: HttpStatus.BadRequest,
@@ -807,10 +813,10 @@ const handleWorkspaceStateUpdate = async (
   }
 };
 
-export const parseWorkspaceStateUpdateRequest = (
+export const parseSettingsUpdateRequest = (
   value: unknown,
   currentState: WorkspaceState,
-): Result<{ settings?: WorkspaceSettingsSnapshot }, ApiError> => {
+): Result<WorkspaceSettingsSnapshot, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
@@ -818,16 +824,17 @@ export const parseWorkspaceStateUpdateRequest = (
     });
   }
 
-  if (!Object.hasOwn(value, "settings")) {
-    return ok({});
-  }
-
   try {
+    const settings = parseWorkspaceState({
+      ...currentState,
+      settings: value,
+    }).settings;
     return ok({
-      settings: parseWorkspaceState({
-        ...currentState,
-        settings: value["settings"],
-      }).settings,
+      ...settings,
+      serverConnection: {
+        ...settings.serverConnection,
+        authToken: "",
+      },
     });
   } catch {
     return err({
@@ -836,6 +843,16 @@ export const parseWorkspaceStateUpdateRequest = (
     });
   }
 };
+
+const redactSettingsForClient = (
+  settings: WorkspaceSettingsSnapshot,
+): WorkspaceSettingsSnapshot => ({
+  ...settings,
+  serverConnection: {
+    ...settings.serverConnection,
+    authToken: "",
+  },
+});
 const handleProvidersList = async (
   req: IncomingMessage,
   res: ServerResponse,

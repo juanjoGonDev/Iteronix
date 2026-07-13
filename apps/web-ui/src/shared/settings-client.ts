@@ -1,6 +1,12 @@
 import { requestJson } from "./server-api-client.js";
+import {
+  parseSettingsSnapshot,
+  type SettingsSnapshot,
+} from "./settings-storage.js";
 
 const EndpointPath = {
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
 } as const;
@@ -32,6 +38,8 @@ export type RuntimeProviderSettingsRecord = {
 };
 
 export type SettingsClient = {
+  load: () => Promise<SettingsSnapshot>;
+  update: (settings: SettingsSnapshot) => Promise<SettingsSnapshot>;
   listProviders: (input?: {
     profileId?: string;
   }) => Promise<RuntimeProviderListResponse>;
@@ -43,6 +51,18 @@ export type SettingsClient = {
 };
 
 export const createSettingsClient = (): SettingsClient => ({
+  load: () =>
+    requestJson({
+      path: EndpointPath.SettingsGet,
+      body: {},
+      parse: parseSettingsResponse,
+    }),
+  update: (settings) =>
+    requestJson({
+      path: EndpointPath.SettingsUpdate,
+      body: settings,
+      parse: parseSettingsResponse,
+    }),
   listProviders: (input) =>
     requestJson({
       path: EndpointPath.ProvidersList,
@@ -61,6 +81,23 @@ export const createSettingsClient = (): SettingsClient => ({
       },
       parse: parseProviderSettingsResponse,
     }),
+});
+
+export const parseSettingsResponse = (value: unknown): SettingsSnapshot =>
+  redactSettingsAuthToken(
+    parseSettingsSnapshot(
+      readRequiredRecord(value, "settingsResponse", "settings"),
+    ),
+  );
+
+const redactSettingsAuthToken = (
+  settings: SettingsSnapshot,
+): SettingsSnapshot => ({
+  ...settings,
+  serverConnection: {
+    ...settings.serverConnection,
+    authToken: "",
+  },
 });
 
 export const parseProviderListResponse = (

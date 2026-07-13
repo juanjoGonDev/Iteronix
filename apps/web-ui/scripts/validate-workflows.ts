@@ -38,8 +38,8 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
-  WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update",
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   DefinitionsList: "/workflows/definitions/list",
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
@@ -1402,19 +1402,19 @@ async function handleStubRequest(
 
   const body = await readJsonBody(request);
 
-  if (requestUrl.pathname === RequestPath.WorkspaceStateGet) {
+  if (requestUrl.pathname === RequestPath.SettingsGet) {
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings),
+      settings: state.settings,
     });
     return;
   }
 
-  if (requestUrl.pathname === RequestPath.WorkspaceStateUpdate) {
-    if (isRecord(body) && isRecord(body["settings"])) {
-      state.settings = body["settings"];
+  if (requestUrl.pathname === RequestPath.SettingsUpdate) {
+    if (isRecord(body)) {
+      state.settings = body;
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings),
+      settings: state.settings,
     });
     return;
   }
@@ -2027,14 +2027,6 @@ function upsertStubExecution(
   return executions.map((entry, index) =>
     index === existingIndex ? execution : entry,
   );
-}
-
-function createWorkspaceState(
-  settings: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    settings,
-  };
 }
 
 function createDefaultWorkspaceSettings(): Record<string, unknown> {

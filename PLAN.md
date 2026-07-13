@@ -28,6 +28,7 @@
 - [x] Delete remaining deprecated project-centric implementation modules, tests, and internal type fields after the workflow catalog is made scope-native.
   - [x] Delete the server project, file, git, Kanban, history, logs, quality-gate, session, sandbox, and AI workbench modules with their tests.
   - [x] Delete the browser project, overview, explorer, kanban, standalone history, git, quality-gate, logging, and workbench modules with their tests and validators.
+- [x] Replace the residual public workspace-state API with typed settings endpoints and remove browser workspace-state requests.
 
 Acceptance:
 

@@ -49,6 +49,7 @@ const RemovedSourcePaths = [
   "shared/workbench-history.test.ts",
   "shared/workbench-history.ts",
   "shared/workbench-types.ts",
+  "shared/workspace-state-client.ts",
   "shared/types.ts",
 ] as const;
 
@@ -87,5 +88,14 @@ describe("workflow-only web source inventory", () => {
     expect(constants).toContain('WORKFLOWS: "/workflows"');
     expect(constants).toContain('SETTINGS: "/settings"');
     expect(constants).not.toMatch(/OVERVIEW|PROJECTS|EXPLORER|KANBAN|HISTORY/);
+  });
+
+  it("does not retain workspace-state browser requests", () => {
+    const source = readFileSync(
+      join(WebSourceRoot, "screens", "Workflows.ts"),
+      "utf8",
+    );
+    expect(source).not.toContain("/workspace/state/get");
+    expect(source).not.toContain("workspace-state-client");
   });
 });

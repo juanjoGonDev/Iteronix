@@ -38,8 +38,8 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
-  WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update",
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
   Webhook: "/webhook/test",
@@ -157,7 +157,7 @@ async function validateSettingsScreen(): Promise<void> {
 
     await clickNamedButton(page, "Add Anthropic");
     await waitForPageText(page, readProviderCardLabel(ProviderKind.Anthropic));
-    await waitForTestId(page, "settings-provider-api-key");
+    await waitForTestId(page, "settings-provider-api-key-env-var");
     await setInputValueByTestId(
       page,
       "settings-provider-name",
@@ -170,8 +170,8 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await setInputValueByTestId(
       page,
-      "settings-provider-api-key",
-      "anthropic-session-secret",
+      "settings-provider-api-key-env-var",
+      "ANTHROPIC_API_KEY",
     );
 
     await clickNamedButton(page, "Workflow Limits");
@@ -232,7 +232,7 @@ async function validateSettingsScreen(): Promise<void> {
       "button",
       ValidationText.AnthropicProfileName,
     );
-    await waitForTestId(page, "settings-provider-api-key");
+    await waitForTestId(page, "settings-provider-api-key-env-var");
     await waitForInputValue(
       page,
       "settings-provider-name",
@@ -245,8 +245,8 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await waitForInputValue(
       page,
-      "settings-provider-api-key",
-      "anthropic-session-secret",
+      "settings-provider-api-key-env-var",
+      "ANTHROPIC_API_KEY",
     );
 
     await clickNamedButton(page, "Workflow Limits");
@@ -516,24 +516,24 @@ async function handleStubRequest(
 
   if (
     request.method === "POST" &&
-    requestUrl.pathname === RequestPath.WorkspaceStateGet
+    requestUrl.pathname === RequestPath.SettingsGet
   ) {
     writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings),
+      settings: state.workspaceSettings,
     });
     return;
   }
 
   if (
     request.method === "POST" &&
-    requestUrl.pathname === RequestPath.WorkspaceStateUpdate
+    requestUrl.pathname === RequestPath.SettingsUpdate
   ) {
     const body = await readJsonBody(request);
-    if (isRecord(body) && isRecord(body["settings"])) {
-      state.workspaceSettings = body["settings"];
+    if (isRecord(body)) {
+      state.workspaceSettings = body;
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings),
+      settings: state.workspaceSettings,
     });
     return;
   }
@@ -631,14 +631,6 @@ async function seedBrowserStorage(page: Page): Promise<void> {
       serverKeys: ServerStorageKey,
     },
   );
-}
-
-function createWorkspaceState(
-  settings: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    settings,
-  };
 }
 
 function createDefaultWorkspaceSettings(): Record<string, unknown> {

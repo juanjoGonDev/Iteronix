@@ -4658,3 +4658,12 @@
 - Commands: RED `pnpm vitest run apps/server-api/src/environment.test.ts`; PASS focused Vitest (5 tests), focused ESLint, `pnpm typecheck`, and a controlled 12-second `pnpm dev:server` probe.
 - Issues/Risks: The probe no longer reports `DATABASE_URL is required`; PostgreSQL now rejects the configured credentials, so the database password in the root URL must match the running PostgreSQL service.
 - Next: Align the root `DATABASE_URL` credentials with PostgreSQL, then commit this startup correction with its regression.
+
+### 2026-07-13 21:56 (Europe/Madrid) — Settings API boundary
+
+- Summary: Replaced the residual browser workspace-state API with typed settings-only endpoints.
+- Decisions: `/settings/get` and `/settings/update` remain behind the existing bearer authentication boundary; responses and persisted updates redact `AUTH_TOKEN` while the browser retains its configured connection locally.
+- Changes: Deleted `workspace-state-client.ts`, migrated Settings and Workflows to `SettingsClient`, removed `/workspace/state/*` routes, and updated browser validation stubs to assert settings-only payloads and environment-key references.
+- Commands: RED focused suite (8 expected failures); PASS focused suite (14 tests), focused lint, `pnpm typecheck`, `validate:workflows`, and `validate:settings`.
+- Issues/Risks: No production or validator request remains for `/workspace/state/get` or `/workspace/state/update`.
+- Next: Include this boundary replacement in the next scoped review and atomic commit.

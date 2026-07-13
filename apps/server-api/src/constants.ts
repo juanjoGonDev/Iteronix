@@ -4,8 +4,8 @@ export const HttpMethod = {
 } as const;
 
 export const RoutePath = {
-  WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update",
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSelect: "/providers/select",
   ProvidersSettings: "/providers/settings",

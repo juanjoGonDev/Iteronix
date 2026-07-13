@@ -4,6 +4,12 @@ import { isWorkflowOnlyRoute } from "./server";
 describe("workflow-only server boundary", () => {
   it("admits retained workflow paths", () => {
     expect(isWorkflowOnlyRoute("/workflows/definitions/list")).toBe(true);
+    expect(isWorkflowOnlyRoute("/settings/get")).toBe(true);
+  });
+
+  it("rejects the removed workspace state API", () => {
+    expect(isWorkflowOnlyRoute("/workspace/state/get")).toBe(false);
+    expect(isWorkflowOnlyRoute("/workspace/state/update")).toBe(false);
   });
 
   it("rejects every removed product API family", () => {
