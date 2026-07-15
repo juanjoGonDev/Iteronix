@@ -49,6 +49,8 @@ export type WorkflowStepExecutionAvailability = {
   label: "Execute step" | "Executing";
 };
 
+export type WorkflowStepRunMode = "normal" | "test";
+
 export type WorkflowNodeHoverRunControlState = {
   disabled: boolean;
   icon: "hourglass_top" | "play_arrow";
@@ -121,30 +123,33 @@ export const readWorkflowDebugItemLabel = (value: unknown): string => {
   return `${count.toString()} item${count === 1 ? "" : "s"}`;
 };
 
-export const readWorkflowStepSeedOutputs = (input: {
+export const readWorkflowStepRunSeedOutputs = (input: {
+  mode: WorkflowStepRunMode;
   workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike;
-  executionOutputs: WorkflowDebugOutputMap;
-  pinnedOutput: WorkflowPinnedTestOutput | null;
-  workflowId: string;
   targetNodeId: string;
-}): Readonly<Record<string, unknown>> => {
+}): Readonly<Record<string, unknown>> | undefined => {
+  if (input.mode === "normal") {
+    return undefined;
+  }
+
   const upstreamNodeIds = collectWorkflowUpstreamNodeIds(
     input.workflow,
     input.targetNodeId,
   );
   const entries = new Map<string, unknown>();
-  for (const [nodeId, output] of input.executionOutputs.entries()) {
-    if (upstreamNodeIds.has(nodeId) && output !== undefined) {
-      entries.set(nodeId, output);
-    }
-  }
 
-  if (
-    input.pinnedOutput !== null &&
-    input.pinnedOutput.workflowId === input.workflowId &&
-    upstreamNodeIds.has(input.pinnedOutput.nodeId)
-  ) {
-    entries.set(input.pinnedOutput.nodeId, input.pinnedOutput.outputSnapshot);
+  for (const node of input.workflow.nodes) {
+    if (!upstreamNodeIds.has(node.id)) {
+      continue;
+    }
+
+    const output = readWorkflowNodeSelectedPersistedPinnedTestOutput(
+      node.config,
+      node.id,
+    );
+    if (output) {
+      entries.set(node.id, output.outputSnapshot);
+    }
   }
 
   return Object.fromEntries(entries.entries());
@@ -722,6 +727,20 @@ const readWorkflowNodeDefaultPinnedTestOutputId = (
   config: WorkflowPinnedNodeConfig,
 ): string | undefined =>
   config.defaultPinnedTestOutputId ?? config.pinnedTestOutputs?.[0]?.id;
+
+const readWorkflowNodeSelectedPersistedPinnedTestOutput = (
+  config: WorkflowPinnedNodeConfig,
+  nodeId: string,
+): { outputSnapshot: unknown } | undefined => {
+  const outputs = readWorkflowNodePinnedTestOutputs(config, nodeId);
+
+  if (!config.pinnedTestOutputs || config.pinnedTestOutputs.length === 0) {
+    return undefined;
+  }
+
+  const selectedId = readWorkflowNodeDefaultPinnedTestOutputId(config);
+  return outputs.find((output) => output.id === selectedId);
+};
 
 const selectDefaultWorkflowPinnedTestOutput = (
   workflow: WorkflowPinnedDefinitionLike,

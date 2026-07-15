@@ -4851,3 +4851,39 @@
 - Commands: RED/GREEN `pnpm exec vitest run apps/server-api/src/postgres-application-state.test.ts`; `pnpm typecheck`; Docker runtime request against the existing legacy database verified the API returns `global`.
 - Issues/Risks: The legacy database row remains readable under its compatibility key until the next normal persistence write creates the canonical application record; no browser request now receives `workspace` assets.
 - Next: Run complete gates, commit, and push the compatibility fix.
+
+### 2026-07-15 18:18 (Europe/Madrid) — Step execution modes
+
+- Summary: Aligned node step execution with the canvas Run selector.
+- Decisions: Normal step runs omit `seedNodeOutputs`, so the runtime executes the selected node and required ancestors without pins. Test step runs pass only selected persisted pinned defaults for upstream nodes; cached results and the legacy one-pin field are excluded.
+- Changes: Added explicit inspector, hover, and node-settings menu state; shared Normal/Test menu rendering; outside-click dismissal; focused seed-selection regression coverage; updated the workflow-only plan.
+- Commands: RED/GREEN `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts`; focused Prettier and ESLint checks.
+- Issues/Risks: Browser validator updates and full quality gates are intentionally left to the parent integration pass. The user-owned `.atl/skill-registry.md` remains untouched and unstaged.
+- Next: Run the workflow browser validator and the complete integration gates before committing.
+
+### 2026-07-15 18:30 (Europe/Madrid) — Step execution mode validation
+
+- Summary: Completed browser and integration validation for the Execute step Normal/Test selector.
+- Decisions: The browser regression captures the selector and proves a normal run omits `seedNodeOutputs`, while a test run sends only the upstream selected default output.
+- Changes: Repaired the validator's JSON query decoding and removed stale history-output assertions that did not belong to the persisted-pin fixture.
+- Commands: `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 256 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run bounded review, commit, and push the validated workflow UI change.
+
+### 2026-07-15 18:35 (Europe/Madrid) — Legacy step-test pin correction
+
+- Summary: Restored legacy pinned-output compatibility for Execute step Test mode after bounded review found a divergence from canvas Run.
+- Decisions: A legacy singular pin is normalized only for test execution; normal execution still omits all seed outputs and never uses a pin.
+- Changes: Reused the existing pin normalization path and added a legacy-only regression alongside the selected-default coverage.
+- Commands: RED/GREEN focused debug-state test (29 tests); `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 257 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Finalize the bounded correction receipt, commit, and push.
+
+### 2026-07-15 18:40 (Europe/Madrid) — Canvas parity for legacy pins
+
+- Summary: Aligned Execute step Test mode with the canvas Run test-mode contract after post-commit review detected a legacy-pin divergence.
+- Decisions: Test execution accepts only explicit modern pinned-output defaults. A legacy singular pin has no selected default, so neither canvas nor Execute step sends it as a seed.
+- Changes: Replaced legacy-only seed reuse with an explicit no-seed parity regression while retaining normal no-pin and modern selected-default behavior.
+- Commands: RED/GREEN focused workflow debug-state tests; `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 257 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Finalize the bounded correction receipt, amend the unpushed commit, and push.

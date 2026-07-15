@@ -82,6 +82,9 @@ const WorkflowSelector = {
   EdgeHitPrefix: "workflows-edge-hit-",
   WorkflowSave: "workflows-save",
   WorkflowRun: "workflows-run",
+  NodeStepRunMenu: "workflows-node-step-run-menu",
+  NodeStepRunMenuNormal: "workflows-node-step-run-normal",
+  NodeStepRunMenuTest: "workflows-node-step-run-test",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
   WorkflowEditHistoryUndo: "workflows-edit-history-undo",
@@ -410,6 +413,10 @@ type StubServerState = {
   definitionVersions: StubWorkflowDefinitionVersionRecord[];
   assets: StubWorkflowAssetRecord[];
   executions: StubExecutionRecord[];
+  nodeExecutionRequests: Array<{
+    nodeId: string;
+    seedNodeOutputs: unknown | undefined;
+  }>;
   nextWorkflowId: number;
   nextAssetId: number;
   versionExportCount: number;
@@ -1288,6 +1295,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickButtonByTitle(page, "Close editor");
 
+    const stepTestFixture = addStepTestPinnedDefault(
+      connectedHistoryDefinition,
+    );
+    stubServer.state.definitions = [stepTestFixture.definition];
+
     await page.reload({
       waitUntil: "networkidle0",
     });
@@ -1297,41 +1309,47 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
-    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
     await assertPinnedOutputListHasName(page);
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    const inspectorUrl = page.url();
     await clickButtonByText(page, "Execute step");
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenu);
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuNormal);
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    if (page.url() !== inspectorUrl) {
+      throw new Error("Execute step menu must not change the inspector URL.");
+    }
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-step-run-menu",
+      artifactName: "workflows",
+    });
+    stubServer.state.nodeExecutionRequests = [];
+    await clickByTestId(page, WorkflowSelector.NodeStepRunMenuNormal);
     await waitForPageText(page, "Executing");
+    await waitForNodeExecutionSeedOutputs(stubServer.state, undefined);
     await waitForPageText(page, ValidationText.StepOutputNeedle);
     await waitForExecutionWithOutput(
       stubServer.state,
       ValidationText.StepOutputNeedle,
     );
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.WorkflowSavedNotice);
-    await clickButtonByTitle(page, "Close editor");
-    await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
-
-    await page.reload({
-      waitUntil: "networkidle0",
-    });
-    await waitForNodeCardCount(page, 2);
-    const postStepResponseCardTestId = await readNodeCardTestIdByText(
-      page,
-      "Response",
+    await clickButtonByText(page, "Execute step");
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    if (page.url() !== inspectorUrl) {
+      throw new Error(
+        "Execute step test menu must not change the inspector URL.",
+      );
+    }
+    stubServer.state.nodeExecutionRequests = [];
+    await clickByTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    await waitForPageText(page, "Executing");
+    await waitForNodeExecutionSeedOutputs(
+      stubServer.state,
+      stepTestFixture.seedNodeOutputs,
     );
-    await doubleClickByTestId(page, postStepResponseCardTestId);
-    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
-    await waitForMissingPageText(page, ValidationText.StepOutputNeedle);
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
-    await captureBrowserValidationScreenshot({
-      page,
-      directory: screenshotDirectory,
-      suffix: "workflows-pinned-output",
-      artifactName: "workflows",
-    });
     await clickButtonByTitle(page, "Close editor");
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
 
@@ -1393,6 +1411,7 @@ async function startWorkflowStubServer(): Promise<{
     definitionVersions: [],
     assets: [],
     executions: [],
+    nodeExecutionRequests: [],
     nextWorkflowId: 1,
     nextAssetId: 1,
     versionExportCount: 0,
@@ -2004,6 +2023,13 @@ async function handleStreamNodeRequest(
     writeJson(response, 404, { message: "Not found" });
     return;
   }
+
+  state.nodeExecutionRequests.push({
+    nodeId,
+    seedNodeOutputs: readJsonQueryParam(
+      requestUrl.searchParams.get("seedNodeOutputs"),
+    ),
+  });
 
   const execution = createStepExecutionFixture(definition, node);
   state.executions = upsertStubExecution(
@@ -2807,6 +2833,49 @@ async function waitForPinnedDefinitionOutput(
   );
 }
 
+async function waitForNodeExecutionSeedOutputs(
+  state: StubServerState,
+  expectedSeedNodeOutputs: unknown | undefined,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const request = state.nodeExecutionRequests.at(-1);
+      if (!request) {
+        return false;
+      }
+      return areWorkflowValidationValuesEqual(
+        request.seedNodeOutputs,
+        expectedSeedNodeOutputs,
+      );
+    },
+    "expected node execution seed outputs",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+function areWorkflowValidationValuesEqual(
+  left: unknown | undefined,
+  right: unknown | undefined,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function readJsonQueryParam(value: string | null): unknown | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
 async function waitForTestId(page: Page, testId: string): Promise<void> {
   await waitForCondition(
     async () => {
@@ -2983,6 +3052,60 @@ function ensureHistoryNavigationEdge(
         },
       },
     ],
+  };
+}
+
+function addStepTestPinnedDefault(definition: StubWorkflowDefinitionRecord): {
+  definition: StubWorkflowDefinitionRecord;
+  seedNodeOutputs: Readonly<Record<string, unknown>>;
+} {
+  const upstreamNode = definition.nodes.find(
+    (node) => node.kind === WorkflowNodeKind.TriggerManual,
+  );
+  if (!upstreamNode) {
+    throw new Error("Expected an upstream node for step test validation.");
+  }
+
+  const selectedOutput = {
+    source: "step-test-default",
+    value: "selected-upstream-pin",
+  };
+  return {
+    definition: {
+      ...definition,
+      nodes: definition.nodes.map((node) =>
+        node.id === upstreamNode.id
+          ? {
+              ...node,
+              config: {
+                ...node.config,
+                pinnedTestOutput: {
+                  outputSnapshot: { source: "legacy-step-pin" },
+                  updatedAt: "2026-07-15T18:20:00.000Z",
+                },
+                pinnedTestOutputs: [
+                  {
+                    id: "step-test-unselected",
+                    name: "Earlier fixture",
+                    outputSnapshot: { source: "unselected-step-pin" },
+                    updatedAt: "2026-07-15T18:20:00.000Z",
+                  },
+                  {
+                    id: "step-test-selected",
+                    name: "Selected fixture",
+                    outputSnapshot: selectedOutput,
+                    updatedAt: "2026-07-15T18:20:00.000Z",
+                  },
+                ],
+                defaultPinnedTestOutputId: "step-test-selected",
+              },
+            }
+          : node,
+      ),
+    },
+    seedNodeOutputs: {
+      [upstreamNode.id]: selectedOutput,
+    },
   };
 }
 

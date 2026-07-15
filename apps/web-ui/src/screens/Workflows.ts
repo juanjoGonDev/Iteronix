@@ -64,7 +64,7 @@ import {
   readWorkflowTestRunSeedOutputs,
   writeWorkflowPinnedTestOutputToDefinition,
   writeWorkflowPinnedTestOutputsToDefinition,
-  readWorkflowStepSeedOutputs,
+  readWorkflowStepRunSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
@@ -80,6 +80,7 @@ import {
   type WorkflowPinnedTestOutputOption,
   type WorkflowRunControlState,
   type WorkflowStepExecutionAvailability,
+  type WorkflowStepRunMode,
 } from "./workflows-debug-state.js";
 import {
   WorkflowAssetKind,
@@ -184,6 +185,9 @@ const WorkflowScreenSelector = {
   WorkflowDelete: "workflows-delete",
   WorkflowRun: "workflows-run",
   WorkflowRunMenu: "workflows-run-menu",
+  NodeStepRunMenu: "workflows-node-step-run-menu",
+  NodeStepRunMenuNormal: "workflows-node-step-run-normal",
+  NodeStepRunMenuTest: "workflows-node-step-run-test",
   CanvasZoomOut: "workflows-canvas-zoom-out",
   CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
@@ -757,6 +761,7 @@ interface WorkflowsScreenState {
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
   pinnedTestOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>;
   runModeMenuOpen: boolean;
+  nodeStepRunMenu: WorkflowNodeStepRunMenuState | null;
   outputEditor: WorkflowOutputEditorState | null;
   pinnedOutputOverwrite: WorkflowPinnedOutputOverwriteDialogState | null;
   workflowDeleteDialog: WorkflowDeleteDialogState | null;
@@ -780,6 +785,11 @@ interface WorkflowsScreenState {
   errorMessage: string | null;
   noticeMessage: string | null;
 }
+
+type WorkflowNodeStepRunMenuState = {
+  nodeId: string;
+  source: "hover" | "modal" | "action";
+};
 
 interface WorkflowsEditorProps extends ComponentProps {
   workflowId: string;
@@ -851,6 +861,7 @@ export class WorkflowsScreen extends Component<
       pinnedTestOutput: null,
       pinnedTestOutputs: [],
       runModeMenuOpen: false,
+      nodeStepRunMenu: null,
       outputEditor: null,
       pinnedOutputOverwrite: null,
       workflowDeleteDialog: null,
@@ -879,7 +890,7 @@ export class WorkflowsScreen extends Component<
     window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
     window.addEventListener("keyup", this.handleGlobalKeyUp);
-    window.addEventListener("click", this.handleRunModeMenuOutsideClick);
+    window.addEventListener("click", this.handleRunMenusOutsideClick);
     window.addEventListener("popstate", this.handleWorkflowUrlStateChange);
     void this.hydrateState();
   }
@@ -892,7 +903,7 @@ export class WorkflowsScreen extends Component<
     window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
     window.removeEventListener("keyup", this.handleGlobalKeyUp);
-    window.removeEventListener("click", this.handleRunModeMenuOutsideClick);
+    window.removeEventListener("click", this.handleRunMenusOutsideClick);
     window.removeEventListener("popstate", this.handleWorkflowUrlStateChange);
     this.cancelLiveExecutionStream();
     this.stopExecutionRefreshPolling();
@@ -4606,6 +4617,7 @@ export class WorkflowsScreen extends Component<
           onClick: () => {
             this.setState({
               runModeMenuOpen: !this.state.runModeMenuOpen,
+              nodeStepRunMenu: null,
             });
           },
           icon: runControl.icon,
@@ -4650,11 +4662,13 @@ export class WorkflowsScreen extends Component<
     label: string;
     detail: string;
     onClick: () => void;
+    testId?: string;
   }): HTMLElement {
     return createElement(
       "button",
       {
         type: "button",
+        ...(input.testId ? { "data-testid": input.testId } : {}),
         className:
           "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm text-slate-100 transition-colors hover:bg-white/10",
         onClick: input.onClick,
@@ -4664,6 +4678,62 @@ export class WorkflowsScreen extends Component<
         createElement("span", { className: "text-xs text-slate-400" }, [
           input.detail,
         ]),
+      ],
+    );
+  }
+
+  private renderNodeStepRunSelector(input: {
+    nodeId: string;
+    source: "hover" | "modal" | "action";
+    trigger: HTMLElement;
+  }): HTMLElement {
+    const menuOpen =
+      this.state.nodeStepRunMenu?.nodeId === input.nodeId &&
+      this.state.nodeStepRunMenu.source === input.source;
+
+    return createElement(
+      "div",
+      {
+        className: "relative",
+        "data-testid": WorkflowScreenSelector.NodeStepRunMenu,
+      },
+      [
+        input.trigger,
+        menuOpen
+          ? createElement(
+              "div",
+              {
+                className:
+                  "absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] py-1 shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+              },
+              [
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run normally",
+                  detail: "Execute this node and its ancestors without pins",
+                  onClick: () => {
+                    void this.handleExecuteNodeStep(
+                      input.nodeId,
+                      input.source,
+                      "normal",
+                    );
+                  },
+                  testId: WorkflowScreenSelector.NodeStepRunMenuNormal,
+                }),
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run test",
+                  detail: "Use selected pinned outputs from upstream nodes",
+                  onClick: () => {
+                    void this.handleExecuteNodeStep(
+                      input.nodeId,
+                      input.source,
+                      "test",
+                    );
+                  },
+                  testId: WorkflowScreenSelector.NodeStepRunMenuTest,
+                }),
+              ],
+            )
+          : "",
       ],
     );
   }
@@ -4847,16 +4917,20 @@ export class WorkflowsScreen extends Component<
           "div",
           {
             className:
-              "relative flex items-center overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
+              "relative flex items-center overflow-visible rounded-md border border-[#3d3d3d] bg-[#202020] shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
           },
           [
-            this.renderNodeHoverToolbarButton({
-              icon: runControl.icon,
-              title: runControl.title,
-              disabled: runControl.disabled,
-              onClick: () => {
-                void this.handleExecuteNodeStep(node.id, "hover");
-              },
+            this.renderNodeStepRunSelector({
+              nodeId: node.id,
+              source: "hover",
+              trigger: this.renderNodeHoverToolbarButton({
+                icon: runControl.icon,
+                title: "Choose normal or test step execution",
+                disabled: runControl.disabled,
+                onClick: () => {
+                  this.toggleNodeStepRunMenu(node.id, "hover");
+                },
+              }),
             }),
             this.renderNodeHoverToolbarButton({
               icon: "edit",
@@ -4913,15 +4987,18 @@ export class WorkflowsScreen extends Component<
           this.setState({ nodeActionMenuId: null });
           this.openSelectionEditorModal({ type: "node", id: node.id });
         }),
-        this.renderNodeActionMenuItem(
-          "Execute step",
-          "play_arrow",
-          () => {
-            this.setState({ nodeActionMenuId: null });
-            void this.handleExecuteNodeStep(node.id, "hover");
-          },
-          this.readNodeHoverRunControlState(node.id).disabled,
-        ),
+        this.renderNodeStepRunSelector({
+          nodeId: node.id,
+          source: "action",
+          trigger: this.renderNodeActionMenuItem(
+            "Execute step",
+            "play_arrow",
+            () => {
+              this.toggleNodeStepRunMenu(node.id, "action");
+            },
+            this.readNodeHoverRunControlState(node.id).disabled,
+          ),
+        }),
         this.renderNodeActionMenuItem(
           "Rename",
           "drive_file_rename_outline",
@@ -5569,14 +5646,19 @@ export class WorkflowsScreen extends Component<
                     ? (() => {
                         const stepAvailability =
                           this.readSelectedNodeStepExecutionAvailability();
-                        return createElement(Button, {
-                          variant: "primary",
-                          size: "sm",
-                          disabled: stepAvailability.disabled,
-                          onClick: () => {
-                            void this.handleExecuteSelectedNodeStep();
-                          },
-                          children: stepAvailability.label,
+                        const nodeId = this.state.selection.id;
+                        return this.renderNodeStepRunSelector({
+                          nodeId,
+                          source: "modal",
+                          trigger: createElement(Button, {
+                            variant: "primary",
+                            size: "sm",
+                            disabled: stepAvailability.disabled,
+                            onClick: () => {
+                              this.toggleNodeStepRunMenu(nodeId, "modal");
+                            },
+                            children: stepAvailability.label,
+                          }),
                         });
                       })()
                     : "",
@@ -8638,24 +8720,41 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private async handleExecuteSelectedNodeStep(): Promise<void> {
-    const selectedNode = this.readSelectedNode();
-    if (!selectedNode) {
+  private toggleNodeStepRunMenu(
+    nodeId: string,
+    source: "hover" | "modal" | "action",
+  ): void {
+    const current = this.state.nodeStepRunMenu;
+    if (current?.nodeId === nodeId && current.source === source) {
+      this.setState({ nodeStepRunMenu: null });
       return;
     }
 
-    await this.handleExecuteNodeStep(selectedNode.id, "modal");
+    this.openNodeStepRunMenu(nodeId, source);
+  }
+
+  private openNodeStepRunMenu(
+    nodeId: string,
+    source: "hover" | "modal" | "action",
+  ): void {
+    this.setState({
+      runModeMenuOpen: false,
+      nodeStepRunMenu: { nodeId, source },
+    });
   }
 
   private async handleExecuteNodeStep(
     nodeId: string,
-    source: "hover" | "modal",
+    source: "hover" | "modal" | "action",
+    mode: WorkflowStepRunMode,
   ): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     const targetNode = currentWorkflow?.nodes.find(
       (node) => node.id === nodeId,
     );
-    const launchState = readWorkflowNodeStepLaunchState(source);
+    const launchState = readWorkflowNodeStepLaunchState(
+      source === "modal" ? "modal" : "hover",
+    );
     if (
       !targetNode ||
       !currentWorkflow ||
@@ -8671,20 +8770,24 @@ export class WorkflowsScreen extends Component<
       errorMessage: null,
       noticeMessage: null,
       editorModalOpen: launchState.editorModalOpen,
+      nodeStepRunMenu: null,
+      nodeActionMenuId: null,
       selection: { type: "node", id: targetNode.id },
     });
     this.cancelLiveExecutionStream();
     this.liveExecutionAbortController = new AbortController();
+    const seedNodeOutputs = readWorkflowStepRunSeedOutputs({
+      mode,
+      workflow: currentWorkflow,
+      targetNodeId: targetNode.id,
+    });
 
     try {
       await this.workflowClient.streamNode({
         workflowId: currentWorkflow.id,
         nodeId: targetNode.id,
         inputSource: this.readSelectedNodeExecutionInputSource(),
-        seedNodeOutputs: this.readSelectedNodeSeedOutputs(
-          currentWorkflow.id,
-          targetNode.id,
-        ),
+        ...(seedNodeOutputs ? { seedNodeOutputs } : {}),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
           this.handleWorkflowRunStreamEvent(event);
@@ -8714,21 +8817,6 @@ export class WorkflowsScreen extends Component<
       this.cancelLiveExecutionStream();
       void this.refreshWorkflowLogs();
     }
-  }
-
-  private readSelectedNodeSeedOutputs(
-    workflowId: string,
-    targetNodeId: string,
-  ): Readonly<Record<string, unknown>> {
-    return readWorkflowStepSeedOutputs({
-      workflow: this.state.draftWorkflow ?? { nodes: [], edges: [] },
-      executionOutputs: this.readWorkflowDebugOutputMap(
-        this.readWorkflowDebugExecution(),
-      ),
-      pinnedOutput: this.state.pinnedTestOutput,
-      workflowId,
-      targetNodeId,
-    });
   }
 
   private readSelectedNodeExecutionInputSource(): WorkflowNodeExecutionInputSourceRecord {
@@ -14932,22 +15020,33 @@ export class WorkflowsScreen extends Component<
     });
   };
 
-  private readonly handleRunModeMenuOutsideClick = (
-    event: MouseEvent,
-  ): void => {
-    if (!this.state.runModeMenuOpen || !(event.target instanceof Element)) {
-      return;
-    }
-
+  private readonly handleRunMenusOutsideClick = (event: MouseEvent): void => {
     if (
-      event.target.closest(
-        `[data-testid="${WorkflowScreenSelector.WorkflowRunMenu}"]`,
-      )
+      (!this.state.runModeMenuOpen && this.state.nodeStepRunMenu === null) ||
+      !(event.target instanceof Element)
     ) {
       return;
     }
 
-    this.setState({ runModeMenuOpen: false });
+    const canvasMenuClick = Boolean(
+      event.target.closest(
+        `[data-testid="${WorkflowScreenSelector.WorkflowRunMenu}"]`,
+      ),
+    );
+    const stepMenuClick = Boolean(
+      event.target.closest(
+        `[data-testid="${WorkflowScreenSelector.NodeStepRunMenu}"]`,
+      ),
+    );
+
+    if (canvasMenuClick && stepMenuClick) {
+      return;
+    }
+
+    this.setState({
+      ...(canvasMenuClick ? {} : { runModeMenuOpen: false }),
+      ...(stepMenuClick ? {} : { nodeStepRunMenu: null }),
+    });
   };
 
   private readonly handleGlobalPointerMove = (event: MouseEvent): void => {
