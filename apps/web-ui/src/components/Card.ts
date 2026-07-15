@@ -1,8 +1,6 @@
 import { Component, createElement, ComponentProps } from "../shared/Component";
 import { css } from "../shared/tokens";
 
-type CardVariant = "default" | "bordered" | "elevated";
-type CardPadding = "sm" | "md" | "lg" | "xl";
 type StatusType =
   | "info"
   | "success"
@@ -13,15 +11,6 @@ type StatusType =
   | "paused";
 type AvatarSize = "sm" | "md" | "lg" | "xl";
 type StatusIndicator = "online" | "away" | "busy" | "offline";
-
-interface CardProps extends ComponentProps {
-  variant?: CardVariant;
-  hover?: boolean;
-  active?: boolean;
-  children?: unknown;
-  padding?: CardPadding;
-  className?: string;
-}
 
 interface StatusBadgeProps extends ComponentProps {
   status?: StatusType;
@@ -37,40 +26,6 @@ interface AvatarProps extends ComponentProps {
   size?: AvatarSize;
   status?: StatusIndicator | null;
   className?: string;
-}
-
-export class Card extends Component<CardProps> {
-  override render(): HTMLElement {
-    const {
-      hover = false,
-      active = false,
-      children,
-      padding = "md",
-      className = "",
-    } = this.props;
-
-    const baseClasses = css.card.default;
-    const hoverClasses = hover ? "hover:border-primary/50" : "";
-    const activeClasses = active
-      ? "border-primary/40 shadow-lg shadow-blue-900/10"
-      : "";
-    const paddingClasses: Record<CardPadding, string> = {
-      sm: "p-3",
-      md: "p-4",
-      lg: "p-6",
-      xl: "p-8",
-    };
-
-    const finalClasses = `${baseClasses} ${hoverClasses} ${activeClasses} ${paddingClasses[padding]} ${className}`;
-
-    return createElement(
-      "div",
-      {
-        className: finalClasses,
-      },
-      [children],
-    );
-  }
 }
 
 export class StatusBadge extends Component<StatusBadgeProps> {

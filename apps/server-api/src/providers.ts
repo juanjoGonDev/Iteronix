@@ -71,7 +71,7 @@ export type ProviderStore = {
   restore: (snapshot: ProviderStoreSnapshot) => void;
 };
 
-export type ProviderStoreSnapshot = {
+type ProviderStoreSnapshot = {
   selections: ReadonlyArray<ProviderSelection>;
   settings: ReadonlyArray<ProviderSettingsRecord>;
 };

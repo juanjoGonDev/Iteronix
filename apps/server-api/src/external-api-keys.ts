@@ -35,7 +35,7 @@ export const createExternalApiKey = (input: {
   };
 };
 
-export const hashExternalApiKey = (plaintext: string): string => {
+const hashExternalApiKey = (plaintext: string): string => {
   const salt = randomBytes(SaltBytes);
   const derived = deriveKey(plaintext, salt);
   return [

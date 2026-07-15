@@ -4725,3 +4725,12 @@
 - Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (298), `pnpm build`, `pnpm -C apps/web-ui validate:settings`, and `pnpm -C apps/web-ui validate:workflows`.
 - Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
 - Next: Run native bounded review validation, commit the catalog navigation work unit, and push the branch.
+
+### 2026-07-15 13:55 (Europe/Madrid) — Pre-push quality remediation
+
+- Summary: Resolved the pre-push formatting and dead-code failures exposed after the workflow catalog commit.
+- Decisions: Removed unused internal exports and the unused Card component rather than suppressing Knip findings; formatted the affected workflow catalog files with the repository formatter.
+- Changes: Kept behavior unchanged while removing seven unused exports/types/components and formatting the new catalog routing code.
+- Commands: PASS `pnpm format:check`, `pnpm deadcode`, `pnpm typecheck`, and `pnpm test`.
+- Issues/Risks: The unpublished branch has no remote tracking branch yet, so the pre-push receipt cannot derive the branch base until the initial branch publication completes. The user-owned `.atl/skill-registry.md` remains backed up for restoration as an unstaged change.
+- Next: Run the remaining build/browser gates, review and commit this quality-only correction, then publish the branch and restore the unstaged registry change.

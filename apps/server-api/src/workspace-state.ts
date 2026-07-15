@@ -6,7 +6,7 @@ import {
   type ExternalApiKeyRecord,
 } from "../../../packages/domain/src/external-api-keys";
 
-export const WorkspaceStateVersion = {
+const WorkspaceStateVersion = {
   Current: 1,
 } as const;
 

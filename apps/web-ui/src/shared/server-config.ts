@@ -18,7 +18,7 @@ export const LocalStorageKey = {
   AuthToken: "iteronix_auth_token",
 } as const;
 
-export const DefaultServerConnection = {
+const DefaultServerConnection = {
   serverUrl: `http://${RuntimeHost.Localhost}:${RuntimePort.ApiDefault}`,
   authToken: "",
 } as const;
@@ -27,9 +27,6 @@ export type ServerConnection = {
   serverUrl: string;
   authToken: string;
 };
-
-export const hasServerAuthToken = (connection: ServerConnection): boolean =>
-  connection.authToken.trim().length > 0;
 
 export const readServerConnection = (
   storage: StorageLike = window.localStorage,
@@ -40,19 +37,6 @@ export const readServerConnection = (
     serverUrl: normalizeServerUrl(serverUrl, location),
     authToken: "",
   };
-};
-
-export const writeServerConnection = (
-  connection: ServerConnection,
-  storage: StorageLike = window.localStorage,
-): ServerConnection => {
-  const normalized = {
-    serverUrl: normalizeServerUrl(connection.serverUrl, window.location),
-    authToken: normalizeAuthToken(connection.authToken),
-  };
-
-  storage.setItem(LocalStorageKey.ServerUrl, normalized.serverUrl);
-  return normalized;
 };
 
 const normalizeServerUrl = (
@@ -74,11 +58,6 @@ const normalizeServerUrl = (
   }
 
   return normalized;
-};
-
-const normalizeAuthToken = (value: string | null | undefined): string => {
-  const trimmed = value?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : "";
 };
 
 const readDefaultServerUrl = (location: LocationLike | undefined): string => {

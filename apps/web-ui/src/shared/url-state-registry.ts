@@ -74,11 +74,6 @@ const RegisteredRouteValues = Object.values(ROUTES);
 export const listUrlStateRoutePolicies =
   (): ReadonlyArray<UrlStateRoutePolicy> => UrlStatePolicies;
 
-export const getUrlStateRoutePolicy = (
-  route: string,
-): UrlStateRoutePolicy | undefined =>
-  UrlStatePolicies.find((policy) => policy.route === route);
-
 export const validateUrlStateRegistryCoverage = (): ReadonlyArray<string> => {
   const policyRoutes = new Set(UrlStatePolicies.map((policy) => policy.route));
   return RegisteredRouteValues.filter((route) => !policyRoutes.has(route));
