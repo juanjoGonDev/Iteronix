@@ -55,6 +55,10 @@ describe("workflow client parsers", () => {
     expect(definitions).toHaveLength(1);
     expect(definitions[0]).not.toHaveProperty("projectId");
     expect(definitions[0]?.tags).toEqual(["mvp"]);
+    expect(definitions[0]).toMatchObject({
+      status: "draft",
+      updatedAt: "2026-05-06T18:10:00.000Z",
+    });
   });
 
   it("parses workflow definition version list responses", () => {

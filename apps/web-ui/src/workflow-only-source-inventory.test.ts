@@ -99,6 +99,21 @@ describe("workflow-only web source inventory", () => {
     expect(source).not.toContain("workspace-state-client");
   });
 
+  it("keeps workflow creation and selection in the catalog, not the editor", () => {
+    const catalogSource = readFileSync(
+      join(WebSourceRoot, "screens", "WorkflowsCatalog.ts"),
+      "utf8",
+    );
+    const editorSource = readFileSync(
+      join(WebSourceRoot, "screens", "Workflows.ts"),
+      "utf8",
+    );
+
+    expect(catalogSource).toContain("workflows-catalog-create");
+    expect(editorSource).not.toContain("workflows-select");
+    expect(editorSource).not.toContain("handleCreateWorkflow");
+  });
+
   it("does not retain removed workspace-state artifacts in the emitted browser output", () => {
     const emittedPaths = readEmittedPaths(join(WebUiRoot, "dist"));
     const emittedSource = emittedPaths

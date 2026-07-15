@@ -11,6 +11,7 @@ describe("url state registry", () => {
     expect(validateUrlStateRegistryCoverage()).toEqual([]);
     expect(listUrlStateRoutePolicies().map((policy) => policy.route)).toEqual([
       ROUTES.WORKFLOWS,
+      ROUTES.WORKFLOW_EDITOR,
       ROUTES.SETTINGS,
     ]);
   });

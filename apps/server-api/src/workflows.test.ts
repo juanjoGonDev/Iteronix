@@ -95,7 +95,7 @@ describe("workflow api contracts", () => {
     });
   });
 
-  it("creates, lists, gets and deletes workflow definitions", () => {
+  it("creates, lists, gets and deletes workflow catalog records", () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
@@ -137,6 +137,11 @@ describe("workflow api contracts", () => {
     expect(deleted.type).toBe(ResultType.Ok);
     if (listed.type === ResultType.Ok) {
       expect(listed.value).toHaveLength(1);
+      expect(listed.value[0]).toMatchObject({
+        id: upserted.value.id,
+        name: upserted.value.name,
+        updatedAt: BaseTime,
+      });
     }
   });
 

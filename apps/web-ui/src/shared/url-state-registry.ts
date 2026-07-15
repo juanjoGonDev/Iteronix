@@ -29,6 +29,14 @@ const ForbiddenUrlState = [
 const UrlStatePolicies = [
   {
     route: ROUTES.WORKFLOWS,
+    status: "none",
+    allowedParams: [],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Workflow selection belongs to this catalog route, not query state.",
+  },
+  {
+    route: ROUTES.WORKFLOW_EDITOR,
     status: "mixed",
     allowedParams: [
       "panel",

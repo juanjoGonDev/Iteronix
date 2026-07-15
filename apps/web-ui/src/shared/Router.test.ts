@@ -85,4 +85,41 @@ describe("router path helpers", () => {
       params: {},
     });
   });
+
+  it("notifies a dynamic route when its parameter changes", () => {
+    let currentPath = "/workflows/one";
+    let popstateHandler: (() => void) | undefined;
+    const visited: string[] = [];
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        location: {
+          get pathname() {
+            return currentPath;
+          },
+        },
+        history: {
+          pushState: (_state: object, _title: string, path: string) => {
+            currentPath = path;
+          },
+        },
+        addEventListener: (eventName: string, listener: () => void) => {
+          if (eventName === "popstate") {
+            popstateHandler = listener;
+          }
+        },
+      },
+    });
+
+    const router = new Router({ autoInit: false });
+    router.register("/workflows/:workflowId", ({ workflowId }) => {
+      visited.push(workflowId ?? "");
+    });
+    router.start();
+    router.navigate("/workflows/two");
+    popstateHandler?.();
+
+    expect(visited).toEqual(["one", "two"]);
+  });
 });

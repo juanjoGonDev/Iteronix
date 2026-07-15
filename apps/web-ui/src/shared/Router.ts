@@ -82,12 +82,14 @@ export const matchRoutePath = (
 export class Router {
   private routes: Map<string, RouteHandler>;
   private currentRoute: string | null;
+  private currentPathname: string | null;
   private params: Record<string, string>;
   private initialized: boolean;
 
   constructor(input?: { autoInit?: boolean }) {
     this.routes = new Map();
     this.currentRoute = null;
+    this.currentPathname = null;
     this.params = {};
     this.initialized = false;
     if (input?.autoInit !== false && canUseBrowserRouter()) {
@@ -141,11 +143,15 @@ export class Router {
       return;
     }
 
-    if (this.currentRoute === match.route) {
+    if (
+      this.currentRoute === match.route &&
+      this.currentPathname === pathname
+    ) {
       return;
     }
 
     this.currentRoute = match.route;
+    this.currentPathname = pathname;
     this.params = match.params;
 
     const handler = this.routes.get(match.route);

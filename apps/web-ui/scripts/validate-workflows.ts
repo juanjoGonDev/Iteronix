@@ -25,6 +25,7 @@ const ValidationConfig = {
   PreviewHealthPath: "/index.html",
   StubHealthPath: "/health",
   WorkflowsRoute: ROUTES.WORKFLOWS,
+  InitialWorkflowId: "workflow-1",
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
@@ -82,7 +83,6 @@ const WorkflowSelector = {
   ConnectionPreview: "workflows-connection-preview",
   EdgeDeletePrefix: "workflows-edge-delete-",
   EdgeHitPrefix: "workflows-edge-hit-",
-  WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
@@ -207,6 +207,12 @@ const WorkflowSelector = {
   CompactCanvas: "workflows-compact-canvas",
   NodeCardPrefix: "workflows-node-card-",
   NodePalettePrefix: "workflows-node-palette-",
+} as const;
+
+const WorkflowCatalogSelector = {
+  Root: "workflows-catalog-root",
+  Create: "workflows-catalog-create",
+  EmptyCreate: "workflows-catalog-empty-create",
 } as const;
 
 const WorkflowNodeKind = {
@@ -438,7 +444,6 @@ const ValidationText = {
   ExecutionPrimaryStartedAt: "2026-05-06T08:16:00.000Z",
   ExecutionSecondaryStartedAt: "2026-05-06T08:20:00.000Z",
   ExecutionCleanStartedAt: "2026-05-06T08:12:00.000Z",
-  WorkflowCreatedNotice: "Workflow definition created.",
   WorkflowSavedNotice: "Workflow saved to the server workspace.",
   ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
@@ -510,13 +515,12 @@ async function validateWorkflowsScreen(): Promise<void> {
         waitUntil: "networkidle0",
       },
     );
-
-    await waitForTestId(page, WorkflowSelector.Root);
-    await waitForPageTexts(page, [ValidationText.ScreenTitle]);
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await waitForTestId(page, WorkflowCatalogSelector.EmptyCreate);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
-      suffix: "workflows-initial",
+      suffix: "workflows-catalog-empty",
       artifactName: "workflows",
     });
 
@@ -524,8 +528,29 @@ async function validateWorkflowsScreen(): Promise<void> {
       throw new Error(`Unexpected native dialog: ${dialog.message()}`);
     });
 
-    await clickByTestId(page, WorkflowSelector.WorkflowCreate);
-    await waitForPageText(page, ValidationText.WorkflowCreatedNotice);
+    await clickByTestId(page, WorkflowCatalogSelector.EmptyCreate);
+    await waitForUrlPath(
+      page,
+      `${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowSelector.Root);
+    await waitForPageTexts(page, [ValidationText.ScreenTitle]);
+    await waitForMissingTestId(page, "workflows-select");
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/missing-workflow`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await waitForUrlPath(page, ValidationConfig.WorkflowsRoute);
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowSelector.Root);
     await waitForTestId(page, WorkflowSelector.CanvasZoomOut);
     await waitForTestId(page, WorkflowSelector.CanvasResetView);
     await waitForTestId(page, WorkflowSelector.CanvasZoomIn);
@@ -1294,7 +1319,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       height: ValidationConfig.MobileViewportHeight,
     });
     await page.goto(
-      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
       {
         waitUntil: "networkidle0",
       },
@@ -2630,6 +2655,17 @@ async function waitForUrlSearchParam(
   await waitForCondition(
     async () => new URL(page.url()).searchParams.get(key) === expectedValue,
     `url search param ${key}=${expectedValue}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForUrlPath(page: Page, expectedPath: string): Promise<void> {
+  await waitForCondition(
+    async () => new URL(page.url()).pathname === expectedPath,
+    `URL path "${expectedPath}"`,
     {
       timeoutMs: ValidationConfig.UiPollingTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs,

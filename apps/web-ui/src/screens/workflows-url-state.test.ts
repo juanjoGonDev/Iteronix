@@ -10,6 +10,14 @@ import {
 } from "./workflows-url-state.js";
 
 describe("workflows URL state", () => {
+  it("preserves the selected editor route while updating URL state", () => {
+    expect(
+      applyWorkflowsUrlPatch("http://localhost/workflows/workflow-1", {
+        panel: WorkflowsUrlPanel.Nodes,
+      }),
+    ).toBe("/workflows/workflow-1?panel=nodes");
+  });
+
   it("reads empty workflow URLs as default canvas state", () => {
     expect(readWorkflowsUrlState("http://localhost/workflows")).toEqual({
       panel: null,

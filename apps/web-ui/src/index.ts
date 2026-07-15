@@ -14,9 +14,11 @@ import { router } from "./shared/Router.js";
 import { sanitizeBrowserUrlState } from "./shared/url-state.js";
 import { SettingsScreen } from "./screens/Settings.js";
 import { WorkflowsScreen } from "./screens/Workflows.js";
+import { WorkflowsCatalogScreen } from "./screens/WorkflowsCatalog.js";
 
 const ScreenId = {
-  Workflows: "workflows",
+  WorkflowCatalog: "workflow-catalog",
+  WorkflowEditor: "workflow-editor",
   Settings: "settings",
 } as const;
 
@@ -25,12 +27,14 @@ type ScreenId = (typeof ScreenId)[keyof typeof ScreenId];
 const RootRoute = "/";
 
 const ScreenLabel: Record<ScreenId, string> = {
-  workflows: "Workflows",
+  "workflow-catalog": "Workflows",
+  "workflow-editor": "Workflow editor",
   settings: "Settings",
 };
 
 interface AppState {
   currentScreen: ScreenId;
+  workflowId: string | null;
   sidebarCollapsed: boolean;
   isCompactViewport: boolean;
 }
@@ -44,11 +48,12 @@ const ScreenHostTestId = "app-screen-host";
 export class App extends Component<AppProps, AppState> {
   private activeScreenInstance: Component<ComponentProps, unknown> | null =
     null;
-  private activeScreenId: ScreenId | null = null;
+  private activeScreenKey: string | null = null;
 
   constructor(props: AppProps) {
     super(props, {
-      currentScreen: ScreenId.Workflows,
+      currentScreen: ScreenId.WorkflowCatalog,
+      workflowId: null,
       sidebarCollapsed: readIsCompactViewport(),
       isCompactViewport: readIsCompactViewport(),
     });
@@ -58,7 +63,7 @@ export class App extends Component<AppProps, AppState> {
 
     console.info("Application started", {
       version: APP_VERSION,
-      screen: ScreenId.Workflows,
+      screen: ScreenId.WorkflowCatalog,
     });
   }
 
@@ -98,13 +103,18 @@ export class App extends Component<AppProps, AppState> {
     window.removeEventListener("resize", this.handleViewportResize);
     this.activeScreenInstance?.unmount();
     this.activeScreenInstance = null;
-    this.activeScreenId = null;
+    this.activeScreenKey = null;
   }
 
   private setupRouter(): void {
-    router.register(RootRoute, () => this.updateScreen(ScreenId.Workflows));
+    router.register(RootRoute, () =>
+      this.updateScreen(ScreenId.WorkflowCatalog),
+    );
     router.register(ROUTES.WORKFLOWS, () =>
-      this.updateScreen(ScreenId.Workflows),
+      this.updateScreen(ScreenId.WorkflowCatalog),
+    );
+    router.register(ROUTES.WORKFLOW_EDITOR, ({ workflowId }) =>
+      this.updateScreen(ScreenId.WorkflowEditor, workflowId ?? null),
     );
     router.register(ROUTES.SETTINGS, () =>
       this.updateScreen(ScreenId.Settings),
@@ -121,9 +131,9 @@ export class App extends Component<AppProps, AppState> {
   }> {
     return [
       this.createNavigationItem(
-        ScreenId.Workflows,
+        ScreenId.WorkflowCatalog,
         "account_tree",
-        ScreenLabel.workflows,
+        ScreenLabel[ScreenId.WorkflowCatalog],
         ROUTES.WORKFLOWS,
       ),
       this.createNavigationItem(
@@ -151,7 +161,10 @@ export class App extends Component<AppProps, AppState> {
       icon,
       label,
       href,
-      active: this.state.currentScreen === screen,
+      active:
+        this.state.currentScreen === screen ||
+        (screen === ScreenId.WorkflowCatalog &&
+          this.state.currentScreen === ScreenId.WorkflowEditor),
       onClick: (event: Event) => {
         event.preventDefault();
         router.navigate(href);
@@ -189,9 +202,15 @@ export class App extends Component<AppProps, AppState> {
     });
   }
 
-  private updateScreen(screen: ScreenId): void {
-    if (this.state.currentScreen !== screen) {
-      this.setState({ currentScreen: screen });
+  private updateScreen(
+    screen: ScreenId,
+    workflowId: string | null = null,
+  ): void {
+    if (
+      this.state.currentScreen !== screen ||
+      this.state.workflowId !== workflowId
+    ) {
+      this.setState({ currentScreen: screen, workflowId });
     }
   }
 
@@ -215,12 +234,13 @@ export class App extends Component<AppProps, AppState> {
       return;
     }
 
-    if (this.activeScreenId !== this.state.currentScreen) {
+    const activeScreenKey = this.readActiveScreenKey();
+    if (this.activeScreenKey !== activeScreenKey) {
       this.activeScreenInstance?.unmount();
       this.activeScreenInstance = this.createScreenInstance(
         this.state.currentScreen,
       );
-      this.activeScreenId = this.state.currentScreen;
+      this.activeScreenKey = activeScreenKey;
       screenHost.replaceChildren();
       this.activeScreenInstance.mount(screenHost);
       return;
@@ -242,8 +262,12 @@ export class App extends Component<AppProps, AppState> {
   private createScreenInstance(
     screen: ScreenId,
   ): Component<ComponentProps, unknown> {
-    if (screen === ScreenId.Workflows) {
-      return new WorkflowsScreen({});
+    if (screen === ScreenId.WorkflowCatalog) {
+      return new WorkflowsCatalogScreen({});
+    }
+
+    if (screen === ScreenId.WorkflowEditor && this.state.workflowId) {
+      return new WorkflowsScreen({ workflowId: this.state.workflowId });
     }
 
     if (screen === ScreenId.Settings) {
@@ -251,6 +275,10 @@ export class App extends Component<AppProps, AppState> {
     }
 
     return new SettingsScreen({});
+  }
+
+  private readActiveScreenKey(): string {
+    return `${this.state.currentScreen}:${this.state.workflowId ?? ""}`;
   }
 }
 

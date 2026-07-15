@@ -5,5 +5,9 @@ export const COMPACT_VIEWPORT_MAX_WIDTH = 960;
 // Route aliases configuration
 export const ROUTES = {
   WORKFLOWS: "/workflows",
+  WORKFLOW_EDITOR: "/workflows/:workflowId",
   SETTINGS: "/settings",
 } as const;
+
+export const workflowEditorRoute = (workflowId: string): string =>
+  `/workflows/${encodeURIComponent(workflowId)}`;

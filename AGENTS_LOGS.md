@@ -4716,3 +4716,12 @@
 - Commands: RED focused tests proved absent duplicate/update behavior. PASS focused tests, `pnpm lint`, `pnpm typecheck`, `pnpm test` (293), `pnpm build`, `validate:settings`, and `validate:workflows` (the first workflows validator attempt timed out on an existing version-import control; the immediate retry passed).
 - Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged; the previous review receipt is invalidated and must be recreated before any commit.
 - Next: Run a fresh scoped bounded review and resolve the unstaged-file receipt scope before committing.
+
+### 2026-07-15 13:45 (Europe/Madrid) — Workflow-first catalog navigation
+
+- Summary: Replaced the workflow editor landing experience with a persisted workflow catalog and a one-workflow-per-route editor.
+- Decisions: `/workflows` owns creation and selection; `/workflows/:workflowId` owns editing. The catalog keeps the automatic browser-to-server connection and reads definitions and execution summaries through the existing PostgreSQL-backed workflow API.
+- Changes: Added deterministic catalog search/sort, empty and populated states, create-and-navigate behavior, dynamic-route remounting, missing/deleted-ID fallback, editor submenu removal, deep-link-safe bundle loading, and server/client/UI regression coverage.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (298), `pnpm build`, `pnpm -C apps/web-ui validate:settings`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run native bounded review validation, commit the catalog navigation work unit, and push the branch.

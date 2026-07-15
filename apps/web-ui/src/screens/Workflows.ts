@@ -36,6 +36,7 @@ import {
   readWorkflowVersionImportCandidates,
   type WorkflowVersionImportCandidateRecord,
 } from "./workflows-version-import-state.js";
+import { readWorkflowEditorTarget } from "./workflows-catalog-state.js";
 import {
   WorkflowsUrlEditor,
   WorkflowsUrlModal,
@@ -99,7 +100,6 @@ import {
   attachGuardrailToNode,
   createJsonSchemaNode,
   connectWorkflowNodes,
-  createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   detachGuardrailFromNode,
   evaluateWorkflowRegex,
@@ -171,7 +171,6 @@ const WorkflowScreenSelector = {
   SidebarRail: "workflows-sidebar-rail",
   SidebarPanel: "workflows-sidebar-panel",
   InspectorPanel: "workflows-inspector-panel",
-  WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
@@ -184,7 +183,6 @@ const WorkflowScreenSelector = {
   WorkflowEditHistoryClose: "workflows-edit-history-close",
   WorkflowDelete: "workflows-delete",
   WorkflowRun: "workflows-run",
-  WorkflowSelect: "workflows-select",
   CanvasZoomOut: "workflows-canvas-zoom-out",
   CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
@@ -386,7 +384,6 @@ const InspectorTextAreaClassName = `min-h-32 resize-y py-3 leading-6 ${Inspector
 const InspectorSelectClassName = `h-10 appearance-none pr-10 ${InspectorInputClassName}`;
 
 const SidebarSection = {
-  Workflows: "workflows",
   Nodes: "nodes",
   Assets: "assets",
   History: "history",
@@ -404,7 +401,6 @@ type CompactView = (typeof CompactView)[keyof typeof CompactView];
 
 const PendingAction = {
   Load: "load",
-  CreateWorkflow: "create-workflow",
   SaveWorkflow: "save-workflow",
   DeleteWorkflow: "delete-workflow",
   CreateAsset: "create-asset",
@@ -781,8 +777,12 @@ interface WorkflowsScreenState {
   noticeMessage: string | null;
 }
 
+interface WorkflowsEditorProps extends ComponentProps {
+  workflowId: string;
+}
+
 export class WorkflowsScreen extends Component<
-  ComponentProps,
+  WorkflowsEditorProps,
   WorkflowsScreenState
 > {
   private readonly settingsClient = createSettingsClient();
@@ -800,7 +800,7 @@ export class WorkflowsScreen extends Component<
   private executionRefreshIntervalId: number | null = null;
   private outputEditorDraftText: string | null = null;
 
-  constructor(props: ComponentProps = {}) {
+  constructor(props: WorkflowsEditorProps) {
     super(props, {
       settingsSnapshot: null,
       workflows: [],
@@ -813,7 +813,7 @@ export class WorkflowsScreen extends Component<
       executionAutoRefreshEnabled: true,
       draftWorkflow: null,
       selection: { type: "workflow", id: null },
-      activeSidebarSection: SidebarSection.Workflows,
+      activeSidebarSection: SidebarSection.Nodes,
       compactView: CompactView.Canvas,
       desktopSidebarCollapsed: false,
       desktopInspectorCollapsed: false,
@@ -1029,21 +1029,6 @@ export class WorkflowsScreen extends Component<
             createElement(Button, {
               variant: "secondary",
               size: "sm",
-              disabled: this.state.pendingAction !== null,
-              onClick: () => {
-                void this.handleCreateWorkflow();
-              },
-              children:
-                this.state.pendingAction === PendingAction.CreateWorkflow
-                  ? "Creating"
-                  : "New workflow",
-              dataset: {
-                testid: WorkflowScreenSelector.WorkflowCreate,
-              },
-            }),
-            createElement(Button, {
-              variant: "secondary",
-              size: "sm",
               disabled: currentWorkflow === null,
               onClick: () => this.openWorkflowEditHistory(),
               icon: "history_edu",
@@ -1184,13 +1169,6 @@ export class WorkflowsScreen extends Component<
               "flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
           },
           [
-            this.renderRailButton(
-              "list",
-              "Definitions",
-              this.state.activeSidebarSection === SidebarSection.Workflows,
-              () => this.showSidebarSection(SidebarSection.Workflows),
-              WorkflowScreenSelector.SectionWorkflows,
-            ),
             this.renderRailButton(
               "deployed_code",
               "Nodes",
@@ -1709,10 +1687,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private readSidebarSectionTitle(section: SidebarSection): string {
-    if (section === SidebarSection.Workflows) {
-      return "Definitions";
-    }
-
     if (section === SidebarSection.Nodes) {
       return "Nodes";
     }
@@ -1725,10 +1699,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private readSidebarSectionCount(section: SidebarSection): string {
-    if (section === SidebarSection.Workflows) {
-      return `${this.state.workflows.length.toString()} workflows`;
-    }
-
     if (section === SidebarSection.Nodes) {
       return `${this.state.draftWorkflow?.nodes.length.toString() ?? "0"} nodes`;
     }
@@ -1761,145 +1731,7 @@ export class WorkflowsScreen extends Component<
       );
     }
 
-    return this.renderWorkflowListSection();
-  }
-
-  private renderWorkflowListSection(): HTMLElement {
-    return createElement(
-      "div",
-      {
-        className: "flex min-h-0 flex-1 flex-col",
-      },
-      [
-        createElement(
-          "div",
-          { className: "border-b border-border-dark px-3 py-3" },
-          [
-            createElement("label", { className: "flex flex-col gap-2" }, [
-              createElement(
-                "span",
-                {
-                  className:
-                    "text-[11px] font-medium tracking-[0.14em] text-text-secondary",
-                },
-                ["Active workflow"],
-              ),
-              createElement(
-                "select",
-                {
-                  className:
-                    "h-10 rounded-md border border-border-dark bg-[#0f151c] px-3 text-sm text-white focus:border-primary focus:outline-none",
-                  value: this.readCurrentWorkflowRecord()?.id ?? "",
-                  "data-testid": WorkflowScreenSelector.WorkflowSelect,
-                  onChange: (event: Event) => {
-                    const target = event.target;
-                    if (target instanceof HTMLSelectElement) {
-                      this.handleSelectWorkflow(target.value);
-                    }
-                  },
-                },
-                [
-                  this.state.workflows.length === 0
-                    ? createElement("option", { value: "" }, [
-                        "No workflows yet",
-                      ])
-                    : this.state.workflows.map((workflow) =>
-                        createElement(
-                          "option",
-                          {
-                            key: workflow.id,
-                            value: workflow.id,
-                          },
-                          [workflow.name],
-                        ),
-                      ),
-                ],
-              ),
-            ]),
-          ],
-        ),
-        this.state.workflows.length === 0
-          ? createElement(
-              "div",
-              { className: "flex flex-1 items-center justify-center p-4" },
-              [
-                createElement(EmptyStatePanel, {
-                  icon: "account_tree",
-                  title: "No workflow definitions",
-                  description:
-                    "Create the first workflow from the toolbar. Definitions persist in the server workspace and reload across browser contexts.",
-                }),
-              ],
-            )
-          : createElement(
-              "div",
-              { className: "min-h-0 flex-1 overflow-y-auto p-3" },
-              [
-                this.state.workflows
-                  .slice()
-                  .sort((left, right) =>
-                    right.updatedAt.localeCompare(left.updatedAt),
-                  )
-                  .map((workflow) =>
-                    createElement(
-                      "button",
-                      {
-                        type: "button",
-                        key: workflow.id,
-                        className: `mb-2 flex w-full flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition-colors ${workflow.id === this.readCurrentWorkflowRecord()?.id ? "border-primary/50 bg-primary/10 shadow-[0_10px_24px_rgba(37,99,235,0.16)]" : "border-border-dark bg-[#10161d] hover:border-slate-600 hover:bg-[#1a222c]"}`,
-                        onClick: () => this.handleSelectWorkflow(workflow.id),
-                      },
-                      [
-                        createElement(
-                          "div",
-                          {
-                            className:
-                              "flex items-center justify-between gap-3",
-                          },
-                          [
-                            createElement(
-                              "span",
-                              {
-                                className:
-                                  "truncate text-sm font-medium text-white",
-                              },
-                              [workflow.name],
-                            ),
-                            createElement(
-                              StatusBadge,
-                              {
-                                status:
-                                  workflow.status ===
-                                  WorkflowRecordStatus.Published
-                                    ? "success"
-                                    : workflow.status ===
-                                        WorkflowRecordStatus.Archived
-                                      ? "paused"
-                                      : "info",
-                              },
-                              [workflow.status],
-                            ),
-                          ],
-                        ),
-                        createElement(
-                          "span",
-                          { className: "truncate text-xs text-text-secondary" },
-                          [workflow.description || "No description yet"],
-                        ),
-                        createElement(
-                          "span",
-                          { className: "text-[11px] text-text-secondary" },
-                          [
-                            `${workflow.nodes.length} nodes · ${workflow.edges.length} connections · v${workflow.version}`,
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-      ],
-    );
+    return this.renderNodePaletteSection();
   }
 
   private renderNodePaletteSection(): HTMLElement {
@@ -12606,13 +12438,14 @@ export class WorkflowsScreen extends Component<
       this.workflowClient.listAssetUsages({}),
       this.workflowClient.listExecutions(),
     ]);
-    const currentWorkflowId =
-      this.readCurrentWorkflowRecord()?.id ?? workflows[0]?.id ?? null;
-    const currentWorkflow = currentWorkflowId
-      ? (workflows.find((workflow) => workflow.id === currentWorkflowId) ??
-        workflows[0] ??
-        null)
-      : null;
+    const currentWorkflow = readWorkflowEditorTarget(
+      workflows,
+      this.props.workflowId,
+    );
+    if (!currentWorkflow) {
+      window.location.replace(ROUTES.WORKFLOWS);
+      return;
+    }
     const workflowVersions = currentWorkflow
       ? await this.workflowClient.listDefinitionVersions({
           workflowId: currentWorkflow.id,
@@ -12738,41 +12571,6 @@ export class WorkflowsScreen extends Component<
       desktopSidebarCollapsed: false,
     });
     void this.refreshWorkflowLogs();
-  }
-
-  private async handleCreateWorkflow(): Promise<void> {
-    this.setState({
-      pendingAction: PendingAction.CreateWorkflow,
-      errorMessage: null,
-      noticeMessage: null,
-    });
-
-    try {
-      const created = await this.workflowClient.upsertDefinition({
-        definition: createEmptyWorkflowDefinition({
-          name: `Workflow ${this.state.workflows.length + 1}`,
-        }),
-      });
-      await this.reloadCatalog({
-        preserveLocalDraft: false,
-      });
-      this.handleSelectWorkflow(created.id);
-      this.setState({
-        pendingAction: null,
-        noticeMessage: "Workflow definition created.",
-        errorMessage: null,
-        selection: { type: "workflow", id: created.id },
-      });
-    } catch (error) {
-      this.setState({
-        pendingAction: null,
-        errorMessage: readErrorMessage(
-          error,
-          "Could not create the workflow definition.",
-        ),
-        noticeMessage: null,
-      });
-    }
   }
 
   private async handleRunWorkflow(): Promise<void> {
@@ -13117,16 +12915,7 @@ export class WorkflowsScreen extends Component<
       await this.workflowClient.deleteDefinition({
         workflowId,
       });
-      await this.reloadCatalog();
-      this.setState({
-        pendingAction: null,
-        noticeMessage: "Workflow deleted.",
-        errorMessage: null,
-        selection: {
-          type: "workflow",
-          id: this.state.workflows[0]?.id ?? null,
-        },
-      });
+      window.location.replace(ROUTES.WORKFLOWS);
     } catch (error) {
       this.setState({
         pendingAction: null,
@@ -16377,9 +16166,6 @@ const toSidebarSection = (
   }
   if (panel === WorkflowsUrlPanel.History) {
     return SidebarSection.History;
-  }
-  if (panel === WorkflowsUrlPanel.Workflows) {
-    return SidebarSection.Workflows;
   }
   return null;
 };

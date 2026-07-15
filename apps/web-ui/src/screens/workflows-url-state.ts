@@ -147,7 +147,7 @@ export const applyWorkflowsUrlPatch = (
   patch: WorkflowsUrlPatch,
 ): string => {
   const url = new URL(urlInput, "http://localhost");
-  url.pathname = WorkflowsRoutePath;
+  url.pathname = readWorkflowRoutePath(url.pathname);
   writeOptionalParam(url.searchParams, UrlParam.Panel, patch.panel);
   writeOptionalParam(url.searchParams, UrlParam.Modal, patch.modal);
   writeOptionalParam(url.searchParams, UrlParam.Node, patch.nodeId);
@@ -194,9 +194,7 @@ export const applyWorkflowsUrlPatch = (
     patch.versionAction,
   );
   const query = url.searchParams.toString();
-  return query.length > 0
-    ? `${WorkflowsRoutePath}?${query}`
-    : WorkflowsRoutePath;
+  return query.length > 0 ? `${url.pathname}?${query}` : url.pathname;
 };
 
 export const readWorkflowsUrlStateFromLocation = (
@@ -221,6 +219,12 @@ const readPanel = (value: string | null): WorkflowsUrlPanel | null => {
   }
   return null;
 };
+
+const readWorkflowRoutePath = (pathname: string): string =>
+  pathname === WorkflowsRoutePath ||
+  pathname.startsWith(`${WorkflowsRoutePath}/`)
+    ? pathname
+    : WorkflowsRoutePath;
 
 const readModal = (value: string | null): WorkflowsUrlModal | null => {
   if (value === WorkflowsUrlModal.EditHistory) {
