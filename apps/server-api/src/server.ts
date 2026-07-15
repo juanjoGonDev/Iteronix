@@ -2180,6 +2180,17 @@ const handleWorkflowExecutionStream = async (
     });
     return;
   }
+  const seedNodeOutputs = readJsonQueryParam(
+    url.searchParams.get(QueryParam.SeedNodeOutputs),
+  );
+  const parsed = parseWorkflowExecutionRunRequest({
+    workflowId,
+    ...(seedNodeOutputs ? { seedNodeOutputs } : {}),
+  });
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
 
   const stream = createSseStream(res);
   const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
@@ -2193,15 +2204,12 @@ const handleWorkflowExecutionStream = async (
   });
 
   try {
-    const result = await executeWorkflowExecutionRun(
-      { workflowId },
-      {
-        catalog: workflowCatalog,
-        runWorkflow: workflowRuntime.runWorkflow,
-        signal: executionAbortController.signal,
-        onEvent: streamEvents.onEvent,
-      },
-    );
+    const result = await executeWorkflowExecutionRun(parsed.value, {
+      catalog: workflowCatalog,
+      runWorkflow: workflowRuntime.runWorkflow,
+      signal: executionAbortController.signal,
+      onEvent: streamEvents.onEvent,
+    });
 
     if (result.type === ResultType.Err) {
       stream.send({

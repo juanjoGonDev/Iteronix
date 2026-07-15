@@ -32,6 +32,7 @@ describe("workflows URL state", () => {
       debugOutputTab: null,
       debugInputSourceId: null,
       editor: null,
+      pinnedOutputId: null,
       deepEditorTab: null,
       deepEditorOutputTab: null,
       regexPattern: null,
@@ -114,6 +115,7 @@ describe("workflows URL state", () => {
       modal: WorkflowsUrlModal.NodeEditor,
       nodeId: "node-1",
       editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: "pinned-output-1",
     });
     const deepEditorUrl = applyWorkflowsUrlPatch(
       `http://localhost${outputUrl}`,
@@ -130,6 +132,7 @@ describe("workflows URL state", () => {
       editor: WorkflowsUrlEditor.DeepEditor,
       deepEditorTab: "output",
       deepEditorOutputTab: "json",
+      pinnedOutputId: "pinned-output-1",
     });
   });
 
@@ -195,6 +198,7 @@ describe("workflows URL state", () => {
         compareVersionId: null,
         diffQuery: null,
         editor: null,
+        pinnedOutputId: null,
         debugInputTab: null,
         debugOutputTab: null,
         debugInputSourceId: null,

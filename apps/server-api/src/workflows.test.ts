@@ -693,6 +693,57 @@ describe("workflow api contracts", () => {
     }
   });
 
+  it("forwards pinned test outputs only when a test run provides them", async () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    catalog.upsertWorkflow({
+      ...createWorkflowDefinitionInput(),
+      id: "workflow-1",
+      nodes: [createProviderRunNodeRecord()],
+    });
+    let receivedSeedNodeOutputs: Readonly<Record<string, unknown>> | undefined;
+
+    await executeWorkflowExecutionRun(
+      {
+        workflowId: "workflow-1",
+        seedNodeOutputs: {
+          "node-1": { result: "pinned" },
+        },
+      },
+      {
+        catalog,
+        runWorkflow: async ({ definition, seedNodeOutputs }) => {
+          receivedSeedNodeOutputs = seedNodeOutputs;
+          return {
+            id: "execution-test-1",
+            workflowId: definition.id,
+            triggerKind: WorkflowTriggerKind.Manual,
+            status: WorkflowExecutionStatus.Completed,
+            startedAt: BaseTime,
+            finishedAt: "2026-05-06T18:01:00.000Z",
+            durationMs: 60000,
+            warningsCount: 0,
+            errorsCount: 0,
+            totals: {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              estimatedCostEur: 0,
+              latencyMs: 0,
+            },
+            contextSessionId: "ctx-test-1",
+            nodeRuns: [],
+          };
+        },
+      },
+    );
+
+    expect(receivedSeedNodeOutputs).toEqual({
+      "node-1": { result: "pinned" },
+    });
+  });
+
   it("runs and persists a partial node execution", async () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),

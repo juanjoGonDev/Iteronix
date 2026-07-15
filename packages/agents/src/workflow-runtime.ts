@@ -138,6 +138,7 @@ export type WorkflowRuntime = {
   runDefinition: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -165,6 +166,7 @@ export const createWorkflowRuntime = (input: {
   const runDefinition = async (request: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -176,6 +178,9 @@ export const createWorkflowRuntime = (input: {
         request.definition.nodes,
         request.definition.edges,
       ),
+      ...(request.seedNodeOutputs
+        ? { seedNodeOutputs: request.seedNodeOutputs }
+        : {}),
       ...(request.contextSessionId
         ? { contextSessionId: request.contextSessionId }
         : {}),
@@ -267,6 +272,10 @@ export const createWorkflowRuntime = (input: {
       if (request.signal?.aborted) {
         status = WorkflowExecutionStatus.Canceled;
         break;
+      }
+
+      if (seededOutputs.has(node.id)) {
+        continue;
       }
 
       const nodeStartedAt = now().toISOString();

@@ -61,6 +61,7 @@ export const executeWorkflowDefinitionList = (dependencies: {
 export const executeWorkflowDefinitionGet = (
   input: {
     workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
@@ -472,12 +473,14 @@ export const executeWorkflowExecutionCancel = (
 export const executeWorkflowExecutionRun = async (
   input: {
     workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   },
   dependencies: {
     catalog: WorkflowCatalogStore;
     runWorkflow: (input: {
       definition: WorkflowDefinitionRecord;
       assets: ReadonlyArray<WorkflowAssetRecord>;
+      seedNodeOutputs?: Readonly<Record<string, unknown>>;
       signal?: AbortSignal;
       onEvent?: (event: WorkflowRuntimeEvent) => void;
     }) => Promise<WorkflowExecutionRecord>;
@@ -497,6 +500,9 @@ export const executeWorkflowExecutionRun = async (
   const execution = await dependencies.runWorkflow({
     definition: workflow,
     assets,
+    ...(input.seedNodeOutputs
+      ? { seedNodeOutputs: input.seedNodeOutputs }
+      : {}),
     ...(dependencies.signal ? { signal: dependencies.signal } : {}),
     ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
   });
@@ -952,8 +958,39 @@ export const parseWorkflowExecutionCancelRequest = (
 
 export const parseWorkflowExecutionRunRequest = (
   value: unknown,
-): Result<{ workflowId: string }, ApiError> =>
-  parseSingleIdentifierRequest(value, "workflowId");
+): Result<
+  {
+    workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return invalidBody();
+  }
+
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.MissingWorkflowId,
+  );
+  const seedNodeOutputs = parseWorkflowSeedNodeOutputs(
+    value["seedNodeOutputs"],
+  );
+  if (
+    workflowId.type === ResultType.Err ||
+    seedNodeOutputs.type === ResultType.Err
+  ) {
+    return invalidBody();
+  }
+
+  return ok({
+    workflowId: workflowId.value,
+    ...(seedNodeOutputs.value
+      ? { seedNodeOutputs: seedNodeOutputs.value }
+      : {}),
+  });
+};
 
 export const parseWorkflowNodeExecutionRunRequest = (
   value: unknown,

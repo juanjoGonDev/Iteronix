@@ -82,6 +82,34 @@ describe("workflow runtime", () => {
     ]);
   });
 
+  it("reuses pinned outputs only when a test workflow run supplies them", async () => {
+    const providerCalls: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerCalls.push(request.node.id);
+        return {
+          outputText: `Fresh output from ${request.node.id}.`,
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      seedNodeOutputs: {
+        "node-provider-1": "Pinned provider text",
+      },
+    });
+
+    expect(providerCalls).toEqual(["node-provider-2"]);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-2",
+    ]);
+  });
+
   it("keeps server-owned continuity between provider nodes", async () => {
     const providerCalls: Array<{
       nodeId: string;

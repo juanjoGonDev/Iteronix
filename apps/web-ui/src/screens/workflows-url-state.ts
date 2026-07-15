@@ -61,6 +61,7 @@ export type WorkflowsUrlState = {
   debugOutputTab: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId: string | null;
   editor: WorkflowsUrlEditor | null;
+  pinnedOutputId: string | null;
   deepEditorTab: WorkflowsUrlDeepEditorTab | null;
   deepEditorOutputTab: WorkflowsUrlDeepEditorOutputTab | null;
   regexPattern: string | null;
@@ -81,6 +82,7 @@ export type WorkflowsUrlPatch = {
   debugOutputTab?: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId?: string | null;
   editor?: WorkflowsUrlEditor | null;
+  pinnedOutputId?: string | null;
   deepEditorTab?: WorkflowsUrlDeepEditorTab | null;
   deepEditorOutputTab?: WorkflowsUrlDeepEditorOutputTab | null;
   regexPattern?: string | null;
@@ -102,6 +104,7 @@ const UrlParam = {
   OutputTab: "outputTab",
   InputSource: "inputSource",
   Editor: "editor",
+  PinnedOutput: "pinnedOutput",
   DeepEditorTab: "deepTab",
   DeepEditorOutputTab: "deepOutputTab",
   RegexPattern: "regexPattern",
@@ -126,6 +129,9 @@ export const readWorkflowsUrlState = (urlInput: string): WorkflowsUrlState => {
       url.searchParams.get(UrlParam.InputSource),
     ),
     editor: readEditor(url.searchParams.get(UrlParam.Editor)),
+    pinnedOutputId: readNonEmptyParam(
+      url.searchParams.get(UrlParam.PinnedOutput),
+    ),
     deepEditorTab: readDeepEditorTab(
       url.searchParams.get(UrlParam.DeepEditorTab),
     ),
@@ -172,6 +178,11 @@ export const applyWorkflowsUrlPatch = (
     patch.debugInputSourceId,
   );
   writeOptionalParam(url.searchParams, UrlParam.Editor, patch.editor);
+  writeOptionalParam(
+    url.searchParams,
+    UrlParam.PinnedOutput,
+    patch.pinnedOutputId,
+  );
   writeOptionalParam(
     url.searchParams,
     UrlParam.DeepEditorTab,

@@ -38,6 +38,7 @@ export type WorkflowRuntimeService = {
   runWorkflow: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }) => Promise<WorkflowExecutionRecord>;
@@ -81,12 +82,16 @@ export const createWorkflowRuntimeService = (input: {
   const runWorkflow = async (request: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
     runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
+      ...(request.seedNodeOutputs
+        ? { seedNodeOutputs: request.seedNodeOutputs }
+        : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });

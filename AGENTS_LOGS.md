@@ -4743,3 +4743,39 @@
 - Commands: RED `validate:workflows` proved the catalog controls were absent. PASS `pnpm typecheck` and `pnpm -C apps/web-ui validate:workflows`.
 - Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
 - Next: Run full gates, bounded review, commit, and push the focused catalog-management slice.
+
+### 2026-07-15 14:33 (Europe/Madrid) — Workflow multi-output test runs
+
+- Summary: Replaced the workflow-wide single pinned output with multiple persisted snapshots per node and a selectable default for test execution.
+- Decisions: Normal runs never receive pinned data. The compact Run menu explicitly chooses normal or test execution; test execution forwards only each node's selected default snapshot and the runtime skips those seeded nodes.
+- Changes: Added pin collection/default persistence, test-run seed transport through client/API/SSE/runtime, node-level default selector, and browser validation for the Run menu and multiple persisted pins.
+- Commands: RED focused UI/runtime/API tests; PASS `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (301), `pnpm build`, `pnpm -C apps/web-ui validate:workflows`, and `git diff --check`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run the native bounded review, commit the focused workflow execution change, and push the branch.
+
+### 2026-07-15 14:43 (Europe/Madrid) — Workflow Run menu layering
+
+- Summary: Fixed the Run selector menu being hidden behind the workflow canvas.
+- Decisions: The toolbar owns the stacking layer above the canvas so dropdowns remain visible without introducing a second execution control.
+- Changes: Raised the toolbar stacking context and added a Puppeteer regression that verifies the opened Run menu is hit-testable above the canvas.
+- Commands: RED `pnpm -C apps/web-ui validate:workflows` failed with the menu obscured; GREEN rerun passed.
+- Issues/Risks: Existing multi-output workflow changes remain uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 14:55 (Europe/Madrid) — Persistent pinned test-output management
+
+- Summary: Made pinned node outputs a persistent, manageable test-fixture list rather than an execution-only affordance.
+- Decisions: Each node keeps multiple named fixtures but exactly one selected default for test runs. The list owns separate star, edit, rename and delete actions.
+- Changes: Persisted names in workflow node config, added a visible fixture list after execution/reload, supported individual JSON editing and safe default replacement on deletion, and made pinned-output editing URL-addressable.
+- Commands: RED unit tests for persisted names, URL fixture target, and browser list visibility; GREEN focused state/URL tests, `pnpm typecheck`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing multi-output workflow work remains uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 14:59 (Europe/Madrid) — Workflow Run menu dismissal
+
+- Summary: Made the normal/test Run selector close when the user clicks elsewhere.
+- Decisions: The outside-click listener ignores events originating within the selector, so its trigger and menu actions retain their intended behavior.
+- Changes: Added a selector root marker, a scoped window click listener with cleanup, and a browser regression that closes the menu through a canvas control click.
+- Commands: RED `pnpm -C apps/web-ui validate:workflows` timed out because the menu remained open; GREEN rerun passed after the listener was added.
+- Issues/Risks: Existing workflow changes remain uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.

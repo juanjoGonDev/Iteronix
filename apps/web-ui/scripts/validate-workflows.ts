@@ -84,6 +84,7 @@ const WorkflowSelector = {
   EdgeDeletePrefix: "workflows-edge-delete-",
   EdgeHitPrefix: "workflows-edge-hit-",
   WorkflowSave: "workflows-save",
+  WorkflowRun: "workflows-run",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
   WorkflowEditHistoryUndo: "workflows-edit-history-undo",
@@ -112,6 +113,7 @@ const WorkflowSelector = {
   DebugOutputTabPrefix: "workflows-debug-output-tab-",
   DebugInputSource: "workflows-debug-input-source",
   OutputPinControl: "workflows-output-pin-control",
+  PinnedOutputsList: "workflows-pinned-outputs-list",
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
@@ -272,6 +274,8 @@ type StubWorkflowNodeRecord = {
       requireHumanDecision: boolean;
     };
     pinnedTestOutput?: Record<string, unknown>;
+    pinnedTestOutputs?: ReadonlyArray<Record<string, unknown>>;
+    defaultPinnedTestOutputId?: string;
   };
   inputPorts: ReadonlyArray<{ id: string; name: string; acceptsMany: boolean }>;
   outputPorts: ReadonlyArray<{
@@ -572,6 +576,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(page, WorkflowSelector.Root);
     await waitForTestId(page, WorkflowSelector.CanvasZoomOut);
     await waitForTestId(page, WorkflowSelector.CanvasResetView);
+    await clickByTestId(page, WorkflowSelector.WorkflowRun);
+    await waitForPageTexts(page, ["Run normally", "Run test"]);
+    await assertWorkflowRunMenuIsAboveCanvas(page);
+    await clickByTestId(page, WorkflowSelector.CanvasZoomIn);
+    await waitForMissingPageText(page, "Run test");
     await waitForTestId(page, WorkflowSelector.CanvasZoomIn);
     await waitForNodeCardCount(page, 2);
 
@@ -1276,11 +1285,6 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickByTestId(page, WorkflowSelector.OutputPinControl);
-    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
-    await clickByTestId(
-      page,
-      WorkflowSelector.WorkflowVersionActionDialogConfirm,
-    );
     await waitForPinnedDefinitionOutput(
       stubServer.state,
       ValidationText.HistoryPinnedOutputNeedle,
@@ -1298,6 +1302,8 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
+    await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
+    await assertPinnedOutputListHasName(page);
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
     await clickButtonByText(page, "Execute step");
@@ -2685,6 +2691,73 @@ async function waitForPageTexts(
   );
 }
 
+async function assertWorkflowRunMenuIsAboveCanvas(page: Page): Promise<void> {
+  const isVisible = await page.evaluate(
+    ({ canvasTestId, runTestId }) => {
+      const runControl = document.querySelector<HTMLElement>(
+        `[data-testid="${runTestId}"]`,
+      );
+      const canvas = document.querySelector<HTMLElement>(
+        `[data-testid="${canvasTestId}"]`,
+      );
+      const testMenuItem = Array.from(
+        document.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((button) => button.textContent?.includes("Run test"));
+      const menu = testMenuItem?.parentElement;
+
+      if (
+        !(runControl instanceof HTMLElement) ||
+        !(canvas instanceof HTMLElement) ||
+        !(menu instanceof HTMLElement)
+      ) {
+        return false;
+      }
+
+      const runRect = runControl.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const menuCenter = document.elementFromPoint(
+        menuRect.left + menuRect.width / 2,
+        menuRect.top + menuRect.height / 2,
+      );
+
+      return (
+        menuRect.top >= runRect.bottom &&
+        menuRect.bottom > canvasRect.top &&
+        menuCenter !== null &&
+        menu.contains(menuCenter)
+      );
+    },
+    {
+      canvasTestId: WorkflowSelector.CanvasViewport,
+      runTestId: WorkflowSelector.WorkflowRun,
+    },
+  );
+
+  if (!isVisible) {
+    throw new Error("Workflow Run menu is obscured by the canvas.");
+  }
+}
+
+async function assertPinnedOutputListHasName(page: Page): Promise<void> {
+  const hasNamedOutput = await page.evaluate((testId: string) => {
+    const list = document.querySelector<HTMLElement>(
+      `[data-testid="${testId}"]`,
+    );
+    if (!(list instanceof HTMLElement)) {
+      return false;
+    }
+
+    return Array.from(list.querySelectorAll<HTMLInputElement>("input")).some(
+      (input) => input.value.trim().length > 0,
+    );
+  }, WorkflowSelector.PinnedOutputsList);
+
+  if (!hasNamedOutput) {
+    throw new Error("Pinned output list is missing editable output names.");
+  }
+}
+
 async function waitForUrlSearchParam(
   page: Page,
   key: string,
@@ -2755,7 +2828,7 @@ async function waitForPinnedDefinitionOutput(
     async () =>
       state.definitions.some((definition) =>
         definition.nodes.some((node) =>
-          JSON.stringify(node.config.pinnedTestOutput ?? {}).includes(
+          JSON.stringify(node.config.pinnedTestOutputs ?? []).includes(
             expectedNeedle,
           ),
         ),
@@ -3604,6 +3677,14 @@ function readNodeConfigRecord(
   const provider = readOptionalRecord(value, "provider");
   const reviewPolicyValue = readOptionalRecord(value, "reviewPolicy");
   const pinnedTestOutput = readOptionalRecord(value, "pinnedTestOutput");
+  const pinnedTestOutputsValue = value["pinnedTestOutputs"];
+  const pinnedTestOutputs = Array.isArray(pinnedTestOutputsValue)
+    ? pinnedTestOutputsValue.filter(isRecord)
+    : undefined;
+  const defaultPinnedTestOutputId = readOptionalString(
+    value,
+    "defaultPinnedTestOutputId",
+  );
   const reviewPolicy = reviewPolicyValue
     ? {
         requireHumanDecision: readBooleanValue(
@@ -3620,6 +3701,8 @@ function readNodeConfigRecord(
     ...(provider ? { provider } : {}),
     ...(reviewPolicy ? { reviewPolicy } : {}),
     ...(pinnedTestOutput ? { pinnedTestOutput } : {}),
+    ...(pinnedTestOutputs ? { pinnedTestOutputs } : {}),
+    ...(defaultPinnedTestOutputId ? { defaultPinnedTestOutputId } : {}),
   };
 }
 

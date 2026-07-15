@@ -16,7 +16,10 @@ import {
   readWorkflowPinnedNodeVisualState,
   parseWorkflowEditedOutputSnapshot,
   readWorkflowPinnedTestOutputFromDefinition,
+  readWorkflowPinnedTestOutputsFromDefinition,
+  readWorkflowTestRunSeedOutputs,
   writeWorkflowPinnedTestOutputToDefinition,
+  writeWorkflowPinnedTestOutputsToDefinition,
   readWorkflowStepSeedOutputs,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
@@ -238,10 +241,89 @@ describe("workflows debug state", () => {
       "2026-07-03T10:01:00.000Z",
     );
 
-    expect(replaced.nodes[0]?.config.pinnedTestOutput).toBeUndefined();
-    expect(replaced.nodes[1]?.config.pinnedTestOutput).toEqual({
-      outputSnapshot: { result: "second" },
-      updatedAt: "2026-07-03T10:01:00.000Z",
+    expect(replaced.nodes[0]?.config.pinnedTestOutputs).toBeUndefined();
+    expect(replaced.nodes[1]?.config.pinnedTestOutputs).toEqual([
+      {
+        id: `pinned-${secondNodeId}`,
+        name: "Pinned output 1",
+        outputSnapshot: { result: "second" },
+        updatedAt: "2026-07-03T10:01:00.000Z",
+      },
+    ]);
+    expect(replaced.nodes[1]?.config.defaultPinnedTestOutputId).toBe(
+      `pinned-${secondNodeId}`,
+    );
+  });
+
+  it("persists several pinned outputs per node and exposes only each selected default to test runs", () => {
+    const definition = createEmptyWorkflowDefinition({
+      name: "Pinned test fixtures",
+    });
+    const firstNodeId = definition.nodes[0]?.id ?? "";
+    const secondNodeId = definition.nodes[1]?.id ?? "";
+    const pinned = writeWorkflowPinnedTestOutputsToDefinition(
+      { ...definition, id: "workflow-1" },
+      [
+        {
+          id: "first-response",
+          workflowId: "workflow-1",
+          nodeId: firstNodeId,
+          name: "Initial response",
+          outputSnapshot: { result: "first" },
+        },
+        {
+          id: "selected-response",
+          workflowId: "workflow-1",
+          nodeId: firstNodeId,
+          name: "Approved response",
+          outputSnapshot: { result: "selected" },
+        },
+        {
+          id: "second-node-response",
+          workflowId: "workflow-1",
+          nodeId: secondNodeId,
+          name: "Fallback response",
+          outputSnapshot: { result: "second" },
+        },
+      ],
+      {
+        [firstNodeId]: "selected-response",
+        [secondNodeId]: "second-node-response",
+      },
+      "2026-07-15T14:00:00.000Z",
+    );
+
+    expect(readWorkflowPinnedTestOutputsFromDefinition(pinned)).toEqual([
+      {
+        id: "first-response",
+        workflowId: "workflow-1",
+        nodeId: firstNodeId,
+        name: "Initial response",
+        outputSnapshot: { result: "first" },
+      },
+      {
+        id: "selected-response",
+        workflowId: "workflow-1",
+        nodeId: firstNodeId,
+        name: "Approved response",
+        outputSnapshot: { result: "selected" },
+      },
+      {
+        id: "second-node-response",
+        workflowId: "workflow-1",
+        nodeId: secondNodeId,
+        name: "Fallback response",
+        outputSnapshot: { result: "second" },
+      },
+    ]);
+    expect(
+      readWorkflowTestRunSeedOutputs({
+        workflow: pinned,
+        workflowId: "workflow-1",
+      }),
+    ).toEqual({
+      [firstNodeId]: { result: "selected" },
+      [secondNodeId]: { result: "second" },
     });
   });
 

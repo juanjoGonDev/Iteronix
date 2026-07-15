@@ -871,6 +871,18 @@ Stop cross-screen churn and finish the PWA one screen at a time with browser val
     - Workflow version rows now expose Details, Restore, Clone and Download actions against server-backed snapshots
     - The details action opens a modal diff preview with snapshot JSON and current-workflow comparison metadata
     - Browser validation covers version action visibility, details modal rendering and restore flow; catalog/API tests cover clone-from-version behavior
+  - `06.6` multi-output test execution completed on `2026-07-15`:
+    - Each workflow node persists any number of pinned test output snapshots and a selected default snapshot
+    - The Run control uses a compact menu to choose normal execution or test execution; only test runs forward the selected node defaults
+    - Runtime, API, UI state and browser validation cover seeded test execution while normal runs execute every node
+  - `06.6` Run menu layering fix completed on `2026-07-15`:
+    - The workflow toolbar now establishes a higher stacking layer than the canvas, so the Run menu stays visible and interactive
+    - Browser validation asserts that the open menu is hit-testable above the canvas
+    - Clicking outside the Run menu closes it without closing it on its own trigger or menu actions
+  - `06.6` pinned test-output management completed on `2026-07-15`:
+    - Pinned outputs persist their editable names and remain visible after the execution history reloads
+    - Each node has a durable pinned-output list with distinct select-for-test, edit, rename and delete actions
+    - Editing a pinned output remains URL-addressable through its pinned-output identifier
 - [ ] Kanban:
   - [x] Replace local seed board state with `/kanban/*` persistence
   - [x] Persist create/edit/move/delete flows

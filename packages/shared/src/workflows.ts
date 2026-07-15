@@ -207,6 +207,13 @@ export type WorkflowNodeConfigRecord = {
     outputSnapshot: unknown;
     updatedAt: string;
   };
+  pinnedTestOutputs?: ReadonlyArray<{
+    id: string;
+    name?: string;
+    outputSnapshot: unknown;
+    updatedAt: string;
+  }>;
+  defaultPinnedTestOutputId?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
   };

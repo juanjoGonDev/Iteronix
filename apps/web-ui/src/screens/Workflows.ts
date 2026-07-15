@@ -61,7 +61,10 @@ import {
   readWorkflowPinnedOutputAction,
   parseWorkflowEditedOutputSnapshot,
   readWorkflowPinnedTestOutputFromDefinition,
+  readWorkflowPinnedTestOutputsFromDefinition,
+  readWorkflowTestRunSeedOutputs,
   writeWorkflowPinnedTestOutputToDefinition,
+  writeWorkflowPinnedTestOutputsToDefinition,
   readWorkflowStepSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
@@ -75,6 +78,8 @@ import {
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
   type WorkflowPinnedTestOutput,
+  type WorkflowPinnedTestOutputOption,
+  type WorkflowRunControlState,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
 import {
@@ -183,6 +188,7 @@ const WorkflowScreenSelector = {
   WorkflowEditHistoryClose: "workflows-edit-history-close",
   WorkflowDelete: "workflows-delete",
   WorkflowRun: "workflows-run",
+  WorkflowRunMenu: "workflows-run-menu",
   CanvasZoomOut: "workflows-canvas-zoom-out",
   CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
@@ -533,6 +539,7 @@ type ExecutionNodeModalState = {
 
 type WorkflowOutputEditorState = {
   nodeId: string;
+  pinnedOutputId: string | null;
   text: string;
 };
 
@@ -753,6 +760,8 @@ interface WorkflowsScreenState {
   debugExecutionId: string | null;
   liveExecution: LiveExecutionState | null;
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
+  pinnedTestOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>;
+  runModeMenuOpen: boolean;
   outputEditor: WorkflowOutputEditorState | null;
   pinnedOutputOverwrite: WorkflowPinnedOutputOverwriteDialogState | null;
   workflowDeleteDialog: WorkflowDeleteDialogState | null;
@@ -845,6 +854,8 @@ export class WorkflowsScreen extends Component<
       executionNodeModal: null,
       liveExecution: null,
       pinnedTestOutput: null,
+      pinnedTestOutputs: [],
+      runModeMenuOpen: false,
       outputEditor: null,
       pinnedOutputOverwrite: null,
       workflowDeleteDialog: null,
@@ -873,6 +884,7 @@ export class WorkflowsScreen extends Component<
     window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
     window.addEventListener("keyup", this.handleGlobalKeyUp);
+    window.addEventListener("click", this.handleRunModeMenuOutsideClick);
     window.addEventListener("popstate", this.handleWorkflowUrlStateChange);
     void this.hydrateState();
   }
@@ -885,6 +897,7 @@ export class WorkflowsScreen extends Component<
     window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
     window.removeEventListener("keyup", this.handleGlobalKeyUp);
+    window.removeEventListener("click", this.handleRunModeMenuOutsideClick);
     window.removeEventListener("popstate", this.handleWorkflowUrlStateChange);
     this.cancelLiveExecutionStream();
     this.stopExecutionRefreshPolling();
@@ -957,7 +970,7 @@ export class WorkflowsScreen extends Component<
       "div",
       {
         className:
-          "flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border-dark bg-[#141a21]/95 px-3 py-3 backdrop-blur xl:flex-nowrap xl:px-4",
+          "relative z-20 flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border-dark bg-[#141a21]/95 px-3 py-3 backdrop-blur xl:flex-nowrap xl:px-4",
       },
       [
         createElement(
@@ -1055,25 +1068,7 @@ export class WorkflowsScreen extends Component<
                 testid: WorkflowScreenSelector.WorkflowSave,
               },
             }),
-            createElement(Button, {
-              variant: runControl.variant,
-              size: "sm",
-              disabled: runControl.disabled,
-              onClick: () => {
-                if (runControl.mode === "stop") {
-                  void this.handleStopWorkflowExecution();
-                  return;
-                }
-
-                void this.handleRunWorkflow();
-              },
-              icon: runControl.icon,
-              children: runControl.label,
-              title: runControl.title,
-              dataset: {
-                testid: WorkflowScreenSelector.WorkflowRun,
-              },
-            }),
+            this.renderWorkflowRunSelector(runControl),
             createElement(Button, {
               variant: "danger",
               size: "sm",
@@ -1486,11 +1481,25 @@ export class WorkflowsScreen extends Component<
     }
 
     const context = this.readNodeDebugContext(node);
-    const text =
-      context?.outputValue === undefined
+    const pinnedOutput = urlState.pinnedOutputId
+      ? this.state.pinnedTestOutputs.find(
+          (output) =>
+            output.nodeId === node.id && output.id === urlState.pinnedOutputId,
+        )
+      : null;
+    if (urlState.pinnedOutputId && !pinnedOutput) {
+      return null;
+    }
+    const text = pinnedOutput
+      ? formatOutputSnapshot(pinnedOutput.outputSnapshot)
+      : context?.outputValue === undefined
         ? ""
         : formatOutputSnapshot(context.outputValue);
-    return { nodeId: node.id, text };
+    return {
+      nodeId: node.id,
+      pinnedOutputId: pinnedOutput?.id ?? null,
+      text,
+    };
   }
 
   private readUrlDeepEditor(
@@ -1622,6 +1631,7 @@ export class WorkflowsScreen extends Component<
           diffQuery: null,
           executionId: state.hasSelection ? urlState.executionId : null,
           editor: null,
+          pinnedOutputId: null,
           deepEditorTab: null,
           deepEditorOutputTab: null,
           regexPattern: null,
@@ -4566,6 +4576,102 @@ export class WorkflowsScreen extends Component<
     );
   }
 
+  private renderWorkflowRunSelector(
+    runControl: WorkflowRunControlState,
+  ): HTMLElement {
+    if (runControl.mode === "stop") {
+      return createElement(Button, {
+        variant: runControl.variant,
+        size: "sm",
+        disabled: runControl.disabled,
+        onClick: () => {
+          void this.handleStopWorkflowExecution();
+        },
+        icon: runControl.icon,
+        children: runControl.label,
+        title: runControl.title,
+        dataset: {
+          testid: WorkflowScreenSelector.WorkflowRun,
+        },
+      });
+    }
+
+    return createElement(
+      "div",
+      {
+        className: "relative",
+        "data-testid": WorkflowScreenSelector.WorkflowRunMenu,
+      },
+      [
+        createElement(Button, {
+          variant: runControl.variant,
+          size: "sm",
+          disabled: runControl.disabled,
+          onClick: () => {
+            this.setState({
+              runModeMenuOpen: !this.state.runModeMenuOpen,
+            });
+          },
+          icon: runControl.icon,
+          children: "Run",
+          title: "Choose normal or test execution",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowRun,
+          },
+        }),
+        this.state.runModeMenuOpen
+          ? createElement(
+              "div",
+              {
+                className:
+                  "absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] py-1 shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+              },
+              [
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run normally",
+                  detail: "Execute every node",
+                  onClick: () => {
+                    this.setState({ runModeMenuOpen: false });
+                    void this.handleRunWorkflow("normal");
+                  },
+                }),
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run test",
+                  detail: "Use each node's pinned default output",
+                  onClick: () => {
+                    this.setState({ runModeMenuOpen: false });
+                    void this.handleRunWorkflow("test");
+                  },
+                }),
+              ],
+            )
+          : "",
+      ],
+    );
+  }
+
+  private renderWorkflowRunModeMenuItem(input: {
+    label: string;
+    detail: string;
+    onClick: () => void;
+  }): HTMLElement {
+    return createElement(
+      "button",
+      {
+        type: "button",
+        className:
+          "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm text-slate-100 transition-colors hover:bg-white/10",
+        onClick: input.onClick,
+      },
+      [
+        createElement("span", { className: "font-medium" }, [input.label]),
+        createElement("span", { className: "text-xs text-slate-400" }, [
+          input.detail,
+        ]),
+      ],
+    );
+  }
+
   private renderCanvasFooter(): HTMLElement {
     const viewport = this.state.draftWorkflow?.viewport;
     const footerLabel = this.readCanvasFooterLabel();
@@ -4599,7 +4705,11 @@ export class WorkflowsScreen extends Component<
     const nodeRunVisual = this.readNodeRunVisual(node.id);
     const workflowId = this.state.draftWorkflow?.id ?? "";
     const pinnedVisual = readWorkflowPinnedNodeVisualState({
-      pinnedOutput: this.state.pinnedTestOutput,
+      pinnedOutput:
+        this.state.pinnedTestOutputs.find(
+          (output) =>
+            output.workflowId === workflowId && output.nodeId === node.id,
+        ) ?? null,
       workflowId,
       nodeId: node.id,
     });
@@ -4790,12 +4900,9 @@ export class WorkflowsScreen extends Component<
     const outputValue = this.readWorkflowDebugOutputMap(
       this.readWorkflowDebugExecution(),
     ).get(node.id);
-    const pinAction = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
-      nextNodeId: node.id,
-      nextOutputSnapshot: outputValue,
-      hasOutput: outputValue !== undefined,
-    });
+    const pinnedOutputs = this.state.pinnedTestOutputs.filter(
+      (output) => output.nodeId === node.id,
+    );
 
     return createElement(
       "div",
@@ -4832,18 +4939,19 @@ export class WorkflowsScreen extends Component<
           this.handleDuplicateNode(node.id);
         }),
         this.renderNodeActionMenuItem(
-          pinAction === "unpin" ? "Unpin" : "Pin output",
+          "Pin output",
           "push_pin",
           () => {
             this.setState({ nodeActionMenuId: null });
             this.handleTogglePinnedTestOutputForNode(
               node.id,
               outputValue,
-              pinAction,
+              outputValue === undefined ? "disabled" : "pin",
             );
           },
-          pinAction === "disabled",
+          outputValue === undefined,
         ),
+        this.renderPinnedTestOutputDefaultSelector(node, pinnedOutputs),
         this.renderNodeActionMenuItem(
           "Deactivate",
           "power_settings_new",
@@ -7338,31 +7446,35 @@ export class WorkflowsScreen extends Component<
             this.renderNodeInspector(node),
           ],
         ),
-        this.renderWorkflowDebugDataPanel({
-          title: "OUTPUT",
-          tab: this.state.debugOutputTab,
-          onTabChange: (tab) => this.updateDebugOutputTab(tab),
-          value: context.outputValue,
-          statusTone: context.statusTone,
-          itemLabel: readWorkflowDebugItemLabel(context.outputValue),
-          emptyMessage: "Execute this step to inspect the current node output.",
-          pinned:
-            this.state.pinnedTestOutput?.workflowId ===
-              (context.workflow.id ?? "") &&
-            this.state.pinnedTestOutput?.nodeId === context.node.id,
-          selector: createElement(
-            "div",
-            { className: "flex items-center gap-1" },
-            [
-              createElement(IconButton, {
-                icon: "edit",
-                tooltip: "Edit output for test runs",
-                onClick: () => this.openOutputEditor(context),
-              }),
-              this.renderPinnedOutputControl(context),
-            ],
-          ),
-        }),
+        createElement("div", { className: "flex min-h-0 flex-col gap-3" }, [
+          this.renderWorkflowDebugDataPanel({
+            title: "OUTPUT",
+            tab: this.state.debugOutputTab,
+            onTabChange: (tab) => this.updateDebugOutputTab(tab),
+            value: context.outputValue,
+            statusTone: context.statusTone,
+            itemLabel: readWorkflowDebugItemLabel(context.outputValue),
+            emptyMessage:
+              "Execute this step to inspect the current node output.",
+            pinned:
+              this.state.pinnedTestOutput?.workflowId ===
+                (context.workflow.id ?? "") &&
+              this.state.pinnedTestOutput?.nodeId === context.node.id,
+            selector: createElement(
+              "div",
+              { className: "flex items-center gap-1" },
+              [
+                createElement(IconButton, {
+                  icon: "edit",
+                  tooltip: "Edit output for test runs",
+                  onClick: () => this.openOutputEditor(context),
+                }),
+                this.renderPinnedOutputControl(context),
+              ],
+            ),
+          }),
+          this.renderPinnedTestOutputsList(context),
+        ]),
       ],
     );
   }
@@ -7382,28 +7494,130 @@ export class WorkflowsScreen extends Component<
     this.setState({ debugInputSourceId });
   }
 
+  private renderPinnedTestOutputsList(
+    context: WorkflowNodeDebugContext,
+  ): HTMLElement {
+    const outputs = this.state.pinnedTestOutputs.filter(
+      (output) =>
+        output.workflowId === (context.workflow.id ?? "") &&
+        output.nodeId === context.node.id,
+    );
+    const defaultOutputId =
+      context.node.config.defaultPinnedTestOutputId ?? outputs[0]?.id ?? null;
+
+    return createElement(
+      "section",
+      {
+        className: "border-t border-border-dark bg-[#0f141a] px-3 py-3",
+        dataset: {
+          testid: "workflows-pinned-outputs-list",
+        },
+      },
+      [
+        createElement(
+          "div",
+          { className: "mb-2 flex items-center justify-between gap-2" },
+          [
+            createElement(
+              "p",
+              { className: "text-xs font-semibold text-slate-100" },
+              ["Pinned test outputs"],
+            ),
+            createElement(
+              "span",
+              { className: "text-[11px] text-text-secondary" },
+              [`${outputs.length.toString()} saved`],
+            ),
+          ],
+        ),
+        outputs.length === 0
+          ? createElement(
+              "p",
+              { className: "text-xs leading-5 text-text-secondary" },
+              ["Pin an execution output to create a reusable test response."],
+            )
+          : createElement(
+              "div",
+              { className: "flex flex-col gap-2" },
+              outputs.map((output) =>
+                this.renderPinnedTestOutputListItem({
+                  output,
+                  isDefault: output.id === defaultOutputId,
+                }),
+              ),
+            ),
+      ],
+    );
+  }
+
+  private renderPinnedTestOutputListItem(input: {
+    output: WorkflowPinnedTestOutputOption;
+    isDefault: boolean;
+  }): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className: `flex items-center gap-2 rounded-md border px-2 py-2 ${input.isDefault ? "border-primary/50 bg-primary/10" : "border-border-dark bg-[#111820]"}`,
+        key: input.output.id,
+      },
+      [
+        createElement(IconButton, {
+          icon: input.isDefault ? "star" : "star_outline",
+          tooltip: input.isDefault
+            ? "Selected for test runs"
+            : "Use for test runs",
+          className: input.isDefault ? "text-primary" : "text-slate-400",
+          onClick: () => {
+            void this.selectPinnedTestOutputDefault(
+              input.output.nodeId,
+              input.output.id,
+            );
+          },
+        }),
+        createElement("input", {
+          type: "text",
+          className:
+            "min-w-0 flex-1 border-0 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-500",
+          value: input.output.name,
+          onBlur: (event: Event) => {
+            if (event.target instanceof HTMLInputElement) {
+              void this.renamePinnedTestOutput(
+                input.output.id,
+                event.target.value,
+              );
+            }
+          },
+        }),
+        createElement(IconButton, {
+          icon: "edit",
+          tooltip: "Edit pinned output",
+          onClick: () => this.openPinnedTestOutputEditor(input.output),
+        }),
+        createElement(IconButton, {
+          icon: "delete",
+          tooltip: "Delete pinned output",
+          className: "text-rose-300 hover:text-rose-100",
+          onClick: () => {
+            void this.removePinnedTestOutput(input.output.id);
+          },
+        }),
+      ],
+    );
+  }
+
   private renderPinnedOutputControl(
     context: WorkflowNodeDebugContext,
   ): HTMLElement {
-    const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: readWorkflowPinnedTestOutputFromDefinition(
-        context.workflow,
-      ),
-      nextNodeId: context.node.id,
-      nextOutputSnapshot: context.outputValue,
-      hasOutput: context.outputValue !== undefined,
-    });
-    const active = action === "unpin";
-
     return createElement(IconButton, {
       icon: "push_pin",
-      tooltip: active ? "Unpin test output" : "Pin output as test response",
-      disabled: action === "disabled",
+      tooltip: "Pin output as a test response",
+      disabled: context.outputValue === undefined,
       "data-testid": WorkflowScreenSelector.OutputPinControl,
-      ...(active
-        ? { className: "border-primary/60 bg-primary/15 text-primary" }
-        : {}),
-      onClick: () => this.handleTogglePinnedTestOutput(context, action),
+      onClick: () =>
+        this.handleTogglePinnedTestOutput(
+          context,
+          context.outputValue === undefined ? "disabled" : "pin",
+        ),
     });
   }
 
@@ -7416,6 +7630,49 @@ export class WorkflowsScreen extends Component<
       context.outputValue,
       action,
       context.workflow.id ?? "",
+    );
+  }
+
+  private renderPinnedTestOutputDefaultSelector(
+    node: WorkflowNodeRecord,
+    pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+  ): HTMLElement | string {
+    if (pinnedOutputs.length === 0) {
+      return "";
+    }
+
+    const selectedOutputId =
+      node.config.defaultPinnedTestOutputId ?? pinnedOutputs[0]?.id ?? "";
+    return createElement(
+      "label",
+      {
+        className:
+          "mx-2 my-1 flex flex-col gap-1 border-t border-[#3d3d3d] px-1 pt-2 text-xs text-slate-300",
+      },
+      [
+        createElement("span", {}, ["Test default"]),
+        createElement(
+          "select",
+          {
+            className:
+              "rounded border border-[#4a4a4a] bg-[#151515] px-2 py-1 text-xs text-slate-100",
+            value: selectedOutputId,
+            onChange: (event: Event) => {
+              const select = event.target as HTMLSelectElement;
+              void this.selectPinnedTestOutputDefault(node.id, select.value);
+            },
+          },
+          pinnedOutputs.map((output, index) =>
+            createElement(
+              "option",
+              {
+                value: output.id,
+              },
+              [`Pinned output ${(index + 1).toString()}`],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -7515,31 +7772,177 @@ export class WorkflowsScreen extends Component<
     action: ReturnType<typeof readWorkflowPinnedOutputAction>,
     workflowId = this.state.draftWorkflow?.id ?? "",
   ): Promise<void> {
-    if (action === "disabled") {
+    if (action === "disabled" || outputValue === undefined) {
       return;
     }
 
-    if (action === "unpin") {
-      await this.updatePinnedTestOutput(null);
-      return;
-    }
-
-    if (action === "confirm-overwrite") {
-      this.setState({
-        pinnedOutputOverwrite: {
-          nodeId,
-          outputValue,
-          workflowId,
-        },
-      });
-      return;
-    }
-
-    await this.updatePinnedTestOutput({
+    await this.addPinnedTestOutput({
       workflowId,
       nodeId,
       outputSnapshot: outputValue,
     });
+  }
+
+  private async addPinnedTestOutput(
+    output: WorkflowPinnedTestOutput,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow) {
+      return;
+    }
+
+    const defaults = this.readPinnedTestOutputDefaultIds(workflow);
+    const outputCount = this.state.pinnedTestOutputs.filter(
+      (existing) =>
+        existing.workflowId === output.workflowId &&
+        existing.nodeId === output.nodeId,
+    ).length;
+    const nextOutput: WorkflowPinnedTestOutputOption = {
+      ...output,
+      id: crypto.randomUUID(),
+      name: `Pinned output ${(outputCount + 1).toString()}`,
+    };
+    const nextDefaults = {
+      ...defaults,
+      [output.nodeId]: nextOutput.id,
+    };
+    await this.persistPinnedTestOutputs(
+      workflow,
+      [...this.state.pinnedTestOutputs, nextOutput],
+      nextDefaults,
+    );
+  }
+
+  private async selectPinnedTestOutputDefault(
+    nodeId: string,
+    outputId: string,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (
+      !workflow ||
+      !this.state.pinnedTestOutputs.some(
+        (output) => output.nodeId === nodeId && output.id === outputId,
+      )
+    ) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs,
+      {
+        ...this.readPinnedTestOutputDefaultIds(workflow),
+        [nodeId]: outputId,
+      },
+    );
+  }
+
+  private async renamePinnedTestOutput(
+    outputId: string,
+    name: string,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    const normalizedName = name.trim();
+    const output = this.state.pinnedTestOutputs.find(
+      (candidate) => candidate.id === outputId,
+    );
+    if (!workflow || !output || normalizedName.length === 0) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs.map((candidate) =>
+        candidate.id === outputId
+          ? { ...candidate, name: normalizedName }
+          : candidate,
+      ),
+      this.readPinnedTestOutputDefaultIds(workflow),
+    );
+  }
+
+  private async updatePinnedTestOutputSnapshot(
+    outputId: string,
+    outputSnapshot: unknown,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (
+      !workflow ||
+      !this.state.pinnedTestOutputs.some(
+        (candidate) => candidate.id === outputId,
+      )
+    ) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs.map((candidate) =>
+        candidate.id === outputId
+          ? { ...candidate, outputSnapshot }
+          : candidate,
+      ),
+      this.readPinnedTestOutputDefaultIds(workflow),
+    );
+  }
+
+  private async removePinnedTestOutput(outputId: string): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    const output = this.state.pinnedTestOutputs.find(
+      (candidate) => candidate.id === outputId,
+    );
+    if (!workflow || !output) {
+      return;
+    }
+
+    const remainingOutputs = this.state.pinnedTestOutputs.filter(
+      (candidate) => candidate.id !== outputId,
+    );
+    const defaults = { ...this.readPinnedTestOutputDefaultIds(workflow) };
+    if (defaults[output.nodeId] === outputId) {
+      const replacement = remainingOutputs.find(
+        (candidate) => candidate.nodeId === output.nodeId,
+      );
+      if (replacement) {
+        defaults[output.nodeId] = replacement.id;
+      } else {
+        delete defaults[output.nodeId];
+      }
+    }
+
+    await this.persistPinnedTestOutputs(workflow, remainingOutputs, defaults);
+  }
+
+  private readPinnedTestOutputDefaultIds(
+    workflow: WorkflowDefinitionUpsertInput,
+  ): Readonly<Record<string, string>> {
+    return Object.fromEntries(
+      workflow.nodes.flatMap((node) =>
+        node.config.defaultPinnedTestOutputId
+          ? [[node.id, node.config.defaultPinnedTestOutputId]]
+          : [],
+      ),
+    );
+  }
+
+  private async persistPinnedTestOutputs(
+    workflow: WorkflowDefinitionUpsertInput,
+    pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+    defaultOutputIdsByNodeId: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    const nextWorkflow = writeWorkflowPinnedTestOutputsToDefinition(
+      workflow,
+      pinnedOutputs,
+      defaultOutputIdsByNodeId,
+      new Date().toISOString(),
+    );
+    this.updateDraftWorkflow(nextWorkflow);
+    this.setState({
+      pinnedTestOutput:
+        readWorkflowPinnedTestOutputFromDefinition(nextWorkflow),
+      pinnedTestOutputs: pinnedOutputs,
+    });
+    await this.persistPinnedTestOutputWorkflow(nextWorkflow);
   }
 
   private async updatePinnedTestOutput(
@@ -7575,6 +7978,7 @@ export class WorkflowsScreen extends Component<
         ),
         draftWorkflow,
         pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(saved),
+        pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(saved),
         dirtyWorkflow: false,
         errorMessage: null,
       });
@@ -7595,10 +7999,32 @@ export class WorkflowsScreen extends Component<
         ? ""
         : formatOutputSnapshot(context.outputValue);
     this.outputEditorDraftText = text;
-    this.writeWorkflowsUrlState({ editor: WorkflowsUrlEditor.OutputEditor });
+    this.writeWorkflowsUrlState({
+      editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: null,
+    });
     this.setState({
       outputEditor: {
         nodeId: context.node.id,
+        pinnedOutputId: null,
+        text,
+      },
+    });
+  }
+
+  private openPinnedTestOutputEditor(
+    output: WorkflowPinnedTestOutputOption,
+  ): void {
+    const text = formatOutputSnapshot(output.outputSnapshot);
+    this.outputEditorDraftText = text;
+    this.writeWorkflowsUrlState({
+      editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: output.id,
+    });
+    this.setState({
+      outputEditor: {
+        nodeId: output.nodeId,
+        pinnedOutputId: output.id,
         text,
       },
     });
@@ -7606,7 +8032,10 @@ export class WorkflowsScreen extends Component<
 
   private closeOutputEditor(): void {
     this.outputEditorDraftText = null;
-    this.writeWorkflowsUrlState({ editor: null }, "replace");
+    this.writeWorkflowsUrlState(
+      { editor: null, pinnedOutputId: null },
+      "replace",
+    );
     this.setState({ outputEditor: null });
   }
 
@@ -7622,19 +8051,23 @@ export class WorkflowsScreen extends Component<
     const outputSnapshot = parseWorkflowEditedOutputSnapshot(
       outputTextarea?.value ?? this.outputEditorDraftText ?? editor.text,
     );
-    const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
-      nextNodeId: editor.nodeId,
-      nextOutputSnapshot: outputSnapshot,
-      hasOutput: true,
-    });
-    await this.handleTogglePinnedTestOutputForNode(
-      editor.nodeId,
-      outputSnapshot,
-      action === "unpin" ? "pin" : action,
-    );
+    if (editor.pinnedOutputId) {
+      await this.updatePinnedTestOutputSnapshot(
+        editor.pinnedOutputId,
+        outputSnapshot,
+      );
+    } else {
+      await this.handleTogglePinnedTestOutputForNode(
+        editor.nodeId,
+        outputSnapshot,
+        "pin",
+      );
+    }
     this.outputEditorDraftText = null;
-    this.writeWorkflowsUrlState({ editor: null }, "replace");
+    this.writeWorkflowsUrlState(
+      { editor: null, pinnedOutputId: null },
+      "replace",
+    );
     this.setState({ outputEditor: null });
   }
 
@@ -8000,11 +8433,10 @@ export class WorkflowsScreen extends Component<
       ) ??
       inputSources[0] ??
       null;
-    const pinnedOutputValue =
-      this.state.pinnedTestOutput?.workflowId === (workflow.id ?? "") &&
-      this.state.pinnedTestOutput.nodeId === node.id
-        ? this.state.pinnedTestOutput.outputSnapshot
-        : undefined;
+    const pinnedOutputValue = readWorkflowTestRunSeedOutputs({
+      workflow,
+      workflowId: workflow.id ?? "",
+    })[node.id];
     const outputValue =
       execution !== null
         ? persistedRun?.outputSnapshot
@@ -8122,14 +8554,16 @@ export class WorkflowsScreen extends Component<
       }
     }
 
-    if (
-      this.state.pinnedTestOutput &&
-      this.state.pinnedTestOutput.workflowId === this.state.draftWorkflow?.id
-    ) {
-      entries.set(
-        this.state.pinnedTestOutput.nodeId,
-        this.state.pinnedTestOutput.outputSnapshot,
-      );
+    const workflow = this.state.draftWorkflow;
+    if (workflow?.id) {
+      for (const [nodeId, output] of Object.entries(
+        readWorkflowTestRunSeedOutputs({
+          workflow,
+          workflowId: workflow.id,
+        }),
+      )) {
+        entries.set(nodeId, output);
+      }
     }
 
     return entries;
@@ -12492,6 +12926,9 @@ export class WorkflowsScreen extends Component<
       pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(
         draftState.draftWorkflow,
       ),
+      pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(
+        draftState.draftWorkflow,
+      ),
       selection: nextSelection,
       debugExecutionId,
       loadingExecutionId: null,
@@ -12558,6 +12995,7 @@ export class WorkflowsScreen extends Component<
     this.setState({
       draftWorkflow: stripDefinitionVersionFields(workflow),
       pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(workflow),
+      pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(workflow),
       selection: { type: "workflow", id: workflow.id },
       loadingExecutionId: null,
       dirtyWorkflow: false,
@@ -12573,7 +13011,7 @@ export class WorkflowsScreen extends Component<
     void this.refreshWorkflowLogs();
   }
 
-  private async handleRunWorkflow(): Promise<void> {
+  private async handleRunWorkflow(mode: "normal" | "test"): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     if (
       !currentWorkflow ||
@@ -12585,6 +13023,7 @@ export class WorkflowsScreen extends Component<
 
     this.setState({
       pendingAction: PendingAction.RunWorkflow,
+      runModeMenuOpen: false,
       liveExecution: createLiveExecutionState(currentWorkflow),
       debugExecutionId: null,
       selection: { type: "workflow", id: currentWorkflow.id },
@@ -12600,6 +13039,14 @@ export class WorkflowsScreen extends Component<
     try {
       await this.workflowClient.streamWorkflow({
         workflowId: currentWorkflow.id,
+        ...(mode === "test"
+          ? {
+              seedNodeOutputs: readWorkflowTestRunSeedOutputs({
+                workflow: currentWorkflow,
+                workflowId: currentWorkflow.id,
+              }),
+            }
+          : {}),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
           this.handleWorkflowRunStreamEvent(event);
@@ -12618,7 +13065,10 @@ export class WorkflowsScreen extends Component<
       this.setState({
         pendingAction: null,
         liveExecution: null,
-        noticeMessage: "Workflow run persisted in execution history.",
+        noticeMessage:
+          mode === "test"
+            ? "Test run persisted in execution history."
+            : "Workflow run persisted in execution history.",
         errorMessage: null,
         selection: { type: "execution", id: completedExecution.id },
         debugExecutionId: completedExecution.id,
@@ -14434,6 +14884,24 @@ export class WorkflowsScreen extends Component<
         ? CompactView.Canvas
         : this.state.compactView,
     });
+  };
+
+  private readonly handleRunModeMenuOutsideClick = (
+    event: MouseEvent,
+  ): void => {
+    if (!this.state.runModeMenuOpen || !(event.target instanceof Element)) {
+      return;
+    }
+
+    if (
+      event.target.closest(
+        `[data-testid="${WorkflowScreenSelector.WorkflowRunMenu}"]`,
+      )
+    ) {
+      return;
+    }
+
+    this.setState({ runModeMenuOpen: false });
   };
 
   private readonly handleGlobalPointerMove = (event: MouseEvent): void => {

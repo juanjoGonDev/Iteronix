@@ -19,6 +19,11 @@ export type WorkflowPinnedTestOutput = {
   outputSnapshot: unknown;
 };
 
+export type WorkflowPinnedTestOutputOption = WorkflowPinnedTestOutput & {
+  id: string;
+  name: string;
+};
+
 export type WorkflowPinnedOutputAction =
   | "pin"
   | "unpin"
@@ -33,6 +38,9 @@ export type WorkflowPinnedNodeVisualState = {
 type WorkflowPinnedDefinitionLike = Pick<WorkflowDefinitionRecord, "nodes"> & {
   id?: string;
 };
+
+type WorkflowPinnedNodeConfig =
+  WorkflowPinnedDefinitionLike["nodes"][number]["config"];
 
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
@@ -210,18 +218,47 @@ export const readWorkflowPinnedTestOutputFromDefinition = (
     return null;
   }
 
-  const node = workflow.nodes.find(
-    (candidate) => candidate.config.pinnedTestOutput !== undefined,
-  );
-  if (!node?.config.pinnedTestOutput) {
-    return null;
+  const options = readWorkflowPinnedTestOutputsFromDefinition(workflow);
+  return selectDefaultWorkflowPinnedTestOutput(workflow, options);
+};
+
+export const readWorkflowPinnedTestOutputsFromDefinition = (
+  workflow: WorkflowPinnedDefinitionLike | null,
+): ReadonlyArray<WorkflowPinnedTestOutputOption> => {
+  if (!workflow) {
+    return [];
   }
 
-  return {
-    workflowId: workflow.id ?? "",
-    nodeId: node.id,
-    outputSnapshot: node.config.pinnedTestOutput.outputSnapshot,
-  };
+  return workflow.nodes.flatMap((node) =>
+    readWorkflowNodePinnedTestOutputs(node.config, node.id).map((output) => ({
+      ...output,
+      workflowId: workflow.id ?? "",
+      nodeId: node.id,
+    })),
+  );
+};
+
+export const readWorkflowTestRunSeedOutputs = (input: {
+  workflow: WorkflowPinnedDefinitionLike;
+  workflowId: string;
+}): Readonly<Record<string, unknown>> => {
+  const options = readWorkflowPinnedTestOutputsFromDefinition(input.workflow);
+  const defaults = new Map<string, unknown>();
+
+  for (const node of input.workflow.nodes) {
+    const defaultId = readWorkflowNodeDefaultPinnedTestOutputId(node.config);
+    const selected = options.find(
+      (option) =>
+        option.workflowId === input.workflowId &&
+        option.nodeId === node.id &&
+        option.id === defaultId,
+    );
+    if (selected) {
+      defaults.set(node.id, selected.outputSnapshot);
+    }
+  }
+
+  return Object.fromEntries(defaults.entries());
 };
 
 export const writeWorkflowPinnedTestOutputToDefinition = <
@@ -230,21 +267,57 @@ export const writeWorkflowPinnedTestOutputToDefinition = <
   workflow: TWorkflow,
   pinnedOutput: WorkflowPinnedTestOutput | null,
   updatedAt: string,
+): TWorkflow =>
+  writeWorkflowPinnedTestOutputsToDefinition(
+    workflow,
+    pinnedOutput
+      ? [
+          {
+            ...pinnedOutput,
+            id: `pinned-${pinnedOutput.nodeId}`,
+            name: "Pinned output 1",
+          },
+        ]
+      : [],
+    pinnedOutput
+      ? { [pinnedOutput.nodeId]: `pinned-${pinnedOutput.nodeId}` }
+      : {},
+    updatedAt,
+  );
+
+export const writeWorkflowPinnedTestOutputsToDefinition = <
+  TWorkflow extends WorkflowPinnedDefinitionLike,
+>(
+  workflow: TWorkflow,
+  pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+  defaultOutputIdsByNodeId: Readonly<Record<string, string>>,
+  updatedAt: string,
 ): TWorkflow => ({
   ...workflow,
   nodes: workflow.nodes.map((node) => {
+    const outputs = pinnedOutputs.filter(
+      (output) =>
+        output.workflowId === (workflow.id ?? "") && output.nodeId === node.id,
+    );
+    const defaultOutputId = defaultOutputIdsByNodeId[node.id];
+    const selectedDefaultId = outputs.some(
+      (output) => output.id === defaultOutputId,
+    )
+      ? defaultOutputId
+      : outputs[0]?.id;
     const nextConfig = { ...node.config };
     delete nextConfig.pinnedTestOutput;
+    delete nextConfig.pinnedTestOutputs;
+    delete nextConfig.defaultPinnedTestOutputId;
 
-    if (
-      pinnedOutput &&
-      pinnedOutput.workflowId === (workflow.id ?? "") &&
-      pinnedOutput.nodeId === node.id
-    ) {
-      nextConfig.pinnedTestOutput = {
-        outputSnapshot: pinnedOutput.outputSnapshot,
+    if (outputs.length > 0 && selectedDefaultId) {
+      nextConfig.pinnedTestOutputs = outputs.map((output) => ({
+        id: output.id,
+        name: output.name,
+        outputSnapshot: output.outputSnapshot,
         updatedAt,
-      };
+      }));
+      nextConfig.defaultPinnedTestOutputId = selectedDefaultId;
     }
 
     return {
@@ -621,6 +694,59 @@ type WorkflowCanvasExecutionLike = Pick<
   WorkflowExecutionRecord,
   "id" | "workflowId" | "status" | "startedAt"
 >;
+
+const readWorkflowNodePinnedTestOutputs = (
+  config: WorkflowPinnedNodeConfig,
+  nodeId: string,
+): ReadonlyArray<
+  Pick<WorkflowPinnedTestOutputOption, "id" | "name" | "outputSnapshot">
+> => {
+  if (config.pinnedTestOutputs && config.pinnedTestOutputs.length > 0) {
+    return config.pinnedTestOutputs.map((output, index) => ({
+      id: output.id,
+      name: output.name ?? `Pinned output ${(index + 1).toString()}`,
+      outputSnapshot: output.outputSnapshot,
+    }));
+  }
+
+  if (!config.pinnedTestOutput) {
+    return [];
+  }
+
+  return [
+    {
+      id: `legacy-${nodeId}`,
+      name: "Pinned output 1",
+      outputSnapshot: config.pinnedTestOutput.outputSnapshot,
+    },
+  ];
+};
+
+const readWorkflowNodeDefaultPinnedTestOutputId = (
+  config: WorkflowPinnedNodeConfig,
+): string | undefined =>
+  config.defaultPinnedTestOutputId ?? config.pinnedTestOutputs?.[0]?.id;
+
+const selectDefaultWorkflowPinnedTestOutput = (
+  workflow: WorkflowPinnedDefinitionLike,
+  options: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+): WorkflowPinnedTestOutput | null => {
+  for (const node of workflow.nodes) {
+    const defaultId = readWorkflowNodeDefaultPinnedTestOutputId(node.config);
+    const selected = options.find(
+      (option) => option.nodeId === node.id && option.id === defaultId,
+    );
+    if (selected) {
+      return {
+        workflowId: selected.workflowId,
+        nodeId: selected.nodeId,
+        outputSnapshot: selected.outputSnapshot,
+      };
+    }
+  }
+
+  return null;
+};
 
 const collectWorkflowUpstreamNodeIds = (
   workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike,
