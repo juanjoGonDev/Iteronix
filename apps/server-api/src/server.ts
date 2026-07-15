@@ -109,6 +109,20 @@ import {
   createPostgresPool,
   createPostgresWorkspaceStateStore,
 } from "./postgres-workspace-state";
+import {
+  ExternalApiKeyScopeKind,
+  isExternalApiKeyNameAvailable,
+  isWorkflowAllowedForExternalApiKey,
+  readWorkflowExternalApiKeyDependencies,
+  revokeExternalApiKeysForWorkflow,
+  toExternalApiKeyView,
+  type ExternalApiKeyRecord,
+  type ExternalApiKeyScope,
+} from "../../../packages/domain/src/external-api-keys";
+import {
+  createExternalApiKey,
+  findVerifiedExternalApiKey,
+} from "./external-api-keys";
 const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.SettingsGet,
   RoutePath.SettingsUpdate,
@@ -142,6 +156,11 @@ const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.WorkflowExecutionsRunNode,
   RoutePath.WorkflowExecutionsStreamNode,
   RoutePath.WorkflowProvidersTest,
+  RoutePath.ExternalApiKeysList,
+  RoutePath.ExternalApiKeysCreate,
+  RoutePath.ExternalApiKeysUpdate,
+  RoutePath.ExternalApiKeysRevoke,
+  RoutePath.ExternalApiKeysWorkflowDependencies,
 ]);
 
 export const isWorkflowOnlyRoute = (path: string): boolean =>
@@ -158,6 +177,9 @@ export type WorkspacePersistence = {
   updateUiState: (input: {
     settings?: WorkspaceSettingsSnapshot;
   }) => Promise<WorkspaceState>;
+  updateExternalApiKeys: (
+    externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
+  ) => Promise<WorkspaceState>;
 };
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
@@ -265,12 +287,16 @@ export const createWorkspacePersistence = (input: {
   };
 
   const buildState = (
-    settings: WorkspaceSettingsSnapshot = state.settings,
+    update: {
+      settings?: WorkspaceSettingsSnapshot;
+      externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
+    } = {},
   ): WorkspaceState =>
     createWorkspaceStateFromStores({
       providerSnapshot: input.providerStore.snapshot(),
       workflowSnapshot: input.workflowCatalog.snapshot(),
-      settings,
+      settings: update.settings ?? state.settings,
+      externalApiKeys: update.externalApiKeys ?? state.externalApiKeys,
       previousState: state,
     });
 
@@ -296,10 +322,20 @@ export const createWorkspacePersistence = (input: {
   const updateUiState = async (update: {
     settings?: WorkspaceSettingsSnapshot;
   }): Promise<WorkspaceState> => {
-    return enqueueSave(() => saveState(buildState(update.settings)));
+    return enqueueSave(() => saveState(buildState(update)));
   };
 
-  return { read: () => state, saveCurrent, updateUiState };
+  const updateExternalApiKeys = async (
+    externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
+  ): Promise<WorkspaceState> =>
+    enqueueSave(() => saveState(buildState({ externalApiKeys })));
+
+  return {
+    read: () => state,
+    saveCurrent,
+    updateUiState,
+    updateExternalApiKeys,
+  };
 };
 const handleRequest = async (
   req: IncomingMessage,
@@ -325,14 +361,27 @@ const handleRequest = async (
 
   applyCorsHeaders(req, res);
 
+  const url = new URL(req.url, `http://${config.host}`);
+  const path = url.pathname;
+  const method = req.method;
+
+  if (isExternalWorkflowRoute(path)) {
+    await handleExternalWorkflowRequest({
+      req,
+      res,
+      path,
+      method,
+      workflowCatalog,
+      workflowRuntime,
+      workspacePersistence,
+    });
+    return;
+  }
+
   if (!isAuthorized(req, config.authToken)) {
     respondUnauthorized(res);
     return;
   }
-
-  const url = new URL(req.url, `http://${config.host}`);
-  const path = url.pathname;
-  const method = req.method;
 
   if (!isWorkflowOnlyRoute(path)) {
     respondError(res, {
@@ -359,6 +408,68 @@ const handleRequest = async (
     }
 
     await handleSettingsUpdate(req, res, workspacePersistence);
+    return;
+  }
+  if (path === RoutePath.ExternalApiKeysList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    respondJson(res, HttpStatus.Ok, {
+      keys: workspacePersistence
+        .read()
+        .externalApiKeys.map(toExternalApiKeyView),
+    });
+    return;
+  }
+
+  if (path === RoutePath.ExternalApiKeysCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleExternalApiKeyCreate(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+  if (path === RoutePath.ExternalApiKeysUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleExternalApiKeyUpdate(
+      req,
+      res,
+      workflowCatalog,
+      workspacePersistence,
+    );
+    return;
+  }
+
+  if (path === RoutePath.ExternalApiKeysRevoke) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleExternalApiKeyRevoke(req, res, workspacePersistence);
+    return;
+  }
+
+  if (path === RoutePath.ExternalApiKeysWorkflowDependencies) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleExternalApiKeyDependencies(req, res, workspacePersistence);
     return;
   }
   if (path === RoutePath.ProvidersList) {
@@ -1507,9 +1618,199 @@ const handleWorkflowDefinitionDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  const keyUpdate = revokeExternalApiKeysForWorkflow({
+    keys: workspacePersistence.read().externalApiKeys,
+    workflowId: parsed.value.workflowId,
+    revokedAt: new Date().toISOString(),
+  });
+  await workspacePersistence.updateExternalApiKeys(keyUpdate.keys);
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
+    revokedKeys: keyUpdate.revoked,
+  });
+};
+
+const handleExternalApiKeyCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseExternalApiKeyCreateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  if (
+    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
+    parsed.value.scope.workflowIds.some(
+      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
+    )
+  ) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  if (
+    !isExternalApiKeyNameAvailable(
+      workspacePersistence.read().externalApiKeys,
+      parsed.value.name,
+    )
+  ) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+
+  const created = createExternalApiKey({ ...parsed.value, now: new Date() });
+  await workspacePersistence.updateExternalApiKeys([
+    ...workspacePersistence.read().externalApiKeys,
+    created.key,
+  ]);
+  respondJson(res, HttpStatus.Ok, {
+    key: toExternalApiKeyView(created.key),
+    plaintextKey: created.plaintext,
+  });
+};
+
+const handleExternalApiKeyUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const parsed = parseExternalApiKeyUpdateRequest(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+
+  if (
+    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
+    parsed.value.scope.workflowIds.some(
+      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
+    )
+  ) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  const keys = workspacePersistence.read().externalApiKeys;
+  const currentKey = keys.find((key) => key.id === parsed.value.keyId);
+  if (!currentKey) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  if (!isExternalApiKeyNameAvailable(keys, parsed.value.name, currentKey.id)) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+
+  const updatedKey: ExternalApiKeyRecord = {
+    ...currentKey,
+    name: parsed.value.name,
+    scope: parsed.value.scope,
+  };
+  await workspacePersistence.updateExternalApiKeys(
+    keys.map((key) => (key.id === updatedKey.id ? updatedKey : key)),
+  );
+  respondJson(res, HttpStatus.Ok, { key: toExternalApiKeyView(updatedKey) });
+};
+
+const handleExternalApiKeyRevoke = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+
+  const keyId = readExternalApiKeyId(bodyResult.value);
+  if (keyId.type === ResultType.Err) {
+    respondError(res, keyId.error);
+    return;
+  }
+
+  const revokedAt = new Date().toISOString();
+  let found = false;
+  const keys = workspacePersistence.read().externalApiKeys.map((key) => {
+    if (key.id !== keyId.value) {
+      return key;
+    }
+    found = true;
+    return key.revokedAt ? key : { ...key, revokedAt };
+  });
+  if (!found) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  await workspacePersistence.updateExternalApiKeys(keys);
+  const key = keys.find((entry) => entry.id === keyId.value);
+  if (!key) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { key: toExternalApiKeyView(key) });
+};
+
+const handleExternalApiKeyDependencies = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workspacePersistence: WorkspacePersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+  const workflowId = readWorkflowId(bodyResult.value);
+  if (workflowId.type === ResultType.Err) {
+    respondError(res, workflowId.error);
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, {
+    keys: readWorkflowExternalApiKeyDependencies(
+      workspacePersistence.read().externalApiKeys,
+      workflowId.value,
+    ),
   });
 };
 
@@ -2437,19 +2738,218 @@ const readDurationMs = (startedAt: string, finishedAt: string): number =>
   Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
 
 const isAuthorized = (req: IncomingMessage, authToken: string): boolean => {
+  const token = readBearerToken(req);
+  return token === authToken || isColocatedWebUiRequest(req);
+};
+
+const isColocatedWebUiRequest = (req: IncomingMessage): boolean => {
+  const origin = readCorsOrigin(req);
+  const host = req.headers.host;
+  if (!origin || !host) {
+    return false;
+  }
+  try {
+    const originUrl = new URL(origin);
+    return (
+      originUrl.host === host ||
+      (isAllowedCorsOrigin(origin) && originUrl.port === "4000")
+    );
+  } catch {
+    return false;
+  }
+};
+
+const isExternalWorkflowRoute = (path: string): boolean =>
+  path === RoutePath.ExternalWorkflowRead ||
+  path === RoutePath.ExternalWorkflowInvoke;
+
+const handleExternalWorkflowRequest = async (input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  path: string;
+  method: string;
+  workflowCatalog: WorkflowCatalogStore;
+  workflowRuntime: WorkflowRuntimeService;
+  workspacePersistence: WorkspacePersistence;
+}): Promise<void> => {
+  if (input.method !== HttpMethod.Post) {
+    respondMethodNotAllowed(input.res);
+    return;
+  }
+
+  const plaintextKey = readBearerToken(input.req);
+  if (!plaintextKey) {
+    respondUnauthorized(input.res);
+    return;
+  }
+  const key = findVerifiedExternalApiKey(
+    input.workspacePersistence.read().externalApiKeys,
+    plaintextKey,
+  );
+  if (!key) {
+    respondUnauthorized(input.res);
+    return;
+  }
+
+  const bodyResult = await readJsonBody(input.req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(input.res, bodyResult.error);
+    return;
+  }
+  const workflowId = readWorkflowId(bodyResult.value);
+  if (workflowId.type === ResultType.Err) {
+    respondError(input.res, workflowId.error);
+    return;
+  }
+  if (!isWorkflowAllowedForExternalApiKey(key, workflowId.value)) {
+    respondError(input.res, {
+      status: HttpStatus.Forbidden,
+      message: ErrorMessage.WorkflowApiKeyOutOfScope,
+    });
+    return;
+  }
+
+  const workflow = input.workflowCatalog.getWorkflow(workflowId.value);
+  if (!workflow) {
+    respondError(input.res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  await input.workspacePersistence.updateExternalApiKeys(
+    input.workspacePersistence
+      .read()
+      .externalApiKeys.map((entry) =>
+        entry.id === key.id
+          ? { ...entry, lastUsedAt: new Date().toISOString() }
+          : entry,
+      ),
+  );
+
+  if (input.path === RoutePath.ExternalWorkflowRead) {
+    respondJson(input.res, HttpStatus.Ok, { definition: workflow });
+    return;
+  }
+
+  const result = await executeWorkflowExecutionRun(
+    { workflowId: workflowId.value },
+    {
+      catalog: input.workflowCatalog,
+      runWorkflow: input.workflowRuntime.runWorkflow,
+    },
+  );
+  if (result.type === ResultType.Err) {
+    respondError(input.res, result.error);
+    return;
+  }
+  await input.workspacePersistence.saveCurrent();
+  respondJson(input.res, HttpStatus.Ok, { execution: result.value });
+};
+
+const readBearerToken = (req: IncomingMessage): string | undefined => {
   const header = req.headers[HeaderName.Authorization];
-  const value = typeof header === "string" ? header : undefined;
+  return typeof header === "string" ? extractBearerToken(header) : undefined;
+};
 
-  if (!value) {
-    return false;
+const parseExternalApiKeyCreateRequest = (
+  value: unknown,
+): Result<{ name: string; scope: ExternalApiKeyScope }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
   }
-
-  const token = extractBearerToken(value);
-  if (!token) {
-    return false;
+  const name = typeof value["name"] === "string" ? value["name"].trim() : "";
+  if (!name) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingApiKeyName,
+    });
   }
+  const scope = parseExternalApiKeyScope(value["scope"]);
+  return scope.type === ResultType.Err
+    ? scope
+    : ok({ name, scope: scope.value });
+};
 
-  return token === authToken;
+const parseExternalApiKeyUpdateRequest = (
+  value: unknown,
+): Result<
+  { keyId: string; name: string; scope: ExternalApiKeyScope },
+  ApiError
+> => {
+  const keyId = readExternalApiKeyId(value);
+  if (keyId.type === ResultType.Err) {
+    return keyId;
+  }
+  const creation = parseExternalApiKeyCreateRequest(value);
+  return creation.type === ResultType.Err
+    ? creation
+    : ok({ keyId: keyId.value, ...creation.value });
+};
+
+const parseExternalApiKeyScope = (
+  value: unknown,
+): Result<ExternalApiKeyScope, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidApiKeyScope,
+    });
+  }
+  if (value["kind"] === ExternalApiKeyScopeKind.AllWorkflows) {
+    return ok({ kind: ExternalApiKeyScopeKind.AllWorkflows });
+  }
+  if (
+    value["kind"] !== ExternalApiKeyScopeKind.SelectedWorkflows ||
+    !Array.isArray(value["workflowIds"])
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidApiKeyScope,
+    });
+  }
+  const workflowIds = value["workflowIds"].filter(
+    (entry): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0,
+  );
+  return workflowIds.length > 0
+    ? ok({ kind: ExternalApiKeyScopeKind.SelectedWorkflows, workflowIds })
+    : err({
+        status: HttpStatus.BadRequest,
+        message: ErrorMessage.InvalidApiKeyScope,
+      });
+};
+
+const readExternalApiKeyId = (value: unknown): Result<string, ApiError> => {
+  if (
+    !isRecord(value) ||
+    typeof value["keyId"] !== "string" ||
+    !value["keyId"].trim()
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingApiKeyId,
+    });
+  }
+  return ok(value["keyId"].trim());
+};
+
+const readWorkflowId = (value: unknown): Result<string, ApiError> => {
+  if (
+    !isRecord(value) ||
+    typeof value["workflowId"] !== "string" ||
+    !value["workflowId"].trim()
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingWorkflowId,
+    });
+  }
+  return ok(value["workflowId"].trim());
 };
 
 const extractBearerToken = (header: string): string | undefined => {

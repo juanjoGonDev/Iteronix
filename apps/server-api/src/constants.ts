@@ -39,6 +39,14 @@ export const RoutePath = {
   WorkflowExecutionsRunNode: "/workflows/executions/run-node",
   WorkflowExecutionsStreamNode: "/workflows/executions/stream-node",
   WorkflowProvidersTest: "/workflows/providers/test",
+  ExternalApiKeysList: "/settings/api-keys/list",
+  ExternalApiKeysCreate: "/settings/api-keys/create",
+  ExternalApiKeysUpdate: "/settings/api-keys/update",
+  ExternalApiKeysRevoke: "/settings/api-keys/revoke",
+  ExternalApiKeysWorkflowDependencies:
+    "/settings/api-keys/workflow-dependencies",
+  ExternalWorkflowRead: "/external/workflows/read",
+  ExternalWorkflowInvoke: "/external/workflows/invoke",
 } as const;
 
 export const HeaderName = {
@@ -85,6 +93,11 @@ export const ErrorMessage = {
   MissingAssetId: "Missing assetId",
   MissingExecutionId: "Missing executionId",
   MissingNodeId: "Missing nodeId",
+  MissingApiKeyName: "Missing API key name",
+  MissingApiKeyId: "Missing API key id",
+  DuplicateApiKeyName: "An API key with this name already exists",
+  InvalidApiKeyScope: "Invalid API key scope",
+  WorkflowApiKeyOutOfScope: "API key is not allowed to access this workflow",
 } as const;
 
 export const MimeType = {
@@ -117,6 +130,7 @@ export const HttpStatus = {
   Ok: 200,
   BadRequest: 400,
   Unauthorized: 401,
+  Forbidden: 403,
   NotFound: 404,
   Conflict: 409,
   MethodNotAllowed: 405,

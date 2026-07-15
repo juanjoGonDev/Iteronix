@@ -1,12 +1,8 @@
-import {
-  hasServerAuthToken,
-  type ServerConnection,
-} from "../shared/server-config.js";
+import type { ServerConnection } from "../shared/server-config.js";
 
 export const readWorkflowBootstrapDecision = (
-  connection: ServerConnection,
-): "load" | "configure" =>
-  hasServerAuthToken(connection) ? "load" : "configure";
+  _connection: ServerConnection,
+): "load" | "configure" => "load";
 
 export const isWorkflowAuthenticationFailure = (value: unknown): boolean => {
   if (!(value instanceof Error)) {

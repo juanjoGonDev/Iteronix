@@ -36,11 +36,9 @@ export const readServerConnection = (
   location: LocationLike | undefined = window.location,
 ): ServerConnection => {
   const serverUrl = storage.getItem(LocalStorageKey.ServerUrl);
-  const authToken = storage.getItem(LocalStorageKey.AuthToken);
-
   return {
     serverUrl: normalizeServerUrl(serverUrl, location),
-    authToken: normalizeAuthToken(authToken),
+    authToken: "",
   };
 };
 
@@ -54,8 +52,6 @@ export const writeServerConnection = (
   };
 
   storage.setItem(LocalStorageKey.ServerUrl, normalized.serverUrl);
-  storage.setItem(LocalStorageKey.AuthToken, normalized.authToken);
-
   return normalized;
 };
 

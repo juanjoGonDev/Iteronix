@@ -4682,3 +4682,37 @@
 - Summary: Aligned Settings browser validation with browser-local authentication and snapshot-only provider profiles.
 - Changes: The validator expects zero runtime provider-sync requests for a snapshot-only profile without a token, and requires Check connection before Save in the second tab.
 - Next: Run the updated Settings validator with the final browser correction gates.
+
+### 2026-07-15 13:00 (Europe/Madrid) — External workflow API access
+
+- Summary
+  - Added external workflow API keys with one-time secret delivery, scrypt hashes, scope checks, revocation, usage metadata, and PostgreSQL-backed workspace persistence.
+- Decisions
+  - Keys authorize only `/external/workflows/read` and `/external/workflows/invoke`; internal Settings/provider/workflow management remains behind the internal boundary. Selected-workflow keys are automatically revoked with their workflow in the same persisted state update.
+- Changes
+  - Added domain policy for all-workflows/selected-workflows scopes, dependency warnings, and revocation.
+  - Added Settings API Access management, copied one-time secret display, automatic colocated web connection, and workflow deletion dependency warnings.
+- Commands
+  - PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:settings`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks
+  - Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next
+  - Run native bounded review validation, then create the scoped atomic commit.
+
+### 2026-07-15 13:07 (Europe/Madrid) — API key workflow scope selector
+
+- Summary: Replaced free-form workflow IDs with a default-all selector and an explicit multi-select catalog for limited external API keys.
+- Decisions: The selector uses canonical workflow definitions, filters selections that disappear from the catalog, refreshes on API Access activation, and listens for workflow catalog reloads after create, edit, or deletion.
+- Changes: Added scope-selection domain state and regression tests; connected Settings to the workflow catalog; emitted catalog-change notifications from Workflows; aligned the Settings validator selector check and strict browser typing.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:settings`, `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged. The current high-risk review receipt must be refreshed because this selector changes the reviewed scope.
+- Next: Run the scoped native bounded review and commit the completed external workflow API access work unit.
+
+### 2026-07-15 13:16 (Europe/Madrid) — External API key in-place editing
+
+- Summary: Existing external workflow API keys can now be edited instead of replaced.
+- Decisions: Editing changes only a key's name and workflow scope; its secret hash, creation date, revocation state, and usage metadata remain unchanged. Names are unique after trim/case normalization, while an edited key may retain its own current name.
+- Changes: Added the protected `/settings/api-keys/update` endpoint, shared domain name-availability policy, Settings edit/cancel controls, and update client handling.
+- Commands: RED focused tests proved absent duplicate/update behavior. PASS focused tests, `pnpm lint`, `pnpm typecheck`, `pnpm test` (293), `pnpm build`, `validate:settings`, and `validate:workflows` (the first workflows validator attempt timed out on an existing version-import control; the immediate retry passed).
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged; the previous review receipt is invalidated and must be recreated before any commit.
+- Next: Run a fresh scoped bounded review and resolve the unstaged-file receipt scope before committing.

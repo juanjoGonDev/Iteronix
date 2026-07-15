@@ -5,13 +5,13 @@ import {
 } from "./workflows-auth-bootstrap.js";
 
 describe("workflow authentication bootstrap", () => {
-  it("does not request settings before a local bearer token is configured", () => {
+  it("loads settings through the colocated backend without a local bearer token", () => {
     expect(
       readWorkflowBootstrapDecision({
         serverUrl: "http://localhost:4001",
         authToken: "",
       }),
-    ).toBe("configure");
+    ).toBe("load");
   });
 
   it("routes 401 responses to the connection recovery state", () => {

@@ -20,10 +20,7 @@ import {
   type ComponentProps,
 } from "../shared/Component.js";
 import {
-  DefaultServerConnection,
-  hasServerAuthToken,
   readServerConnection,
-  writeServerConnection,
   type ServerConnection,
 } from "../shared/server-config.js";
 import {
@@ -36,13 +33,11 @@ import {
 } from "../shared/settings-storage.js";
 import {
   createSettingsClient,
+  type ExternalApiKeyRecord,
   type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
+import { createWorkflowClient } from "../shared/workflow-client.js";
 import { writeBrowserUrlState } from "../shared/url-state.js";
-import {
-  checkSettingsConnection,
-  readSaveConnection,
-} from "./settings-save-connection.js";
 import {
   ProviderKind,
   ProviderPromptMode,
@@ -56,6 +51,11 @@ import {
   readSettingsUrlStateFromLocation,
   type SettingsUrlTab,
 } from "./settings-url-state.js";
+import {
+  ExternalApiKeyScopeSelection,
+  readExternalApiKeyScope,
+  type ExternalApiKeyScopeSelection as ExternalApiKeyScopeSelectionValue,
+} from "./settings-api-access-state.js";
 
 type SettingsTab = SettingsUrlTab;
 
@@ -72,6 +72,14 @@ interface SettingsScreenState {
   isSaving: boolean;
   isTestingConnection: boolean;
   isTestingWebhook: boolean;
+  externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
+  apiKeyName: string;
+  apiKeyScope: ExternalApiKeyScopeSelectionValue;
+  apiKeyWorkflowIds: ReadonlyArray<string>;
+  availableWorkflows: ReadonlyArray<{ id: string; name: string }>;
+  editingExternalApiKeyId: string | null;
+  newExternalApiKey: string | null;
+  isManagingExternalApiKeys: boolean;
 }
 
 const TabLabel: Record<SettingsTab, string> = {
@@ -113,6 +121,7 @@ export class SettingsScreen extends Component<
   SettingsScreenState
 > {
   private readonly settingsClient = createSettingsClient();
+  private readonly workflowClient = createWorkflowClient();
 
   constructor(props: ComponentProps = {}) {
     const snapshot = {
@@ -146,16 +155,32 @@ export class SettingsScreen extends Component<
       isSaving: false,
       isTestingConnection: false,
       isTestingWebhook: false,
+      externalApiKeys: [],
+      apiKeyName: "",
+      apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+      apiKeyWorkflowIds: [],
+      availableWorkflows: [],
+      editingExternalApiKeyId: null,
+      newExternalApiKey: null,
+      isManagingExternalApiKeys: false,
     });
   }
 
   override onMount(): void {
     window.addEventListener("popstate", this.handleSettingsUrlStateChange);
+    window.addEventListener(
+      "iteronix:workflows-changed",
+      this.handleWorkflowCatalogChanged,
+    );
     void this.hydrateRuntimeContext();
   }
 
   override onUnmount(): void {
     window.removeEventListener("popstate", this.handleSettingsUrlStateChange);
+    window.removeEventListener(
+      "iteronix:workflows-changed",
+      this.handleWorkflowCatalogChanged,
+    );
   }
 
   override render(): HTMLElement {
@@ -198,6 +223,9 @@ export class SettingsScreen extends Component<
       onClick: () => {
         this.writeSettingsUrlState({ activeTab: tab }, "replace");
         this.setState({ activeTab: tab });
+        if (tab === "api") {
+          void this.refreshExternalApiKeyContext();
+        }
       },
     };
   }
@@ -796,101 +824,329 @@ export class SettingsScreen extends Component<
           createElement(
             "h2",
             { className: "text-lg font-semibold text-white" },
-            ["API access"],
+            ["External API access"],
           ),
           createElement("p", { className: "text-sm text-text-secondary" }, [
-            "This browser keeps the server URL and token locally. The token is never sent in settings data or stored by the server.",
+            "Create or update workflow-only API keys for external automation. Each secret is shown once and is never persisted in plaintext.",
           ]),
         ]),
         createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
           createElement(SettingsTextField, {
-            label: "Server URL",
-            value: this.state.serverConnection.serverUrl,
-            placeholder: DefaultServerConnection.serverUrl,
-            testId: "settings-server-url",
-            onChange: (value: string) =>
-              this.handleServerConnectionChange("serverUrl", value),
+            label: "Key name",
+            value: this.state.apiKeyName,
+            placeholder: "Deployment automation",
+            testId: "settings-external-api-key-name",
+            onChange: (apiKeyName: string) => this.setState({ apiKeyName }),
           }),
-          createElement(SettingsTextField, {
-            label: "Auth token",
-            value: this.state.serverConnection.authToken,
-            placeholder: "Paste the server bearer token",
-            testId: "settings-auth-token",
-            type: "password",
-            onChange: (value: string) =>
-              this.handleServerConnectionChange("authToken", value),
+          createElement(SettingsSelectField, {
+            label: "Workflow access",
+            value: this.state.apiKeyScope,
+            testId: "settings-external-api-key-scope",
+            options: [
+              {
+                value: ExternalApiKeyScopeSelection.AllWorkflows,
+                label: "All workflows",
+              },
+              {
+                value: ExternalApiKeyScopeSelection.SelectedWorkflows,
+                label: "Selected workflows",
+              },
+            ],
+            onChange: (value: string) => {
+              const apiKeyScope =
+                value === ExternalApiKeyScopeSelection.SelectedWorkflows
+                  ? ExternalApiKeyScopeSelection.SelectedWorkflows
+                  : ExternalApiKeyScopeSelection.AllWorkflows;
+              this.setState({
+                apiKeyScope,
+                apiKeyWorkflowIds:
+                  apiKeyScope === ExternalApiKeyScopeSelection.AllWorkflows
+                    ? []
+                    : this.state.apiKeyWorkflowIds,
+              });
+            },
           }),
         ]),
-        createElement(
-          "div",
-          { className: "flex flex-wrap items-center gap-3" },
-          [
-            createElement(Button, {
-              variant: "secondary",
+        this.state.apiKeyScope ===
+        ExternalApiKeyScopeSelection.SelectedWorkflows
+          ? this.renderWorkflowScopeSelector()
+          : "",
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled:
+            this.state.isManagingExternalApiKeys ||
+            this.state.apiKeyName.trim().length === 0 ||
+            (this.state.apiKeyScope ===
+              ExternalApiKeyScopeSelection.SelectedWorkflows &&
+              this.state.apiKeyWorkflowIds.length === 0),
+          onClick: () => void this.handleSubmitExternalApiKey(),
+          children: this.state.isManagingExternalApiKeys
+            ? this.state.editingExternalApiKeyId
+              ? "Saving"
+              : "Creating"
+            : this.state.editingExternalApiKeyId
+              ? "Save changes"
+              : "Create API key",
+        }),
+        this.state.editingExternalApiKeyId
+          ? createElement(Button, {
+              variant: "ghost",
               size: "sm",
-              disabled: this.state.isTestingConnection,
-              onClick: () => {
-                void this.handleTestConnection();
-              },
-              children: this.state.isTestingConnection
-                ? "Testing"
-                : "Check connection",
-            }),
-            createElement(
-              StatusBadge,
-              {
-                status:
-                  this.state.runtimeProviders.length > 0
-                    ? "success"
-                    : "warning",
-              },
-              [
-                this.state.runtimeProviders.length > 0
-                  ? `${this.state.runtimeProviders.length} runtime provider${this.state.runtimeProviders.length === 1 ? "" : "s"}`
-                  : "No runtime providers loaded",
-              ],
-            ),
-          ],
-        ),
-        this.state.runtimeProviders.length > 0
-          ? createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
-              this.state.runtimeProviders.map((provider) =>
-                createElement(
-                  "div",
-                  {
-                    key: provider.id,
-                    className:
-                      "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3",
-                  },
-                  [
-                    createElement(
-                      "p",
-                      { className: "text-sm font-semibold text-white" },
-                      [provider.displayName],
-                    ),
-                    createElement(
-                      "p",
-                      { className: "mt-1 text-xs text-text-secondary" },
-                      [
-                        `${provider.id} · ${provider.type} · auth ${provider.authType}`,
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ])
-          : createElement(
+              disabled: this.state.isManagingExternalApiKeys,
+              onClick: () => this.handleCancelExternalApiKeyEdit(),
+              children: "Cancel edit",
+            })
+          : "",
+        this.state.newExternalApiKey
+          ? createElement(
               "div",
               {
                 className:
-                  "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary",
+                  "rounded-lg border border-amber-500/50 bg-amber-500/10 p-4",
               },
               [
-                "Use Check connection to validate the current server URL and auth token.",
+                createElement(
+                  "p",
+                  { className: "text-sm font-semibold text-white" },
+                  ["Copy this key now. It cannot be shown again."],
+                ),
+                createElement(
+                  "code",
+                  {
+                    className: "mt-2 block break-all text-xs text-amber-100",
+                    "data-testid": "settings-new-external-api-key",
+                  },
+                  [this.state.newExternalApiKey],
+                ),
+                createElement(Button, {
+                  variant: "secondary",
+                  size: "sm",
+                  onClick: () =>
+                    void navigator.clipboard.writeText(
+                      this.state.newExternalApiKey ?? "",
+                    ),
+                  children: "Copy key",
+                }),
+              ],
+            )
+          : "",
+        createElement(
+          "div",
+          { className: "flex flex-col gap-2" },
+          this.state.externalApiKeys.map((key) =>
+            createElement(
+              "div",
+              {
+                key: key.id,
+                className:
+                  "flex items-center justify-between gap-4 rounded-lg border border-border-dark px-4 py-3",
+              },
+              [
+                createElement("div", {}, [
+                  createElement(
+                    "p",
+                    { className: "text-sm font-semibold text-white" },
+                    [key.name],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "text-xs text-text-secondary" },
+                    [
+                      `${key.scope.kind === "all_workflows" ? "All workflows" : `${key.scope.workflowIds.length.toString()} selected workflow(s)`} · last used ${key.lastUsedAt ?? "never"}${key.revokedAt ? " · revoked" : ""}`,
+                    ],
+                  ),
+                ]),
+                createElement("div", { className: "flex shrink-0 gap-2" }, [
+                  createElement(Button, {
+                    variant: "secondary",
+                    size: "sm",
+                    disabled:
+                      Boolean(key.revokedAt) ||
+                      this.state.isManagingExternalApiKeys,
+                    onClick: () => this.handleEditExternalApiKey(key),
+                    children: "Edit",
+                  }),
+                  createElement(Button, {
+                    variant: "danger",
+                    size: "sm",
+                    disabled:
+                      Boolean(key.revokedAt) ||
+                      this.state.isManagingExternalApiKeys,
+                    onClick: () => void this.handleRevokeExternalApiKey(key.id),
+                    children: key.revokedAt ? "Revoked" : "Revoke",
+                  }),
+                ]),
               ],
             ),
+          ),
+        ),
       ],
     );
+  }
+
+  private renderWorkflowScopeSelector(): HTMLElement {
+    const selectedWorkflowIds = new Set(this.state.apiKeyWorkflowIds);
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement(
+        "span",
+        { className: "text-[13px] font-medium text-slate-100" },
+        ["Allowed workflows"],
+      ),
+      this.state.availableWorkflows.length === 0
+        ? createElement("p", { className: "text-sm text-text-secondary" }, [
+            "No workflows are available. Create one before making a limited key.",
+          ])
+        : createElement(
+            "select",
+            {
+              multiple: true,
+              size: Math.min(
+                Math.max(this.state.availableWorkflows.length, 3),
+                6,
+              ),
+              "data-testid": "settings-external-api-key-workflows",
+              className:
+                "min-h-28 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+              onChange: (event: Event) => {
+                const target = event.target;
+                if (target instanceof HTMLSelectElement) {
+                  this.setState({
+                    apiKeyWorkflowIds: Array.from(
+                      target.selectedOptions,
+                      (option) => option.value,
+                    ),
+                  });
+                }
+              },
+            },
+            this.state.availableWorkflows.map((workflow) =>
+              createElement(
+                "option",
+                {
+                  value: workflow.id,
+                  selected: selectedWorkflowIds.has(workflow.id),
+                },
+                [workflow.name],
+              ),
+            ),
+          ),
+      createElement("span", { className: "text-xs text-text-secondary" }, [
+        "Choose one or more workflows. This list refreshes when the workflow catalog changes.",
+      ]),
+    ]);
+  }
+
+  private async handleSubmitExternalApiKey(): Promise<void> {
+    if (this.state.editingExternalApiKeyId) {
+      await this.handleUpdateExternalApiKey(this.state.editingExternalApiKeyId);
+      return;
+    }
+
+    await this.handleCreateExternalApiKey();
+  }
+
+  private async handleCreateExternalApiKey(): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      const created = await this.settingsClient.createExternalApiKey({
+        name: this.state.apiKeyName,
+        scope: readExternalApiKeyScope(
+          this.state.apiKeyScope,
+          this.state.apiKeyWorkflowIds,
+        ),
+      });
+      this.setState({
+        externalApiKeys: [...this.state.externalApiKeys, created.key],
+        apiKeyName: "",
+        apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+        apiKeyWorkflowIds: [],
+        newExternalApiKey: created.plaintextKey,
+        isManagingExternalApiKeys: false,
+      });
+    } catch (error) {
+      this.setState({
+        isManagingExternalApiKeys: false,
+      });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not create external API key."),
+      );
+    }
+  }
+
+  private async handleUpdateExternalApiKey(keyId: string): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      const updated = await this.settingsClient.updateExternalApiKey({
+        keyId,
+        name: this.state.apiKeyName,
+        scope: readExternalApiKeyScope(
+          this.state.apiKeyScope,
+          this.state.apiKeyWorkflowIds,
+        ),
+      });
+      this.setState({
+        externalApiKeys: this.state.externalApiKeys.map((key) =>
+          key.id === updated.id ? updated : key,
+        ),
+        apiKeyName: "",
+        apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+        apiKeyWorkflowIds: [],
+        editingExternalApiKeyId: null,
+        isManagingExternalApiKeys: false,
+      });
+    } catch (error) {
+      this.setState({ isManagingExternalApiKeys: false });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not update external API key."),
+      );
+    }
+  }
+
+  private handleEditExternalApiKey(key: ExternalApiKeyRecord): void {
+    this.setState({
+      apiKeyName: key.name,
+      apiKeyScope:
+        key.scope.kind === "selected_workflows"
+          ? ExternalApiKeyScopeSelection.SelectedWorkflows
+          : ExternalApiKeyScopeSelection.AllWorkflows,
+      apiKeyWorkflowIds:
+        key.scope.kind === "selected_workflows" ? key.scope.workflowIds : [],
+      editingExternalApiKeyId: key.id,
+      newExternalApiKey: null,
+    });
+  }
+
+  private handleCancelExternalApiKeyEdit(): void {
+    this.setState({
+      apiKeyName: "",
+      apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+      apiKeyWorkflowIds: [],
+      editingExternalApiKeyId: null,
+    });
+  }
+
+  private async handleRevokeExternalApiKey(keyId: string): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      const revoked = await this.settingsClient.revokeExternalApiKey({ keyId });
+      this.setState({
+        externalApiKeys: this.state.externalApiKeys.map((key) =>
+          key.id === keyId ? revoked : key,
+        ),
+        isManagingExternalApiKeys: false,
+      });
+    } catch (error) {
+      this.setState({
+        isManagingExternalApiKeys: false,
+      });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not revoke external API key."),
+      );
+    }
   }
 
   private renderSaveBar(): HTMLElement {
@@ -929,10 +1185,6 @@ export class SettingsScreen extends Component<
       this.state.runtimeProviders;
     let message: string | null = null;
 
-    if (!hasServerAuthToken(this.state.serverConnection)) {
-      return;
-    }
-
     try {
       const snapshot = await this.settingsClient.load();
       hydrateSettingsSnapshot(snapshot);
@@ -953,6 +1205,7 @@ export class SettingsScreen extends Component<
       });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
+      await this.refreshExternalApiKeyContext();
     } catch (error) {
       message = toErrorMessage(error, "Could not load runtime providers.");
     }
@@ -963,6 +1216,36 @@ export class SettingsScreen extends Component<
 
     if (message) {
       this.pushToast("error", message);
+    }
+  }
+
+  private async refreshExternalApiKeyContext(): Promise<void> {
+    try {
+      const [externalApiKeys, availableWorkflows] = await Promise.all([
+        this.settingsClient.listExternalApiKeys(),
+        this.workflowClient.listDefinitions(),
+      ]);
+      const availableWorkflowIds = new Set(
+        availableWorkflows.map((workflow) => workflow.id),
+      );
+      this.setState({
+        externalApiKeys,
+        availableWorkflows: availableWorkflows.map((workflow) => ({
+          id: workflow.id,
+          name: workflow.name,
+        })),
+        apiKeyWorkflowIds: this.state.apiKeyWorkflowIds.filter((workflowId) =>
+          availableWorkflowIds.has(workflowId),
+        ),
+      });
+    } catch (error) {
+      this.pushToast(
+        "error",
+        toErrorMessage(
+          error,
+          "Could not refresh workflows for API key access.",
+        ),
+      );
     }
   }
 
@@ -1058,65 +1341,6 @@ export class SettingsScreen extends Component<
     });
   }
 
-  private handleServerConnectionChange(
-    key: keyof ServerConnection,
-    value: string,
-  ): void {
-    this.setState({
-      serverConnection: {
-        ...this.state.serverConnection,
-        [key]: value,
-      },
-      validatedServerConnection: null,
-    });
-  }
-
-  private async handleTestConnection(): Promise<void> {
-    this.setState({
-      isTestingConnection: true,
-    });
-
-    try {
-      const candidateClient = createSettingsClient(this.state.serverConnection);
-      const checkedConnection = await checkSettingsConnection(
-        this.state.serverConnection,
-        candidateClient,
-      );
-      const serverConnection = writeServerConnection(
-        checkedConnection.serverConnection,
-      );
-      hydrateSettingsSnapshot(checkedConnection.settings);
-      const urlState =
-        typeof window === "undefined"
-          ? null
-          : readSettingsUrlStateFromLocation(window.location);
-      const selectedProviderId = resolveSettingsProviderSelection(
-        urlState?.selectedProviderId ?? this.state.selectedProviderId,
-        checkedConnection.settings.providerProfiles,
-      );
-      this.setState({
-        profileId: checkedConnection.settings.profileId,
-        providerProfiles: checkedConnection.settings.providerProfiles,
-        selectedProviderId,
-        workflowLimits: checkedConnection.settings.workflowLimits,
-        notifications: checkedConnection.settings.notifications,
-        runtimeProviders: checkedConnection.runtimeProviders,
-        serverConnection,
-        validatedServerConnection: serverConnection,
-      });
-      this.pushToast(
-        "success",
-        `Connection OK. Runtime exposes ${checkedConnection.runtimeProviders.length} provider${checkedConnection.runtimeProviders.length === 1 ? "" : "s"}.`,
-      );
-    } catch (error) {
-      this.pushToast("error", toErrorMessage(error, "Connection test failed."));
-    } finally {
-      this.setState({
-        isTestingConnection: false,
-      });
-    }
-  }
-
   private async handleTestWebhook(): Promise<void> {
     this.setState({
       isTestingWebhook: true,
@@ -1157,15 +1381,12 @@ export class SettingsScreen extends Component<
       isSaving: true,
     });
 
-    const saveConnection = readSaveConnection(
-      this.state.serverConnection,
-      this.state.validatedServerConnection,
-    );
+    const saveConnection = this.state.serverConnection;
 
-    if (!saveConnection || !hasServerAuthToken(saveConnection)) {
+    if (!saveConnection) {
       this.pushToast(
         "error",
-        "Configure the local server URL and auth token, then use Check connection before saving.",
+        "The colocated backend connection is unavailable.",
       );
       this.setState({ isSaving: false });
       return;
@@ -1278,6 +1499,10 @@ export class SettingsScreen extends Component<
       activeTab: urlState.activeTab ?? this.state.activeTab,
       selectedProviderId,
     });
+  };
+
+  private readonly handleWorkflowCatalogChanged = (): void => {
+    void this.refreshExternalApiKeyContext();
   };
 
   private writeSettingsUrlState(

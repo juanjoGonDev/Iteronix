@@ -10,6 +10,10 @@ const EndpointPath = {
   SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
+  ExternalApiKeysList: "/settings/api-keys/list",
+  ExternalApiKeysCreate: "/settings/api-keys/create",
+  ExternalApiKeysUpdate: "/settings/api-keys/update",
+  ExternalApiKeysRevoke: "/settings/api-keys/revoke",
 } as const;
 
 export type RuntimeProviderRecord = {
@@ -18,6 +22,19 @@ export type RuntimeProviderRecord = {
   type: string;
   authType: string;
   settingsSchema: Record<string, unknown>;
+};
+
+export type ExternalApiKeyScope =
+  | { kind: "all_workflows" }
+  | { kind: "selected_workflows"; workflowIds: ReadonlyArray<string> };
+
+export type ExternalApiKeyRecord = {
+  id: string;
+  name: string;
+  scope: ExternalApiKeyScope;
+  createdAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
 };
 
 type RuntimeProviderSelectionRecord = {
@@ -49,6 +66,19 @@ export type SettingsClient = {
     providerId: string;
     config: Record<string, unknown>;
   }) => Promise<RuntimeProviderSettingsRecord>;
+  listExternalApiKeys: () => Promise<ReadonlyArray<ExternalApiKeyRecord>>;
+  createExternalApiKey: (input: {
+    name: string;
+    scope: ExternalApiKeyScope;
+  }) => Promise<{ key: ExternalApiKeyRecord; plaintextKey: string }>;
+  updateExternalApiKey: (input: {
+    keyId: string;
+    name: string;
+    scope: ExternalApiKeyScope;
+  }) => Promise<ExternalApiKeyRecord>;
+  revokeExternalApiKey: (input: {
+    keyId: string;
+  }) => Promise<ExternalApiKeyRecord>;
 };
 
 export const createSettingsClient = (
@@ -88,7 +118,104 @@ export const createSettingsClient = (
       parse: parseProviderSettingsResponse,
       connection,
     }),
+  listExternalApiKeys: () =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeysList,
+      body: {},
+      parse: (value) => readExternalApiKeysResponse(value, "keys"),
+      connection,
+    }),
+  createExternalApiKey: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeysCreate,
+      body: input,
+      parse: parseExternalApiKeyCreationResponse,
+      connection,
+    }),
+  updateExternalApiKey: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeysUpdate,
+      body: input,
+      parse: (value) =>
+        parseExternalApiKey(
+          readRequiredRecord(value, "externalApiKeyUpdateResponse", "key"),
+        ),
+      connection,
+    }),
+  revokeExternalApiKey: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeysRevoke,
+      body: input,
+      parse: (value) =>
+        parseExternalApiKey(
+          readRequiredRecord(value, "externalApiKeyRevokeResponse", "key"),
+        ),
+      connection,
+    }),
 });
+
+const parseExternalApiKeyCreationResponse = (
+  value: unknown,
+): {
+  key: ExternalApiKeyRecord;
+  plaintextKey: string;
+} => {
+  const record = ensureRecord(value, "externalApiKeyCreationResponse");
+  return {
+    key: parseExternalApiKey(
+      readRequiredRecord(record, "externalApiKeyCreationResponse", "key"),
+    ),
+    plaintextKey: readRequiredString(
+      record,
+      "externalApiKeyCreationResponse",
+      "plaintextKey",
+    ),
+  };
+};
+
+const readExternalApiKeysResponse = (
+  value: unknown,
+  key: string,
+): ReadonlyArray<ExternalApiKeyRecord> =>
+  readRequiredArray(
+    ensureRecord(value, "externalApiKeysResponse"),
+    "externalApiKeysResponse",
+    key,
+  ).map((entry) => parseExternalApiKey(ensureRecord(entry, "externalApiKey")));
+
+const parseExternalApiKey = (
+  value: Record<string, unknown>,
+): ExternalApiKeyRecord => {
+  const scope = readRequiredRecord(value, "externalApiKey", "scope");
+  const kind = readRequiredString(scope, "externalApiKey.scope", "kind");
+  return {
+    id: readRequiredString(value, "externalApiKey", "id"),
+    name: readRequiredString(value, "externalApiKey", "name"),
+    scope:
+      kind === "all_workflows"
+        ? { kind }
+        : {
+            kind: "selected_workflows",
+            workflowIds: readRequiredArray(
+              scope,
+              "externalApiKey.scope",
+              "workflowIds",
+            ).map((workflowId) => {
+              if (typeof workflowId !== "string") {
+                throw new Error("Invalid externalApiKey.scope.workflowIds");
+              }
+              return workflowId;
+            }),
+          },
+    createdAt: readRequiredString(value, "externalApiKey", "createdAt"),
+    ...(typeof value["lastUsedAt"] === "string"
+      ? { lastUsedAt: value["lastUsedAt"] }
+      : {}),
+    ...(typeof value["revokedAt"] === "string"
+      ? { revokedAt: value["revokedAt"] }
+      : {}),
+  };
+};
 
 export const parseSettingsResponse = (value: unknown): SettingsSnapshot =>
   parseSettingsSnapshot(

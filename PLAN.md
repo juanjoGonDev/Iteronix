@@ -13,6 +13,8 @@
 
 ## Workflow-only PostgreSQL cutover
 
+- [x] Add external workflow API key access with one-time secrets, hashed PostgreSQL state, scoped workflow authorization, revocation, dependent-key deletion warnings, a live workflow selector that defaults to all workflows, and in-place name/scope edits with duplicate-name checks.
+
 - [x] Create `refactor/workflow-only-postgres` from `master`.
 - [x] Replace the file-backed workspace state adapter with PostgreSQL-only persistence.
 - [x] Require `DATABASE_URL` and provide Docker Compose PostgreSQL startup with a clean reset procedure.

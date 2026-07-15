@@ -1,6 +1,10 @@
 import { createDefaultWorkflowCatalogState } from "../../../packages/shared/src/workflows";
 import type { WorkflowCatalogState } from "../../../packages/shared/src/workflows";
 import type { ProviderSelection, ProviderSettingsRecord } from "./providers";
+import {
+  ExternalApiKeyScopeKind,
+  type ExternalApiKeyRecord,
+} from "../../../packages/domain/src/external-api-keys";
 
 export const WorkspaceStateVersion = {
   Current: 1,
@@ -40,6 +44,7 @@ export type WorkspaceState = {
   providerSelections: ReadonlyArray<ProviderSelection>;
   providerSettings: ReadonlyArray<ProviderSettingsRecord>;
   workflows: WorkflowCatalogState;
+  externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
   createdAt: string;
   updatedAt: string;
 };
@@ -64,6 +69,7 @@ export const createDefaultWorkspaceState = (): WorkspaceState => {
     providerSelections: [],
     providerSettings: [],
     workflows: createDefaultWorkflowCatalogState(),
+    externalApiKeys: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -84,6 +90,7 @@ export const parseWorkspaceState = (value: unknown): WorkspaceState => {
     providerSelections: readProviderSelections(value["providerSelections"]),
     providerSettings: readProviderSettings(value["providerSettings"]),
     workflows: readWorkflowCatalogState(value["workflows"]),
+    externalApiKeys: readExternalApiKeys(value["externalApiKeys"]),
     createdAt,
     updatedAt: readString(value, "updatedAt") ?? createdAt,
   };
@@ -96,6 +103,7 @@ export const createWorkspaceStateFromStores = (input: {
   };
   settings: WorkspaceSettingsSnapshot;
   workflowSnapshot: WorkflowCatalogState;
+  externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
   previousState?: WorkspaceState;
 }): WorkspaceState => {
   const now = new Date().toISOString();
@@ -106,6 +114,8 @@ export const createWorkspaceStateFromStores = (input: {
     providerSelections: input.providerSnapshot.selections,
     providerSettings: input.providerSnapshot.settings,
     workflows: input.workflowSnapshot,
+    externalApiKeys:
+      input.externalApiKeys ?? input.previousState?.externalApiKeys ?? [],
     createdAt: input.previousState?.createdAt ?? now,
     updatedAt: now,
   });
@@ -113,6 +123,70 @@ export const createWorkspaceStateFromStores = (input: {
 
 export const redactWorkspaceState = (state: WorkspaceState): WorkspaceState =>
   redactUnknownValue(state) as WorkspaceState;
+
+const readExternalApiKeys = (
+  value: unknown,
+): ReadonlyArray<ExternalApiKeyRecord> => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const id = readString(entry, "id");
+    const name = readString(entry, "name");
+    const secretHash = readString(entry, "secretHash");
+    const createdAt = readString(entry, "createdAt");
+    const scope = readExternalApiKeyScope(entry["scope"]);
+    if (!id || !name || !secretHash || !createdAt || !scope) {
+      return [];
+    }
+
+    const lastUsedAt = readString(entry, "lastUsedAt");
+    const revokedAt = readString(entry, "revokedAt");
+    const key: ExternalApiKeyRecord = {
+      id,
+      name,
+      scope,
+      secretHash,
+      createdAt,
+      ...(lastUsedAt ? { lastUsedAt } : {}),
+      ...(revokedAt ? { revokedAt } : {}),
+    };
+    return [key];
+  });
+};
+
+const readExternalApiKeyScope = (
+  value: unknown,
+): ExternalApiKeyRecord["scope"] | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (value["kind"] === ExternalApiKeyScopeKind.AllWorkflows) {
+    return { kind: ExternalApiKeyScopeKind.AllWorkflows };
+  }
+
+  if (
+    value["kind"] !== ExternalApiKeyScopeKind.SelectedWorkflows ||
+    !Array.isArray(value["workflowIds"])
+  ) {
+    return undefined;
+  }
+
+  const workflowIds = value["workflowIds"].filter(
+    (workflowId): workflowId is string =>
+      typeof workflowId === "string" && workflowId.length > 0,
+  );
+  return {
+    kind: ExternalApiKeyScopeKind.SelectedWorkflows,
+    workflowIds: [...new Set(workflowIds)],
+  };
+};
 
 const createDefaultSettingsSnapshot = (): WorkspaceSettingsSnapshot => ({
   profileId: DefaultProfileId,

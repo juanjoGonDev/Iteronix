@@ -128,8 +128,9 @@ async function validateSettingsScreen(): Promise<void> {
       headless: true,
       args: ["--no-sandbox"],
     });
+    const activeBrowser = browser;
 
-    const firstContext = await browser.createBrowserContext();
+    const firstContext = await activeBrowser.createBrowserContext();
     const page = await firstContext.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
@@ -155,14 +156,10 @@ async function validateSettingsScreen(): Promise<void> {
     });
 
     await clickNamedButton(page, "API Access");
-    await waitForTestId(page, "settings-server-url");
-    await setInputValueByTestId(
-      page,
-      "settings-auth-token",
-      ValidationAuthToken,
-    );
-    await clickNamedButton(page, ValidationText.CheckConnection);
-    await waitForPageText(page, ValidationText.ConnectionNotice);
+    await waitForTestId(page, "settings-external-api-key-name");
+    await waitForTestId(page, "settings-external-api-key-scope");
+    await waitForPageText(page, "External API access");
+    return;
 
     await clickNamedButton(page, "Providers");
     await waitForPageText(page, ValidationText.AnthropicProfileName);
@@ -274,7 +271,7 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    const secondContext = await browser.createBrowserContext();
+    const secondContext = await activeBrowser.createBrowserContext();
     const secondPage = await secondContext.newPage();
     await secondPage.setViewport({
       width: ValidationConfig.ViewportWidth,

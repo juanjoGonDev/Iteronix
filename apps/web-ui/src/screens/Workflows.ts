@@ -549,6 +549,7 @@ type WorkflowPinnedOutputOverwriteDialogState = {
 type WorkflowDeleteDialogState = {
   workflowId: string;
   workflowName: string;
+  dependentApiKeyNames: ReadonlyArray<string>;
 };
 
 type WorkflowNodeRenameDialogState = {
@@ -12664,6 +12665,7 @@ export class WorkflowsScreen extends Component<
       dirtyWorkflow: draftState.dirtyWorkflow,
       dirtyAssetIds: draftState.dirtyAssetIds,
     });
+    window.dispatchEvent(new Event("iteronix:workflows-changed"));
     this.applyWorkflowsUrlState(
       readWorkflowsUrlStateFromLocation(window.location),
     );
@@ -12999,12 +13001,29 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    this.setState({
-      workflowDeleteDialog: {
-        workflowId: currentWorkflow.id,
-        workflowName: currentWorkflow.name,
-      },
-    });
+    try {
+      const dependencies =
+        await this.workflowClient.listExternalApiKeyDependencies({
+          workflowId: currentWorkflow.id,
+        });
+      this.setState({
+        workflowDeleteDialog: {
+          workflowId: currentWorkflow.id,
+          workflowName: currentWorkflow.name,
+          dependentApiKeyNames: dependencies.map(
+            (dependency) => dependency.name,
+          ),
+        },
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not inspect API key dependencies.",
+        ),
+        noticeMessage: null,
+      });
+    }
   }
 
   private renderWorkflowDeleteDialog(): HTMLElement | string {
@@ -13044,6 +13063,15 @@ export class WorkflowsScreen extends Component<
                 `Delete ${dialog.workflowName}? This removes the workflow definition from the active workspace.`,
               ],
             ),
+            dialog.dependentApiKeyNames.length > 0
+              ? createElement(
+                  "p",
+                  { className: "mt-2 text-xs leading-5 text-amber-200" },
+                  [
+                    `This will also revoke ${dialog.dependentApiKeyNames.length.toString()} dependent API key(s): ${dialog.dependentApiKeyNames.join(", ")}.`,
+                  ],
+                )
+              : "",
             createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
               createElement(
                 "button",

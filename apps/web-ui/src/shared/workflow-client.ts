@@ -45,6 +45,7 @@ const EndpointPath = {
   ExecutionsRunNode: "/workflows/executions/run-node",
   ExecutionsStreamNode: "/workflows/executions/stream-node",
   ProvidersTest: "/workflows/providers/test",
+  ExternalApiKeyDependencies: "/settings/api-keys/workflow-dependencies",
 } as const;
 
 export type WorkflowVersionRestorePart =
@@ -200,6 +201,9 @@ export type WorkflowRunStreamEvent =
     };
 
 export type WorkflowClient = {
+  listExternalApiKeyDependencies: (input: {
+    workflowId: string;
+  }) => Promise<ReadonlyArray<{ id: string; name: string }>>;
   listDefinitions: () => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
   getDefinition: (input: {
     workflowId: string;
@@ -302,6 +306,12 @@ export type WorkflowClient = {
 };
 
 export const createWorkflowClient = (): WorkflowClient => ({
+  listExternalApiKeyDependencies: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeyDependencies,
+      body: { workflowId: input.workflowId },
+      parse: parseExternalApiKeyDependenciesResponse,
+    }),
   listDefinitions: () =>
     requestJson({
       path: EndpointPath.DefinitionsList,
@@ -565,6 +575,24 @@ export const createWorkflowClient = (): WorkflowClient => ({
       parse: parseWorkflowNodeProviderTestResponse,
     }),
 });
+
+const parseExternalApiKeyDependenciesResponse = (
+  value: unknown,
+): ReadonlyArray<{ id: string; name: string }> => {
+  const record = ensureRecord(value, "externalApiKeyDependenciesResponse");
+  const keys = readRequiredArray(
+    record,
+    "externalApiKeyDependenciesResponse",
+    "keys",
+  );
+  return keys.map((key) => {
+    const item = ensureRecord(key, "externalApiKeyDependency");
+    return {
+      id: readRequiredString(item, "externalApiKeyDependency", "id"),
+      name: readRequiredString(item, "externalApiKeyDependency", "name"),
+    };
+  });
+};
 
 export const parseWorkflowDefinitionListResponse = (
   value: unknown,

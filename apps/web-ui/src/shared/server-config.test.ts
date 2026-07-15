@@ -12,7 +12,7 @@ describe("server config", () => {
     expect(connection.authToken).toBe("");
   });
 
-  it("migrates a stored local web UI dev origin to the backend dev port", () => {
+  it("migrates a stored local UI URL and clears the obsolete stored bearer token", () => {
     const storage = createMemoryStorage({
       iteronix_server_url: "http://localhost:4000/",
       iteronix_auth_token: "custom-token",
@@ -24,10 +24,10 @@ describe("server config", () => {
     );
 
     expect(connection.serverUrl).toBe("http://localhost:4001");
-    expect(connection.authToken).toBe("custom-token");
+    expect(connection.authToken).toBe("");
   });
 
-  it("keeps explicit remote values untouched", () => {
+  it("keeps explicit remote URLs while clearing obsolete stored bearer tokens", () => {
     const storage = createMemoryStorage({
       iteronix_server_url: "https://api.example.com/",
       iteronix_auth_token: "remote-token",
@@ -39,7 +39,7 @@ describe("server config", () => {
     );
 
     expect(connection.serverUrl).toBe("https://api.example.com");
-    expect(connection.authToken).toBe("remote-token");
+    expect(connection.authToken).toBe("");
   });
 
   it("keeps an absent authentication token empty instead of inventing a development credential", () => {
