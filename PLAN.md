@@ -7,6 +7,7 @@
 - [x] Keep only workflow/provider/settings documentation and workflow UI specifications.
 - [x] Ensure the colocated browser client never sends, displays, or persists the internal backend bearer token.
 - [x] Support PostgreSQL-backed global runtime defaults plus persisted per-workflow overrides for limits and notifications.
+- [x] Migrate persisted legacy workflow asset scopes to the global catalog during PostgreSQL state loading.
 - [x] Serve the workflow UI from the colocated server container and validate deep links in CI.
 
 ## Acceptance

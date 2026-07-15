@@ -4842,3 +4842,12 @@
 - Commands: RED/GREEN focused Vitest suites for static serving, workflow assets, debug execution, and source inventory.
 - Issues/Risks: Legacy `workspace` strings remain solely in the PostgreSQL migration fallback and explicit negative regression assertions. The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
 - Next: Run clean full validation, Docker/browser runtime checks, native bounded review, commit, and push.
+
+### 2026-07-15 17:14 (Europe/Madrid) — Legacy asset-scope compatibility
+
+- Summary: Fixed the workflow editor load failure reported against an existing PostgreSQL database.
+- Decisions: Retain strict browser rejection of unsupported asset scopes, but normalize the only known persisted legacy value (`workspace`) to the workflow-only global scope while state is loaded server-side.
+- Changes: Added RED→GREEN PostgreSQL state parsing coverage and migrated legacy asset records before catalog hydration.
+- Commands: RED/GREEN `pnpm exec vitest run apps/server-api/src/postgres-application-state.test.ts`; `pnpm typecheck`; Docker runtime request against the existing legacy database verified the API returns `global`.
+- Issues/Risks: The legacy database row remains readable under its compatibility key until the next normal persistence write creates the canonical application record; no browser request now receives `workspace` assets.
+- Next: Run complete gates, commit, and push the compatibility fix.

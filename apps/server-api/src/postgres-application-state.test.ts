@@ -66,6 +66,34 @@ describe("PostgreSQL application state store", () => {
     expect(client.calls[1]?.values).toEqual([LegacyStateKey]);
   });
 
+  it("migrates legacy workspace asset scopes while loading PostgreSQL state", () => {
+    const state = createDefaultApplicationState();
+    const parsed = parseApplicationState({
+      ...state,
+      workflows: {
+        ...state.workflows,
+        assets: [
+          {
+            id: "asset-1",
+            kind: "prompt",
+            scope: "workspace",
+            name: "Legacy prompt",
+            slug: "legacy-prompt",
+            description: "",
+            body: "Prompt",
+            language: "en",
+            version: 1,
+            tags: [],
+            createdAt: "2026-07-15T00:00:00.000Z",
+            updatedAt: "2026-07-15T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(parsed.workflows.assets[0]?.scope).toBe("global");
+  });
+
   it("upserts normalized state into PostgreSQL instead of a local file", async () => {
     const client = createClient([]);
     const store = createPostgresApplicationStateStore(client);

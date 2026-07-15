@@ -1,4 +1,7 @@
-import { createDefaultWorkflowCatalogState } from "../../../packages/shared/src/workflows";
+import {
+  createDefaultWorkflowCatalogState,
+  WorkflowAssetScope,
+} from "../../../packages/shared/src/workflows";
 import type { WorkflowCatalogState } from "../../../packages/shared/src/workflows";
 import type { ProviderSelection, ProviderSettingsRecord } from "./providers";
 import {
@@ -59,6 +62,7 @@ export type ApplicationStateStore = {
 
 const DefaultProfileId = "default";
 const DefaultMaxLoops = 50;
+const LegacyWorkflowAssetScope = "workspace";
 
 export const createDefaultApplicationState = (): ApplicationState => {
   const now = new Date().toISOString();
@@ -291,7 +295,7 @@ const readWorkflowCatalogState = (value: unknown): WorkflowCatalogState => {
       value["definitionVersions"],
     ) as NonNullable<WorkflowCatalogState["definitionVersions"]>,
     assets: readJsonRecordArray(
-      value["assets"],
+      migrateLegacyWorkflowAssetScopes(value["assets"]),
     ) as WorkflowCatalogState["assets"],
     assetUsages: readJsonRecordArray(
       value["assetUsages"],
@@ -300,6 +304,18 @@ const readWorkflowCatalogState = (value: unknown): WorkflowCatalogState => {
       value["executions"],
     ) as WorkflowCatalogState["executions"],
   };
+};
+
+const migrateLegacyWorkflowAssetScopes = (value: unknown): unknown => {
+  if (!isUnknownArray(value)) {
+    return value;
+  }
+
+  return value.map((asset) =>
+    isRecord(asset) && asset["scope"] === LegacyWorkflowAssetScope
+      ? { ...asset, scope: WorkflowAssetScope.Global }
+      : asset,
+  );
 };
 
 const readJsonRecordArray = (value: unknown): ReadonlyArray<JsonRecord> =>
@@ -440,6 +456,9 @@ const readNonNegativeInteger = (
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isUnknownArray = (value: unknown): value is ReadonlyArray<unknown> =>
+  Array.isArray(value);
 
 const isJsonRecord = (value: JsonValue): value is JsonRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
