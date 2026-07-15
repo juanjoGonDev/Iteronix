@@ -1,4 +1,5 @@
 import { requestJson, streamText } from "./server-api-client.js";
+import { WorkflowAssetScope } from "../screens/workflows-editor-state.js";
 import type {
   WorkflowAlertRecord,
   WorkflowAssetRecord,
@@ -1303,6 +1304,11 @@ const parseWorkflowDefinitionRecord = (
     "workflowDefinitionRecord",
     "executionPolicy",
   ) as WorkflowDefinitionRecord["executionPolicy"],
+  ...(readWorkflowRuntimeSettingsOverride(value)
+    ? {
+        runtimeSettingsOverride: readWorkflowRuntimeSettingsOverride(value)!,
+      }
+    : {}),
   defaultContextPolicy: readRequiredRecord(
     value,
     "workflowDefinitionRecord",
@@ -1310,6 +1316,34 @@ const parseWorkflowDefinitionRecord = (
   ) as WorkflowDefinitionRecord["defaultContextPolicy"],
   tags: readRequiredStringArray(value, "workflowDefinitionRecord", "tags"),
 });
+
+const readWorkflowRuntimeSettingsOverride = (
+  value: Record<string, unknown>,
+): WorkflowDefinitionRecord["runtimeSettingsOverride"] => {
+  const candidate = value["runtimeSettingsOverride"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return undefined;
+  }
+
+  const record = ensureRecord(candidate, "workflowRuntimeSettingsOverride");
+  return {
+    ...(typeof record["infiniteLoops"] === "boolean"
+      ? { infiniteLoops: record["infiniteLoops"] }
+      : {}),
+    ...(typeof record["maxLoops"] === "number"
+      ? { maxLoops: record["maxLoops"] }
+      : {}),
+    ...(typeof record["externalCalls"] === "boolean"
+      ? { externalCalls: record["externalCalls"] }
+      : {}),
+    ...(typeof record["soundEnabled"] === "boolean"
+      ? { soundEnabled: record["soundEnabled"] }
+      : {}),
+    ...(typeof record["webhookUrl"] === "string"
+      ? { webhookUrl: record["webhookUrl"] }
+      : {}),
+  };
+};
 
 const parseWorkflowDefinitionVersionRecord = (
   value: Record<string, unknown>,
@@ -1400,11 +1434,9 @@ const parseWorkflowAssetRecord = (
       "workflowAssetRecord",
       "kind",
     ) as WorkflowAssetRecord["kind"],
-    scope: readRequiredString(
-      value,
-      "workflowAssetRecord",
-      "scope",
-    ) as WorkflowAssetRecord["scope"],
+    scope: parseWorkflowAssetScope(
+      readRequiredString(value, "workflowAssetRecord", "scope"),
+    ),
     name: readRequiredString(value, "workflowAssetRecord", "name"),
     slug: readRequiredString(value, "workflowAssetRecord", "slug"),
     description: readRequiredString(
@@ -1422,6 +1454,16 @@ const parseWorkflowAssetRecord = (
     updatedAt: readRequiredString(value, "workflowAssetRecord", "updatedAt"),
     ...(archivedAt ? { archivedAt } : {}),
   };
+};
+
+const parseWorkflowAssetScope = (
+  value: string,
+): WorkflowAssetRecord["scope"] => {
+  if (value === WorkflowAssetScope.Global) {
+    return value;
+  }
+
+  throw new Error(`Invalid workflowAssetRecord.scope: ${value}`);
 };
 
 const parseWorkflowAssetUsageRecord = (

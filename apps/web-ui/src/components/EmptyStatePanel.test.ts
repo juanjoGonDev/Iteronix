@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EmptyStatePanel } from "./WorkbenchPanels.js";
+import { EmptyStatePanel } from "./EmptyStatePanel.js";
 
 describe("empty state panel", () => {
   it("constructs the workflow-only empty-state primitive", () => {

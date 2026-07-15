@@ -15,14 +15,14 @@ import {
 const BaseTime = "2026-05-06T18:00:00.000Z";
 
 describe("workflow catalog store", () => {
-  it("exposes one global asset catalog without a workspace filter", () => {
+  it("exposes one global asset catalog without a scope filter", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     store.upsertAsset({
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Global prompt",
       slug: "global-prompt",
       description: "Prompt",
@@ -32,7 +32,7 @@ describe("workflow catalog store", () => {
     });
     store.upsertAsset({
       kind: WorkflowAssetKind.Instruction,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Global instruction",
       slug: "global-instruction",
       description: "Instruction",
@@ -44,7 +44,7 @@ describe("workflow catalog store", () => {
     expect(store.listAssets()).toHaveLength(2);
   });
 
-  it("stores workflow catalog records without a project scope", () => {
+  it("stores workflow catalog records without a legacy scope", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
@@ -64,7 +64,7 @@ describe("workflow catalog store", () => {
 
     const promptAsset = store.upsertAsset({
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Planner prompt",
       slug: "planner-prompt",
       description: "Prompt",
@@ -75,7 +75,7 @@ describe("workflow catalog store", () => {
 
     const guardrailAsset = store.upsertAsset({
       kind: WorkflowAssetKind.Guardrail,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Groundedness",
       slug: "groundedness",
       description: "Guard",
@@ -176,7 +176,7 @@ describe("workflow catalog store", () => {
 
     const asset = store.upsertAsset({
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Planner prompt",
       slug: "planner-prompt",
       description: "Prompt",
@@ -235,14 +235,14 @@ describe("workflow catalog store", () => {
     expect(() => store.deleteAsset(asset.id)).toThrowError(/referenced/i);
   });
 
-  it("lists all workflow assets in the same workspace", () => {
+  it("lists all workflow assets in the global catalog", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     store.upsertAsset({
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Shared prompt",
       slug: "shared-prompt",
       description: "Prompt",
@@ -252,17 +252,17 @@ describe("workflow catalog store", () => {
     });
     store.upsertAsset({
       kind: WorkflowAssetKind.Instruction,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Workflow instruction",
       slug: "workflow-instruction",
       description: "Instruction",
-      body: "Project",
+      body: "Shared",
       language: "en",
       tags: [],
     });
     store.upsertAsset({
       kind: WorkflowAssetKind.Instruction,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Other instruction",
       slug: "other-instruction",
       description: "Instruction",

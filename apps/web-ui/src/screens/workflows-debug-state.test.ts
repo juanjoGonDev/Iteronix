@@ -540,7 +540,6 @@ describe("workflows debug state", () => {
     expect(
       readWorkflowStepExecutionAvailability({
         hasNodeSelection: true,
-        hasCurrentProject: true,
         hasCurrentWorkflow: true,
         hasDirtyWorkflow: false,
         dirtyAssetCount: 0,
@@ -560,7 +559,6 @@ describe("workflows debug state", () => {
     expect(
       readWorkflowNodeHoverRunControlState({
         hasTargetNode: true,
-        hasCurrentProject: true,
         hasCurrentWorkflow: true,
         hasDirtyWorkflow: false,
         dirtyAssetCount: 0,

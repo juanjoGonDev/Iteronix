@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
-import { LocalStorageKey as ServerStorageKey } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
@@ -21,7 +20,7 @@ import {
 
 const ValidationConfig = {
   PreviewBaseUrl: "http://127.0.0.1:4000",
-  StubApiBaseUrl: "http://127.0.0.1:4104",
+  StubApiBaseUrl: "http://127.0.0.1:4001",
   PreviewHealthPath: "/index.html",
   StubHealthPath: "/health",
   SettingsRoute: ROUTES.SETTINGS,
@@ -54,15 +53,13 @@ const ValidationText = {
   ProviderHeading: "Provider profiles",
   SaveChanges: "Save changes",
   TestPayload: "Test payload",
-  CheckConnection: "Check connection",
   AnthropicProfileName: "Claude Coder",
   AnthropicModelId: "claude-sonnet-4-20250514",
-  NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
+  NotificationsUrl: "http://127.0.0.1:4001/webhook/test",
   SaveNotice: "Settings saved.",
   SettingsServerBackedNotice:
-    "Provider profiles, workflow limits, and notifications persist on the current server workspace.",
+    "Provider profiles, workflow limits, and notifications persist in PostgreSQL.",
   WebhookNotice: "Webhook test payload delivered successfully.",
-  ConnectionNotice: "Connection OK.",
 } as const;
 
 const ProviderKind = {
@@ -71,8 +68,6 @@ const ProviderKind = {
   Anthropic: "anthropic",
   Ollama: "ollama",
 } as const;
-
-const ValidationAuthToken = "settings-validation-token";
 
 type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
@@ -85,7 +80,7 @@ type ProviderSettingsRequestRecord = {
 type StubServerState = {
   providerSettingsRequests: ProviderSettingsRequestRecord[];
   webhookPayloadCount: number;
-  workspaceSettings: Record<string, unknown>;
+  applicationSettings: Record<string, unknown>;
 };
 
 const runtimeOptions = parseBrowserValidationRuntimeOptions(
@@ -136,7 +131,6 @@ async function validateSettingsScreen(): Promise<void> {
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(page, false);
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -204,7 +198,7 @@ async function validateSettingsScreen(): Promise<void> {
     assertNoRuntimeProviderSyncRequests(
       stubServer.state.providerSettingsRequests,
     );
-    assertPersistedWorkspaceSettings(stubServer.state.workspaceSettings);
+    assertPersistedApplicationSettings(stubServer.state.applicationSettings);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -258,12 +252,6 @@ async function validateSettingsScreen(): Promise<void> {
       ValidationText.NotificationsUrl,
     );
     await clickNamedButton(page, "API Access");
-    await waitForInputValue(
-      page,
-      "settings-server-url",
-      ValidationConfig.StubApiBaseUrl,
-    );
-    await waitForInputValue(page, "settings-auth-token", ValidationAuthToken);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -277,7 +265,6 @@ async function validateSettingsScreen(): Promise<void> {
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(secondPage, true);
     await secondPage.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -300,19 +287,6 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await waitForSwitchValue(secondPage, "settings-sound-enabled", true);
     await clickNamedButton(secondPage, "API Access");
-    await waitForInputValue(
-      secondPage,
-      "settings-server-url",
-      ValidationConfig.StubApiBaseUrl,
-    );
-    await waitForInputValue(
-      secondPage,
-      "settings-auth-token",
-      ValidationAuthToken,
-    );
-    await waitForButtonEnabled(secondPage, ValidationText.CheckConnection);
-    await clickNamedButton(secondPage, ValidationText.CheckConnection);
-    await waitForPageText(secondPage, ValidationText.ConnectionNotice);
     await clickNamedButton(secondPage, "Providers");
     await waitForPageText(secondPage, ValidationText.AnthropicProfileName);
     await clickElementContainingText(
@@ -456,14 +430,14 @@ async function startSettingsStubServer(): Promise<{
   const state: StubServerState = {
     providerSettingsRequests: [],
     webhookPayloadCount: 0,
-    workspaceSettings: createDefaultWorkspaceSettings(),
+    applicationSettings: createDefaultApplicationSettings(),
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(4104, "127.0.0.1", () => resolve());
+    server.listen(4001, "127.0.0.1", () => resolve());
     server.on("error", (error) => reject(error));
   });
 
@@ -505,19 +479,12 @@ async function handleStubRequest(
     return;
   }
 
-  if (requestUrl.pathname !== RequestPath.Webhook && !isAuthorized(request)) {
-    writeJson(response, 401, {
-      message: "Unauthorized",
-    });
-    return;
-  }
-
   if (
     request.method === "POST" &&
     requestUrl.pathname === RequestPath.SettingsGet
   ) {
     writeJson(response, 200, {
-      settings: state.workspaceSettings,
+      settings: state.applicationSettings,
     });
     return;
   }
@@ -528,10 +495,10 @@ async function handleStubRequest(
   ) {
     const body = await readJsonBody(request);
     if (isRecord(body)) {
-      state.workspaceSettings = body;
+      state.applicationSettings = body;
     }
     writeJson(response, 200, {
-      settings: state.workspaceSettings,
+      settings: state.applicationSettings,
     });
     return;
   }
@@ -600,40 +567,7 @@ async function handleStubRequest(
   });
 }
 
-function isAuthorized(request: IncomingMessage): boolean {
-  return request.headers.authorization === `Bearer ${ValidationAuthToken}`;
-}
-
-async function seedBrowserStorage(
-  page: Page,
-  includeAuthToken: boolean,
-): Promise<void> {
-  await page.evaluateOnNewDocument(
-    (payload: {
-      serverUrl: string;
-      authToken?: string;
-      serverKeys: typeof ServerStorageKey;
-    }) => {
-      window.localStorage.setItem(
-        payload.serverKeys.ServerUrl,
-        payload.serverUrl,
-      );
-      if (payload.authToken) {
-        window.localStorage.setItem(
-          payload.serverKeys.AuthToken,
-          payload.authToken,
-        );
-      }
-    },
-    {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      ...(includeAuthToken ? { authToken: ValidationAuthToken } : {}),
-      serverKeys: ServerStorageKey,
-    },
-  );
-}
-
-function createDefaultWorkspaceSettings(): Record<string, unknown> {
+function createDefaultApplicationSettings(): Record<string, unknown> {
   return {
     profileId: "default",
     providerProfiles: [
@@ -670,12 +604,12 @@ function assertNoRuntimeProviderSyncRequests(
   }
 }
 
-function assertPersistedWorkspaceSettings(
+function assertPersistedApplicationSettings(
   settings: Record<string, unknown>,
 ): void {
   if (!isRecord(settings["workflowLimits"])) {
     throw new Error(
-      "Expected workflow limits to persist in workspace settings.",
+      "Expected workflow limits to persist in application settings.",
     );
   }
 
@@ -693,7 +627,9 @@ function assertPersistedWorkspaceSettings(
   }
 
   if (!isRecord(settings["notifications"])) {
-    throw new Error("Expected notifications to persist in workspace settings.");
+    throw new Error(
+      "Expected notifications to persist in application settings.",
+    );
   }
 
   const notifications = settings["notifications"];
@@ -1110,7 +1046,7 @@ function writeJson(
 function createCorsHeaders(): Record<string, string> {
   return {
     [ResponseHeader.AllowOrigin]: "*",
-    [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
+    [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

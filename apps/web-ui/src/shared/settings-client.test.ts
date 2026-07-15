@@ -7,7 +7,7 @@ import {
 import { createDefaultSettingsSnapshot } from "./settings-storage.js";
 
 describe("settings client codecs", () => {
-  it("parses the settings-only response without a workspace wrapper", () => {
+  it("parses the settings-only response without an application wrapper", () => {
     const settings = createDefaultSettingsSnapshot();
 
     expect(parseSettingsResponse({ settings })).toEqual(settings);

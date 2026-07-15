@@ -62,7 +62,7 @@ describe("workflows editor state", () => {
     ]);
   });
 
-  it("creates workflow workspace prompt and guardrail assets", () => {
+  it("creates global workflow prompt and guardrail assets", () => {
     const prompt = createWorkflowAssetDraft({
       kind: WorkflowAssetKind.Prompt,
       idFactory: () => "prompt-asset",
@@ -73,7 +73,7 @@ describe("workflows editor state", () => {
     });
 
     expect(prompt.kind).toBe(WorkflowAssetKind.Prompt);
-    expect(prompt.scope).toBe("workspace");
+    expect(prompt.scope).toBe("global");
     expect(prompt.outputContract?.schema.properties?.["result"]?.type).toBe(
       "string",
     );

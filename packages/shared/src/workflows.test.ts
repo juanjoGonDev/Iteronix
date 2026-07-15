@@ -4,6 +4,7 @@ import {
   WorkflowTriggerKind,
   createDefaultWorkflowCatalogState,
   isWorkflowTriggerKindSupportedInMvp,
+  resolveWorkflowRuntimeSettings,
 } from "./workflows";
 
 describe("workflow shared contracts", () => {
@@ -37,5 +38,30 @@ describe("workflow shared contracts", () => {
     expect(isWorkflowTriggerKindSupportedInMvp(WorkflowTriggerKind.Init)).toBe(
       false,
     );
+  });
+
+  it("merges a workflow runtime override onto application defaults", () => {
+    expect(
+      resolveWorkflowRuntimeSettings(
+        {
+          infiniteLoops: false,
+          maxLoops: 50,
+          externalCalls: true,
+          soundEnabled: true,
+          webhookUrl: "",
+        },
+        {
+          maxLoops: 12,
+          externalCalls: false,
+          webhookUrl: "https://notify.example.com/workflows",
+        },
+      ),
+    ).toEqual({
+      infiniteLoops: false,
+      maxLoops: 12,
+      externalCalls: false,
+      soundEnabled: true,
+      webhookUrl: "https://notify.example.com/workflows",
+    });
   });
 });

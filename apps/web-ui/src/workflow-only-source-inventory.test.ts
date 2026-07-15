@@ -10,6 +10,8 @@ const RemovedSourcePaths = [
   "components/KanbanPrimitives.ts",
   "components/OverviewPrimitives.test.ts",
   "components/OverviewPrimitives.ts",
+  "components/WorkbenchPanels.test.ts",
+  "components/WorkbenchPanels.ts",
   "screens/Dashboard.ts",
   "screens/Explorer.ts",
   "screens/History.ts",
@@ -50,7 +52,13 @@ const RemovedSourcePaths = [
   "shared/workbench-history.ts",
   "shared/workbench-types.ts",
   "shared/workspace-state-client.ts",
+  "shared/server-config.test.ts",
+  "shared/server-config.ts",
   "shared/types.ts",
+  "screens/settings-save-connection.test.ts",
+  "screens/settings-save-connection.ts",
+  "screens/workflows-auth-bootstrap.test.ts",
+  "screens/workflows-auth-bootstrap.ts",
 ] as const;
 
 const RemovedScriptPaths = [
@@ -99,6 +107,18 @@ describe("workflow-only web source inventory", () => {
     expect(source).not.toContain("workspace-state-client");
   });
 
+  it("does not retain browser-configured backend credentials", () => {
+    const sourcePaths = readSourcePaths(WebSourceRoot);
+    const source = sourcePaths
+      .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts"))
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
+    expect(source).not.toContain("iteronix_auth_token");
+    expect(source).not.toContain("settings-auth-token");
+    expect(source).not.toContain("Authorization: `Bearer");
+  });
+
   it("keeps workflow creation and selection in the catalog, not the editor", () => {
     const catalogSource = readFileSync(
       join(WebSourceRoot, "screens", "WorkflowsCatalog.ts"),
@@ -139,3 +159,9 @@ const readEmittedPaths = (directory: string): ReadonlyArray<string> => {
     return statSync(path).isDirectory() ? readEmittedPaths(path) : [path];
   });
 };
+
+const readSourcePaths = (directory: string): ReadonlyArray<string> =>
+  readdirSync(directory).flatMap((entry) => {
+    const path = join(directory, entry);
+    return statSync(path).isDirectory() ? readSourcePaths(path) : [path];
+  });

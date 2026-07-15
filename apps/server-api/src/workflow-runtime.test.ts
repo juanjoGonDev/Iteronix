@@ -7,7 +7,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowNodeRecord,
 } from "../../../packages/shared/src/workflows";
-import { createDefaultWorkspaceState } from "./workspace-state";
+import { createDefaultApplicationState } from "./application-state";
 import {
   createWorkflowRuntimeService,
   resolveProviderApiKey,
@@ -32,7 +32,7 @@ describe("workflow runtime provider adapters", () => {
   it("rejects the legacy Codex profile before attempting a CLI invocation in fresh state", async () => {
     const node = createProviderNode();
     const runtime = createWorkflowRuntimeService({
-      readWorkspaceState: createDefaultWorkspaceState,
+      readApplicationState: createDefaultApplicationState,
     });
 
     const result = await runtime.testProviderNode({

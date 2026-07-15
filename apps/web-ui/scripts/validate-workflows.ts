@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
-import { LocalStorageKey as ServerStorageKey } from "../src/shared/server-config.js";
 import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
@@ -21,7 +20,7 @@ import {
 
 const ValidationConfig = {
   PreviewBaseUrl: "http://127.0.0.1:4000",
-  StubApiBaseUrl: "http://127.0.0.1:4108",
+  StubApiBaseUrl: "http://127.0.0.1:4001",
   PreviewHealthPath: "/index.html",
   StubHealthPath: "/health",
   WorkflowsRoute: ROUTES.WORKFLOWS,
@@ -63,8 +62,6 @@ const RequestPath = {
   ExecutionsDelete: "/workflows/executions/delete",
   ExecutionsStreamNode: "/workflows/executions/stream-node",
 } as const;
-
-const ValidationAuthToken = "workflows-validation-token";
 
 const ResponseHeader = {
   AllowOrigin: "Access-Control-Allow-Origin",
@@ -243,7 +240,7 @@ type WorkflowNodeKind =
 type StubWorkflowAssetRecord = {
   id: string;
   kind: "prompt" | "instruction" | "guardrail";
-  scope: "workspace";
+  scope: "global";
   name: string;
   slug: string;
   description: string;
@@ -455,7 +452,7 @@ const ValidationText = {
   ExecutionPrimaryStartedAt: "2026-05-06T08:16:00.000Z",
   ExecutionSecondaryStartedAt: "2026-05-06T08:20:00.000Z",
   ExecutionCleanStartedAt: "2026-05-06T08:12:00.000Z",
-  WorkflowSavedNotice: "Workflow saved to the server workspace.",
+  WorkflowSavedNotice: "Workflow saved to PostgreSQL.",
   ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
   ConnectionHintTitle: "Connect nodes",
@@ -519,7 +516,6 @@ async function validateWorkflowsScreen(): Promise<void> {
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(page);
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
       {
@@ -1392,7 +1388,7 @@ async function startWorkflowStubServer(): Promise<{
   close: () => Promise<void>;
 }> {
   const state: StubServerState = {
-    settings: createDefaultWorkspaceSettings(),
+    settings: createDefaultApplicationSettings(),
     definitions: [],
     definitionVersions: [],
     assets: [],
@@ -1407,7 +1403,7 @@ async function startWorkflowStubServer(): Promise<{
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(4108, "127.0.0.1", () => resolve());
+    server.listen(4001, "127.0.0.1", () => resolve());
     server.on("error", (error) => reject(error));
   });
 
@@ -1446,13 +1442,6 @@ async function handleStubRequest(
   if (request.method === "OPTIONS") {
     response.writeHead(204, createCorsHeaders());
     response.end();
-    return;
-  }
-
-  if (!isAuthorized(request)) {
-    writeJson(response, 401, {
-      message: "Unauthorized",
-    });
     return;
   }
 
@@ -2097,7 +2086,7 @@ function upsertStubExecution(
   );
 }
 
-function createDefaultWorkspaceSettings(): Record<string, unknown> {
+function createDefaultApplicationSettings(): Record<string, unknown> {
   return {
     profileId: "default",
     providerProfiles: [
@@ -2297,29 +2286,6 @@ function readAssetUsages(
   );
 }
 
-async function seedBrowserStorage(page: Page): Promise<void> {
-  await page.evaluateOnNewDocument(
-    (payload: {
-      serverUrl: string;
-      authToken: string;
-      serverKeys: typeof ServerStorageKey;
-    }) => {
-      window.localStorage.setItem(
-        payload.serverKeys.ServerUrl,
-        payload.serverUrl,
-      );
-      window.localStorage.setItem(
-        payload.serverKeys.AuthToken,
-        payload.authToken,
-      );
-    },
-    {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: ValidationAuthToken,
-      serverKeys: ServerStorageKey,
-    },
-  );
-}
 async function clickByTestId(page: Page, testId: string): Promise<void> {
   const clicked = await page.evaluate((selector: string) => {
     const element = document.querySelector(`[data-testid="${selector}"]`);
@@ -3481,11 +3447,6 @@ function normalizeRequestChunk(chunk: unknown): Buffer | null {
   return null;
 }
 
-function isAuthorized(request: IncomingMessage): boolean {
-  void request;
-  return true;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -3890,7 +3851,7 @@ function readAssetScopeValue(
   key: string,
 ): StubWorkflowAssetRecord["scope"] {
   const nested = readRequiredString(value, key);
-  if (nested === "workspace") {
+  if (nested === "global") {
     return nested;
   }
   throw new Error(`Invalid ${key}`);
@@ -3911,7 +3872,7 @@ function writeJson(
 function createCorsHeaders(): Record<string, string> {
   return {
     [ResponseHeader.AllowOrigin]: "*",
-    [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
+    [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

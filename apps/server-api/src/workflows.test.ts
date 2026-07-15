@@ -1050,7 +1050,7 @@ const createWorkflowDefinitionInput = (assetId = "asset-1") => ({
 
 const createWorkflowAssetInput = () => ({
   kind: WorkflowAssetKind.Prompt,
-  scope: WorkflowAssetScope.Workspace,
+  scope: WorkflowAssetScope.Global,
   name: "Planner prompt",
   slug: "planner-prompt",
   description: "Prompt",

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 
 const EnvironmentFileName = ".env";
-const WorkspaceManifestFileName = "pnpm-workspace.yaml";
+const PackageManifestFileName = "pnpm-workspace.yaml";
 
 export const resolveRepositoryEnvPath = (
   executionDirectory: string,
@@ -14,7 +14,7 @@ const findRepositoryRoot = (executionDirectory: string): string => {
   let candidateDirectory = resolve(executionDirectory);
 
   while (candidateDirectory !== parse(candidateDirectory).root) {
-    if (existsSync(join(candidateDirectory, WorkspaceManifestFileName))) {
+    if (existsSync(join(candidateDirectory, PackageManifestFileName))) {
       return candidateDirectory;
     }
 

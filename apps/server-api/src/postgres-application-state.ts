@@ -1,12 +1,13 @@
 import { Pool, type PoolConfig } from "pg";
 import {
-  parseWorkspaceState,
-  redactWorkspaceState,
-  type WorkspaceState,
-  type WorkspaceStateStore,
-} from "./workspace-state";
+  parseApplicationState,
+  redactApplicationState,
+  type ApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 
-const WorkspaceStateKey = "workspace";
+const ApplicationStateKey = "application";
+const LegacyApplicationStateKey = "workspace";
 const CreateStateTableSql = `
   CREATE TABLE IF NOT EXISTS app_state (
     key TEXT PRIMARY KEY,
@@ -32,29 +33,35 @@ type QueryResult = {
   rows: ReadonlyArray<{ value?: unknown; revision?: unknown }>;
 };
 
-export type PostgresWorkspaceStateClient = {
+export type PostgresApplicationStateClient = {
   query: (
     text: string,
     values?: ReadonlyArray<unknown>,
   ) => Promise<QueryResult>;
 };
 
-export type PostgresWorkspaceStateStore = WorkspaceStateStore & {
+export type PostgresApplicationStateStore = ApplicationStateStore & {
   initialize: () => Promise<void>;
 };
 
-export const createPostgresWorkspaceStateStore = (
-  client: PostgresWorkspaceStateClient,
-): PostgresWorkspaceStateStore => {
+export const createPostgresApplicationStateStore = (
+  client: PostgresApplicationStateClient,
+): PostgresApplicationStateStore => {
   let saveQueue: Promise<unknown> = Promise.resolve();
   let knownRevision = 0;
   const initialize = async (): Promise<void> => {
     await client.query(CreateStateTableSql);
   };
 
-  const load = async (): Promise<WorkspaceState> => {
-    const result = await client.query(LoadStateSql, [WorkspaceStateKey]);
-    const state = parseWorkspaceState(result.rows[0]?.value);
+  const load = async (): Promise<ApplicationState> => {
+    const applicationResult = await client.query(LoadStateSql, [
+      ApplicationStateKey,
+    ]);
+    const result =
+      applicationResult.rows.length > 0
+        ? applicationResult
+        : await client.query(LoadStateSql, [LegacyApplicationStateKey]);
+    const state = parseApplicationState(result.rows[0]?.value);
     const revision = result.rows[0]?.revision;
     const loaded = {
       ...state,
@@ -64,7 +71,7 @@ export const createPostgresWorkspaceStateStore = (
     return loaded;
   };
 
-  const save = (state: WorkspaceState): Promise<WorkspaceState> => {
+  const save = (state: ApplicationState): Promise<ApplicationState> => {
     const pendingSave = saveQueue
       .catch(() => undefined)
       .then(() => saveState(state));
@@ -73,8 +80,8 @@ export const createPostgresWorkspaceStateStore = (
   };
 
   const update = async (
-    updater: (state: WorkspaceState) => WorkspaceState,
-  ): Promise<WorkspaceState> => save(updater(await load()));
+    updater: (state: ApplicationState) => ApplicationState,
+  ): Promise<ApplicationState> => save(updater(await load()));
 
   return {
     initialize,
@@ -83,16 +90,16 @@ export const createPostgresWorkspaceStateStore = (
     update,
   };
 
-  async function saveState(state: WorkspaceState): Promise<WorkspaceState> {
-    const normalized = parseWorkspaceState(state);
+  async function saveState(state: ApplicationState): Promise<ApplicationState> {
+    const normalized = parseApplicationState(state);
     const expectedRevision = Math.max(normalized.revision, knownRevision);
     const nextRevision = expectedRevision + 1;
-    const persisted = redactWorkspaceState({
+    const persisted = redactApplicationState({
       ...normalized,
       revision: nextRevision,
     });
     const result = await client.query(SaveStateSql, [
-      WorkspaceStateKey,
+      ApplicationStateKey,
       JSON.stringify(persisted),
       nextRevision,
       expectedRevision,
@@ -100,7 +107,7 @@ export const createPostgresWorkspaceStateStore = (
     const returnedRevision = result.rows[0]?.revision;
     const revision = readRevision(returnedRevision);
     if (revision === undefined) {
-      throw new Error("Workspace state revision conflict");
+      throw new Error("Application state revision conflict");
     }
 
     knownRevision = revision;

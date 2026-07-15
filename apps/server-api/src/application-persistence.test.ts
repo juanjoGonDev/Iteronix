@@ -8,21 +8,21 @@ import {
   WorkflowTriggerKind,
 } from "../../../packages/shared/src/workflows";
 import { createProviderStore } from "./providers";
-import { createWorkspacePersistence } from "./server";
+import { createApplicationPersistence } from "./server";
 import {
-  createDefaultWorkspaceState,
-  type WorkspaceState,
-  type WorkspaceStateStore,
-} from "./workspace-state";
+  createDefaultApplicationState,
+  type ApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 
-describe("workspace persistence mutations", () => {
+describe("application persistence mutations", () => {
   it("rolls back a rejected workflow definition before a later save", async () => {
     const fixture = createPersistenceFixture();
 
     fixture.catalog.upsertWorkflow(createWorkflowDefinitionInput());
 
     await expect(fixture.persistence.saveCurrent()).rejects.toThrow(
-      "Workspace state revision conflict",
+      "Application state revision conflict",
     );
     expect(fixture.catalog.listWorkflows()).toEqual([]);
 
@@ -42,7 +42,7 @@ describe("workspace persistence mutations", () => {
     expect(selected.type).toBe("ok");
 
     await expect(fixture.persistence.saveCurrent()).rejects.toThrow(
-      "Workspace state revision conflict",
+      "Application state revision conflict",
     );
     expect(fixture.providerStore.snapshot().selections).toEqual([]);
 
@@ -67,7 +67,7 @@ describe("workspace persistence mutations", () => {
     fixture.rejectFirstSave();
 
     await expect(rejectedSave).rejects.toThrow(
-      "Workspace state revision conflict",
+      "Application state revision conflict",
     );
     await laterSave;
 
@@ -77,19 +77,19 @@ describe("workspace persistence mutations", () => {
 });
 
 const createPersistenceFixture = () => {
-  const initialState = createDefaultWorkspaceState();
+  const initialState = createDefaultApplicationState();
   const catalog = createWorkflowCatalogStore({
     now: () => new Date("2026-07-13T00:00:00.000Z"),
   });
   const providerStore = createProviderStore();
-  const savedStates: WorkspaceState[] = [];
+  const savedStates: ApplicationState[] = [];
   let rejectNextSave = true;
-  const stateStore: WorkspaceStateStore = {
+  const stateStore: ApplicationStateStore = {
     load: async () => initialState,
     save: async (state) => {
       if (rejectNextSave) {
         rejectNextSave = false;
-        throw new Error("Workspace state revision conflict");
+        throw new Error("Application state revision conflict");
       }
 
       const saved = { ...state, revision: state.revision + 1 };
@@ -98,7 +98,7 @@ const createPersistenceFixture = () => {
     },
     update: async (updater) => updater(initialState),
   };
-  const persistence = createWorkspacePersistence({
+  const persistence = createApplicationPersistence({
     stateStore,
     initialState,
     providerStore,
@@ -109,17 +109,17 @@ const createPersistenceFixture = () => {
 };
 
 const createOverlappingPersistenceFixture = () => {
-  const initialState = createDefaultWorkspaceState();
+  const initialState = createDefaultApplicationState();
   const catalog = createWorkflowCatalogStore({
     now: () => new Date("2026-07-13T00:00:00.000Z"),
   });
   const providerStore = createProviderStore();
-  const savedStates: WorkspaceState[] = [];
+  const savedStates: ApplicationState[] = [];
   const firstSave = createDeferred<void>();
   const rejectFirstSave = createDeferred<void>();
   let isFirstSave = true;
   let saveQueue: Promise<void> = Promise.resolve();
-  const stateStore: WorkspaceStateStore = {
+  const stateStore: ApplicationStateStore = {
     load: async () => initialState,
     save: async (state) => {
       const queuedSave = saveQueue.then(async () => {
@@ -127,7 +127,7 @@ const createOverlappingPersistenceFixture = () => {
           isFirstSave = false;
           firstSave.resolve(undefined);
           await rejectFirstSave.promise;
-          throw new Error("Workspace state revision conflict");
+          throw new Error("Application state revision conflict");
         }
 
         const saved = { ...state, revision: state.revision + 1 };
@@ -142,7 +142,7 @@ const createOverlappingPersistenceFixture = () => {
     },
     update: async (updater) => updater(initialState),
   };
-  const persistence = createWorkspacePersistence({
+  const persistence = createApplicationPersistence({
     stateStore,
     initialState,
     providerStore,

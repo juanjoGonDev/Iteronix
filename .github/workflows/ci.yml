@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - codex/**
+      - refactor/**
   pull_request:
     branches:
       - master
@@ -30,6 +31,17 @@ jobs:
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:settings
       - run: pnpm -C apps/web-ui validate:workflows
+      - name: Validate colocated Docker workflow UI
+        env:
+          POSTGRES_DB: iteronix_ci
+          POSTGRES_USER: iteronix_ci
+          POSTGRES_PASSWORD: iteronix_ci_password
+          AUTH_TOKEN: iteronix_ci_internal_token
+          ITERONIX_HTTP_PORT: 4002
+        run: |
+          docker compose up --build --detach --wait
+          curl --fail --silent --show-error http://localhost:4002/workflows/workflow-ci | grep '<script type="module" src="/dist/index.js"></script>'
+          docker compose down --volumes
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

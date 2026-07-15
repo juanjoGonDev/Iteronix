@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  createDefaultWorkspaceState,
-  parseWorkspaceState,
-} from "./workspace-state";
-import { createPostgresWorkspaceStateStore } from "./postgres-workspace-state";
+  createDefaultApplicationState,
+  parseApplicationState,
+} from "./application-state";
+import { createPostgresApplicationStateStore } from "./postgres-application-state";
 import { resolveProviderApiKey } from "./workflow-runtime";
 
 type QueryCall = {
@@ -11,12 +11,13 @@ type QueryCall = {
   values?: ReadonlyArray<unknown>;
 };
 
-const StateKey = "workspace";
+const StateKey = "application";
+const LegacyStateKey = "workspace";
 
-describe("PostgreSQL workspace state store", () => {
+describe("PostgreSQL application state store", () => {
   it("creates the empty workflow baseline when PostgreSQL has no state", async () => {
     const client = createClient([]);
-    const store = createPostgresWorkspaceStateStore(client);
+    const store = createPostgresApplicationStateStore(client);
 
     await store.initialize();
     const state = await store.load();
@@ -35,21 +36,40 @@ describe("PostgreSQL workspace state store", () => {
   it("parses PostgreSQL BIGINT revisions returned as strings", async () => {
     const client = createClient([
       {
-        value: createDefaultWorkspaceState(),
+        value: createDefaultApplicationState(),
         revision: "9007199254740991",
       },
     ]);
-    const store = createPostgresWorkspaceStateStore(client);
+    const store = createPostgresApplicationStateStore(client);
 
     await expect(store.load()).resolves.toMatchObject({
       revision: 9007199254740991,
     });
   });
 
+  it("reads the legacy PostgreSQL key until the application state is next saved", async () => {
+    const legacyState = createDefaultApplicationState();
+    const calls: QueryCall[] = [];
+    const client = {
+      calls,
+      query: async (text: string, values?: ReadonlyArray<unknown>) => {
+        calls.push({ text, ...(values ? { values } : {}) });
+        return values?.[0] === LegacyStateKey
+          ? { rows: [{ value: legacyState, revision: 4 }] }
+          : { rows: [] };
+      },
+    };
+    const store = createPostgresApplicationStateStore(client);
+
+    await expect(store.load()).resolves.toMatchObject({ revision: 4 });
+    expect(client.calls[0]?.values).toEqual([StateKey]);
+    expect(client.calls[1]?.values).toEqual([LegacyStateKey]);
+  });
+
   it("upserts normalized state into PostgreSQL instead of a local file", async () => {
     const client = createClient([]);
-    const store = createPostgresWorkspaceStateStore(client);
-    const state = createDefaultWorkspaceState();
+    const store = createPostgresApplicationStateStore(client);
+    const state = createDefaultApplicationState();
 
     const saved = await store.save(state);
     const saveCall = client.calls.find((call) =>
@@ -65,10 +85,10 @@ describe("PostgreSQL workspace state store", () => {
 
   it("serializes saves, advances revisions, and does not persist credentials", async () => {
     const client = createRevisionedClient();
-    const store = createPostgresWorkspaceStateStore(client);
-    const state = createDefaultWorkspaceState();
+    const store = createPostgresApplicationStateStore(client);
+    const state = createDefaultApplicationState();
 
-    const legacyConnectionState = parseWorkspaceState({
+    const legacyConnectionState = parseApplicationState({
       ...state,
       settings: {
         ...state.settings,
@@ -92,8 +112,8 @@ describe("PostgreSQL workspace state store", () => {
 
   it("retains provider environment references across persistence while removing raw keys", async () => {
     const client = createClient([]);
-    const store = createPostgresWorkspaceStateStore(client);
-    const state = createDefaultWorkspaceState();
+    const store = createPostgresApplicationStateStore(client);
+    const state = createDefaultApplicationState();
 
     await store.save({
       ...state,
@@ -113,7 +133,7 @@ describe("PostgreSQL workspace state store", () => {
     const saveCall = client.calls.find((call) =>
       call.text.includes("INSERT INTO app_state"),
     );
-    const persisted = parseWorkspaceState(
+    const persisted = parseApplicationState(
       JSON.parse(String(saveCall?.values?.[1])),
     );
     const reference = persisted.settings.providerProfiles[0]?.["apiKeyEnvVar"];
@@ -132,10 +152,10 @@ describe("PostgreSQL workspace state store", () => {
 
   it("rejects a stale PostgreSQL state revision instead of overwriting it", async () => {
     const client = createRevisionedClient({ rejectWrites: true });
-    const store = createPostgresWorkspaceStateStore(client);
+    const store = createPostgresApplicationStateStore(client);
 
-    await expect(store.save(createDefaultWorkspaceState())).rejects.toThrow(
-      "Workspace state revision conflict",
+    await expect(store.save(createDefaultApplicationState())).rejects.toThrow(
+      "Application state revision conflict",
     );
   });
 });

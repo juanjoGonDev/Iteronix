@@ -4788,3 +4788,57 @@
 - Commands: RED `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts`; GREEN focused inventory tests and `pnpm typecheck`.
 - Issues/Risks: `.atl/skill-registry.md` remains user-owned and unstaged. The Settings connection form still needs a dedicated follow-up to remove its obsolete token controls while preserving the existing colocated unauthenticated browser path.
 - Next: Run full gates, Docker configuration, native review, commit, and push the destructive cleanup.
+
+### 2026-07-15 16:06 (Europe/Madrid) — Workflow-only completion plan
+
+- Summary: User confirmed that limits and notifications remain in scope only as global defaults with explicit per-workflow overrides.
+- Decisions: Do not remove these controls; move them out of generic workspace Settings into a global workflow runtime policy plus workflow-level override model.
+- Changes: Began the final legacy-artifact cleanup with RED→GREEN source inventory coverage; removed the obsolete UI setup document and AI Workbench bootstrap workflow; removed desktop/obsolete Knip configuration and added `refactor/**` CI triggering.
+- Commands: RED/GREEN `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts`.
+- Issues/Risks: The full completion work remains active: browser token controls, workspace-state naming, workflow policy overrides, Docker web delivery/runtime test, and bounded receipt sequencing are still pending.
+- Next: Implement the colocated token-free browser path before modifying workflow policy persistence.
+
+### 2026-07-15 16:40 (Europe/Madrid) — Colocated workflow delivery
+
+- Summary: Removed browser-managed backend credentials and replaced the final workbench-named UI primitive.
+- Decisions: The browser computes only the colocated backend origin (local development maps port 4000 to 4001) and never stores or sends the internal bearer token; external workflow API keys remain server-managed.
+- Changes: Added token-free browser/source regressions and browser validation updates; packaged the web UI into the server container with SPA deep-link fallback; Compose now uses the Postgres service hostname and supports a non-conflicting configurable host port; CI runs the Docker deep-link check.
+- Commands: RED/GREEN focused Vitest suites; `pnpm typecheck`; `pnpm -C apps/web-ui validate:settings`; `pnpm -C apps/web-ui validate:workflows`; `docker compose config --quiet`; Docker build/up/health/deep-link validation on port 4002.
+- Issues/Risks: Docker initially failed because the production image omitted `pnpm-workspace.yaml`, which the dotenv resolver requires; fixed by copying that manifest. The remaining structural workspace-state rename and global/per-workflow runtime policy overrides are still active.
+- Next: Finish the persisted global/default plus workflow-override execution policy, then rename the persistence model without losing PostgreSQL state.
+
+### 2026-07-15 16:46 (Europe/Madrid) — Workflow runtime overrides
+
+- Summary: Added a persisted workflow runtime override contract layered on existing global Settings defaults.
+- Decisions: Global limits and notifications remain the fallback; each workflow can override external-provider permission, loop limit, and notification webhook in its own editor. Runtime resolves the effective settings before provider invocation and blocks provider calls when the effective workflow policy disables external calls.
+- Changes: Added shared policy merge coverage, propagated overrides through workflow catalog clone/import/upsert paths and the web API codec, and added editor controls in the single-workflow inspector.
+- Commands: RED/GREEN `pnpm vitest run packages/shared/src/workflows.test.ts`; focused shared/editor/runtime tests; `pnpm typecheck`.
+- Issues/Risks: Notification delivery is still configured/persisted per workflow but does not yet dispatch runtime webhook events; this must be completed before the workflow policy work is considered done.
+- Next: Add notification dispatch using the resolved effective policy, then perform the PostgreSQL state terminology migration.
+
+### 2026-07-15 16:50 (Europe/Madrid) — Workflow runtime notifications
+
+- Summary: Completed execution notification delivery for resolved global and workflow-specific webhook settings.
+- Decisions: Notification delivery is best-effort and redacted: only event/status/workflow/execution identifiers leave the server; a webhook outage never changes workflow execution status.
+- Changes: Added a unit-tested notification dispatcher and called it after terminal workflow execution states. Per-workflow overrides now propagate through web codecs and workflow catalog upsert/clone/import paths.
+- Commands: RED/GREEN `pnpm vitest run apps/server-api/src/workflow-notifications.test.ts`; focused shared/runtime suites; `pnpm typecheck`.
+- Issues/Risks: The persistence implementation is still named workspace state despite now holding only application settings, workflows, providers, and API keys.
+- Next: Rename the persistence terminology and PostgreSQL key with a backward-compatible read migration.
+
+### 2026-07-15 16:55 (Europe/Madrid) — Application-state migration
+
+- Summary: Removed the server's active workspace-state terminology without discarding PostgreSQL persistence.
+- Decisions: The canonical JSONB key is now `application`; when it is absent the store reads the former `workspace` key and preserves its revision until the next normal save writes the canonical record.
+- Changes: Renamed state/store/persistence modules and identifiers to application terminology, migrated workflow asset scope from workspace to global, added legacy-key regression coverage, and extended source inventory coverage for removed filenames.
+- Commands: RED/GREEN PostgreSQL persistence tests; focused source inventories; `pnpm typecheck`.
+- Issues/Risks: Historical logs and explicit negative regression assertions retain the word `workspace` only to document/remediate the removed legacy surface; no active product route or state identifier uses it.
+- Next: Run complete validation, inspect remaining terminology/docs, then review, commit, and push.
+
+### 2026-07-15 17:00 (Europe/Madrid) — Workflow-only surface hardening
+
+- Summary: Closed the remaining reachable workflow-only regressions found by the final source audit.
+- Decisions: The colocated server exposes only the UI entry document and built `/dist/` assets; non-product metadata never becomes a generic static-file surface. Workflow assets are globally scoped and reject legacy project-scoped payloads at the browser boundary.
+- Changes: Added RED→GREEN static-file and asset-scope parsing regressions; removed the stale Stagehand multi-surface guide; eliminated active project/workspace/workbench wording from workflow execution, Settings, validators, and generic fixtures; protected the deletion in the source inventory.
+- Commands: RED/GREEN focused Vitest suites for static serving, workflow assets, debug execution, and source inventory.
+- Issues/Risks: Legacy `workspace` strings remain solely in the PostgreSQL migration fallback and explicit negative regression assertions. The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run clean full validation, Docker/browser runtime checks, native bounded review, commit, and push.

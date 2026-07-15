@@ -20,10 +20,6 @@ import {
   type ComponentProps,
 } from "../shared/Component.js";
 import {
-  readServerConnection,
-  type ServerConnection,
-} from "../shared/server-config.js";
-import {
   DefaultSettingsProfileId,
   createDefaultSettingsSnapshot,
   hydrateSettingsSnapshot,
@@ -66,8 +62,6 @@ interface SettingsScreenState {
   selectedProviderId: string | null;
   workflowLimits: WorkflowLimitsSettings;
   notifications: NotificationsSettings;
-  serverConnection: ServerConnection;
-  validatedServerConnection: ServerConnection | null;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
@@ -102,13 +96,13 @@ const ProviderKindDescription: Record<ProviderKind, string> = {
   [ProviderKind.CodexCli]:
     "CLI provider registered in the current backend runtime.",
   [ProviderKind.OpenAI]:
-    "API-based profile persisted in the shared server workspace for future workflow selection.",
+    "API-based profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Anthropic]:
-    "API-based profile persisted in the shared server workspace for future workflow selection.",
+    "API-based profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Ollama]:
-    "Local inference profile persisted in the shared server workspace for future workflow selection.",
+    "Local inference profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Custom]:
-    "Custom OpenAI-compatible API profile persisted in the shared server workspace for future workflow selection.",
+    "Custom OpenAI-compatible API profile persisted in PostgreSQL for future workflow selection.",
 };
 
 const TestWebhookPayload = {
@@ -124,10 +118,7 @@ export class SettingsScreen extends Component<
   private readonly workflowClient = createWorkflowClient();
 
   constructor(props: ComponentProps = {}) {
-    const snapshot = {
-      ...createDefaultSettingsSnapshot(),
-      serverConnection: readServerConnection(),
-    };
+    const snapshot = createDefaultSettingsSnapshot();
     const urlState =
       typeof window === "undefined"
         ? null
@@ -149,8 +140,6 @@ export class SettingsScreen extends Component<
       selectedProviderId,
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
-      serverConnection: snapshot.serverConnection,
-      validatedServerConnection: null,
       runtimeProviders: [],
       isSaving: false,
       isTestingConnection: false,
@@ -193,7 +182,7 @@ export class SettingsScreen extends Component<
         createElement(PageIntro, {
           title: "Settings",
           description:
-            "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench.",
+            "Configure provider profiles, workflow guardrails, and notifications for every workflow.",
         }),
         createElement(PageTabs, {
           sticky: true,
@@ -269,13 +258,13 @@ export class SettingsScreen extends Component<
                 createElement(
                   "h2",
                   { className: "text-lg font-semibold text-white" },
-                  ["Workspace context"],
+                  ["Workflow application"],
                 ),
                 createElement(
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Settings persist provider profiles in the workflow workspace so workflow execution can resolve them without project setup.",
+                    "Settings persist provider profiles in PostgreSQL so workflow execution can resolve them without additional setup.",
                   ],
                 ),
               ]),
@@ -285,8 +274,8 @@ export class SettingsScreen extends Component<
             ],
           ),
           createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
-            renderReadOnlyCell("Scope", "Workflow workspace"),
-            renderReadOnlyCell("Storage", "PostgreSQL workspace state"),
+            renderReadOnlyCell("Scope", "Workflow application"),
+            renderReadOnlyCell("Storage", "PostgreSQL application state"),
             renderReadOnlyCell("Runtime mode", "Workflow only"),
             renderReadOnlyCell(
               "Runtime providers",
@@ -326,7 +315,7 @@ export class SettingsScreen extends Component<
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Provider profiles, workflow limits, and notifications persist on the current server workspace. Server access remains local to this browser.",
+                    "Provider profiles, workflow limits, and notifications persist in PostgreSQL. This browser automatically uses the colocated workflow service.",
                   ],
                 ),
               ]),
@@ -671,10 +660,10 @@ export class SettingsScreen extends Component<
           },
           [
             profile.providerKind === ProviderKind.CodexCli
-              ? "This Codex CLI profile will be pushed to the workflow workspace backend on save so future flow work can resolve it server-side."
+              ? "This Codex CLI profile will be pushed to the workflow backend on save so future workflow execution can resolve it server-side."
               : runtimeAvailable
-                ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
-                : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
+                ? "This API profile persists through the server snapshot and syncs to the backend runtime store on save."
+                : "This provider profile persists through the server snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
           ],
         ),
       ],
@@ -1381,17 +1370,6 @@ export class SettingsScreen extends Component<
       isSaving: true,
     });
 
-    const saveConnection = this.state.serverConnection;
-
-    if (!saveConnection) {
-      this.pushToast(
-        "error",
-        "The colocated backend connection is unavailable.",
-      );
-      this.setState({ isSaving: false });
-      return;
-    }
-
     try {
       const snapshot: SettingsSnapshot = {
         profileId: this.state.profileId || DefaultSettingsProfileId,
@@ -1400,8 +1378,7 @@ export class SettingsScreen extends Component<
         notifications: this.state.notifications,
       };
 
-      const candidateClient = createSettingsClient(saveConnection);
-      const persistedSettings = await candidateClient.update(snapshot);
+      const persistedSettings = await this.settingsClient.update(snapshot);
       hydrateSettingsSnapshot(persistedSettings);
       const selectedProviderId = persistedSettings.providerProfiles.some(
         (profile) => profile.id === this.state.selectedProviderId,
@@ -1422,7 +1399,7 @@ export class SettingsScreen extends Component<
       );
 
       for (const request of syncRequests) {
-        await candidateClient.updateProviderSettings({
+        await this.settingsClient.updateProviderSettings({
           profileId: request.profileId,
           providerId: request.providerId,
           config: request.config,
@@ -1433,7 +1410,7 @@ export class SettingsScreen extends Component<
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;
       this.pushToast(
         "success",
-        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in the workspace state, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`,
+        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in PostgreSQL, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`,
       );
     } catch (error) {
       this.pushToast(

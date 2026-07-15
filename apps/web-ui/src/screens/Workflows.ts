@@ -1,14 +1,13 @@
 import { Button, IconButton } from "../components/Button.js";
 import { StatusBadge } from "../components/Card.js";
 import { PageNoticeStack } from "../components/PageScaffold.js";
-import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
+import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
   Component,
   createElement,
   type ComponentProps,
 } from "../shared/Component.js";
 import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
-import { readServerConnection } from "../shared/server-config.js";
 import {
   createWorkflowClient,
   WorkflowRunStreamEventType,
@@ -82,10 +81,6 @@ import {
   type WorkflowRunControlState,
   type WorkflowStepExecutionAvailability,
 } from "./workflows-debug-state.js";
-import {
-  isWorkflowAuthenticationFailure,
-  readWorkflowBootstrapDecision,
-} from "./workflows-auth-bootstrap.js";
 import {
   WorkflowAssetKind,
   WorkflowAssetScope,
@@ -1119,9 +1114,11 @@ export class WorkflowsScreen extends Component<
       },
       [
         createElement(EmptyStatePanel, {
-          icon: "vpn_key",
-          title: "Connect this browser to Iteronix",
-          description: this.state.errorMessage ?? "Authentication is required.",
+          icon: "cloud_off",
+          title: "Workflow service unavailable",
+          description:
+            this.state.errorMessage ??
+            "The colocated workflow service is unavailable.",
         }),
         createElement(
           "a",
@@ -1758,7 +1755,7 @@ export class WorkflowsScreen extends Component<
               "mb-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-sm leading-6 text-text-secondary",
           },
           [
-            "Add the MVP node set to the canvas. Asset-backed nodes create workflow workspace assets server-side before they are placed.",
+            "Add the MVP node set to the canvas. Asset-backed nodes create reusable workflow assets server-side before they are placed.",
           ],
         ),
         readNodeKindsForPalette().map((kind) =>
@@ -1838,7 +1835,7 @@ export class WorkflowsScreen extends Component<
                   icon: "library_add",
                   title: "No reusable assets",
                   description:
-                    "Create workflow workspace prompt, instruction or guardrail assets here before reusing them across workflow definitions.",
+                    "Create reusable prompt, instruction or guardrail assets here before reusing them across workflow definitions.",
                 })
               : groupAssetsByKind(this.state.assets).map((group) =>
                   createElement(
@@ -1905,8 +1902,7 @@ export class WorkflowsScreen extends Component<
                                   StatusBadge,
                                   {
                                     status:
-                                      asset.scope ===
-                                      WorkflowAssetScope.Workspace
+                                      asset.scope === WorkflowAssetScope.Global
                                         ? "info"
                                         : "warning",
                                   },
@@ -5051,7 +5047,6 @@ export class WorkflowsScreen extends Component<
     return readWorkflowNodeHoverRunControlState({
       hasTargetNode:
         currentWorkflow?.nodes.some((node) => node.id === nodeId) ?? false,
-      hasCurrentProject: true,
       hasCurrentWorkflow: currentWorkflow !== null,
       hasDirtyWorkflow: this.state.dirtyWorkflow,
       dirtyAssetCount: this.state.dirtyAssetIds.length,
@@ -6764,6 +6759,7 @@ export class WorkflowsScreen extends Component<
   private renderWorkflowInspector(
     workflow: WorkflowDefinitionUpsertInput,
   ): HTMLElement {
+    const runtimeOverride = workflow.runtimeSettingsOverride ?? {};
     return createElement("div", { className: "flex flex-col gap-4" }, [
       this.renderInspectorField(
         "Workflow name",
@@ -6813,6 +6809,65 @@ export class WorkflowsScreen extends Component<
               language: value,
             },
           });
+        },
+      ),
+      this.renderInspectorSelect(
+        "External provider calls",
+        runtimeOverride.externalCalls === undefined
+          ? "global"
+          : runtimeOverride.externalCalls
+            ? "enabled"
+            : "disabled",
+        ["global", "enabled", "disabled"],
+        (value) => {
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "externalCalls",
+              ),
+              ...(value === "global"
+                ? {}
+                : { externalCalls: value === "enabled" }),
+            },
+          }));
+        },
+      ),
+      this.renderInspectorField(
+        "Workflow max loops override",
+        runtimeOverride.maxLoops?.toString() ?? "",
+        (value) => {
+          const maxLoops = Number.parseInt(value, 10);
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "maxLoops",
+              ),
+              ...(Number.isSafeInteger(maxLoops) && maxLoops > 0
+                ? { maxLoops }
+                : {}),
+            },
+          }));
+        },
+      ),
+      this.renderInspectorField(
+        "Workflow notification webhook override",
+        runtimeOverride.webhookUrl ?? "",
+        (value) => {
+          const webhookUrl = value.trim();
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "webhookUrl",
+              ),
+              ...(webhookUrl.length > 0 ? { webhookUrl } : {}),
+            },
+          }));
         },
       ),
       this.renderInlineMetaGrid([
@@ -8573,7 +8628,6 @@ export class WorkflowsScreen extends Component<
     const currentWorkflow = this.readCurrentWorkflowRecord();
     return readWorkflowStepExecutionAvailability({
       hasNodeSelection: this.state.selection.type === "node",
-      hasCurrentProject: true,
       hasCurrentWorkflow: currentWorkflow !== null,
       hasDirtyWorkflow: this.state.dirtyWorkflow,
       dirtyAssetCount: this.state.dirtyAssetIds.length,
@@ -10527,7 +10581,7 @@ export class WorkflowsScreen extends Component<
       this.renderInspectorSelect(
         "Scope",
         asset.scope,
-        [WorkflowAssetScope.Workspace],
+        [WorkflowAssetScope.Global],
         (value) => {
           const nextScope = readWorkflowAssetScope(value);
           this.patchAsset(asset.id, (current) => ({
@@ -12830,15 +12884,6 @@ export class WorkflowsScreen extends Component<
       noticeMessage: null,
     });
 
-    if (readWorkflowBootstrapDecision(readServerConnection()) === "configure") {
-      this.setState({
-        pendingAction: null,
-        errorMessage:
-          "Authentication is required. Open Settings to configure this browser's server URL and auth token.",
-      });
-      return;
-    }
-
     try {
       const settingsSnapshot = await this.settingsClient.load();
       this.setState({
@@ -12855,9 +12900,10 @@ export class WorkflowsScreen extends Component<
     } catch (error) {
       this.setState({
         pendingAction: null,
-        errorMessage: isWorkflowAuthenticationFailure(error)
-          ? "Authentication was rejected. Open Settings to check this browser's server URL and auth token."
-          : readErrorMessage(error, "Could not load the workflow editor."),
+        errorMessage: readErrorMessage(
+          error,
+          "Could not load the workflow editor.",
+        ),
         noticeMessage: null,
       });
     }
@@ -13227,7 +13273,7 @@ export class WorkflowsScreen extends Component<
       this.handleSelectWorkflow(saved.id);
       this.setState({
         pendingAction: null,
-        noticeMessage: "Workflow saved to the server workspace.",
+        noticeMessage: "Workflow saved to PostgreSQL.",
         errorMessage: null,
         nextVersionNote: "",
         nextVersionTags: "",
@@ -13308,7 +13354,7 @@ export class WorkflowsScreen extends Component<
               "p",
               { className: "mt-2 text-xs leading-5 text-text-secondary" },
               [
-                `Delete ${dialog.workflowName}? This removes the workflow definition from the active workspace.`,
+                `Delete ${dialog.workflowName}? This removes the workflow definition from the workflow catalog.`,
               ],
             ),
             dialog.dependentApiKeyNames.length > 0
@@ -16147,7 +16193,7 @@ const stripAssetVersionFields = (
 });
 
 const readWorkflowAssetScope = (_value: string): WorkflowAssetScopeValue =>
-  WorkflowAssetScope.Workspace;
+  WorkflowAssetScope.Global;
 
 const readWorkflowRecordStatus = (value: string): WorkflowRecordStatus =>
   value === WorkflowRecordStatus.Published
@@ -16641,6 +16687,17 @@ const toSidebarSection = (
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" &&
   window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
+
+const omitRuntimeSetting = (
+  override: WorkflowDefinitionUpsertInput["runtimeSettingsOverride"],
+  key: keyof NonNullable<
+    WorkflowDefinitionUpsertInput["runtimeSettingsOverride"]
+  >,
+): NonNullable<WorkflowDefinitionUpsertInput["runtimeSettingsOverride"]> => {
+  const current = override ?? {};
+  const { [key]: _removed, ...remaining } = current;
+  return remaining;
+};
 
 const readErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim().length > 0

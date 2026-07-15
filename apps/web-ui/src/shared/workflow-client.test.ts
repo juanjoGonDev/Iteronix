@@ -185,7 +185,6 @@ describe("workflow client parsers", () => {
         status: "warning",
         schemaSupported: true,
         checksumValid: true,
-        projectMismatch: false,
         workflowIdCollision: true,
         recommendedIdMode: "regenerate_ids",
         suggestedName: "Imported workflow",
@@ -206,12 +205,12 @@ describe("workflow client parsers", () => {
   });
 
   it("parses workflow asset lists with optional contracts and guardrails", () => {
-    const assets = parseWorkflowAssetListResponse({
+    const response = {
       assets: [
         {
           id: "asset-1",
           kind: "prompt",
-          scope: "project",
+          scope: "global",
           name: "Prompt asset",
           slug: "prompt-asset",
           description: "",
@@ -239,7 +238,7 @@ describe("workflow client parsers", () => {
         {
           id: "asset-2",
           kind: "guardrail",
-          scope: "project",
+          scope: "global",
           name: "Guardrail",
           slug: "guardrail",
           description: "",
@@ -264,11 +263,22 @@ describe("workflow client parsers", () => {
           updatedAt: "2026-05-06T18:10:00.000Z",
         },
       ],
-    });
+    };
+    const assets = parseWorkflowAssetListResponse(response);
+    const firstAsset = response.assets[0];
+    if (!firstAsset) {
+      throw new Error("Expected an asset fixture.");
+    }
 
     expect(assets).toHaveLength(2);
+    expect(assets.map((asset) => asset.scope)).toEqual(["global", "global"]);
     expect(assets[0]?.outputContract?.name).toBe("Prompt output");
     expect(assets[1]?.guardrail?.validations).toHaveLength(1);
+    expect(() =>
+      parseWorkflowAssetListResponse({
+        assets: [{ ...firstAsset, scope: "project" }],
+      }),
+    ).toThrow("workflowAssetRecord.scope");
   });
 
   it("parses workflow execution lists", () => {

@@ -6,7 +6,7 @@ import {
   type ExternalApiKeyRecord,
 } from "../../../packages/domain/src/external-api-keys";
 
-const WorkspaceStateVersion = {
+const ApplicationStateVersion = {
   Current: 1,
 } as const;
 
@@ -17,30 +17,30 @@ type JsonValue =
   | { readonly [key: string]: JsonValue };
 type JsonRecord = Record<string, JsonValue>;
 
-type WorkspaceWorkflowLimits = {
+type ApplicationWorkflowLimits = {
   infiniteLoops: boolean;
   maxLoops: number;
   externalCalls: boolean;
 };
 
-type WorkspaceNotifications = {
+type ApplicationNotifications = {
   soundEnabled: boolean;
   webhookUrl: string;
 };
 
-type WorkspaceProviderProfile = JsonRecord;
+type ApplicationProviderProfile = JsonRecord;
 
-export type WorkspaceSettingsSnapshot = {
+export type ApplicationSettingsSnapshot = {
   profileId: string;
-  providerProfiles: ReadonlyArray<WorkspaceProviderProfile>;
-  workflowLimits: WorkspaceWorkflowLimits;
-  notifications: WorkspaceNotifications;
+  providerProfiles: ReadonlyArray<ApplicationProviderProfile>;
+  workflowLimits: ApplicationWorkflowLimits;
+  notifications: ApplicationNotifications;
 };
 
-export type WorkspaceState = {
-  version: typeof WorkspaceStateVersion.Current;
+export type ApplicationState = {
+  version: typeof ApplicationStateVersion.Current;
   revision: number;
-  settings: WorkspaceSettingsSnapshot;
+  settings: ApplicationSettingsSnapshot;
   providerSelections: ReadonlyArray<ProviderSelection>;
   providerSettings: ReadonlyArray<ProviderSettingsRecord>;
   workflows: WorkflowCatalogState;
@@ -49,21 +49,21 @@ export type WorkspaceState = {
   updatedAt: string;
 };
 
-export type WorkspaceStateStore = {
-  load: () => Promise<WorkspaceState>;
-  save: (state: WorkspaceState) => Promise<WorkspaceState>;
+export type ApplicationStateStore = {
+  load: () => Promise<ApplicationState>;
+  save: (state: ApplicationState) => Promise<ApplicationState>;
   update: (
-    updater: (state: WorkspaceState) => WorkspaceState,
-  ) => Promise<WorkspaceState>;
+    updater: (state: ApplicationState) => ApplicationState,
+  ) => Promise<ApplicationState>;
 };
 
 const DefaultProfileId = "default";
 const DefaultMaxLoops = 50;
 
-export const createDefaultWorkspaceState = (): WorkspaceState => {
+export const createDefaultApplicationState = (): ApplicationState => {
   const now = new Date().toISOString();
   return {
-    version: WorkspaceStateVersion.Current,
+    version: ApplicationStateVersion.Current,
     revision: 0,
     settings: createDefaultSettingsSnapshot(),
     providerSelections: [],
@@ -75,16 +75,16 @@ export const createDefaultWorkspaceState = (): WorkspaceState => {
   };
 };
 
-export const parseWorkspaceState = (value: unknown): WorkspaceState => {
+export const parseApplicationState = (value: unknown): ApplicationState => {
   if (!isRecord(value)) {
-    return createDefaultWorkspaceState();
+    return createDefaultApplicationState();
   }
 
-  const defaults = createDefaultWorkspaceState();
+  const defaults = createDefaultApplicationState();
   const createdAt = readString(value, "createdAt") ?? defaults.createdAt;
 
   return {
-    version: WorkspaceStateVersion.Current,
+    version: ApplicationStateVersion.Current,
     revision: readNonNegativeInteger(value, "revision") ?? 0,
     settings: readSettingsSnapshot(value["settings"]),
     providerSelections: readProviderSelections(value["providerSelections"]),
@@ -96,19 +96,19 @@ export const parseWorkspaceState = (value: unknown): WorkspaceState => {
   };
 };
 
-export const createWorkspaceStateFromStores = (input: {
+export const createApplicationStateFromStores = (input: {
   providerSnapshot: {
     selections: ReadonlyArray<ProviderSelection>;
     settings: ReadonlyArray<ProviderSettingsRecord>;
   };
-  settings: WorkspaceSettingsSnapshot;
+  settings: ApplicationSettingsSnapshot;
   workflowSnapshot: WorkflowCatalogState;
   externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
-  previousState?: WorkspaceState;
-}): WorkspaceState => {
+  previousState?: ApplicationState;
+}): ApplicationState => {
   const now = new Date().toISOString();
-  return parseWorkspaceState({
-    version: WorkspaceStateVersion.Current,
+  return parseApplicationState({
+    version: ApplicationStateVersion.Current,
     revision: input.previousState?.revision ?? 0,
     settings: input.settings,
     providerSelections: input.providerSnapshot.selections,
@@ -121,8 +121,9 @@ export const createWorkspaceStateFromStores = (input: {
   });
 };
 
-export const redactWorkspaceState = (state: WorkspaceState): WorkspaceState =>
-  redactUnknownValue(state) as WorkspaceState;
+export const redactApplicationState = (
+  state: ApplicationState,
+): ApplicationState => redactUnknownValue(state) as ApplicationState;
 
 const readExternalApiKeys = (
   value: unknown,
@@ -188,7 +189,7 @@ const readExternalApiKeyScope = (
   };
 };
 
-const createDefaultSettingsSnapshot = (): WorkspaceSettingsSnapshot => ({
+const createDefaultSettingsSnapshot = (): ApplicationSettingsSnapshot => ({
   profileId: DefaultProfileId,
   providerProfiles: [],
   workflowLimits: {
@@ -202,7 +203,7 @@ const createDefaultSettingsSnapshot = (): WorkspaceSettingsSnapshot => ({
   },
 });
 
-const readSettingsSnapshot = (value: unknown): WorkspaceSettingsSnapshot => {
+const readSettingsSnapshot = (value: unknown): ApplicationSettingsSnapshot => {
   if (!isRecord(value)) {
     return createDefaultSettingsSnapshot();
   }
@@ -223,7 +224,7 @@ const readSettingsSnapshot = (value: unknown): WorkspaceSettingsSnapshot => {
   };
 };
 
-const readWorkflowLimits = (value: unknown): WorkspaceWorkflowLimits => {
+const readWorkflowLimits = (value: unknown): ApplicationWorkflowLimits => {
   if (!isRecord(value)) {
     return createDefaultSettingsSnapshot().workflowLimits;
   }
@@ -235,7 +236,7 @@ const readWorkflowLimits = (value: unknown): WorkspaceWorkflowLimits => {
   };
 };
 
-const readNotifications = (value: unknown): WorkspaceNotifications => {
+const readNotifications = (value: unknown): ApplicationNotifications => {
   if (!isRecord(value)) {
     return createDefaultSettingsSnapshot().notifications;
   }

@@ -1,10 +1,11 @@
-import type { StorageLike } from "./server-config.js";
 import {
   ProviderKind,
   createDefaultProviderProfiles,
   normalizeProviderProfiles,
   type ProviderProfileRecord,
 } from "../screens/settings-state.js";
+
+export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const DefaultSettingsProfileId = "default";
 const SettingsSnapshotStorageKey = "iteronix_settings_snapshot";

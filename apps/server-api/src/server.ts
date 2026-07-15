@@ -3,6 +3,8 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   BearerPrefix,
   BearerScheme,
@@ -99,16 +101,16 @@ import {
   type WorkflowUsageTotalsRecord,
 } from "../../../packages/shared/src/workflows";
 import {
-  createWorkspaceStateFromStores,
-  parseWorkspaceState,
-  type WorkspaceSettingsSnapshot,
-  type WorkspaceState,
-  type WorkspaceStateStore,
-} from "./workspace-state";
+  createApplicationStateFromStores,
+  parseApplicationState,
+  type ApplicationSettingsSnapshot,
+  type ApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 import {
   createPostgresPool,
-  createPostgresWorkspaceStateStore,
-} from "./postgres-workspace-state";
+  createPostgresApplicationStateStore,
+} from "./postgres-application-state";
 import {
   ExternalApiKeyScopeKind,
   isExternalApiKeyNameAvailable,
@@ -123,6 +125,7 @@ import {
   createExternalApiKey,
   findVerifiedExternalApiKey,
 } from "./external-api-keys";
+import { tryServeStaticUi } from "./static-ui";
 const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.SettingsGet,
   RoutePath.SettingsUpdate,
@@ -171,46 +174,48 @@ type ActiveWorkflowExecutionRegistry = {
   delete: (executionId: string) => void;
 };
 
-export type WorkspacePersistence = {
-  read: () => WorkspaceState;
-  saveCurrent: () => Promise<WorkspaceState>;
+export type ApplicationPersistence = {
+  read: () => ApplicationState;
+  saveCurrent: () => Promise<ApplicationState>;
   updateUiState: (input: {
-    settings?: WorkspaceSettingsSnapshot;
-  }) => Promise<WorkspaceState>;
+    settings?: ApplicationSettingsSnapshot;
+  }) => Promise<ApplicationState>;
   updateExternalApiKeys: (
     externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
-  ) => Promise<WorkspaceState>;
+  ) => Promise<ApplicationState>;
 };
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
   const postgresPool = createPostgresPool(config.databaseUrl);
-  const workspaceStateStore = createPostgresWorkspaceStateStore(postgresPool);
-  const initialWorkspaceState = await loadInitialWorkspaceState(
-    workspaceStateStore,
+  const applicationStateStore =
+    createPostgresApplicationStateStore(postgresPool);
+  const initialApplicationState = await loadInitialApplicationState(
+    applicationStateStore,
     postgresPool,
   );
   const providerStore = createProviderStore({
-    selections: initialWorkspaceState.providerSelections,
-    settings: initialWorkspaceState.providerSettings,
+    selections: initialApplicationState.providerSelections,
+    settings: initialApplicationState.providerSettings,
   });
   const workflowCatalog = createWorkflowCatalogStore(
-    initialWorkspaceState.workflows,
+    initialApplicationState.workflows,
   );
-  const workspacePersistence = createWorkspacePersistence({
-    stateStore: workspaceStateStore,
-    initialState: initialWorkspaceState,
+  const applicationPersistence = createApplicationPersistence({
+    stateStore: applicationStateStore,
+    initialState: initialApplicationState,
     providerStore,
     workflowCatalog,
   });
   const workflowRuntime = createWorkflowRuntimeService({
-    readWorkspaceState: () => workspacePersistence.read(),
+    readApplicationState: () => applicationPersistence.read(),
   });
   const server = createApiServer({
     config,
     providerStore,
     workflowRuntime,
-    workspacePersistence,
+    applicationPersistence,
     workflowCatalog,
+    webUiRoot: readWebUiRoot(),
   });
 
   server.listen(config.port, config.host);
@@ -221,8 +226,9 @@ export const createApiServer = (input: {
   config: ServerConfig;
   providerStore: ProviderStore;
   workflowRuntime: WorkflowRuntimeService;
-  workspacePersistence: WorkspacePersistence;
+  applicationPersistence: ApplicationPersistence;
   workflowCatalog: WorkflowCatalogStore;
+  webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
   return createServer((req, res) => {
@@ -233,8 +239,9 @@ export const createApiServer = (input: {
       input.providerStore,
       input.workflowRuntime,
       activeWorkflowExecutions,
-      input.workspacePersistence,
+      input.applicationPersistence,
       input.workflowCatalog,
+      input.webUiRoot,
     ).catch((error: unknown) => {
       console.error(
         "server.unhandled",
@@ -252,13 +259,13 @@ export const createApiServer = (input: {
   });
 };
 
-const loadInitialWorkspaceState = async (
-  workspaceStateStore: ReturnType<typeof createPostgresWorkspaceStateStore>,
+const loadInitialApplicationState = async (
+  applicationStateStore: ReturnType<typeof createPostgresApplicationStateStore>,
   postgresPool: ReturnType<typeof createPostgresPool>,
-): Promise<WorkspaceState> => {
+): Promise<ApplicationState> => {
   try {
-    await workspaceStateStore.initialize();
-    return await workspaceStateStore.load();
+    await applicationStateStore.initialize();
+    return await applicationStateStore.load();
   } catch (error) {
     await postgresPool.end();
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -266,12 +273,19 @@ const loadInitialWorkspaceState = async (
   }
 };
 
-export const createWorkspacePersistence = (input: {
-  stateStore: WorkspaceStateStore;
-  initialState: WorkspaceState;
+const readWebUiRoot = (): string => {
+  const packagedRoot = resolve(process.cwd(), "web-ui");
+  return existsSync(packagedRoot)
+    ? packagedRoot
+    : resolve(process.cwd(), "apps", "web-ui");
+};
+
+export const createApplicationPersistence = (input: {
+  stateStore: ApplicationStateStore;
+  initialState: ApplicationState;
   providerStore: ProviderStore;
   workflowCatalog: WorkflowCatalogStore;
-}): WorkspacePersistence => {
+}): ApplicationPersistence => {
   let state = input.initialState;
   let saveQueue: Promise<void> = Promise.resolve();
 
@@ -288,11 +302,11 @@ export const createWorkspacePersistence = (input: {
 
   const buildState = (
     update: {
-      settings?: WorkspaceSettingsSnapshot;
+      settings?: ApplicationSettingsSnapshot;
       externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
     } = {},
-  ): WorkspaceState =>
-    createWorkspaceStateFromStores({
+  ): ApplicationState =>
+    createApplicationStateFromStores({
       providerSnapshot: input.providerStore.snapshot(),
       workflowSnapshot: input.workflowCatalog.snapshot(),
       settings: update.settings ?? state.settings,
@@ -301,8 +315,8 @@ export const createWorkspacePersistence = (input: {
     });
 
   const saveState = async (
-    candidate: WorkspaceState,
-  ): Promise<WorkspaceState> => {
+    candidate: ApplicationState,
+  ): Promise<ApplicationState> => {
     try {
       state = await input.stateStore.save(candidate);
       return state;
@@ -316,18 +330,18 @@ export const createWorkspacePersistence = (input: {
     }
   };
 
-  const saveCurrent = async (): Promise<WorkspaceState> =>
+  const saveCurrent = async (): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState()));
 
   const updateUiState = async (update: {
-    settings?: WorkspaceSettingsSnapshot;
-  }): Promise<WorkspaceState> => {
+    settings?: ApplicationSettingsSnapshot;
+  }): Promise<ApplicationState> => {
     return enqueueSave(() => saveState(buildState(update)));
   };
 
   const updateExternalApiKeys = async (
     externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
-  ): Promise<WorkspaceState> =>
+  ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ externalApiKeys })));
 
   return {
@@ -344,8 +358,9 @@ const handleRequest = async (
   providerStore: ProviderStore,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
   workflowCatalog: WorkflowCatalogStore,
+  webUiRoot: string | undefined,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -365,6 +380,15 @@ const handleRequest = async (
   const path = url.pathname;
   const method = req.method;
 
+  if (
+    webUiRoot &&
+    !isWorkflowOnlyRoute(path) &&
+    !isExternalWorkflowRoute(path) &&
+    tryServeStaticUi(req, res, webUiRoot)
+  ) {
+    return;
+  }
+
   if (isExternalWorkflowRoute(path)) {
     await handleExternalWorkflowRequest({
       req,
@@ -373,7 +397,7 @@ const handleRequest = async (
       method,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     });
     return;
   }
@@ -397,7 +421,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleSettingsGet(res, workspacePersistence);
+    await handleSettingsGet(res, applicationPersistence);
     return;
   }
 
@@ -407,7 +431,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleSettingsUpdate(req, res, workspacePersistence);
+    await handleSettingsUpdate(req, res, applicationPersistence);
     return;
   }
   if (path === RoutePath.ExternalApiKeysList) {
@@ -417,7 +441,7 @@ const handleRequest = async (
     }
 
     respondJson(res, HttpStatus.Ok, {
-      keys: workspacePersistence
+      keys: applicationPersistence
         .read()
         .externalApiKeys.map(toExternalApiKeyView),
     });
@@ -434,7 +458,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -448,7 +472,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -459,7 +483,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleExternalApiKeyRevoke(req, res, workspacePersistence);
+    await handleExternalApiKeyRevoke(req, res, applicationPersistence);
     return;
   }
 
@@ -469,7 +493,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleExternalApiKeyDependencies(req, res, workspacePersistence);
+    await handleExternalApiKeyDependencies(req, res, applicationPersistence);
     return;
   }
   if (path === RoutePath.ProvidersList) {
@@ -488,7 +512,12 @@ const handleRequest = async (
       return;
     }
 
-    await handleProvidersSelect(req, res, providerStore, workspacePersistence);
+    await handleProvidersSelect(
+      req,
+      res,
+      providerStore,
+      applicationPersistence,
+    );
     return;
   }
 
@@ -502,7 +531,7 @@ const handleRequest = async (
       req,
       res,
       providerStore,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -547,7 +576,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -562,7 +591,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -577,7 +606,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -630,7 +659,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -645,7 +674,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -660,7 +689,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -675,7 +704,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -710,7 +739,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -725,7 +754,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -770,7 +799,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -786,7 +815,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -802,7 +831,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -818,7 +847,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -836,7 +865,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -853,7 +882,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -869,7 +898,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -881,17 +910,17 @@ const handleRequest = async (
 
 const handleSettingsGet = async (
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   respondJson(res, HttpStatus.Ok, {
-    settings: redactSettingsForClient(workspacePersistence.read().settings),
+    settings: redactSettingsForClient(applicationPersistence.read().settings),
   });
 };
 
 const handleSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -901,7 +930,7 @@ const handleSettingsUpdate = async (
 
   const parsed = parseSettingsUpdateRequest(
     bodyResult.value,
-    workspacePersistence.read(),
+    applicationPersistence.read(),
   );
   if (parsed.type === ResultType.Err) {
     respondError(res, parsed.error);
@@ -909,7 +938,7 @@ const handleSettingsUpdate = async (
   }
 
   try {
-    const state = await workspacePersistence.updateUiState({
+    const state = await applicationPersistence.updateUiState({
       settings: parsed.value,
     });
     respondJson(res, HttpStatus.Ok, {
@@ -926,8 +955,8 @@ const handleSettingsUpdate = async (
 
 export const parseSettingsUpdateRequest = (
   value: unknown,
-  currentState: WorkspaceState,
-): Result<WorkspaceSettingsSnapshot, ApiError> => {
+  currentState: ApplicationState,
+): Result<ApplicationSettingsSnapshot, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
@@ -936,7 +965,7 @@ export const parseSettingsUpdateRequest = (
   }
 
   try {
-    const settings = parseWorkspaceState({
+    const settings = parseApplicationState({
       ...currentState,
       settings: value,
     }).settings;
@@ -950,8 +979,8 @@ export const parseSettingsUpdateRequest = (
 };
 
 const redactSettingsForClient = (
-  settings: WorkspaceSettingsSnapshot,
-): WorkspaceSettingsSnapshot => settings;
+  settings: ApplicationSettingsSnapshot,
+): ApplicationSettingsSnapshot => settings;
 const handleProvidersList = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -994,7 +1023,7 @@ const handleProvidersSelect = async (
   req: IncomingMessage,
   res: ServerResponse,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1014,7 +1043,7 @@ const handleProvidersSelect = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     selection: selected.value,
   });
@@ -1024,7 +1053,7 @@ const handleProviderSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1044,7 +1073,7 @@ const handleProviderSettingsUpdate = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     settings: updated.value,
   });
@@ -1307,7 +1336,7 @@ const handleWorkflowDefinitionRestoreVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1329,7 +1358,7 @@ const handleWorkflowDefinitionRestoreVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -1339,7 +1368,7 @@ const handleWorkflowDefinitionRestoreVersionPart = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1363,7 +1392,7 @@ const handleWorkflowDefinitionRestoreVersionPart = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -1373,7 +1402,7 @@ const handleWorkflowDefinitionCloneVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1395,7 +1424,7 @@ const handleWorkflowDefinitionCloneVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -1468,7 +1497,7 @@ const handleWorkflowDefinitionImportVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1490,7 +1519,7 @@ const handleWorkflowDefinitionImportVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -1532,7 +1561,7 @@ const handleWorkflowDefinitionCleanupVersions = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1556,7 +1585,7 @@ const handleWorkflowDefinitionCleanupVersions = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, result.value);
 };
 
@@ -1564,7 +1593,7 @@ const handleWorkflowDefinitionUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1586,7 +1615,7 @@ const handleWorkflowDefinitionUpsert = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -1596,7 +1625,7 @@ const handleWorkflowDefinitionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1619,11 +1648,11 @@ const handleWorkflowDefinitionDelete = async (
   }
 
   const keyUpdate = revokeExternalApiKeysForWorkflow({
-    keys: workspacePersistence.read().externalApiKeys,
+    keys: applicationPersistence.read().externalApiKeys,
     workflowId: parsed.value.workflowId,
     revokedAt: new Date().toISOString(),
   });
-  await workspacePersistence.updateExternalApiKeys(keyUpdate.keys);
+  await applicationPersistence.updateExternalApiKeys(keyUpdate.keys);
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
     revokedKeys: keyUpdate.revoked,
@@ -1634,7 +1663,7 @@ const handleExternalApiKeyCreate = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1663,7 +1692,7 @@ const handleExternalApiKeyCreate = async (
 
   if (
     !isExternalApiKeyNameAvailable(
-      workspacePersistence.read().externalApiKeys,
+      applicationPersistence.read().externalApiKeys,
       parsed.value.name,
     )
   ) {
@@ -1675,8 +1704,8 @@ const handleExternalApiKeyCreate = async (
   }
 
   const created = createExternalApiKey({ ...parsed.value, now: new Date() });
-  await workspacePersistence.updateExternalApiKeys([
-    ...workspacePersistence.read().externalApiKeys,
+  await applicationPersistence.updateExternalApiKeys([
+    ...applicationPersistence.read().externalApiKeys,
     created.key,
   ]);
   respondJson(res, HttpStatus.Ok, {
@@ -1689,7 +1718,7 @@ const handleExternalApiKeyUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1716,7 +1745,7 @@ const handleExternalApiKeyUpdate = async (
     return;
   }
 
-  const keys = workspacePersistence.read().externalApiKeys;
+  const keys = applicationPersistence.read().externalApiKeys;
   const currentKey = keys.find((key) => key.id === parsed.value.keyId);
   if (!currentKey) {
     respondError(res, {
@@ -1739,7 +1768,7 @@ const handleExternalApiKeyUpdate = async (
     name: parsed.value.name,
     scope: parsed.value.scope,
   };
-  await workspacePersistence.updateExternalApiKeys(
+  await applicationPersistence.updateExternalApiKeys(
     keys.map((key) => (key.id === updatedKey.id ? updatedKey : key)),
   );
   respondJson(res, HttpStatus.Ok, { key: toExternalApiKeyView(updatedKey) });
@@ -1748,7 +1777,7 @@ const handleExternalApiKeyUpdate = async (
 const handleExternalApiKeyRevoke = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1764,7 +1793,7 @@ const handleExternalApiKeyRevoke = async (
 
   const revokedAt = new Date().toISOString();
   let found = false;
-  const keys = workspacePersistence.read().externalApiKeys.map((key) => {
+  const keys = applicationPersistence.read().externalApiKeys.map((key) => {
     if (key.id !== keyId.value) {
       return key;
     }
@@ -1779,7 +1808,7 @@ const handleExternalApiKeyRevoke = async (
     return;
   }
 
-  await workspacePersistence.updateExternalApiKeys(keys);
+  await applicationPersistence.updateExternalApiKeys(keys);
   const key = keys.find((entry) => entry.id === keyId.value);
   if (!key) {
     respondError(res, {
@@ -1794,7 +1823,7 @@ const handleExternalApiKeyRevoke = async (
 const handleExternalApiKeyDependencies = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1808,7 +1837,7 @@ const handleExternalApiKeyDependencies = async (
   }
   respondJson(res, HttpStatus.Ok, {
     keys: readWorkflowExternalApiKeyDependencies(
-      workspacePersistence.read().externalApiKeys,
+      applicationPersistence.read().externalApiKeys,
       workflowId.value,
     ),
   });
@@ -1878,7 +1907,7 @@ const handleWorkflowAssetUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1900,7 +1929,7 @@ const handleWorkflowAssetUpsert = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     asset: result.value,
   });
@@ -1910,7 +1939,7 @@ const handleWorkflowAssetDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1932,7 +1961,7 @@ const handleWorkflowAssetDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     asset: result.value,
   });
@@ -2032,7 +2061,7 @@ const handleWorkflowExecutionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2054,7 +2083,7 @@ const handleWorkflowExecutionDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -2065,7 +2094,7 @@ const handleWorkflowExecutionCancel = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2089,7 +2118,7 @@ const handleWorkflowExecutionCancel = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -2100,7 +2129,7 @@ const handleWorkflowExecutionRun = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2123,7 +2152,7 @@ const handleWorkflowExecutionRun = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -2134,7 +2163,7 @@ const handleWorkflowNodeExecutionRun = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2157,7 +2186,7 @@ const handleWorkflowNodeExecutionRun = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -2170,7 +2199,7 @@ const handleWorkflowExecutionStream = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
@@ -2193,7 +2222,7 @@ const handleWorkflowExecutionStream = async (
   }
 
   const stream = createSseStream(res);
-  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const progressSaves = createApplicationSaveScheduler(applicationPersistence);
   const executionAbortController = new AbortController();
   const streamEvents = createWorkflowStreamEvents({
     workflowCatalog,
@@ -2226,7 +2255,7 @@ const handleWorkflowExecutionStream = async (
     }
 
     await progressSaves.flush();
-    await workspacePersistence.saveCurrent();
+    await applicationPersistence.saveCurrent();
     streamEvents.sendTerminal();
   } catch (error) {
     stream.send({
@@ -2253,7 +2282,7 @@ const handleWorkflowNodeExecutionStream = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const parsed = parseWorkflowNodeExecutionRunRequest(
     readWorkflowNodeExecutionStreamRequest(url),
@@ -2264,7 +2293,7 @@ const handleWorkflowNodeExecutionStream = async (
   }
 
   const stream = createSseStream(res);
-  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const progressSaves = createApplicationSaveScheduler(applicationPersistence);
   const executionAbortController = new AbortController();
   const streamEvents = createWorkflowStreamEvents({
     workflowCatalog,
@@ -2297,7 +2326,7 @@ const handleWorkflowNodeExecutionStream = async (
     }
 
     await progressSaves.flush();
-    await workspacePersistence.saveCurrent();
+    await applicationPersistence.saveCurrent();
     streamEvents.sendTerminal();
   } catch (error) {
     stream.send({
@@ -2356,7 +2385,7 @@ const handleWorkflowNodeProviderTest = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2379,7 +2408,7 @@ const handleWorkflowNodeProviderTest = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, result.value);
 };
 
@@ -2412,8 +2441,8 @@ const createActiveWorkflowExecutionRegistry =
     };
   };
 
-const createWorkspaceSaveScheduler = (
-  workspacePersistence: WorkspacePersistence,
+const createApplicationSaveScheduler = (
+  applicationPersistence: ApplicationPersistence,
 ): {
   schedule: () => void;
   flush: () => Promise<void>;
@@ -2422,7 +2451,7 @@ const createWorkspaceSaveScheduler = (
 
   const schedule = (): void => {
     saveQueue = saveQueue.then(async () => {
-      await workspacePersistence.saveCurrent();
+      await applicationPersistence.saveCurrent();
     });
     void saveQueue.catch(() => undefined);
   };
@@ -2441,7 +2470,7 @@ const createWorkflowStreamEvents = (input: {
   workflowCatalog: WorkflowCatalogStore;
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry;
   executionAbortController: AbortController;
-  progressSaves: ReturnType<typeof createWorkspaceSaveScheduler>;
+  progressSaves: ReturnType<typeof createApplicationSaveScheduler>;
   stream: ReturnType<typeof createSseStream>;
 }): {
   onEvent: (event: WorkflowRuntimeEvent) => void;
@@ -2778,7 +2807,7 @@ const handleExternalWorkflowRequest = async (input: {
   method: string;
   workflowCatalog: WorkflowCatalogStore;
   workflowRuntime: WorkflowRuntimeService;
-  workspacePersistence: WorkspacePersistence;
+  applicationPersistence: ApplicationPersistence;
 }): Promise<void> => {
   if (input.method !== HttpMethod.Post) {
     respondMethodNotAllowed(input.res);
@@ -2791,7 +2820,7 @@ const handleExternalWorkflowRequest = async (input: {
     return;
   }
   const key = findVerifiedExternalApiKey(
-    input.workspacePersistence.read().externalApiKeys,
+    input.applicationPersistence.read().externalApiKeys,
     plaintextKey,
   );
   if (!key) {
@@ -2826,8 +2855,8 @@ const handleExternalWorkflowRequest = async (input: {
     return;
   }
 
-  await input.workspacePersistence.updateExternalApiKeys(
-    input.workspacePersistence
+  await input.applicationPersistence.updateExternalApiKeys(
+    input.applicationPersistence
       .read()
       .externalApiKeys.map((entry) =>
         entry.id === key.id
@@ -2852,7 +2881,7 @@ const handleExternalWorkflowRequest = async (input: {
     respondError(input.res, result.error);
     return;
   }
-  await input.workspacePersistence.saveCurrent();
+  await input.applicationPersistence.saveCurrent();
   respondJson(input.res, HttpStatus.Ok, { execution: result.value });
 };
 

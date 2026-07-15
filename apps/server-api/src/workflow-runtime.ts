@@ -10,6 +10,7 @@ import {
   LLMEventType,
   type LLMEvent,
 } from "../../../packages/domain/src/llm/events";
+import { resolveWorkflowRuntimeSettings } from "../../../packages/shared/src/workflows";
 import type {
   LLMProviderPort,
   LLMRunResult,
@@ -20,7 +21,8 @@ import type {
   WorkflowExecutionRecord,
   WorkflowNodeExecutionInputSourceRecord,
 } from "../../../packages/shared/src/workflows";
-import type { WorkspaceState } from "./workspace-state";
+import type { ApplicationState } from "./application-state";
+import { dispatchWorkflowNotification } from "./workflow-notifications";
 
 const SmokeTestPrompt = "Reply with OK.";
 
@@ -63,20 +65,38 @@ export type WorkflowRuntimeService = {
 };
 
 export const createWorkflowRuntimeService = (input: {
-  readWorkspaceState: () => WorkspaceState;
+  readApplicationState: () => ApplicationState;
   now?: () => Date;
 }): WorkflowRuntimeService => {
   const now = input.now ?? (() => new Date());
   const runtime = createWorkflowRuntime({
     now,
-    runProviderNode: async (request) =>
-      executeProviderNode(
+    runProviderNode: async (request) => {
+      const applicationState = input.readApplicationState();
+      const workflow = applicationState.workflows.definitions.find(
+        (definition) => definition.id === request.workflowId,
+      );
+      const runtimeSettings = resolveWorkflowRuntimeSettings(
+        {
+          ...applicationState.settings.workflowLimits,
+          ...applicationState.settings.notifications,
+        },
+        workflow?.runtimeSettingsOverride,
+      );
+      if (!runtimeSettings.externalCalls) {
+        throw new Error(
+          "External provider calls are disabled for this workflow.",
+        );
+      }
+
+      return executeProviderNode(
         request,
         resolveProviderProfile(
-          input.readWorkspaceState(),
+          applicationState,
           request.node.config.provider?.providerId,
         ),
-      ),
+      );
+    },
   });
 
   const runWorkflow = async (request: {
@@ -85,8 +105,8 @@ export const createWorkflowRuntimeService = (input: {
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
-  }): Promise<WorkflowExecutionRecord> =>
-    runtime.runDefinition({
+  }): Promise<WorkflowExecutionRecord> => {
+    const execution = await runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
       ...(request.seedNodeOutputs
@@ -95,6 +115,13 @@ export const createWorkflowRuntimeService = (input: {
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
     });
+    await notifyWorkflowExecution(
+      input.readApplicationState(),
+      request.definition,
+      execution,
+    );
+    return execution;
+  };
 
   const runNode = async (request: {
     definition: WorkflowDefinitionRecord;
@@ -129,7 +156,7 @@ export const createWorkflowRuntimeService = (input: {
     const testedAt = now().toISOString();
     try {
       const profile = resolveProviderProfile(
-        input.readWorkspaceState(),
+        input.readApplicationState(),
         request.node.config.provider?.providerId,
       );
       await executeProviderNode(
@@ -322,11 +349,43 @@ const collectProviderEvents = async (
   };
 };
 
+const notifyWorkflowExecution = async (
+  applicationState: ApplicationState,
+  workflow: WorkflowDefinitionRecord,
+  execution: WorkflowExecutionRecord,
+): Promise<void> => {
+  if (
+    execution.status !== "completed" &&
+    execution.status !== "failed" &&
+    execution.status !== "canceled"
+  ) {
+    return;
+  }
+
+  const runtimeSettings = resolveWorkflowRuntimeSettings(
+    {
+      ...applicationState.settings.workflowLimits,
+      ...applicationState.settings.notifications,
+    },
+    workflow.runtimeSettingsOverride,
+  );
+  try {
+    await dispatchWorkflowNotification({
+      webhookUrl: runtimeSettings.webhookUrl,
+      workflowId: workflow.id,
+      executionId: execution.id,
+      status: execution.status,
+    });
+  } catch {
+    return;
+  }
+};
+
 const resolveProviderProfile = (
-  workspaceState: WorkspaceState,
+  applicationState: ApplicationState,
   profileId: string | undefined,
 ): ProviderProfile => {
-  const profiles = workspaceState.settings.providerProfiles
+  const profiles = applicationState.settings.providerProfiles
     .map(readProviderProfile)
     .filter((profile): profile is ProviderProfile => profile !== null);
   const profile = profiles.find((candidate) => candidate.id === profileId);

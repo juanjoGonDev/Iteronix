@@ -63,7 +63,7 @@ export type WorkflowAssetKind =
   (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
-  Workspace: "workspace",
+  Global: "global",
 } as const;
 
 export type WorkflowAssetScope =
@@ -408,6 +408,14 @@ type WorkflowExecutionPolicyRecord = {
   allowManualCheckpointResume: boolean;
 };
 
+type WorkflowRuntimeSettingsOverride = {
+  infiniteLoops?: boolean;
+  maxLoops?: number;
+  externalCalls?: boolean;
+  soundEnabled?: boolean;
+  webhookUrl?: string;
+};
+
 export type WorkflowAssetExecutionPolicyRecord = {
   maxRetries: number;
   timeoutMs: number;
@@ -432,6 +440,7 @@ export type WorkflowDefinitionRecord = {
   nodes: ReadonlyArray<WorkflowNodeRecord>;
   edges: ReadonlyArray<WorkflowEdgeRecord>;
   executionPolicy: WorkflowExecutionPolicyRecord;
+  runtimeSettingsOverride?: WorkflowRuntimeSettingsOverride;
   defaultContextPolicy: WorkflowContextPolicyRecord;
   tags: ReadonlyArray<string>;
 };
@@ -726,7 +735,7 @@ export const createWorkflowAssetDraft = (input: {
   const draft: WorkflowAssetUpsertInput = {
     id: idFactory(),
     kind: input.kind,
-    scope: WorkflowAssetScope.Workspace,
+    scope: WorkflowAssetScope.Global,
     name: baseName,
     slug: toSlug(baseName),
     description: "",
@@ -2031,7 +2040,7 @@ export const readAssetKindLabel = (kind: WorkflowAssetKind): string => {
   return "Guardrail";
 };
 
-export const readAssetScopeLabel = (): string => "Workspace";
+export const readAssetScopeLabel = (): string => "Global";
 
 export const readNodeAssetKind = (
   kind: WorkflowNodeKind,

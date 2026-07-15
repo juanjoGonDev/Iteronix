@@ -1,29 +1,21 @@
-import {
-  readServerConnection,
-  type ServerConnection,
-} from "./server-config.js";
+import { readBackendOrigin } from "./backend-origin.js";
 
 const HeaderName = {
   Authorization: "Authorization",
   ContentType: "Content-Type",
 } as const;
 
-const HeaderValue = {
-  Json: "application/json",
-  BearerPrefix: "Bearer ",
-} as const;
+const HeaderValue = { Json: "application/json" } as const;
 
 export const requestJson = async <TResult>(input: {
   path: string;
   method?: "GET" | "POST";
   body?: Readonly<Record<string, unknown>>;
   parse: (value: unknown) => TResult;
-  connection?: ServerConnection | undefined;
 }): Promise<TResult> => {
-  const connection = input.connection ?? readServerConnection();
-  const response = await fetch(`${connection.serverUrl}${input.path}`, {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
     method: input.method ?? "POST",
-    headers: createHeaders(connection.authToken, input.body !== undefined),
+    headers: createHeaders(input.body !== undefined),
     ...(input.body ? { body: JSON.stringify(input.body) } : {}),
   });
   const payload = await readJson(response);
@@ -39,12 +31,10 @@ export const streamText = async (input: {
   path: string;
   signal?: AbortSignal;
   onChunk: (chunk: string) => void;
-  connection?: ServerConnection | undefined;
 }): Promise<void> => {
-  const connection = input.connection ?? readServerConnection();
-  const response = await fetch(`${connection.serverUrl}${input.path}`, {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
     method: "GET",
-    headers: createHeaders(connection.authToken, false),
+    headers: createHeaders(false),
     ...(input.signal ? { signal: input.signal } : {}),
   });
 
@@ -81,10 +71,8 @@ export const streamText = async (input: {
 };
 
 const createHeaders = (
-  authToken: string,
   includeJsonContentType: boolean,
 ): Record<string, string> => ({
-  [HeaderName.Authorization]: `${HeaderValue.BearerPrefix}${authToken}`,
   ...(includeJsonContentType
     ? { [HeaderName.ContentType]: HeaderValue.Json }
     : {}),

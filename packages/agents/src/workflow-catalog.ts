@@ -245,6 +245,9 @@ export const createWorkflowCatalogStore = (
       nodes: snapshot.nodes,
       edges: snapshot.edges,
       executionPolicy: snapshot.executionPolicy,
+      ...(snapshot.runtimeSettingsOverride
+        ? { runtimeSettingsOverride: snapshot.runtimeSettingsOverride }
+        : {}),
       defaultContextPolicy: snapshot.defaultContextPolicy,
       tags: snapshot.tags,
     });
@@ -486,6 +489,9 @@ const createWorkflowRecord = (
     nodes: input.nodes,
     edges: input.edges,
     executionPolicy: input.executionPolicy,
+    ...(input.runtimeSettingsOverride
+      ? { runtimeSettingsOverride: input.runtimeSettingsOverride }
+      : {}),
     defaultContextPolicy: input.defaultContextPolicy,
     tags: input.tags,
   };
@@ -504,6 +510,9 @@ const createImportedWorkflowInput = (
   nodes: snapshot.nodes,
   edges: snapshot.edges,
   executionPolicy: snapshot.executionPolicy,
+  ...(snapshot.runtimeSettingsOverride
+    ? { runtimeSettingsOverride: snapshot.runtimeSettingsOverride }
+    : {}),
   defaultContextPolicy: snapshot.defaultContextPolicy,
   tags: snapshot.tags,
 });

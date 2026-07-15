@@ -392,7 +392,6 @@ export const selectWorkflowCanvasExecution = <
 
 export const readWorkflowStepExecutionAvailability = (input: {
   hasNodeSelection: boolean;
-  hasCurrentProject: boolean;
   hasCurrentWorkflow: boolean;
   hasDirtyWorkflow: boolean;
   dirtyAssetCount: number;
@@ -409,7 +408,6 @@ export const readWorkflowStepExecutionAvailability = (input: {
   return {
     disabled:
       !input.hasNodeSelection ||
-      !input.hasCurrentProject ||
       !input.hasCurrentWorkflow ||
       input.hasDirtyWorkflow ||
       input.dirtyAssetCount > 0 ||
@@ -420,7 +418,6 @@ export const readWorkflowStepExecutionAvailability = (input: {
 
 export const readWorkflowNodeHoverRunControlState = (input: {
   hasTargetNode: boolean;
-  hasCurrentProject: boolean;
   hasCurrentWorkflow: boolean;
   hasDirtyWorkflow: boolean;
   dirtyAssetCount: number;
@@ -429,7 +426,6 @@ export const readWorkflowNodeHoverRunControlState = (input: {
 }): WorkflowNodeHoverRunControlState => {
   const availability = readWorkflowStepExecutionAvailability({
     hasNodeSelection: input.hasTargetNode,
-    hasCurrentProject: input.hasCurrentProject,
     hasCurrentWorkflow: input.hasCurrentWorkflow,
     hasDirtyWorkflow: input.hasDirtyWorkflow,
     dirtyAssetCount: input.dirtyAssetCount,

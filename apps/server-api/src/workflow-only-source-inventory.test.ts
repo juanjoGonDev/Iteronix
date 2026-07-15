@@ -25,6 +25,10 @@ const LegacyProductModulePaths = [
   "apps/server-api/src/server-logs-store.test.ts",
   "apps/server-api/src/sessions.ts",
   "apps/server-api/src/sessions.test.ts",
+  "apps/server-api/src/workspace-persistence.test.ts",
+  "apps/server-api/src/workspace-state.ts",
+  "apps/server-api/src/postgres-workspace-state.ts",
+  "apps/server-api/src/postgres-workspace-state.test.ts",
 ] as const;
 
 const LegacyWorkflowOnlyPaths = [
@@ -51,6 +55,9 @@ const LegacyWorkflowOnlyPaths = [
   "ui-spec/screens/explorer",
   "ui-spec/screens/kanban",
   "ui-spec/screens/runs",
+  "apps/web-ui/SETUP_COMPLETE.md",
+  "apps/web-ui/STAGEHAND.md",
+  ".github/workflows/bootstrap-project.yml",
 ] as const;
 
 const LegacyWorkflowDocumentationPaths = [

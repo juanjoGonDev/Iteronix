@@ -878,7 +878,7 @@ const createDynamicExpressionReferenceWorkflowDefinitionRecord =
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",
   kind: "prompt",
-  scope: "workspace",
+  scope: "global",
   name: "Prompt asset",
   slug: "prompt-asset",
   description: "",
@@ -898,7 +898,7 @@ const createGuardrailAssetRecord = (input: {
 }): WorkflowAssetRecord => ({
   id: input.id,
   kind: "guardrail",
-  scope: "workspace",
+  scope: "global",
   name: input.id,
   slug: input.id,
   description: "",

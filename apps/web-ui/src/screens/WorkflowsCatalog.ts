@@ -1,5 +1,5 @@
 import { Button } from "../components/Button.js";
-import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
+import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
   Component,
   createElement,

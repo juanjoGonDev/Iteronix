@@ -8,12 +8,12 @@ import {
   WorkflowTriggerKind,
 } from "../../../packages/shared/src/workflows";
 import { createProviderStore } from "./providers";
-import { createApiServer, createWorkspacePersistence } from "./server";
+import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowRuntimeService } from "./workflow-runtime";
 import {
-  createDefaultWorkspaceState,
-  type WorkspaceStateStore,
-} from "./workspace-state";
+  createDefaultApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 
 const AuthToken = "workflow-stream-test-token";
 const Timestamp = "2026-07-13T15:30:00.000Z";
@@ -57,7 +57,7 @@ describe("workflow stream persistence failures", () => {
 });
 
 const createFailingPersistenceServer = (): Server => {
-  const initialState = createDefaultWorkspaceState();
+  const initialState = createDefaultApplicationState();
   const workflowCatalog = createWorkflowCatalogStore({
     now: () => new Date(Timestamp),
   });
@@ -99,14 +99,14 @@ const createFailingPersistenceServer = (): Server => {
     edges: [],
   });
   const providerStore = createProviderStore();
-  const workspacePersistence = createWorkspacePersistence({
-    stateStore: createFailingWorkspaceStateStore(initialState),
+  const applicationPersistence = createApplicationPersistence({
+    stateStore: createFailingApplicationStateStore(initialState),
     initialState,
     providerStore,
     workflowCatalog,
   });
   const workflowRuntime = createWorkflowRuntimeService({
-    readWorkspaceState: workspacePersistence.read,
+    readApplicationState: applicationPersistence.read,
     now: () => new Date(Timestamp),
   });
 
@@ -119,14 +119,14 @@ const createFailingPersistenceServer = (): Server => {
     },
     providerStore,
     workflowRuntime,
-    workspacePersistence,
+    applicationPersistence,
     workflowCatalog,
   });
 };
 
-const createFailingWorkspaceStateStore = (
-  initialState: ReturnType<typeof createDefaultWorkspaceState>,
-): WorkspaceStateStore => ({
+const createFailingApplicationStateStore = (
+  initialState: ReturnType<typeof createDefaultApplicationState>,
+): ApplicationStateStore => ({
   load: async () => initialState,
   save: async () => {
     throw new Error("PostgreSQL persistence failed.");

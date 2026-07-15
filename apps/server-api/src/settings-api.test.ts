@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { ErrorMessage, HttpStatus } from "./constants";
 import { ResultType } from "./result";
 import { parseSettingsUpdateRequest } from "./server";
-import { createDefaultWorkspaceState } from "./workspace-state";
+import { createDefaultApplicationState } from "./application-state";
 
 describe("settings API contract", () => {
   it("accepts typed settings updates", () => {
-    const currentState = createDefaultWorkspaceState();
+    const currentState = createDefaultApplicationState();
 
     const result = parseSettingsUpdateRequest(
       {
@@ -30,7 +30,7 @@ describe("settings API contract", () => {
 
     expect(result.type).toBe(ResultType.Ok);
     if (result.type !== ResultType.Ok) {
-      throw new Error("Expected workspace update to parse.");
+      throw new Error("Expected application update to parse.");
     }
 
     expect(result.value.workflowLimits.maxLoops).toBe(21);
@@ -43,7 +43,7 @@ describe("settings API contract", () => {
   it("rejects invalid settings update bodies as typed bad requests", () => {
     const result = parseSettingsUpdateRequest(
       null,
-      createDefaultWorkspaceState(),
+      createDefaultApplicationState(),
     );
 
     expect(result).toEqual({
@@ -56,7 +56,7 @@ describe("settings API contract", () => {
   });
 
   it("keeps provider environment references while dropping plaintext API keys", () => {
-    const currentState = createDefaultWorkspaceState();
+    const currentState = createDefaultApplicationState();
 
     const result = parseSettingsUpdateRequest(
       {

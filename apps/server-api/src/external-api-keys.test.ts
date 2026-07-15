@@ -11,14 +11,14 @@ import {
   verifyExternalApiKey,
 } from "./external-api-keys";
 import { createProviderStore } from "./providers";
-import { createApiServer, createWorkspacePersistence } from "./server";
+import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowRuntimeService } from "./workflow-runtime";
 import {
-  createDefaultWorkspaceState,
-  redactWorkspaceState,
-  type WorkspaceState,
-  type WorkspaceStateStore,
-} from "./workspace-state";
+  createDefaultApplicationState,
+  redactApplicationState,
+  type ApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 
 const AuthToken = "internal-test-token";
 const servers: Server[] = [];
@@ -41,8 +41,8 @@ describe("external workflow API keys", () => {
       verifyExternalApiKey(created.plaintext, created.key.secretHash),
     ).toBe(true);
     const persisted = JSON.stringify(
-      redactWorkspaceState({
-        ...createDefaultWorkspaceState(),
+      redactApplicationState({
+        ...createDefaultApplicationState(),
         externalApiKeys: [created.key],
       }),
     );
@@ -185,9 +185,9 @@ describe("external workflow API keys", () => {
 
 const createTestServer = (): {
   server: Server;
-  persistence: ReturnType<typeof createWorkspacePersistence>;
+  persistence: ReturnType<typeof createApplicationPersistence>;
 } => {
-  const initialState = createDefaultWorkspaceState();
+  const initialState = createDefaultApplicationState();
   const workflowCatalog = createWorkflowCatalogStore();
   workflowCatalog.upsertWorkflow({
     id: "workflow-allowed",
@@ -207,14 +207,14 @@ const createTestServer = (): {
     edges: [],
   });
   const providerStore = createProviderStore();
-  const persistence = createWorkspacePersistence({
+  const persistence = createApplicationPersistence({
     stateStore: createMemoryStore(initialState),
     initialState,
     providerStore,
     workflowCatalog,
   });
   const workflowRuntime = createWorkflowRuntimeService({
-    readWorkspaceState: persistence.read,
+    readApplicationState: persistence.read,
   });
   return {
     persistence,
@@ -227,13 +227,15 @@ const createTestServer = (): {
       },
       providerStore,
       workflowRuntime,
-      workspacePersistence: persistence,
+      applicationPersistence: persistence,
       workflowCatalog,
     }),
   };
 };
 
-const createMemoryStore = (initial: WorkspaceState): WorkspaceStateStore => {
+const createMemoryStore = (
+  initial: ApplicationState,
+): ApplicationStateStore => {
   let state = initial;
   return {
     load: async () => state,

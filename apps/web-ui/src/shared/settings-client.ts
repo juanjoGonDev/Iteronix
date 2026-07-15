@@ -3,7 +3,6 @@ import {
   parseSettingsSnapshot,
   type SettingsSnapshot,
 } from "./settings-storage.js";
-import type { ServerConnection } from "./server-config.js";
 
 const EndpointPath = {
   SettingsGet: "/settings/get",
@@ -81,22 +80,18 @@ export type SettingsClient = {
   }) => Promise<ExternalApiKeyRecord>;
 };
 
-export const createSettingsClient = (
-  connection?: ServerConnection,
-): SettingsClient => ({
+export const createSettingsClient = (): SettingsClient => ({
   load: () =>
     requestJson({
       path: EndpointPath.SettingsGet,
       body: {},
       parse: parseSettingsResponse,
-      connection,
     }),
   update: (settings) =>
     requestJson({
       path: EndpointPath.SettingsUpdate,
       body: settings,
       parse: parseSettingsResponse,
-      connection,
     }),
   listProviders: (input) =>
     requestJson({
@@ -105,7 +100,6 @@ export const createSettingsClient = (
         ...(input?.profileId ? { profileId: input.profileId } : {}),
       },
       parse: parseProviderListResponse,
-      connection,
     }),
   updateProviderSettings: (input) =>
     requestJson({
@@ -116,21 +110,18 @@ export const createSettingsClient = (
         config: input.config,
       },
       parse: parseProviderSettingsResponse,
-      connection,
     }),
   listExternalApiKeys: () =>
     requestJson({
       path: EndpointPath.ExternalApiKeysList,
       body: {},
       parse: (value) => readExternalApiKeysResponse(value, "keys"),
-      connection,
     }),
   createExternalApiKey: (input) =>
     requestJson({
       path: EndpointPath.ExternalApiKeysCreate,
       body: input,
       parse: parseExternalApiKeyCreationResponse,
-      connection,
     }),
   updateExternalApiKey: (input) =>
     requestJson({
@@ -140,7 +131,6 @@ export const createSettingsClient = (
         parseExternalApiKey(
           readRequiredRecord(value, "externalApiKeyUpdateResponse", "key"),
         ),
-      connection,
     }),
   revokeExternalApiKey: (input) =>
     requestJson({
@@ -150,7 +140,6 @@ export const createSettingsClient = (
         parseExternalApiKey(
           readRequiredRecord(value, "externalApiKeyRevokeResponse", "key"),
         ),
-      connection,
     }),
 });
 

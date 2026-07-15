@@ -51,7 +51,7 @@ export type WorkflowAssetKind =
   (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
-  Workspace: "workspace",
+  Global: "global",
 } as const;
 
 export type WorkflowAssetScope =
@@ -106,6 +106,24 @@ export type WorkflowExecutionPolicyRecord = {
   maxNodeRetries: number;
   allowManualCheckpointResume: boolean;
 };
+
+export type WorkflowRuntimeSettings = {
+  infiniteLoops: boolean;
+  maxLoops: number;
+  externalCalls: boolean;
+  soundEnabled: boolean;
+  webhookUrl: string;
+};
+
+export type WorkflowRuntimeSettingsOverride = Partial<WorkflowRuntimeSettings>;
+
+export const resolveWorkflowRuntimeSettings = (
+  defaults: WorkflowRuntimeSettings,
+  override: WorkflowRuntimeSettingsOverride | undefined,
+): WorkflowRuntimeSettings => ({
+  ...defaults,
+  ...override,
+});
 
 export type WorkflowAssetExecutionPolicyRecord = {
   maxRetries: number;
@@ -356,6 +374,7 @@ export type WorkflowDefinitionRecord = {
   nodes: ReadonlyArray<WorkflowNodeRecord>;
   edges: ReadonlyArray<WorkflowEdgeRecord>;
   executionPolicy: WorkflowExecutionPolicyRecord;
+  runtimeSettingsOverride?: WorkflowRuntimeSettingsOverride;
   defaultContextPolicy: WorkflowContextPolicyRecord;
   tags: ReadonlyArray<string>;
 };
