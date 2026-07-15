@@ -27,9 +27,55 @@ const LegacyProductModulePaths = [
   "apps/server-api/src/sessions.test.ts",
 ] as const;
 
+const LegacyWorkflowOnlyPaths = [
+  "apps/desktop-main",
+  "docs/AI_WORKBENCH.md",
+  "docs/UI_CHECKLIST.md",
+  "docs/UI_FUNCTIONALITY_CHECKLIST.md",
+  "packages/adapters/src/file-logs-store",
+  "packages/adapters/src/git",
+  "packages/agents/src/workflow-orchestrator.test.ts",
+  "packages/agents/src/workflow-orchestrator.ts",
+  "packages/ai-core",
+  "packages/domain/src/ports",
+  "packages/eval",
+  "packages/guardrails",
+  "packages/mcp",
+  "packages/memory",
+  "packages/observability",
+  "packages/rag",
+  "packages/shared/src/logger",
+  "packages/skills",
+  "skills/example-skill",
+  "ui-spec/screens/dashboard",
+  "ui-spec/screens/explorer",
+  "ui-spec/screens/kanban",
+  "ui-spec/screens/runs",
+] as const;
+
+const LegacyWorkflowDocumentationPaths = [
+  "docs/DEPLOYMENT.md",
+  "docs/RUNNING.md",
+  "docs/server-api.md",
+  "docs/url-addressable-ui-state.md",
+  "docs/WORKFLOWS_EDITOR_MVP.md",
+] as const;
+
 describe("workflow-only source inventory", () => {
   it("does not retain project-centric product modules", () => {
     for (const path of LegacyProductModulePaths) {
+      expect(existsSync(resolve(process.cwd(), path))).toBe(false);
+    }
+  });
+
+  it("does not retain unreachable legacy workspace subsystems", () => {
+    for (const path of LegacyWorkflowOnlyPaths) {
+      expect(existsSync(resolve(process.cwd(), path))).toBe(false);
+    }
+  });
+
+  it("replaces legacy product documentation with workflow-only guidance", () => {
+    for (const path of LegacyWorkflowDocumentationPaths) {
       expect(existsSync(resolve(process.cwd(), path))).toBe(false);
     }
   });

@@ -28,10 +28,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: pnpm -C apps/web-ui validate:source-linking
-      - run: pnpm -C apps/web-ui validate:quality-gates
-      - run: pnpm -C apps/web-ui validate:git-workspace
-      - run: pnpm eval:min
+      - run: pnpm -C apps/web-ui validate:settings
+      - run: pnpm -C apps/web-ui validate:workflows
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

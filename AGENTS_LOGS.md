@@ -4779,3 +4779,12 @@
 - Commands: RED `pnpm -C apps/web-ui validate:workflows` timed out because the menu remained open; GREEN rerun passed after the listener was added.
 - Issues/Risks: Existing workflow changes remain uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
 - Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 15:41 (Europe/Madrid) — Workflow-only legacy subsystem audit
+
+- Summary: Audited the source tree after the workflow catalog cutover and removed unreachable multi-surface subsystems.
+- Decisions: The product retains only PostgreSQL-backed workflows, provider Settings, and external scoped workflow API keys. Desktop hosting, generic repository/workspace services, AI Workbench, RAG, MCP, memory, evaluation, Git/files/logs, and their documentation/spec artifacts are out of scope.
+- Changes: Deleted dead packages and adapters, legacy desktop launcher, non-workflow UI specs and documentation; rewired package exports, scripts, build inputs, CI browser validators, lockfile, README, PLAN, and source inventory regressions.
+- Commands: RED `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts`; GREEN focused inventory tests and `pnpm typecheck`.
+- Issues/Risks: `.atl/skill-registry.md` remains user-owned and unstaged. The Settings connection form still needs a dedicated follow-up to remove its obsolete token controls while preserving the existing colocated unauthenticated browser path.
+- Next: Run full gates, Docker configuration, native review, commit, and push the destructive cleanup.
