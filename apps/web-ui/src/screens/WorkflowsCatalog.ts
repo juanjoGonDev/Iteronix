@@ -26,6 +26,15 @@ const WorkflowCatalogSelector = {
   EmptyCreate: "workflows-catalog-empty-create",
   RowPrefix: "workflows-catalog-row-",
   OpenPrefix: "workflows-catalog-open-",
+  RenamePrefix: "workflows-catalog-rename-",
+  RenameDialog: "workflows-catalog-rename-dialog",
+  RenameInput: "workflows-catalog-rename-input",
+  RenameSave: "workflows-catalog-rename-save",
+  RenameCancel: "workflows-catalog-rename-cancel",
+  DeletePrefix: "workflows-catalog-delete-",
+  DeleteDialog: "workflows-catalog-delete-dialog",
+  DeleteConfirm: "workflows-catalog-delete-confirm",
+  DeleteCancel: "workflows-catalog-delete-cancel",
 } as const;
 
 type WorkflowsCatalogState = {
@@ -35,6 +44,11 @@ type WorkflowsCatalogState = {
   sort: WorkflowCatalogSort;
   loading: boolean;
   creating: boolean;
+  editingWorkflowId: string | null;
+  renameValue: string;
+  renaming: boolean;
+  deletingWorkflowId: string | null;
+  deleting: boolean;
   errorMessage: string | null;
 };
 
@@ -52,6 +66,11 @@ export class WorkflowsCatalogScreen extends Component<
       sort: WorkflowCatalogSort.UpdatedDescending,
       loading: true,
       creating: false,
+      editingWorkflowId: null,
+      renameValue: "",
+      renaming: false,
+      deletingWorkflowId: null,
+      deleting: false,
       errorMessage: null,
     });
   }
@@ -96,6 +115,8 @@ export class WorkflowsCatalogScreen extends Component<
               : rows.length === 0
                 ? this.renderEmptyState()
                 : this.renderRows(rows),
+            this.renderRenameDialog(),
+            this.renderDeleteDialog(),
           ],
         ),
       ],
@@ -314,16 +335,173 @@ export class WorkflowsCatalogScreen extends Component<
             ],
           ),
         ]),
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
-          onClick: () => router.navigate(workflowEditorRoute(row.workflow.id)),
-          icon: "arrow_forward",
-          children: "Open",
-          dataset: {
-            testid: `${WorkflowCatalogSelector.OpenPrefix}${row.workflow.id}`,
+        createElement("div", { className: "flex shrink-0 flex-wrap gap-2" }, [
+          createElement(Button, {
+            variant: "ghost",
+            size: "sm",
+            onClick: () => this.startRename(row.workflow),
+            icon: "edit",
+            children: "Rename",
+            dataset: {
+              testid: `${WorkflowCatalogSelector.RenamePrefix}${row.workflow.id}`,
+            },
+          }),
+          createElement(Button, {
+            variant: "danger",
+            size: "sm",
+            onClick: () =>
+              this.setState({ deletingWorkflowId: row.workflow.id }),
+            icon: "delete",
+            children: "Delete",
+            dataset: {
+              testid: `${WorkflowCatalogSelector.DeletePrefix}${row.workflow.id}`,
+            },
+          }),
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            onClick: () =>
+              router.navigate(workflowEditorRoute(row.workflow.id)),
+            icon: "arrow_forward",
+            children: "Open",
+            dataset: {
+              testid: `${WorkflowCatalogSelector.OpenPrefix}${row.workflow.id}`,
+            },
+          }),
+        ]),
+      ],
+    );
+  }
+
+  private renderRenameDialog(): HTMLElement | string {
+    const workflow = this.readWorkflow(this.state.editingWorkflowId);
+    if (!workflow) {
+      return "";
+    }
+
+    return createElement(
+      "section",
+      {
+        className:
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
+        "data-testid": WorkflowCatalogSelector.RenameDialog,
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "w-full max-w-md border border-border-dark bg-[#151b22] p-5",
           },
-        }),
+          [
+            createElement(
+              "h2",
+              { className: "text-base font-semibold text-white" },
+              ["Rename workflow"],
+            ),
+            createElement(
+              "p",
+              { className: "mt-1 text-sm text-text-secondary" },
+              [workflow.name],
+            ),
+            createElement("label", { className: "mt-4 block" }, [
+              createElement("span", { className: "sr-only" }, [
+                "Workflow name",
+              ]),
+              createElement("input", {
+                value: this.state.renameValue,
+                className:
+                  "h-10 w-full border border-border-dark bg-[#0f151c] px-3 text-sm text-white outline-none focus:border-primary",
+                "data-testid": WorkflowCatalogSelector.RenameInput,
+                onInput: (event: Event) => {
+                  const target = event.target;
+                  if (target instanceof HTMLInputElement) {
+                    this.setState({ renameValue: target.value });
+                  }
+                },
+              }),
+            ]),
+            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
+              createElement(Button, {
+                variant: "ghost",
+                size: "sm",
+                disabled: this.state.renaming,
+                onClick: () => this.cancelRename(),
+                children: "Cancel",
+                dataset: { testid: WorkflowCatalogSelector.RenameCancel },
+              }),
+              createElement(Button, {
+                variant: "primary",
+                size: "sm",
+                disabled:
+                  this.state.renaming ||
+                  this.state.renameValue.trim().length === 0,
+                onClick: () => {
+                  void this.renameWorkflow(workflow);
+                },
+                children: this.state.renaming ? "Saving" : "Save name",
+                dataset: { testid: WorkflowCatalogSelector.RenameSave },
+              }),
+            ]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  private renderDeleteDialog(): HTMLElement | string {
+    const workflow = this.readWorkflow(this.state.deletingWorkflowId);
+    if (!workflow) {
+      return "";
+    }
+
+    return createElement(
+      "section",
+      {
+        className:
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
+        "data-testid": WorkflowCatalogSelector.DeleteDialog,
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "w-full max-w-md border border-rose-500/40 bg-[#151b22] p-5",
+          },
+          [
+            createElement(
+              "h2",
+              { className: "text-base font-semibold text-white" },
+              ["Delete workflow?"],
+            ),
+            createElement(
+              "p",
+              { className: "mt-2 text-sm text-text-secondary" },
+              [`This permanently deletes ${workflow.name}.`],
+            ),
+            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
+              createElement(Button, {
+                variant: "ghost",
+                size: "sm",
+                disabled: this.state.deleting,
+                onClick: () => this.setState({ deletingWorkflowId: null }),
+                children: "Cancel",
+                dataset: { testid: WorkflowCatalogSelector.DeleteCancel },
+              }),
+              createElement(Button, {
+                variant: "danger",
+                size: "sm",
+                disabled: this.state.deleting,
+                onClick: () => {
+                  void this.deleteWorkflow(workflow.id);
+                },
+                children: this.state.deleting ? "Deleting" : "Delete workflow",
+                dataset: { testid: WorkflowCatalogSelector.DeleteConfirm },
+              }),
+            ]),
+          ],
+        ),
       ],
     );
   }
@@ -359,6 +537,82 @@ export class WorkflowsCatalogScreen extends Component<
         errorMessage: readErrorMessage(error, "Could not create the workflow."),
       });
     }
+  }
+
+  private startRename(workflow: WorkflowDefinitionRecord): void {
+    this.setState({
+      editingWorkflowId: workflow.id,
+      renameValue: workflow.name,
+      errorMessage: null,
+    });
+  }
+
+  private cancelRename(): void {
+    this.setState({ editingWorkflowId: null, renameValue: "" });
+  }
+
+  private async renameWorkflow(
+    workflow: WorkflowDefinitionRecord,
+  ): Promise<void> {
+    const name = this.state.renameValue.trim();
+    if (name.length === 0) {
+      return;
+    }
+
+    this.setState({ renaming: true, errorMessage: null });
+    try {
+      const updated = await this.workflowClient.upsertDefinition({
+        definition: { ...workflow, name },
+      });
+      this.setState({
+        workflows: this.state.workflows.map((entry) =>
+          entry.id === updated.id ? updated : entry,
+        ),
+        editingWorkflowId: null,
+        renameValue: "",
+        renaming: false,
+      });
+    } catch (error) {
+      this.setState({
+        renaming: false,
+        errorMessage: readErrorMessage(error, "Could not rename the workflow."),
+      });
+    }
+  }
+
+  private async deleteWorkflow(workflowId: string): Promise<void> {
+    this.setState({ deleting: true, errorMessage: null });
+    try {
+      await this.workflowClient.deleteDefinition({ workflowId });
+      this.setState({
+        workflows: this.state.workflows.filter(
+          (workflow) => workflow.id !== workflowId,
+        ),
+        executions: this.state.executions.filter(
+          (execution) => execution.workflowId !== workflowId,
+        ),
+        deletingWorkflowId: null,
+        deleting: false,
+      });
+    } catch (error) {
+      this.setState({
+        deleting: false,
+        errorMessage: readErrorMessage(error, "Could not delete the workflow."),
+      });
+    }
+  }
+
+  private readWorkflow(
+    workflowId: string | null,
+  ): WorkflowDefinitionRecord | null {
+    if (!workflowId) {
+      return null;
+    }
+
+    return (
+      this.state.workflows.find((workflow) => workflow.id === workflowId) ??
+      null
+    );
   }
 }
 

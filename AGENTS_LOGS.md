@@ -4734,3 +4734,12 @@
 - Commands: PASS `pnpm format:check`, `pnpm deadcode`, `pnpm typecheck`, and `pnpm test`.
 - Issues/Risks: The unpublished branch has no remote tracking branch yet, so the pre-push receipt cannot derive the branch base until the initial branch publication completes. The user-owned `.atl/skill-registry.md` remains backed up for restoration as an unstaged change.
 - Next: Run the remaining build/browser gates, review and commit this quality-only correction, then publish the branch and restore the unstaged registry change.
+
+### 2026-07-15 14:00 (Europe/Madrid) — Catalog rename and deletion
+
+- Summary: Added workflow rename and confirmed deletion actions directly to the intermediate catalog.
+- Decisions: Rename persists the complete existing workflow definition with only its name changed; deletion requires an explicit catalog dialog and removes the workflow plus its catalog execution summary.
+- Changes: Added accessible catalog action controls and dialogs; extended browser validation through rename persistence and confirmed deletion to the empty state.
+- Commands: RED `validate:workflows` proved the catalog controls were absent. PASS `pnpm typecheck` and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full gates, bounded review, commit, and push the focused catalog-management slice.

@@ -22,6 +22,7 @@
 - [x] Preserve root lifecycle scripts in the Docker build context and group Compose services under the native `iteronix` project name.
 - [x] Restrict the browser shell to Workflows and Settings and remove project selection from the sidebar.
 - [x] Make `/workflows` a PostgreSQL-backed workflow catalog and route each selected workflow to `/workflows/:workflowId` with create-and-navigate, deep-link restoration, and safe missing-ID fallback.
+- [x] Allow workflow catalog rows to rename workflows and delete them through an explicit confirmation without opening the canvas.
 - [x] Reject deprecated project, overview, explorer, kanban, history, file, git, session, log, and quality-gate API paths at the server boundary.
 - [x] Serialize PostgreSQL state writes with optimistic revisions, redact persisted credentials, and require non-default Compose credentials without publishing PostgreSQL to the host.
 - [x] Roll back in-memory workflow catalog and provider state when an optimistic PostgreSQL revision write is rejected, so rejected mutations cannot leak into later saves.

@@ -213,6 +213,13 @@ const WorkflowCatalogSelector = {
   Root: "workflows-catalog-root",
   Create: "workflows-catalog-create",
   EmptyCreate: "workflows-catalog-empty-create",
+  RenamePrefix: "workflows-catalog-rename-",
+  RenameDialog: "workflows-catalog-rename-dialog",
+  RenameInput: "workflows-catalog-rename-input",
+  RenameSave: "workflows-catalog-rename-save",
+  DeletePrefix: "workflows-catalog-delete-",
+  DeleteDialog: "workflows-catalog-delete-dialog",
+  DeleteConfirm: "workflows-catalog-delete-confirm",
 } as const;
 
 const WorkflowNodeKind = {
@@ -544,6 +551,18 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await waitForTestId(page, WorkflowCatalogSelector.Root);
     await waitForUrlPath(page, ValidationConfig.WorkflowsRoute);
+    await clickByTestId(
+      page,
+      `${WorkflowCatalogSelector.RenamePrefix}${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.RenameDialog);
+    await setInputValueByTestId(
+      page,
+      WorkflowCatalogSelector.RenameInput,
+      "Catalog-renamed workflow",
+    );
+    await clickByTestId(page, WorkflowCatalogSelector.RenameSave);
+    await waitForPageText(page, "Catalog-renamed workflow");
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
       {
@@ -1331,6 +1350,25 @@ async function validateWorkflowsScreen(): Promise<void> {
       suffix: "workflows-mobile",
       artifactName: "workflows",
     });
+
+    await page.setViewport({
+      width: ValidationConfig.ViewportWidth,
+      height: ValidationConfig.ViewportHeight,
+    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await clickByTestId(
+      page,
+      `${WorkflowCatalogSelector.DeletePrefix}${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.DeleteDialog);
+    await clickByTestId(page, WorkflowCatalogSelector.DeleteConfirm);
+    await waitForTestId(page, WorkflowCatalogSelector.EmptyCreate);
 
     await page.close();
     console.log("Browser validation passed for workflows screen.");
