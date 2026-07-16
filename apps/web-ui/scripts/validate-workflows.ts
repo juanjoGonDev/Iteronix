@@ -224,6 +224,11 @@ const WorkflowCatalogSelector = {
   DeleteConfirm: "workflows-catalog-delete-confirm",
 } as const;
 
+const WorkflowRecoverySelector = {
+  Root: "workflows-connection-recovery",
+  OpenSettings: "workflows-open-settings",
+} as const;
+
 const WorkflowNodeKind = {
   TriggerManual: "trigger.manual",
   AssetPrompt: "asset.prompt",
@@ -517,6 +522,8 @@ async function validateWorkflowsScreen(): Promise<void> {
       headless: true,
       args: ["--no-sandbox"],
     });
+
+    await validateConnectionRecovery(browser);
 
     const page = await browser.newPage();
     await page.setViewport({
@@ -1399,6 +1406,35 @@ async function validateWorkflowsScreen(): Promise<void> {
     await stubServer.close();
     await stopProcess(previewServer);
   }
+}
+
+async function validateConnectionRecovery(
+  browser: Awaited<ReturnType<typeof puppeteer.launch>>,
+): Promise<void> {
+  const page = await browser.newPage();
+  await page.setViewport({
+    width: ValidationConfig.ViewportWidth,
+    height: ValidationConfig.ViewportHeight,
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    if (request.url().startsWith(ValidationConfig.StubApiBaseUrl)) {
+      void request.abort();
+      return;
+    }
+
+    void request.continue();
+  });
+  await page.goto(
+    `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+    {
+      waitUntil: "networkidle0",
+    },
+  );
+  await waitForTestId(page, WorkflowRecoverySelector.Root);
+  await waitForPageText(page, "Workflow service unavailable");
+  await waitForMissingTestId(page, WorkflowRecoverySelector.OpenSettings);
+  await page.close();
 }
 
 async function startWorkflowStubServer(): Promise<{

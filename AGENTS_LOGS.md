@@ -4887,3 +4887,21 @@
 - Commands: RED/GREEN focused workflow debug-state tests; `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 257 tests); `pnpm build`.
 - Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
 - Next: Finalize the bounded correction receipt, amend the unpushed commit, and push.
+
+### 2026-07-16 20:03 (Europe/Madrid) — Product plan replacement
+
+- Summary: Replaced the obsolete workflow-only closure plan with the authoritative Iteronix AI workflow product roadmap.
+- Decisions: The product is an n8n-like AI workflow editor with governed finite execution, reusable/nested and parallel workflows, validation/repair, extensibility, external APIs, and cross-platform delivery; Kanban and repository-workbench/Monaco/Git/task-management surfaces are explicitly excluded.
+- Changes: Updated `PLAN.md` only and recorded the unresolved higher-precedence `AGENTS.md` conflict; preserved the workflow-only implementation as a migration baseline.
+- Commands: Documentation audit only; no code, configuration, tests, or quality gates run.
+- Issues/Risks: `AGENTS.md` still mandates the older repository-orchestration scope and requires a separately authorized reconciliation. Existing uncommitted non-document work and `.atl/skill-registry.md` were untouched.
+- Next: Approve the governance reconciliation, then begin Phase 0 migration inventory before product implementation.
+
+### 2026-07-16 20:53 (Europe/Madrid) — Product charter scope reconciliation
+
+- Summary: Reconciled the governing agent instructions with the approved Iteronix AI workflow product charter.
+- Decisions: Kanban, task/project-management, and repository-workbench surfaces are explicitly excluded; this includes repository browsing, Monaco editing, Git operations, file management, and coding-agent task surfaces.
+- Changes: Updated `AGENTS.md` project scope, architecture wording, workflow node list, and removed the Kanban/Git requirements.
+- Commands: Documentation audit only; no code, configuration, tests, or quality gates run.
+- Issues/Risks: Existing uncommitted web UI work and the user-owned `.atl/skill-registry.md` were untouched.
+- Next: Begin the approved Phase 0 migration inventory before implementation.

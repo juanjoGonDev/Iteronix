@@ -1131,16 +1131,6 @@ export class WorkflowsScreen extends Component<
             this.state.errorMessage ??
             "The colocated workflow service is unavailable.",
         }),
-        createElement(
-          "a",
-          {
-            href: `${ROUTES.SETTINGS}?tab=api`,
-            className:
-              "rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50",
-            "data-testid": "workflows-open-settings",
-          },
-          ["Open Settings"],
-        ),
       ],
     );
   }

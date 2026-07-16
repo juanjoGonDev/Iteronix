@@ -73,7 +73,7 @@ The agent must never improvise behavior already defined by a higher-priority sou
 ## 1) Project
 
 **Name (working):** Iteronix  
-**Goal:** Build a single tool to orchestrate coding agents and workflows against a repository, with strict quality gates, strong auditability, and a modular LLM/provider system.
+**Goal:** Build an n8n-like, cross-platform AI workflow product for composing, executing, governing, and exposing reusable workflows, with strict quality gates, strong auditability, and a modular LLM/provider system.
 
 The system must support:
 
@@ -83,10 +83,13 @@ The system must support:
   2. Electron desktop wrapper (same UI)
   3. Server-hosted UI (optional)
 - A **Headless server** (Docker-ready, Raspberry Pi friendly) exposing a typed HTTP API used by the UI in all modes.
-- Repo browsing/editing (Monaco) and git operations.
-- Kanban board (Jira-style panels): IDEAS → TODO → IN_PROGRESS → QA → DONE
 - Workflow graph editor (n8n-like) using React Flow.
 - Plugin system (server-side) with permissions (e.g. n8n webhook, Telegram).
+
+The product explicitly excludes:
+
+- Kanban, task-management, project-management, and Jira-style boards.
+- Repository-workbench features, including repository browsing, Monaco editing, Git operations, file management, and coding-agent task surfaces.
 
 ---
 
@@ -123,7 +126,7 @@ Each skill describes:
 Typical skills in this project include (non-exhaustive):
 
 - UI implementation from PNG + HTML spec
-- Kanban task lifecycle management
+- Workflow lifecycle management
 - Safe refactor
 - Code review / QA
 - Auto-loop step execution
@@ -137,7 +140,7 @@ Typical skills in this project include (non-exhaustive):
 - No comments in code.
 - Clean architecture / hexagonal:
   - Domain = pure logic + ports (interfaces)
-  - Adapters = side effects (FS, git, process spawn, HTTP, secrets)
+  - Adapters = side effects (HTTP, providers, secrets, persistence)
   - Shells = server / web UI / desktop wrapper
 - SOLID + clean code. Small cohesive modules.
 - Prefer pure functions; isolate side effects behind ports/adapters.
@@ -195,9 +198,6 @@ Typical skills in this project include (non-exhaustive):
 - Docker-ready, Raspberry Pi friendly
 - Typed HTTP API
 - Streaming via SSE (preferred)
-- Workspace sandbox:
-  - Filesystem restricted to project root
-  - Command execution policy-checked
 
 ### 5.4 Provider-agnostic AI execution
 
@@ -215,13 +215,6 @@ Typical skills in this project include (non-exhaustive):
 - Settings stored per project/profile
 - Schema enforcement via Ajv when not guaranteed by provider
 
-### 5.5 Git (server-first)
-
-- Native `git` CLI via adapter
-- Expose status/diff/commit via API
-
----
-
 ## 6) Security & secrets
 
 - Never store secrets in plain text
@@ -233,21 +226,7 @@ Typical skills in this project include (non-exhaustive):
 
 ---
 
-## 7) Kanban board semantics
-
-Columns: `IDEAS` → `TODO` → `IN_PROGRESS` → `QA` → `DONE`
-
-Rules:
-
-- Pull to IN_PROGRESS only with clear acceptance criteria
-- Move to QA only if gates pass
-- QA fail returns to IN_PROGRESS with concrete reason
-- Tasks may be assigned to agent profiles:
-  - Backend, Frontend, DevOps, Product Manager
-
----
-
-## 8) Workflow graph editor (later milestone)
+## 7) Workflow graph editor (later milestone)
 
 - Use React Flow
 - Nodes (MVP):
@@ -255,12 +234,11 @@ Rules:
   - Run Provider
   - Validate JSON
   - Run Gates
-  - Git Commit
   - Notify/Webhook
 
 ---
 
-## 9) Plugins (later milestone)
+## 8) Plugins (later milestone)
 
 - Server-side only
 - Manifest + permission model
@@ -269,7 +247,7 @@ Rules:
 
 ---
 
-## 10) Quality gates (mandatory)
+## 9) Quality gates (mandatory)
 
 Minimum required gates per change:
 
@@ -282,7 +260,7 @@ Never proceed if gates fail.
 
 ---
 
-## 11) Work protocol
+## 10) Work protocol
 
 - Always read:
   - `AGENTS.md`
@@ -294,7 +272,7 @@ Never proceed if gates fail.
 
 ---
 
-## 12) Agent output & next prompt contract
+## 11) Agent output & next prompt contract
 
 ### Summary
 
@@ -313,7 +291,7 @@ Never proceed if gates fail.
 
 ---
 
-## 13) Test-Driven Development (mandatory for core)
+## 12) Test-Driven Development (mandatory for core)
 
 TDD REQUIRED for:
 
@@ -337,7 +315,7 @@ Never weaken or remove tests.
 
 ---
 
-## 14) Chat reset & context recovery
+## 13) Chat reset & context recovery
 
 - Assume chat memory is unreliable
 - Repo files are authoritative
@@ -351,7 +329,7 @@ On every new session:
 
 ---
 
-## 15) AGENTS_LOGS.md format
+## 14) AGENTS_LOGS.md format
 
 ### YYYY-MM-DD HH:mm (Europe/Madrid) — <Area>
 
@@ -366,14 +344,14 @@ Concise. No large outputs.
 
 ---
 
-## 16) Repository hygiene
+## 15) Repository hygiene
 
 - `.gitignore` before first commit
 - Never commit artifacts or secrets
 
 ---
 
-## 17) UI spec (PNG + HTML) source of truth
+## 16) UI spec (PNG + HTML) source of truth
 
 For each screen under `ui-spec/screens/<screen>/`:
 
@@ -389,7 +367,7 @@ Rules:
 
 ---
 
-## 18) UI continuity & completion contract
+## 17) UI continuity & completion contract
 
 ### Global invariants
 
@@ -431,7 +409,7 @@ Rules:
 
 ---
 
-## 19) 🤖 AI Agent Integration with Stagehand
+## 18) 🤖 AI Agent Integration with Stagehand
 
 ### UI testing & screenshots
 
