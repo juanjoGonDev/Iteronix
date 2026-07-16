@@ -80,23 +80,26 @@ export const createDefaultApplicationState = (): ApplicationState => {
 };
 
 export const parseApplicationState = (value: unknown): ApplicationState => {
-  if (!isRecord(value)) {
+  const application = readApplicationEnvelope(value);
+  if (!application) {
     return createDefaultApplicationState();
   }
 
   const defaults = createDefaultApplicationState();
-  const createdAt = readString(value, "createdAt") ?? defaults.createdAt;
+  const createdAt = readString(application, "createdAt") ?? defaults.createdAt;
 
   return {
     version: ApplicationStateVersion.Current,
-    revision: readNonNegativeInteger(value, "revision") ?? 0,
-    settings: readSettingsSnapshot(value["settings"]),
-    providerSelections: readProviderSelections(value["providerSelections"]),
-    providerSettings: readProviderSettings(value["providerSettings"]),
-    workflows: readWorkflowCatalogState(value["workflows"]),
-    externalApiKeys: readExternalApiKeys(value["externalApiKeys"]),
+    revision: readNonNegativeInteger(application, "revision") ?? 0,
+    settings: readSettingsSnapshot(application["settings"]),
+    providerSelections: readProviderSelections(
+      application["providerSelections"],
+    ),
+    providerSettings: readProviderSettings(application["providerSettings"]),
+    workflows: readWorkflowCatalogState(application["workflows"]),
+    externalApiKeys: readExternalApiKeys(application["externalApiKeys"]),
     createdAt,
-    updatedAt: readString(value, "updatedAt") ?? createdAt,
+    updatedAt: readString(application, "updatedAt") ?? createdAt,
   };
 };
 
@@ -163,6 +166,24 @@ const readExternalApiKeys = (
     };
     return [key];
   });
+};
+
+const readApplicationEnvelope = (
+  value: unknown,
+): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (isRecord(value["application"])) {
+    return value["application"];
+  }
+
+  if (isRecord(value["workspace"])) {
+    return value["workspace"];
+  }
+
+  return value;
 };
 
 const readExternalApiKeyScope = (
@@ -464,6 +485,6 @@ const isJsonRecord = (value: JsonValue): value is JsonRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isSensitiveKey = (key: string): boolean =>
-  /^(?:auth(?:entication|orization)?(?:token)?|token|secret|password|api[-_]?key)$/i.test(
+  /^(?:(?:auth(?:entication|orization)?|access|refresh|webhook)?token|(?:client)?secret|password|api[-_]?key)$/i.test(
     key,
   );

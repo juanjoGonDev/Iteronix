@@ -409,30 +409,18 @@ Rules:
 
 ---
 
-## 18) 🤖 AI Agent Integration with Stagehand
+## 18) Browser and deployment testing governance
 
-### UI testing & screenshots
+### Required strategy
 
-- Use `@browserbasehq/stagehand`
-- Screenshots before/after interactions
-- Store under `apps/web-ui/screenshots/`
-- Format: `[timestamp]_[action]_[screen].png`
-- `screenshots/` gitignored, keep `.gitkeep`
+- Use unit and integration tests for domain, shared, orchestration, server, and adapter behavior.
+- New UI and API end-to-end coverage uses Playwright. Cover desktop, tablet, and mobile viewports; overlays, z-index, and hit-testing; deep links and reload restoration; deterministic screenshots; and Docker/server boundaries.
+- Keep deterministic screenshots under `apps/web-ui/screenshots/` using `[timestamp]_[action]_[screen].png`; `screenshots/` is gitignored and retains `.gitkeep`.
+- Existing Puppeteer checks are baseline validators only. They are not Playwright coverage and must remain operational until equivalent Playwright coverage is deliberately introduced.
 
-### Core actions
+### Practices
 
-- Navigate routes
-- Click elements
-- Fill forms
-- Scroll
-- Extract text
-- Wait for visibility
-- Capture screenshots
-
-### Best practices
-
-- Screenshots first
-- Descriptive names
-- `data-testid` for critical elements
-- Validate outcomes
-- Document failures
+- Add `data-testid` for critical interactions.
+- Capture and verify visual outcomes before and after stateful interactions.
+- Validate responsive behavior, route restoration, and server-backed results.
+- Phase 0 does not install Playwright or change test runners.

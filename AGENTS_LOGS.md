@@ -4905,3 +4905,66 @@
 - Commands: Documentation audit only; no code, configuration, tests, or quality gates run.
 - Issues/Risks: Existing uncommitted web UI work and the user-owned `.atl/skill-registry.md` were untouched.
 - Next: Begin the approved Phase 0 migration inventory before implementation.
+
+### 2026-07-16 21:29 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Started RED → GREEN coverage for schema-versioned full-application export/import.
+- Decisions: The contract must retain metadata hashes while redacting plaintext secrets; legacy workspace envelopes and workspace asset scopes remain import-compatible.
+- Changes: Added the representative legacy state fixture and failing export/import regression tests.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (RED: module `./application-export` missing).
+- Issues/Risks: Fixture intentionally exercises legacy envelope compatibility before canonical PostgreSQL application writes.
+- Next: Implement the runtime-validated checksum contract and prove reload persistence.
+
+### 2026-07-16 21:31 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Completed the GREEN implementation of the application import/export contract and migration documentation.
+- Decisions: Canonical application exports use schema version 1 and SHA-256 canonical-JSON checksums; external API-key hashes are retained as metadata while plaintext secret fields are removed. Legacy workspace envelopes and asset scopes remain one-way compatible.
+- Changes: Added `application-export.ts`, legacy fixture, and regression tests; updated application parsing, migration contract, PostgreSQL documentation, OpenSpec terminology, AGENTS.md browser-test governance, and Phase 0 plan checkboxes.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (GREEN: 3 tests passed).
+- Issues/Risks: No HTTP bulk-transfer endpoint, Playwright installation, graph semantics, governance lifecycle, plugins, or desktop work was introduced; these remain later phases.
+- Next: Run full mandatory quality gates and investigate any failure without masking it.
+
+### 2026-07-16 21:34 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Phase 0 verification completed successfully.
+- Decisions: Imports now reject structurally malformed application bodies before checksum acceptance, preserving atomic revision-safe persistence.
+- Changes: Added malformed-body regression coverage; no Phase 1 graph or governance surfaces were changed.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (RED then GREEN); `pnpm lint` (pass); `pnpm typecheck` (pass); `pnpm test` (pass: 49 files, 260 tests); `pnpm build` (pass).
+- Issues/Risks: Full-state transfer is a server contract only in Phase 0; HTTP bulk-transfer endpoints and Playwright runner changes remain deliberately deferred.
+- Next: Begin Phase 1 only after accepting this migration contract as the compatibility boundary.
+
+### 2026-07-16 21:48 (Europe/Madrid) — Phase 0 bounded review correction
+
+- Summary: Applied only the corroborated correction findings for review lineage `review-77be6816db650648`.
+- Decisions: Direct legacy workspace envelopes are import-compatible; nested import data is structurally validated before normalization; redaction covers access/refresh/webhook tokens and client secrets while retaining `secretHash`; rollback requires a verified pre-migration export or database backup because the single-row revision store has no history restore.
+- Changes: Updated application import validation, redaction, fixture-store regression coverage, migration rollback documentation, and review validation/evidence artifacts.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (3 expected failures); GREEN focused test; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No new review cycle, endpoint, graph, governance, Playwright runner, or unrelated scope was introduced.
+- Next: Parent may submit the supplied validation/evidence files to the existing review lineage finalization.
+
+### 2026-07-16 22:10 (Europe/Madrid) — Phase 0 recovery correction
+
+- Summary: Applied only RES-001 and REL-01 for recovery lineage `review-phase0-recovery-20260716`.
+- Decisions: Every imported workflow catalog entity needs minimal identity fields before permissive application parsing; empty definition records are malformed even when the outer export checksum remains otherwise valid.
+- Changes: Added minimal strict workflow definition/version/asset/usage/execution validators and the checksum-valid empty-definition regression; wrote recovery validation and evidence artifacts.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/application-export.test.ts`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No PLAN.md update, review cycle, migration-policy change, or Phase 1 feature was introduced.
+- Next: Parent may finalize the existing recovery lineage with the supplied JSON artifacts.
+
+### 2026-07-16 22:24 (Europe/Madrid) — Phase 0 complete entity validation
+
+- Summary: Corrected the post-commit Phase 0 import gap by validating complete required workflow catalog record shapes before normalization or persistence.
+- Decisions: Import now requires all mandatory definition, version, asset, asset-usage, and execution fields from the shared workflow contracts. Legacy workspace fixture entities are typed and complete, while legacy asset scope remains normalized to `global`.
+- Changes: Replaced the partial fixture; strengthened application import validators; added deep export/import/PostgreSQL reload preservation and malformed record regressions; updated the directly related migration checklist.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/application-export.test.ts`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No Phase 1 behavior, endpoints, staging, commit, or push was introduced.
+- Next: Finalize the existing review authority with this correction evidence.
+
+### 2026-07-16 22:40 (Europe/Madrid) — Phase 0 import validation
+
+- Summary: Completed fail-closed validation for persisted nested workflow records during application import.
+- Decisions: Reused shared workflow enums/contracts as runtime validation targets; no reusable shared runtime validators existed.
+- Changes: Validated node config and ports, edge mappings, output contracts, guardrails, version and asset optionals, runtime overrides, node execution records, alerts, findings, and usage data. Expanded the legacy fixture and round-trip assertions with nested workflow data and malformed-family cases.
+- Commands: pnpm --filter @iteronix/server-api test -- application-export.test.ts; pnpm lint; pnpm typecheck; pnpm test; pnpm build.
+- Issues/Risks: No Phase 1 behavior added; the test-first baseline execution was blocked by shell policy from temporarily restoring the pre-fix file.
+- Next: Run the existing review validation against the current Phase 0 correction scope.

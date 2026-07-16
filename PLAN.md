@@ -39,11 +39,11 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 
 ### Phase 0 — Charter reconciliation and migration inventory
 
-- [ ] Create a compatibility inventory for current workflow-only routes, PostgreSQL records, external API keys, runtime policies, and execution history.
-- [ ] Classify every current workflow-only artifact as retain, migrate, replace, or retire against this charter; include the unarchived live-execution OpenSpec change.
-- [ ] Define versioned import/export and database migration rules before changing workflow schemas.
-- [ ] Update product documentation and OpenSpec artifacts to remove obsolete workflow-only closure assumptions without restoring excluded workbench surfaces.
-- [ ] Record the resolution of the `AGENTS.md` scope conflict in a separately approved governance update; this plan does not modify `AGENTS.md`.
+- [x] Create a compatibility inventory for current workflow-only routes, PostgreSQL records, external API keys, runtime policies, and execution history.
+- [x] Classify every current workflow-only artifact as retain, migrate, replace, or retire against this charter; include the unarchived live-execution OpenSpec change.
+- [x] Define versioned import/export and database migration rules before changing workflow schemas.
+- [x] Update product documentation and OpenSpec artifacts to remove obsolete workflow-only closure assumptions without restoring excluded workbench surfaces.
+- [x] Record the resolution of the `AGENTS.md` scope conflict in a separately approved governance update; this plan does not modify `AGENTS.md`.
 
 **Acceptance / verification**
 

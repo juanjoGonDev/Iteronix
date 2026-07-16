@@ -14,10 +14,10 @@ The fix keeps the existing Workflows architecture and changes the smallest relia
 ## Server
 
 - Reuse existing runtime progress events to upsert partial execution rows.
-- Return whether a runtime progress event changed the catalog and schedule serialized workspace saves during streaming.
+- Return whether a runtime progress event changed the catalog and schedule serialized application-state saves during streaming.
 - Flush queued saves before the final save at stream completion.
 - Guard SSE writes and close calls when the client has disconnected.
 
 ## Risks
 
-- More frequent workspace saves during execution; mitigated by serializing saves through a single queue and only scheduling after catalog progress events.
+- More frequent application-state saves during execution; mitigated by serializing saves through a single queue and only scheduling after catalog progress events.
