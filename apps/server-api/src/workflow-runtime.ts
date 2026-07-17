@@ -22,6 +22,7 @@ import type {
   WorkflowNodeExecutionInputSourceRecord,
 } from "../../../packages/shared/src/workflows";
 import type { ApplicationState } from "./application-state";
+import { createCanonicalWorkflowRuntimeGuard } from "./canonical-workflow-runtime";
 import { dispatchWorkflowNotification } from "./workflow-notifications";
 
 const SmokeTestPrompt = "Reply with OK.";
@@ -69,19 +70,37 @@ export const createWorkflowRuntimeService = (input: {
   now?: () => Date;
 }): WorkflowRuntimeService => {
   const now = input.now ?? (() => new Date());
+  const canonicalWorkflowRuntimeGuard = createCanonicalWorkflowRuntimeGuard({
+    readDefinitionVersions: () =>
+      input.readApplicationState().workflows.definitionVersions ?? [],
+  });
   const runtime = createWorkflowRuntime({
     now,
+    resolveWorkflowInvocation: (invocation) => {
+      const definition = input
+        .readApplicationState()
+        .workflows.definitionVersions?.find(
+          (record) =>
+            record.workflowId === invocation.workflowId &&
+            record.version === invocation.workflowVersion,
+        )?.snapshot;
+      if (!definition) {
+        return undefined;
+      }
+      const executionPlan = canonicalWorkflowRuntimeGuard.prepare(definition);
+      return {
+        definition,
+        ...(executionPlan ? { executionPlan } : {}),
+      };
+    },
     runProviderNode: async (request) => {
       const applicationState = input.readApplicationState();
-      const workflow = applicationState.workflows.definitions.find(
-        (definition) => definition.id === request.workflowId,
-      );
       const runtimeSettings = resolveWorkflowRuntimeSettings(
         {
           ...applicationState.settings.workflowLimits,
           ...applicationState.settings.notifications,
         },
-        workflow?.runtimeSettingsOverride,
+        request.definition.runtimeSettingsOverride,
       );
       if (!runtimeSettings.externalCalls) {
         throw new Error(
@@ -106,9 +125,13 @@ export const createWorkflowRuntimeService = (input: {
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> => {
+    const executionPlan = canonicalWorkflowRuntimeGuard.prepare(
+      request.definition,
+    );
     const execution = await runtime.runDefinition({
       definition: request.definition,
       assets: request.assets,
+      ...(executionPlan ? { executionPlan } : {}),
       ...(request.seedNodeOutputs
         ? { seedNodeOutputs: request.seedNodeOutputs }
         : {}),
@@ -132,16 +155,10 @@ export const createWorkflowRuntimeService = (input: {
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> =>
-    runtime.runNode({
-      definition: request.definition,
-      assets: request.assets,
-      nodeId: request.nodeId,
-      inputSource: request.inputSource,
-      ...(request.seedNodeOutputs
-        ? { seedNodeOutputs: request.seedNodeOutputs }
-        : {}),
-      ...(request.signal ? { signal: request.signal } : {}),
-      ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+    runCanonicalWorkflowNode({
+      request,
+      canonicalWorkflowRuntimeGuard,
+      runtime,
     });
 
   const testProviderNode = async (request: {
@@ -162,6 +179,7 @@ export const createWorkflowRuntimeService = (input: {
       await executeProviderNode(
         {
           workflowId: request.workflow.id,
+          definition: request.workflow,
           workflowRunId: `provider-test-${request.node.id}`,
           node: request.node,
           provider: request.node.config.provider ?? {
@@ -212,6 +230,35 @@ export const createWorkflowRuntimeService = (input: {
     runNode,
     testProviderNode,
   };
+};
+
+const runCanonicalWorkflowNode = (input: {
+  request: {
+    definition: WorkflowDefinitionRecord;
+    assets: ReadonlyArray<WorkflowAssetRecord>;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+    signal?: AbortSignal;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  };
+  canonicalWorkflowRuntimeGuard: ReturnType<
+    typeof createCanonicalWorkflowRuntimeGuard
+  >;
+  runtime: ReturnType<typeof createWorkflowRuntime>;
+}): Promise<WorkflowExecutionRecord> => {
+  input.canonicalWorkflowRuntimeGuard.prepare(input.request.definition);
+  return input.runtime.runNode({
+    definition: input.request.definition,
+    assets: input.request.assets,
+    nodeId: input.request.nodeId,
+    inputSource: input.request.inputSource,
+    ...(input.request.seedNodeOutputs
+      ? { seedNodeOutputs: input.request.seedNodeOutputs }
+      : {}),
+    ...(input.request.signal ? { signal: input.request.signal } : {}),
+    ...(input.request.onEvent ? { onEvent: input.request.onEvent } : {}),
+  });
 };
 
 const executeProviderNode = async (

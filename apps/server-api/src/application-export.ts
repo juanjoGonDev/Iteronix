@@ -247,6 +247,8 @@ const isWorkflowVersionPayload = (value: Record<string, unknown>): boolean =>
   isNonEmptyString(value["createdAt"]) &&
   isRecord(value["snapshot"]) &&
   isWorkflowDefinitionPayload(value["snapshot"]) &&
+  value["workflowId"] === value["snapshot"]["id"] &&
+  value["version"] === value["snapshot"]["version"] &&
   isOptionalString(value["checksum"]) &&
   isOptionalString(value["author"]) &&
   isOptionalString(value["note"]) &&
@@ -309,6 +311,8 @@ const isWorkflowViewportPayload = (value: unknown): boolean =>
 const isWorkflowExecutionPolicyPayload = (value: unknown): boolean =>
   isRecord(value) &&
   isNonNegativeNumber(value["maxNodeRetries"]) &&
+  (value["maxConcurrency"] === undefined ||
+    isPositiveInteger(value["maxConcurrency"])) &&
   typeof value["allowManualCheckpointResume"] === "boolean";
 
 const isWorkflowContextPolicyPayload = (value: unknown): boolean =>
@@ -342,7 +346,8 @@ const isWorkflowNodeConfigPayload = (value: unknown): boolean =>
     isPinnedTestOutputPayload,
   ) &&
   isOptionalString(value["defaultPinnedTestOutputId"]) &&
-  isOptionalReviewPolicy(value["reviewPolicy"]);
+  isOptionalReviewPolicy(value["reviewPolicy"]) &&
+  isOptionalWorkflowInvocation(value["workflowInvocation"]);
 
 const isWorkflowProviderSelectionPayload = (value: unknown): boolean =>
   isRecord(value) &&
@@ -369,6 +374,12 @@ const isOptionalPinnedTestOutput = (value: unknown): boolean =>
 const isOptionalReviewPolicy = (value: unknown): boolean =>
   value === undefined ||
   (isRecord(value) && typeof value["requireHumanDecision"] === "boolean");
+
+const isOptionalWorkflowInvocation = (value: unknown): boolean =>
+  value === undefined ||
+  (isRecord(value) &&
+    isNonEmptyString(value["workflowId"]) &&
+    isPositiveInteger(value["workflowVersion"]));
 
 const isWorkflowNodePositionPayload = (value: unknown): boolean =>
   isRecord(value) && isFiniteNumber(value["x"]) && isFiniteNumber(value["y"]);
@@ -593,6 +604,9 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 const isNonNegativeNumber = (value: unknown): boolean =>
   isFiniteNumber(value) && value >= 0;
+
+const isPositiveInteger = (value: unknown): boolean =>
+  isFiniteNumber(value) && Number.isInteger(value) && value > 0;
 
 const isEnumValue = <TValues extends Record<string, string>>(
   value: unknown,

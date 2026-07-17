@@ -54,11 +54,11 @@ describe("legacy workflow adapter", () => {
       })),
     );
     expect(legacy.nodes[1]?.kind).toBe(WorkflowNodeKind.AiProviderRun);
-    expect(() =>
+    expect(
       adaptLegacyWorkflowDefinition(
         createLegacyDefinition({ nodeKind: WorkflowNodeKind.AssetPrompt }),
-      ),
-    ).toThrow("Unsupported legacy workflow node kind");
+      ).nodes.find((node) => node.id === "agent")?.kind,
+    ).toBe(CanonicalNodeKind.AgentInvocation);
     expect(() =>
       adaptLegacyWorkflowDefinition(
         createLegacyDefinition({ triggerKind: WorkflowTriggerKind.Event }),

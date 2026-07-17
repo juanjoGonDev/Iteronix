@@ -27,7 +27,8 @@ export const adaptLegacyWorkflowDefinition = (
   triggerEnabled: definition.trigger.enabled,
   inputType: PortDataType.Json,
   outputType: PortDataType.Json,
-  concurrencyLimit: DefaultConcurrencyLimit,
+  concurrencyLimit:
+    definition.executionPolicy.maxConcurrency ?? DefaultConcurrencyLimit,
   nodes: definition.nodes.map(adaptLegacyWorkflowNode),
   edges: definition.edges.map((edge) => ({
     id: edge.id,
@@ -85,6 +86,8 @@ const adaptLegacyWorkflowNode = (
 
 const adaptLegacyNodeKind = (kind: WorkflowNodeKind): CanonicalNodeKind => {
   if (
+    kind === WorkflowNodeKind.AssetPrompt ||
+    kind === WorkflowNodeKind.AssetInstruction ||
     kind === WorkflowNodeKind.AiAgent ||
     kind === WorkflowNodeKind.AiProviderRun
   ) {
@@ -95,6 +98,15 @@ const adaptLegacyNodeKind = (kind: WorkflowNodeKind): CanonicalNodeKind => {
   }
   if (kind === WorkflowNodeKind.LogicMerge) {
     return CanonicalNodeKind.Merge;
+  }
+  if (kind === WorkflowNodeKind.WorkflowInvocation) {
+    return CanonicalNodeKind.WorkflowInvocation;
+  }
+  if (kind === WorkflowNodeKind.LogicCondition) {
+    return CanonicalNodeKind.SchemaValidation;
+  }
+  if (kind === WorkflowNodeKind.HumanReview) {
+    return CanonicalNodeKind.Terminal;
   }
   if (kind === WorkflowNodeKind.TerminalResponse) {
     return CanonicalNodeKind.Terminal;
@@ -115,6 +127,22 @@ const adaptLegacyNodeContract = (
       ...(node.config.provider?.providerId
         ? { agentId: node.config.provider.providerId }
         : {}),
+    };
+  }
+  if (kind === CanonicalNodeKind.SchemaValidation) {
+    return { kind };
+  }
+  if (kind === CanonicalNodeKind.WorkflowInvocation) {
+    const invocation = node.config.workflowInvocation;
+    if (!invocation) {
+      throw new Error(`Workflow node ${node.id} is missing invocation pin`);
+    }
+    return {
+      kind,
+      workflowId: invocation.workflowId,
+      workflowVersion: invocation.workflowVersion,
+      inputType: PortDataType.Json,
+      outputType: PortDataType.Json,
     };
   }
   if (kind === CanonicalNodeKind.Guardrail) {

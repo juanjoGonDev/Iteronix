@@ -14,6 +14,7 @@ export const WorkflowNodeKind = {
   AiProviderRun: "ai.provider-run",
   LogicCondition: "logic.condition",
   LogicMerge: "logic.merge",
+  WorkflowInvocation: "workflow.invocation",
   HumanReview: "human.review",
   TerminalResponse: "terminal.response",
 } as const;
@@ -104,6 +105,7 @@ export type WorkflowViewportRecord = {
 
 export type WorkflowExecutionPolicyRecord = {
   maxNodeRetries: number;
+  maxConcurrency?: number;
   allowManualCheckpointResume: boolean;
 };
 
@@ -234,6 +236,10 @@ export type WorkflowNodeConfigRecord = {
   defaultPinnedTestOutputId?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
+  };
+  workflowInvocation?: {
+    workflowId: string;
+    workflowVersion: number;
   };
 };
 

@@ -4984,3 +4984,48 @@
 - Changes: Execution plans now chunk ready nodes by concurrency limit; external invocation requires enabled published webhook/API workflows and a verified non-revoked scoped key; single-cardinality ports and reusable physical ports are validated; legacy event and unsupported node kinds reject; adapter concurrency default no longer derives from retries.
 - Commands: RED focused contract/adapter tests; GREEN focused Vitest (8 tests), `pnpm lint`, `pnpm typecheck`, and `git diff --check` all passed.
 - Next: Parent can validate this bounded correction against the active review lineage.
+
+### 2026-07-17 10:27 (Europe/Madrid) — Phase 1 runtime adapter boundary
+
+- Summary: Wired the canonical adapter into the existing server runtime as a pre-execution guard without introducing another executor.
+- Decisions: Fully canonical persisted graphs are validated and deterministically planned before execution; legacy workflow records without an explicit trigger node retain their existing runtime path and receive a deterministic compatibility plan so Phase 0 data and stream behavior are not rejected.
+- Changes: Added canonical runtime guard coverage and invoked it for whole-workflow and single-node runtime requests; expanded adapter coverage for current persisted node kinds.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts`; GREEN focused Vitest; `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: Persisted legacy schemas do not yet encode workflow-invocation nodes or configurable canonical concurrency, so version-pinned nested-workflow execution remains a later migration rather than a completed Phase 1 acceptance item.
+- Next: Design the additive persisted workflow-invocation representation and execute it through the existing runtime before checking the Phase 1 integration acceptance box.
+
+### 2026-07-17 10:31 (Europe/Madrid) — Phase 1 pinned workflow invocation
+
+- Summary: Added the minimal persisted invocation pin and execution-policy concurrency representation, then routed pinned child definitions through the existing runtime recursively.
+- Decisions: A workflow invocation stores only `{ workflowId, workflowVersion }`; the server resolves exactly that immutable definition-version snapshot, never the current workflow record. The canonical execution plan bounds deterministic stages while the existing runtime remains the only executor.
+- Changes: Added `workflow.invocation`, invocation config validation, optional `maxConcurrency`, canonical adaptation, version-snapshot resolution, and a persistence/reload acceptance test proving version 1 is selected over version 2.
+- Commands: RED focused canonical-runtime test; GREEN `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts packages/agents/src/canonical-workflow-adapter.test.ts apps/server-api/src/application-export.test.ts apps/server-api/src/workflow-stream-persistence.test.ts` (4 files, 9 tests); `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: The legacy runtime still invokes nodes sequentially; the persisted plan establishes bounded deterministic fan-out stages but physical parallel dispatch requires a dedicated later runtime scheduling change.
+- Next: Parent should run full gates/review and decide whether bounded deterministic staging is sufficient for this Phase 1 slice before marking remaining plan items.
+
+### 2026-07-17 10:36 (Europe/Madrid) — Phase 1 frozen review correction
+
+- Summary: Applied the frozen canonical-runtime corrections without adding another executor.
+- Decisions: The runtime consumes canonical plan stages whenever a persisted definition is canonical-compatible and retains the legacy topological fallback otherwise; merge nodes now use canonical `ObjectByNodeId` output semantics; every resolved pinned child snapshot is validated before recursive execution.
+- Changes: Added canonical-plan dispatch ordering, pinned-child validation, canonical merge output, and distinct v1/v2 fixture assertions.
+- Commands: `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts packages/agents/src/canonical-workflow-adapter.test.ts apps/server-api/src/workflow-stream-persistence.test.ts` (pass: 3 files, 6 tests); `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: Stage order and concurrency bounds are consumed deterministically, but independent node operations remain serial within a stage to preserve the existing mutable envelope/tracing semantics.
+- Next: Parent may submit this focused correction evidence to the frozen review lineage.
+
+### 2026-07-17 10:51 (Europe/Madrid) — Phase 1 safe stage scheduler
+
+- Summary: Replaced the canonical runtime's serial stage path with a bounded concurrent scheduler that commits local node results deterministically after every stage.
+- Decisions: Sibling nodes receive immutable snapshots of envelope/output state; their node runs, outputs, citations, guardrails, and envelope artifacts are merged by node id only after the whole stage finishes. Legacy graphs without a trigger-node remain sequential for Phase 0 compatibility.
+- Changes: Passed canonical execution plans into the runtime, added stage-local execution/aggregation, preserved selected-node sequential semantics, validated canonical pinned children before parent node events, and added overlap, deterministic ordering, persistence/reload, exact v1 pin, and invalid-child acceptance coverage.
+- Commands: RED focused Vitest caught legacy selected-node and legacy stream compatibility regressions; GREEN focused Vitest; `pnpm typecheck`; `pnpm lint`; `pnpm test`; `pnpm build`; `git diff --check`.
+- Issues/Risks: Stage lifecycle events and provider delta events may arrive in physical completion order while persisted node runs remain canonical-id deterministic; downstream consumers must use node-run order for deterministic audit results.
+- Next: Run fresh bounded review and delivery validation; do not mark Phase 1 complete until parent verifies every Phase 1 acceptance item.
+
+### 2026-07-17 10:57 (Europe/Madrid) — Phase 1 frozen scheduler correction
+
+- Summary: Corrected the bounded scheduler and pinning boundaries under the frozen review scope.
+- Decisions: Version-record metadata must equal its immutable snapshot; pinned runtime calls resolve against that snapshot and propagate its canonical plan/settings. Top-level legacy definitions retain the pre-existing runtime fallback without a synthetic alphabetical plan.
+- Changes: Added recursive canonical validation of every pinned reference, metadata enforcement in export/import validation and runtime, snapshot-based provider policy resolution, complete stage outcome aggregation before terminal status, and focused regression tests.
+- Commands: RED focused Vitest; GREEN focused Vitest, typecheck, lint, full test, build, and diff check.
+- Issues/Risks: Live event emission remains physically concurrent; persisted audit ordering is canonical-node deterministic.
+- Next: Parent runs the frozen review validator and delivery receipt workflow.

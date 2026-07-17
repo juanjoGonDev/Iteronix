@@ -518,6 +518,83 @@ describe("workflow runtime", () => {
     expect(providerPrompts.at(-1)).toContain('"accumulatedTotal": 1');
   });
 
+  it("records every settled sibling before terminalizing a failed canonical stage", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        if (request.node.id === "node-provider-right") {
+          throw new Error("right branch failed");
+        }
+        return { outputText: `Output from ${request.node.id}` };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createBranchedWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      executionPlan: {
+        stages: [
+          ["node-trigger"],
+          ["node-prompt"],
+          ["node-provider-left", "node-provider-right"],
+          ["node-provider-target"],
+        ],
+        maxParallelism: 2,
+      },
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Failed);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-left",
+      "node-provider-right",
+    ]);
+    expect(execution.nodeRuns.at(-1)?.status).toBe("failed");
+  });
+
+  it("runs canonical sibling stages concurrently while committing deterministic merge output", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return { outputText: `Output from ${request.node.id}` };
+      },
+    });
+    const definition = createBranchedWorkflowDefinitionRecord();
+    const execution = await runtime.runDefinition({
+      definition,
+      assets: [createWorkflowAssetRecord()],
+      executionPlan: {
+        stages: [
+          ["node-trigger"],
+          ["node-prompt"],
+          ["node-provider-left", "node-provider-right"],
+          ["node-provider-target"],
+        ],
+        maxParallelism: 2,
+      },
+    });
+
+    expect(maxInFlight).toBe(2);
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-left",
+      "node-provider-right",
+      "node-provider-target",
+    ]);
+    expect(execution.nodeRuns.at(-1)?.outputSnapshot).toBe(
+      "Output from node-provider-target",
+    );
+  });
+
   it("resolves dynamic output references in prompts and guardrail values", async () => {
     const providerPrompts: string[] = [];
     const runtime = createWorkflowRuntime({

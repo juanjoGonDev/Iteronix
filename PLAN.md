@@ -60,13 +60,13 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [x] Introduce node contracts for agent invocation, workflow invocation, schema validation, guardrails, merge, and external trigger boundaries.
 - [x] Add deterministic fan-out/fan-in semantics, explicit merge policies, cancellation behavior, concurrency limits, and retry classification.
 - [x] Add reusable workflow references with immutable version pinning, recursion detection, input/output mapping, and compatibility checks.
-- [ ] Migrate the existing editor/runtime representation through adapters rather than duplicating execution engines.
+- [x] Migrate the existing editor/runtime representation through adapters rather than duplicating execution engines.
 
 **Acceptance / verification**
 
 - Unit tests cover valid and invalid graph construction, merge policies, cycle/recursion rejection, cancellation, and deterministic execution ordering.
-- Integration tests persist, reload, and execute a graph containing parallel branches and a version-pinned nested workflow.
-- Legacy workflow fixtures import through the Phase 0 migration contract.
+- [x] Integration tests persist, reload, and execute a graph containing parallel branches and a version-pinned nested workflow.
+- [x] Legacy workflow fixtures import through the Phase 0 migration contract.
 
 **Dependencies**: Phase 0.
 
