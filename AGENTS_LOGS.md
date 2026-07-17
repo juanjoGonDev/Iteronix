@@ -4968,3 +4968,19 @@
 - Commands: pnpm --filter @iteronix/server-api test -- application-export.test.ts; pnpm lint; pnpm typecheck; pnpm test; pnpm build.
 - Issues/Risks: No Phase 1 behavior added; the test-first baseline execution was blocked by shell policy from temporarily restoring the pre-fix file.
 - Next: Run the existing review validation against the current Phase 0 correction scope.
+
+### 2026-07-17 09:44 (Europe/Madrid) — Phase 1 canonical workflow contracts
+
+- Summary: Added the pure domain contract for canonical workflow graphs and a legacy adapter that preserves the Phase 0 persisted representation.
+- Decisions: Graph topology, typed ports, deterministic stage planning, merge policies, retry classification, reusable workflow pinning, recursion rejection, and scoped external invocation are domain rules; the existing runtime stays authoritative behind an adapter.
+- Changes: Added domain graph contracts/tests, legacy workflow adapter/tests, and exported both public contract surfaces; checked the finished Phase 1 contract checklist items without marking runtime migration complete.
+- Commands: RED focused Vitest tests for each missing module; GREEN `pnpm exec vitest run packages/domain/src/workflow-contracts.test.ts packages/agents/src/canonical-workflow-adapter.test.ts` (8 tests); `pnpm typecheck` (pass).
+- Issues/Risks: Server persistence/reload execution of a parallel nested graph remains the unfinished Phase 1 integration boundary; no Phase 0 import/export data shape changed.
+- Next: Wire the adapter into the existing runtime and add server integration coverage before marking the migration task and Phase 1 acceptance criteria complete.
+
+### 2026-07-17 09:54 (Europe/Madrid) — Phase 1 bounded contract correction
+
+- Summary: Applied corroborated graph-contract review fixes without changing Phase 0 persisted records or the plan scope.
+- Changes: Execution plans now chunk ready nodes by concurrency limit; external invocation requires enabled published webhook/API workflows and a verified non-revoked scoped key; single-cardinality ports and reusable physical ports are validated; legacy event and unsupported node kinds reject; adapter concurrency default no longer derives from retries.
+- Commands: RED focused contract/adapter tests; GREEN focused Vitest (8 tests), `pnpm lint`, `pnpm typecheck`, and `git diff --check` all passed.
+- Next: Parent can validate this bounded correction against the active review lineage.

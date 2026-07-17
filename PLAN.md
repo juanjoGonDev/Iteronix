@@ -55,11 +55,11 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 
 ### Phase 1 — Canonical workflow graph and execution contracts
 
-- [ ] Define strict domain schemas for workflow graphs, node inputs/outputs, typed ports, edges, run context, execution events, and persisted run snapshots.
-- [ ] Implement deterministic graph validation: missing references, illegal cycles, unreachable nodes, incompatible ports, and invalid terminal paths.
-- [ ] Introduce node contracts for agent invocation, workflow invocation, schema validation, guardrails, merge, and external trigger boundaries.
-- [ ] Add deterministic fan-out/fan-in semantics, explicit merge policies, cancellation behavior, concurrency limits, and retry classification.
-- [ ] Add reusable workflow references with immutable version pinning, recursion detection, input/output mapping, and compatibility checks.
+- [x] Define strict domain schemas for workflow graphs, node inputs/outputs, typed ports, edges, run context, execution events, and persisted run snapshots.
+- [x] Implement deterministic graph validation: missing references, illegal cycles, unreachable nodes, incompatible ports, and invalid terminal paths.
+- [x] Introduce node contracts for agent invocation, workflow invocation, schema validation, guardrails, merge, and external trigger boundaries.
+- [x] Add deterministic fan-out/fan-in semantics, explicit merge policies, cancellation behavior, concurrency limits, and retry classification.
+- [x] Add reusable workflow references with immutable version pinning, recursion detection, input/output mapping, and compatibility checks.
 - [ ] Migrate the existing editor/runtime representation through adapters rather than duplicating execution engines.
 
 **Acceptance / verification**
