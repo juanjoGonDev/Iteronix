@@ -72,14 +72,16 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 
 ### Phase 2 — Finite AI execution and governance lifecycle (high priority)
 
-- [ ] Model a persisted finite state machine: `Draft` → `Planning` → `Executing` → `Verifying` → `Reviewing` → `AwaitingUserApproval`, with explicit `Failed`, `Cancelled`, `Rejected`, and `Approved` terminal outcomes.
-- [ ] Persist a scope/content fingerprint and test/evidence fingerprint at each transition; record actor, timestamps, budget consumption, and immutable transition reason.
-- [ ] Define configurable, persisted maximum execution, repair, and review budgets; reject transitions that would exceed a budget.
-- [ ] Allow automatic repair only for classified retryable failures, only while budget remains, and only when its before/after evidence is recorded.
-- [ ] Make `AwaitingUserApproval` a blocking terminal checkpoint for autonomous execution. Expose only explicit user controls: **Approve**, **Continue**, and **Reject with feedback**.
-- [ ] Define **Continue** as a user-authorized, single next bounded pass with a new transition record; define **Reject with feedback** as a revision request linked to the feedback; define **Approve** as an immutable approval of the recorded fingerprints.
-- [ ] Prevent any rerun after approval unless a changed scope or changed evidence produces a new fingerprint and a new user-authorized lifecycle.
+- [x] Model a persisted finite state machine: `Draft` → `Planning` → `Executing` → `Verifying` → `Reviewing` → `AwaitingUserApproval`, with explicit `Failed`, `Cancelled`, `Rejected`, and `Approved` terminal outcomes.
+- [x] Persist a scope/content fingerprint and test/evidence fingerprint at each transition; record actor, timestamps, budget consumption, and immutable transition reason.
+- [x] Define configurable, persisted maximum execution, repair, and review budgets; reject transitions that would exceed a budget.
+- [x] Allow automatic repair only for classified retryable failures, only while budget remains, and only when its before/after evidence is recorded.
+- [x] Make `AwaitingUserApproval` a blocking terminal checkpoint for autonomous execution. Expose only explicit user controls: **Approve**, **Continue**, and **Reject with feedback**.
+- [x] Define **Continue** as a user-authorized, single next bounded pass with a new transition record; define **Reject with feedback** as a revision request linked to the feedback; define **Approve** as an immutable approval of the recorded fingerprints.
+- [x] Prevent any rerun after approval unless a changed scope or changed evidence produces a new fingerprint and a new user-authorized lifecycle.
 - [ ] Surface lifecycle state, remaining budgets, fingerprints, decision history, and disabled/available controls in the UI and external API.
+  - [x] Expose authenticated typed server endpoints to read lifecycle state and perform audited Approve, Continue, and Reject-with-feedback controls.
+  - [ ] Surface the lifecycle state and available controls in the UI.
 
 **Acceptance / verification**
 

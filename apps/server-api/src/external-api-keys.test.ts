@@ -15,6 +15,7 @@ import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowRuntimeService } from "./workflow-runtime";
 import {
   createDefaultApplicationState,
+  parseApplicationState,
   redactApplicationState,
   type ApplicationState,
   type ApplicationStateStore,
@@ -28,6 +29,206 @@ afterEach(async () => {
 });
 
 describe("external workflow API keys", () => {
+  it("resumes one persisted retryable external lifecycle pass and preserves its audit query", async () => {
+    const testServer = createTestServer({
+      failureCount: 1,
+      maxNodeRetries: 1,
+      failureMessage: "Provider timeout.",
+    });
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const apiKey = createExternalApiKey({
+      name: "Retryable invoke",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      now: new Date(),
+    });
+    await testServer.persistence.updateExternalApiKeys([apiKey.key]);
+
+    const failed = await invokeExternalWorkflow(url, apiKey.plaintext);
+    expect(failed.status).toBe(500);
+    const paused = testServer.persistence.read().governanceLifecycles.at(-1);
+    expect(paused).toMatchObject({
+      state: "planning",
+      budgets: { execution: 1, repair: 1, review: 0 },
+    });
+    expect(paused?.transitions.at(-1)).toMatchObject({
+      kind: "auto-repair",
+      failure: { classification: "retryable" },
+    });
+    expect(
+      parseApplicationState(
+        JSON.parse(JSON.stringify(testServer.persistence.read())),
+      ).governanceLifecycles.at(-1),
+    ).toEqual(paused);
+
+    const resumed = await requestGovernanceLifecycle(url, "resume", paused?.id);
+    expect(resumed.status).toBe(200);
+    const resumedLifecycle = readLifecycle(resumed.body);
+    expect(resumedLifecycle).toMatchObject({
+      id: paused?.id,
+      state: "awaiting-user-approval",
+      budgets: { execution: 2, repair: 1, review: 1 },
+    });
+    expect(testServer.readRunCalls()).toBe(2);
+    expect(
+      testServer.workflowCatalog.listExecutions({
+        workflowId: "workflow-allowed",
+      }),
+    ).toHaveLength(1);
+
+    const audited = await requestGovernanceLifecycle(url, "get", paused?.id);
+    expect(audited.status).toBe(200);
+    expect(readLifecycle(audited.body)).toEqual(resumedLifecycle);
+
+    const duplicate = await requestGovernanceLifecycle(
+      url,
+      "resume",
+      paused?.id,
+    );
+    expect(duplicate.status).toBe(400);
+    expect(testServer.readRunCalls()).toBe(2);
+  });
+
+  it("rejects retry resumption when the persisted workflow scope changes", async () => {
+    const testServer = createTestServer({
+      failureCount: 1,
+      maxNodeRetries: 1,
+      failureMessage: "Provider timeout.",
+    });
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const apiKey = createExternalApiKey({
+      name: "Scope-bound retry",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      now: new Date(),
+    });
+    await testServer.persistence.updateExternalApiKeys([apiKey.key]);
+    await invokeExternalWorkflow(url, apiKey.plaintext);
+    const paused = testServer.persistence.read().governanceLifecycles.at(-1);
+    const current = testServer.workflowCatalog.getWorkflow("workflow-allowed");
+    if (!current) {
+      throw new Error("Expected workflow fixture.");
+    }
+    testServer.workflowCatalog.upsertWorkflow({
+      ...current,
+      name: "Changed workflow",
+    });
+
+    const rejected = await requestGovernanceLifecycle(
+      url,
+      "resume",
+      paused?.id,
+    );
+    expect(rejected.status).toBe(400);
+    expect(testServer.readRunCalls()).toBe(1);
+    expect(testServer.persistence.read().governanceLifecycles.at(-1)).toEqual(
+      paused,
+    );
+  });
+
+  it("rejects non-retryable external lifecycle resumption", async () => {
+    const testServer = createTestServer({
+      failureCount: 1,
+      maxNodeRetries: 1,
+      failureMessage: "Schema mismatch.",
+    });
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const apiKey = createExternalApiKey({
+      name: "Terminal invoke",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      now: new Date(),
+    });
+    await testServer.persistence.updateExternalApiKeys([apiKey.key]);
+    await invokeExternalWorkflow(url, apiKey.plaintext);
+    const failed = testServer.persistence.read().governanceLifecycles.at(-1);
+
+    expect(failed?.state).toBe("failed");
+    const rejected = await requestGovernanceLifecycle(
+      url,
+      "resume",
+      failed?.id,
+    );
+    expect(rejected.status).toBe(400);
+    expect(testServer.readRunCalls()).toBe(1);
+  });
+
+  it("persists and reloads the external invocation lifecycle audit checkpoint", async () => {
+    const testServer = createTestServer();
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const apiKey = createExternalApiKey({
+      name: "Invoke",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      now: new Date(),
+    });
+    await testServer.persistence.updateExternalApiKeys([apiKey.key]);
+
+    const response = await fetch(`${url}/external/workflows/invoke`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey.plaintext}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ workflowId: "workflow-allowed" }),
+    });
+    expect(response.status).toBe(200);
+    const lifecycle = testServer.persistence.read().governanceLifecycles.at(-1);
+    expect(lifecycle).toMatchObject({
+      workflowId: "workflow-allowed",
+      state: "awaiting-user-approval",
+    });
+    expect(lifecycle?.transitions.map((transition) => transition.kind)).toEqual(
+      [
+        "start-planning",
+        "start-executing",
+        "start-verifying",
+        "start-reviewing",
+        "await-user-approval",
+      ],
+    );
+    expect(
+      parseApplicationState(
+        JSON.parse(JSON.stringify(testServer.persistence.read())),
+      ).governanceLifecycles.at(-1),
+    ).toEqual(lifecycle);
+    const audited = await fetch(`${url}/governance/lifecycles/get`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${AuthToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ lifecycleId: lifecycle?.id }),
+    });
+    expect(audited.status).toBe(200);
+    const auditedBody: unknown = await audited.json();
+    const auditedTransitions =
+      isRecord(auditedBody) && isRecord(auditedBody["lifecycle"])
+        ? auditedBody["lifecycle"]["transitions"]
+        : undefined;
+    expect(auditedTransitions).toEqual(lifecycle?.transitions);
+    const concurrent = await Promise.all(
+      [1, 2].map(() =>
+        fetch(`${url}/external/workflows/invoke`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey.plaintext}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ workflowId: "workflow-allowed" }),
+        }),
+      ),
+    );
+    expect(concurrent.map((item) => item.status)).toEqual([200, 200]);
+    expect(
+      new Set(
+        testServer.persistence
+          .read()
+          .governanceLifecycles.map((item) => item.id),
+      ).size,
+    ).toBe(3);
+  });
+
   it("hashes generated keys and never stores their plaintext", () => {
     const created = createExternalApiKey({
       name: "Automation",
@@ -183,9 +384,17 @@ describe("external workflow API keys", () => {
   });
 });
 
-const createTestServer = (): {
+const createTestServer = (
+  input: {
+    failureCount?: number;
+    failureMessage?: string;
+    maxNodeRetries?: number;
+  } = {},
+): {
   server: Server;
   persistence: ReturnType<typeof createApplicationPersistence>;
+  workflowCatalog: ReturnType<typeof createWorkflowCatalogStore>;
+  readRunCalls: () => number;
 } => {
   const initialState = createDefaultApplicationState();
   const workflowCatalog = createWorkflowCatalogStore();
@@ -196,7 +405,10 @@ const createTestServer = (): {
     status: WorkflowRecordStatus.Draft,
     trigger: { kind: WorkflowTriggerKind.Manual, enabled: true, config: {} },
     viewport: { x: 0, y: 0, zoom: 1 },
-    executionPolicy: { maxNodeRetries: 0, allowManualCheckpointResume: false },
+    executionPolicy: {
+      maxNodeRetries: input.maxNodeRetries ?? 0,
+      allowManualCheckpointResume: false,
+    },
     defaultContextPolicy: {
       language: "en",
       carryMessagesLimit: 1,
@@ -213,11 +425,26 @@ const createTestServer = (): {
     providerStore,
     workflowCatalog,
   });
-  const workflowRuntime = createWorkflowRuntimeService({
+  const baseWorkflowRuntime = createWorkflowRuntimeService({
     readApplicationState: persistence.read,
   });
+  let runCalls = 0;
+  const workflowRuntime = {
+    ...baseWorkflowRuntime,
+    runWorkflow: async (
+      request: Parameters<typeof baseWorkflowRuntime.runWorkflow>[0],
+    ) => {
+      runCalls += 1;
+      if (runCalls <= (input.failureCount ?? 0)) {
+        throw new Error(input.failureMessage ?? "Provider timeout.");
+      }
+      return baseWorkflowRuntime.runWorkflow(request);
+    },
+  };
   return {
     persistence,
+    workflowCatalog,
+    readRunCalls: () => runCalls,
     server: createApiServer({
       config: {
         port: 0,
@@ -267,6 +494,40 @@ const expectExternalStatus = async (
   expect(response.status).toBe(status);
 };
 
+const invokeExternalWorkflow = async (
+  url: string,
+  apiKey: string,
+): Promise<Response> =>
+  fetch(`${url}/external/workflows/invoke`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ workflowId: "workflow-allowed" }),
+  });
+
+const requestGovernanceLifecycle = async (
+  url: string,
+  action: "get" | "resume",
+  lifecycleId: string | undefined,
+): Promise<{ status: number; body: unknown }> => {
+  const response = await fetch(`${url}/governance/lifecycles/${action}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${AuthToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ lifecycleId }),
+  });
+  return { status: response.status, body: await response.json() };
+};
+
+const readLifecycle = (value: unknown): Record<string, unknown> | undefined =>
+  isRecord(value) && isRecord(value["lifecycle"])
+    ? value["lifecycle"]
+    : undefined;
+
 const listen = async (server: Server): Promise<string> =>
   new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -284,3 +545,6 @@ const closeServer = async (server: Server): Promise<void> =>
   new Promise((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);

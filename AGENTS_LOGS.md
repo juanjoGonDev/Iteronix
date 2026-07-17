@@ -5029,3 +5029,56 @@
 - Commands: RED focused Vitest; GREEN focused Vitest, typecheck, lint, full test, build, and diff check.
 - Issues/Risks: Live event emission remains physically concurrent; persisted audit ordering is canonical-node deterministic.
 - Next: Parent runs the frozen review validator and delivery receipt workflow.
+
+### 2026-07-17 11:11 (Europe/Madrid) — Phase 2 governance lifecycle
+
+- Summary: Added a persisted finite governance lifecycle around bounded runtime passes without replacing the Phase 1 workflow executor.
+- Decisions: Lifecycle transitions are immutable audit entries with actor, timestamp, reason, scope/evidence fingerprints and accumulated budgets. Retryable failures may return only to planning once with before/after evidence; all successful bounded passes stop at user approval.
+- Changes: Added pure domain lifecycle contracts and exhaustive transition tests; added fail-closed lifecycle deserialization to application state; added a persistence-backed server adapter and attached external workflow invocation to the governed bounded-pass boundary.
+- Commands: RED focused domain/server tests; GREEN `pnpm exec vitest run packages/domain/src/governance-lifecycle.test.ts apps/server-api/src/governance-lifecycle-persistence.test.ts apps/server-api/src/governance-lifecycle-service.test.ts`; `pnpm typecheck`.
+- Issues/Risks: UI and typed HTTP approval controls remain a later Phase 2 surface; the server adapter exposes the explicit control operations but no new public routes were added in this slice.
+- Next: Run complete gates and inspect external workflow regression coverage before review/delivery.
+
+### 2026-07-17 12:25 (Europe/Madrid) — Phase 2 frozen governance review correction
+
+- Summary: Hardened lifecycle provenance, deserialization, and mutation serialization under the frozen review scope.
+- Decisions: User controls derive their actor identity from authenticated server context, never request payload actor fields. Persisted lifecycle records replay their complete transition history fail-closed before use. Lifecycle begin/transition mutations run through the persistence save queue so concurrent bounded-pass attempts cannot double-spend execution budget.
+- Changes: Added replay validation for transition IDs, state, fingerprints, budgets, actor/reason/timestamp/failure evidence; added atomic lifecycle mutation persistence; added a concurrent bounded-pass regression; classified external runtime failures into retryable repair versus terminal failure.
+- Commands: RED focused lifecycle parser test; GREEN `pnpm exec vitest run packages/domain/src/governance-lifecycle.test.ts apps/server-api/src/governance-lifecycle-service.test.ts apps/server-api/src/governance-lifecycle-api.test.ts`; `pnpm typecheck`.
+- Issues/Risks: UI visibility remains Phase 6 work; no UI checklist item was changed.
+- Next: Parent validates the frozen review receipt and runs full gates before delivery.
+
+### 2026-07-17 12:39 (Europe/Madrid) — Phase 2 final frozen review correction
+
+- Summary: Required bearer authentication for lifecycle controls and made external lifecycle IDs collision-resistant.
+- Decisions: Governance endpoints reject Origin/Host-only requests even when the general colocated UI shortcut would allow them. External lifecycle IDs use UUID entropy and domain creation rejects duplicate IDs before persistence.
+- Changes: Added bearer-forgery and concurrent external invocation regressions; concurrent invokes retain three distinct lifecycle records including the original invocation.
+- Commands: RED focused API forgery test; GREEN `pnpm exec vitest run apps/server-api/src/governance-lifecycle-api.test.ts apps/server-api/src/external-api-keys.test.ts packages/domain/src/governance-lifecycle.test.ts`; `pnpm typecheck`.
+- Issues/Risks: Public begin still accepts workflow/fingerprint/budget values as an explicit advanced API surface; server derivation needs a dedicated API contract change rather than an implicit review-scope rewrite.
+- Next: Parent validates frozen receipt and delivery gates.
+
+### 2026-07-17 12:42 (Europe/Madrid) — Phase 2 retryable lifecycle resume
+
+- Summary: Added the bounded resume boundary for persisted retryable external lifecycle records.
+- Decisions: Resume derives the workflow from the persisted lifecycle workflow id, accepts only `Planning` records whose last audit entry is retryable auto-repair, and invokes exactly one existing runtime bounded pass.
+- Changes: External invocation now returns its lifecycle id; authenticated lifecycle resume route rejects all non-retryable or non-repair states.
+- Issues/Risks: Current workflow catalog resume resolves the persisted workflow id against its current definition; exact version pinning requires a dedicated persisted version-reference extension.
+
+### 2026-07-17 12:16 (Europe/Madrid) — Phase 2 governance lifecycle API
+
+- Summary: Added authenticated typed lifecycle read and user-control endpoints without introducing UI behavior.
+- Decisions: Lifecycle responses return persisted state, fingerprints, consumed budgets, and immutable transition history. Approve, Continue, and Reject-with-feedback are routed only through the persisted lifecycle service; begin rejects an approved workflow fingerprint unless scope or evidence changed.
+- Changes: Added `/governance/lifecycles/get`, `/begin`, `/approve`, `/continue`, and `/reject` routes plus API acceptance coverage.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/governance-lifecycle-api.test.ts` (2 tests).
+- Issues/Risks: UI lifecycle controls remain intentionally unchecked; no Phase 0/1 representation changed.
+- Next: Parent should run full quality gates and review this server/API addition with the complete Phase 2 scope.
+
+### 2026-07-17 12:48 (Europe/Madrid) — Phase 2 retry/resume scope binding
+
+- Summary: Completed the persisted retryable external-invocation resume path with immutable workflow scope validation and execution persistence.
+- Decisions: A resume accepts only a planning lifecycle whose latest transition is retryable auto-repair and whose persisted scope/evidence fingerprints exactly match the current workflow id, version, and update fingerprint. The resume uses the same catalog-backed execution path as the external invocation.
+- Changes: Added deterministic timeout fixture coverage for external failure, persisted reload, authenticated single resume, audit query, execution-record persistence, duplicate resume rejection, changed workflow scope rejection, and terminal failure rejection. Resume now rejects changed workflow scope/evidence before dispatch and persists successful retry executions through the application boundary.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/external-api-keys.test.ts` (changed-scope resume accepted); GREEN `pnpm exec vitest run apps/server-api/src/external-api-keys.test.ts apps/server-api/src/governance-lifecycle-service.test.ts apps/server-api/src/governance-lifecycle-api.test.ts apps/server-api/src/governance-lifecycle-persistence.test.ts packages/domain/src/governance-lifecycle.test.ts` (5 files, 22 tests); `pnpm typecheck`; `pnpm lint`.
+- Issues/Risks: Resume binds the current immutable version/fingerprint tuple and rejects catalog drift; a separately persisted workflow snapshot is unnecessary while that tuple continues to identify an immutable catalog version.
+- Next: Parent should run full Phase 2 gates, bounded review, then stage and deliver the complete Phase 2 scope.
+- Follow-up: A second retryable failure after the sole repair allowance now transitions to terminal `Failed` rather than attempting an exhausted auto-repair transition; the service regression proves no lifecycle can remain `Executing` after that bound is spent.

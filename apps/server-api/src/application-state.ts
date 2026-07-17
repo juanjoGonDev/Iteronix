@@ -8,6 +8,10 @@ import {
   ExternalApiKeyScopeKind,
   type ExternalApiKeyRecord,
 } from "../../../packages/domain/src/external-api-keys";
+import {
+  parseGovernanceLifecycles,
+  type GovernanceLifecycle,
+} from "../../../packages/domain/src/governance-lifecycle";
 
 const ApplicationStateVersion = {
   Current: 1,
@@ -48,6 +52,7 @@ export type ApplicationState = {
   providerSettings: ReadonlyArray<ProviderSettingsRecord>;
   workflows: WorkflowCatalogState;
   externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
+  governanceLifecycles: ReadonlyArray<GovernanceLifecycle>;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +79,7 @@ export const createDefaultApplicationState = (): ApplicationState => {
     providerSettings: [],
     workflows: createDefaultWorkflowCatalogState(),
     externalApiKeys: [],
+    governanceLifecycles: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -98,6 +104,9 @@ export const parseApplicationState = (value: unknown): ApplicationState => {
     providerSettings: readProviderSettings(application["providerSettings"]),
     workflows: readWorkflowCatalogState(application["workflows"]),
     externalApiKeys: readExternalApiKeys(application["externalApiKeys"]),
+    governanceLifecycles: parseGovernanceLifecycles(
+      application["governanceLifecycles"],
+    ),
     createdAt,
     updatedAt: readString(application, "updatedAt") ?? createdAt,
   };
@@ -111,6 +120,7 @@ export const createApplicationStateFromStores = (input: {
   settings: ApplicationSettingsSnapshot;
   workflowSnapshot: WorkflowCatalogState;
   externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
+  governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
   previousState?: ApplicationState;
 }): ApplicationState => {
   const now = new Date().toISOString();
@@ -123,6 +133,10 @@ export const createApplicationStateFromStores = (input: {
     workflows: input.workflowSnapshot,
     externalApiKeys:
       input.externalApiKeys ?? input.previousState?.externalApiKeys ?? [],
+    governanceLifecycles:
+      input.governanceLifecycles ??
+      input.previousState?.governanceLifecycles ??
+      [],
     createdAt: input.previousState?.createdAt ?? now,
     updatedAt: now,
   });

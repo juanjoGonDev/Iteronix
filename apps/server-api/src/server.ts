@@ -4,6 +4,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import {
   BearerPrefix,
@@ -125,6 +126,15 @@ import {
   createExternalApiKey,
   findVerifiedExternalApiKey,
 } from "./external-api-keys";
+import {
+  GovernanceTransitionKind,
+  type GovernanceLifecycle,
+} from "../../../packages/domain/src/governance-lifecycle";
+import {
+  createGovernanceLifecycleService,
+  isRetryableResumeReady,
+  type GovernanceLifecycleService,
+} from "./governance-lifecycle-service";
 import { tryServeStaticUi } from "./static-ui";
 const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.SettingsGet,
@@ -159,6 +169,12 @@ const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.WorkflowExecutionsRunNode,
   RoutePath.WorkflowExecutionsStreamNode,
   RoutePath.WorkflowProvidersTest,
+  RoutePath.GovernanceLifecyclesGet,
+  RoutePath.GovernanceLifecyclesBegin,
+  RoutePath.GovernanceLifecyclesApprove,
+  RoutePath.GovernanceLifecyclesContinue,
+  RoutePath.GovernanceLifecyclesReject,
+  RoutePath.GovernanceLifecyclesResume,
   RoutePath.ExternalApiKeysList,
   RoutePath.ExternalApiKeysCreate,
   RoutePath.ExternalApiKeysUpdate,
@@ -182,6 +198,14 @@ export type ApplicationPersistence = {
   }) => Promise<ApplicationState>;
   updateExternalApiKeys: (
     externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
+  ) => Promise<ApplicationState>;
+  updateGovernanceLifecycles: (
+    governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+  ) => Promise<ApplicationState>;
+  mutateGovernanceLifecycles: (
+    updater: (
+      governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+    ) => ReadonlyArray<GovernanceLifecycle>,
   ) => Promise<ApplicationState>;
 };
 export const startServer = async (): Promise<void> => {
@@ -209,11 +233,15 @@ export const startServer = async (): Promise<void> => {
   const workflowRuntime = createWorkflowRuntimeService({
     readApplicationState: () => applicationPersistence.read(),
   });
+  const governanceLifecycle = createGovernanceLifecycleService(
+    applicationPersistence,
+  );
   const server = createApiServer({
     config,
     providerStore,
     workflowRuntime,
     applicationPersistence,
+    governanceLifecycle,
     workflowCatalog,
     webUiRoot: readWebUiRoot(),
   });
@@ -227,10 +255,14 @@ export const createApiServer = (input: {
   providerStore: ProviderStore;
   workflowRuntime: WorkflowRuntimeService;
   applicationPersistence: ApplicationPersistence;
+  governanceLifecycle?: GovernanceLifecycleService;
   workflowCatalog: WorkflowCatalogStore;
   webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
+  const governanceLifecycle =
+    input.governanceLifecycle ??
+    createGovernanceLifecycleService(input.applicationPersistence);
   return createServer((req, res) => {
     void handleRequest(
       req,
@@ -240,6 +272,7 @@ export const createApiServer = (input: {
       input.workflowRuntime,
       activeWorkflowExecutions,
       input.applicationPersistence,
+      governanceLifecycle,
       input.workflowCatalog,
       input.webUiRoot,
     ).catch((error: unknown) => {
@@ -304,6 +337,7 @@ export const createApplicationPersistence = (input: {
     update: {
       settings?: ApplicationSettingsSnapshot;
       externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
+      governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
     } = {},
   ): ApplicationState =>
     createApplicationStateFromStores({
@@ -311,6 +345,8 @@ export const createApplicationPersistence = (input: {
       workflowSnapshot: input.workflowCatalog.snapshot(),
       settings: update.settings ?? state.settings,
       externalApiKeys: update.externalApiKeys ?? state.externalApiKeys,
+      governanceLifecycles:
+        update.governanceLifecycles ?? state.governanceLifecycles,
       previousState: state,
     });
 
@@ -344,11 +380,31 @@ export const createApplicationPersistence = (input: {
   ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ externalApiKeys })));
 
+  const updateGovernanceLifecycles = async (
+    governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ governanceLifecycles })));
+
+  const mutateGovernanceLifecycles = async (
+    updater: (
+      governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+    ) => ReadonlyArray<GovernanceLifecycle>,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() =>
+      saveState(
+        buildState({
+          governanceLifecycles: updater(state.governanceLifecycles),
+        }),
+      ),
+    );
+
   return {
     read: () => state,
     saveCurrent,
     updateUiState,
     updateExternalApiKeys,
+    updateGovernanceLifecycles,
+    mutateGovernanceLifecycles,
   };
 };
 const handleRequest = async (
@@ -359,6 +415,7 @@ const handleRequest = async (
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
   workflowCatalog: WorkflowCatalogStore,
   webUiRoot: string | undefined,
 ): Promise<void> => {
@@ -398,11 +455,16 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       applicationPersistence,
+      governanceLifecycle,
     });
     return;
   }
 
-  if (!isAuthorized(req, config.authToken)) {
+  if (
+    !isAuthorized(req, config.authToken) ||
+    (isGovernanceLifecycleRoute(path) &&
+      readBearerToken(req) !== config.authToken)
+  ) {
     respondUnauthorized(res);
     return;
   }
@@ -432,6 +494,76 @@ const handleRequest = async (
     }
 
     await handleSettingsUpdate(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleGet(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesBegin) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleBegin(req, res, governanceLifecycle);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesApprove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleControl(
+      req,
+      res,
+      governanceLifecycle,
+      GovernanceTransitionKind.Approve,
+    );
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesContinue) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleControl(
+      req,
+      res,
+      governanceLifecycle,
+      GovernanceTransitionKind.Continue,
+    );
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesReject) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleControl(
+      req,
+      res,
+      governanceLifecycle,
+      GovernanceTransitionKind.RejectWithFeedback,
+    );
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesResume) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleResume(
+      req,
+      res,
+      governanceLifecycle,
+      workflowCatalog,
+      workflowRuntime,
+      applicationPersistence,
+    );
     return;
   }
   if (path === RoutePath.ExternalApiKeysList) {
@@ -1083,6 +1215,288 @@ const mapProviderStoreError = (error: ProviderStoreError): ApiError =>
   error.code === ProviderStoreErrorCode.NotFound
     ? { status: HttpStatus.NotFound, message: error.message }
     : { status: HttpStatus.BadRequest, message: error.message };
+
+const handleGovernanceLifecycleGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+  const lifecycleId = parseGovernanceLifecycleId(bodyResult.value);
+  if (lifecycleId.type === ResultType.Err) {
+    respondError(res, lifecycleId.error);
+    return;
+  }
+  const lifecycle = applicationPersistence
+    .read()
+    .governanceLifecycles.find(
+      (candidate) => candidate.id === lifecycleId.value,
+    );
+  if (!lifecycle) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { lifecycle });
+};
+
+const handleGovernanceLifecycleBegin = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  governanceLifecycle: GovernanceLifecycleService,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+  const parsed = parseGovernanceLifecycleBegin(bodyResult.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+  try {
+    const lifecycle = await governanceLifecycle.begin({
+      ...parsed.value,
+      now: new Date().toISOString(),
+    });
+    respondJson(res, HttpStatus.Ok, { lifecycle });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
+  }
+};
+
+const handleGovernanceLifecycleControl = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  governanceLifecycle: GovernanceLifecycleService,
+  kind: GovernanceTransitionKind,
+): Promise<void> => {
+  const bodyResult = await readJsonBody(req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(res, bodyResult.error);
+    return;
+  }
+  const parsed = parseGovernanceLifecycleControl(bodyResult.value, kind);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+  try {
+    const lifecycle = await governanceLifecycle.transition({
+      ...parsed.value,
+      kind,
+      actorId: readAuthenticatedActorId(req),
+      now: new Date().toISOString(),
+    });
+    respondJson(res, HttpStatus.Ok, { lifecycle });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
+  }
+};
+
+const handleGovernanceLifecycleResume = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  governanceLifecycle: GovernanceLifecycleService,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const lifecycleId = parseGovernanceLifecycleId(body.value);
+  if (lifecycleId.type === ResultType.Err) {
+    respondError(res, lifecycleId.error);
+    return;
+  }
+  const lifecycle = governanceLifecycle.read(lifecycleId.value);
+  const workflow = lifecycle
+    ? workflowCatalog.getWorkflow(lifecycle.workflowId)
+    : undefined;
+  if (
+    !lifecycle ||
+    !workflow ||
+    !isRetryableResumeReady(lifecycle) ||
+    !hasMatchingWorkflowFingerprint(lifecycle, workflow)
+  ) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  try {
+    let execution: WorkflowExecutionRecord | undefined;
+    const resumed = await governanceLifecycle.executeBoundedPass({
+      lifecycleId: lifecycle.id,
+      execute: async () => {
+        const result = await executeWorkflowExecutionRun(
+          { workflowId: workflow.id },
+          {
+            catalog: workflowCatalog,
+            runWorkflow: workflowRuntime.runWorkflow,
+          },
+        );
+        if (result.type === ResultType.Err) {
+          throw new Error(result.error.message);
+        }
+        execution = result.value;
+      },
+      classifyFailure: classifyExternalWorkflowFailure,
+      now: () => new Date().toISOString(),
+    });
+    if (execution) {
+      await applicationPersistence.saveCurrent();
+    }
+    respondJson(res, HttpStatus.Ok, { lifecycle: resumed });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
+  }
+};
+
+const hasMatchingWorkflowFingerprint = (
+  lifecycle: GovernanceLifecycle,
+  workflow: WorkflowDefinitionRecord,
+): boolean =>
+  lifecycle.fingerprints.scope ===
+    `${workflow.id}@${workflow.version.toString()}` &&
+  lifecycle.fingerprints.evidence === workflow.updatedAt;
+
+const parseGovernanceLifecycleId = (
+  value: unknown,
+): Result<string, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return readRequiredString(value, "lifecycleId", ErrorMessage.InvalidBody);
+};
+
+const parseGovernanceLifecycleBegin = (
+  value: unknown,
+): Result<
+  {
+    id: string;
+    workflowId: string;
+    fingerprints: { scope: string; evidence: string };
+    limits: { execution: number; repair: number; review: number };
+  },
+  ApiError
+> => {
+  if (
+    !isRecord(value) ||
+    !isRecord(value["fingerprints"]) ||
+    !isRecord(value["limits"])
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  const id = readRequiredString(value, "lifecycleId", ErrorMessage.InvalidBody);
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.InvalidBody,
+  );
+  const scope = readRequiredString(
+    value["fingerprints"],
+    "scope",
+    ErrorMessage.InvalidBody,
+  );
+  const evidence = readRequiredString(
+    value["fingerprints"],
+    "evidence",
+    ErrorMessage.InvalidBody,
+  );
+  const execution = readNonNegativeIntegerField(value["limits"], "execution");
+  const repair = readNonNegativeIntegerField(value["limits"], "repair");
+  const review = readNonNegativeIntegerField(value["limits"], "review");
+  if (
+    id.type === ResultType.Err ||
+    workflowId.type === ResultType.Err ||
+    scope.type === ResultType.Err ||
+    evidence.type === ResultType.Err ||
+    execution.type === ResultType.Err ||
+    repair.type === ResultType.Err ||
+    review.type === ResultType.Err
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return ok({
+    id: id.value,
+    workflowId: workflowId.value,
+    fingerprints: { scope: scope.value, evidence: evidence.value },
+    limits: {
+      execution: execution.value,
+      repair: repair.value,
+      review: review.value,
+    },
+  });
+};
+
+const parseGovernanceLifecycleControl = (
+  value: unknown,
+  kind: GovernanceTransitionKind,
+): Result<{ lifecycleId: string; reason: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  const lifecycleId = readRequiredString(
+    value,
+    "lifecycleId",
+    ErrorMessage.InvalidBody,
+  );
+  const reason = readRequiredString(
+    value,
+    kind === GovernanceTransitionKind.RejectWithFeedback
+      ? "feedback"
+      : "reason",
+    ErrorMessage.InvalidBody,
+  );
+  if (lifecycleId.type === ResultType.Err || reason.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return ok({ lifecycleId: lifecycleId.value, reason: reason.value });
+};
+
+const readNonNegativeIntegerField = (
+  value: Record<string, unknown>,
+  key: string,
+): Result<number, ApiError> => {
+  const candidate = value[key];
+  return typeof candidate === "number" &&
+    Number.isInteger(candidate) &&
+    candidate >= 0
+    ? ok(candidate)
+    : err({ status: HttpStatus.BadRequest, message: ErrorMessage.InvalidBody });
+};
+
+const mapGovernanceError = (error: unknown): ApiError => ({
+  status: HttpStatus.BadRequest,
+  message: error instanceof Error ? error.message : ErrorMessage.InvalidBody,
+});
 
 type ApiError = {
   status: number;
@@ -2800,6 +3214,14 @@ const isExternalWorkflowRoute = (path: string): boolean =>
   path === RoutePath.ExternalWorkflowRead ||
   path === RoutePath.ExternalWorkflowInvoke;
 
+const isGovernanceLifecycleRoute = (path: string): boolean =>
+  path === RoutePath.GovernanceLifecyclesGet ||
+  path === RoutePath.GovernanceLifecyclesBegin ||
+  path === RoutePath.GovernanceLifecyclesApprove ||
+  path === RoutePath.GovernanceLifecyclesContinue ||
+  path === RoutePath.GovernanceLifecyclesReject ||
+  path === RoutePath.GovernanceLifecyclesResume;
+
 const handleExternalWorkflowRequest = async (input: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -2808,6 +3230,7 @@ const handleExternalWorkflowRequest = async (input: {
   workflowCatalog: WorkflowCatalogStore;
   workflowRuntime: WorkflowRuntimeService;
   applicationPersistence: ApplicationPersistence;
+  governanceLifecycle: GovernanceLifecycleService;
 }): Promise<void> => {
   if (input.method !== HttpMethod.Post) {
     respondMethodNotAllowed(input.res);
@@ -2870,24 +3293,92 @@ const handleExternalWorkflowRequest = async (input: {
     return;
   }
 
-  const result = await executeWorkflowExecutionRun(
-    { workflowId: workflowId.value },
-    {
-      catalog: input.workflowCatalog,
-      runWorkflow: input.workflowRuntime.runWorkflow,
+  const lifecycle = await input.governanceLifecycle.begin({
+    id: `external:${workflow.id}:${randomUUID()}`,
+    workflowId: workflow.id,
+    fingerprints: {
+      scope: `${workflow.id}@${workflow.version.toString()}`,
+      evidence: workflow.updatedAt,
     },
-  );
-  if (result.type === ResultType.Err) {
-    respondError(input.res, result.error);
+    limits: {
+      execution: workflow.executionPolicy.maxNodeRetries + 1,
+      repair: workflow.executionPolicy.maxNodeRetries,
+      review: 1,
+    },
+    now: new Date().toISOString(),
+  });
+  await input.governanceLifecycle.transition({
+    lifecycleId: lifecycle.id,
+    kind: "start-planning",
+    actorId: "external-api",
+    reason: "External invocation requested a bounded workflow pass.",
+    now: new Date().toISOString(),
+  });
+  let execution: WorkflowExecutionRecord | undefined;
+  await input.governanceLifecycle.executeBoundedPass({
+    lifecycleId: lifecycle.id,
+    execute: async () => {
+      const result = await executeWorkflowExecutionRun(
+        { workflowId: workflowId.value },
+        {
+          catalog: input.workflowCatalog,
+          runWorkflow: input.workflowRuntime.runWorkflow,
+        },
+      );
+      if (result.type === ResultType.Err) {
+        throw new Error(result.error.message);
+      }
+      execution = result.value;
+    },
+    classifyFailure: classifyExternalWorkflowFailure,
+    now: () => new Date().toISOString(),
+  });
+  if (!execution) {
+    respondError(input.res, {
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.InternalServerError,
+    });
     return;
   }
   await input.applicationPersistence.saveCurrent();
-  respondJson(input.res, HttpStatus.Ok, { execution: result.value });
+  respondJson(input.res, HttpStatus.Ok, {
+    execution,
+    lifecycleId: lifecycle.id,
+  });
 };
 
 const readBearerToken = (req: IncomingMessage): string | undefined => {
   const header = req.headers[HeaderName.Authorization];
   return typeof header === "string" ? extractBearerToken(header) : undefined;
+};
+
+const readAuthenticatedActorId = (req: IncomingMessage): string =>
+  readBearerToken(req)
+    ? "authenticated-bearer-client"
+    : "authenticated-colocated-web-ui";
+
+const classifyExternalWorkflowFailure = (
+  error: unknown,
+): {
+  classification: "retryable" | "non-retryable";
+  before: string;
+  after: string;
+} => {
+  const message =
+    error instanceof Error ? error.message : "Unknown workflow failure.";
+  const classification = /timeout|temporar|rate limit|\b429\b|\b5\d\d\b/i.test(
+    message,
+  )
+    ? "retryable"
+    : "non-retryable";
+  return {
+    classification,
+    before: message,
+    after:
+      classification === "retryable"
+        ? "A bounded repair pass is available."
+        : "The failure is terminal and requires a new lifecycle.",
+  };
 };
 
 const parseExternalApiKeyCreateRequest = (
