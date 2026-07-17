@@ -5064,6 +5064,14 @@
 - Changes: External invocation now returns its lifecycle id; authenticated lifecycle resume route rejects all non-retryable or non-repair states.
 - Issues/Risks: Current workflow catalog resume resolves the persisted workflow id against its current definition; exact version pinning requires a dedicated persisted version-reference extension.
 
+### 2026-07-17 12:56 (Europe/Madrid) — Governance persistence dependency boundary
+
+- Summary: Removed the server/service dependency cycle reported by the pre-push dependency gate.
+- Decisions: The lifecycle service now depends on a narrow neutral persistence port instead of the server-owned `ApplicationPersistence` contract.
+- Changes: Added `governance-lifecycle-persistence-port.ts` and redirected the service type dependency.
+- Commands: `pnpm deps:check`; `pnpm lint`; `pnpm typecheck`; focused governance/external Vitest suites — all passed.
+- Next: Parent can rerun the delivery hooks without weakening dependency rules.
+
 ### 2026-07-17 12:16 (Europe/Madrid) — Phase 2 governance lifecycle API
 
 - Summary: Added authenticated typed lifecycle read and user-control endpoints without introducing UI behavior.

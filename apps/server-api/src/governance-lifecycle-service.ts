@@ -8,7 +8,7 @@ import {
   type GovernanceFingerprints,
   type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
-import type { ApplicationPersistence } from "./server";
+import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 
 export type GovernanceLifecycleService = {
   read: (lifecycleId: string) => GovernanceLifecycle | undefined;
@@ -49,7 +49,7 @@ export type GovernanceLifecycleService = {
 };
 
 export const createGovernanceLifecycleService = (
-  persistence: ApplicationPersistence,
+  persistence: GovernanceLifecyclePersistencePort,
 ): GovernanceLifecycleService => ({
   read: (lifecycleId) =>
     persistence
@@ -150,7 +150,7 @@ const isUserControl = (kind: GovernanceTransitionKind): boolean =>
   kind === GovernanceTransitionKind.RejectWithFeedback;
 
 const transitionPersistedLifecycle = async (
-  persistence: ApplicationPersistence,
+  persistence: GovernanceLifecyclePersistencePort,
   input: {
     lifecycleId: string;
     kind: GovernanceTransitionKind;
