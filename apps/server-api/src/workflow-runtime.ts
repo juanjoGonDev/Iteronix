@@ -10,6 +10,11 @@ import {
   LLMEventType,
   type LLMEvent,
 } from "../../../packages/domain/src/llm/events";
+import {
+  resolvePinnedPrompt,
+  type PromptAsset,
+  type ResolvedPinnedPrompt,
+} from "../../../packages/domain/src/prompt-assets";
 import { resolveWorkflowRuntimeSettings } from "../../../packages/shared/src/workflows";
 import type {
   LLMProviderPort,
@@ -23,6 +28,7 @@ import type {
 } from "../../../packages/shared/src/workflows";
 import type { ApplicationState } from "./application-state";
 import { createCanonicalWorkflowRuntimeGuard } from "./canonical-workflow-runtime";
+import { AssetKind } from "./editable-assets";
 import { dispatchWorkflowNotification } from "./workflow-notifications";
 
 const SmokeTestPrompt = "Reply with OK.";
@@ -125,11 +131,15 @@ export const createWorkflowRuntimeService = (input: {
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   }): Promise<WorkflowExecutionRecord> => {
-    const executionPlan = canonicalWorkflowRuntimeGuard.prepare(
+    const resolved = resolveWorkflowPromptAssets(
       request.definition,
+      input.readApplicationState(),
+    );
+    const executionPlan = canonicalWorkflowRuntimeGuard.prepare(
+      resolved.definition,
     );
     const execution = await runtime.runDefinition({
-      definition: request.definition,
+      definition: resolved.definition,
       assets: request.assets,
       ...(executionPlan ? { executionPlan } : {}),
       ...(request.seedNodeOutputs
@@ -140,10 +150,15 @@ export const createWorkflowRuntimeService = (input: {
     });
     await notifyWorkflowExecution(
       input.readApplicationState(),
-      request.definition,
+      resolved.definition,
       execution,
     );
-    return execution;
+    return {
+      ...execution,
+      ...(resolved.provenance.length
+        ? { promptProvenance: resolved.provenance }
+        : {}),
+    };
   };
 
   const runNode = async (request: {
@@ -154,12 +169,23 @@ export const createWorkflowRuntimeService = (input: {
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
-  }): Promise<WorkflowExecutionRecord> =>
-    runCanonicalWorkflowNode({
-      request,
+  }): Promise<WorkflowExecutionRecord> => {
+    const resolved = resolveWorkflowPromptAssets(
+      request.definition,
+      input.readApplicationState(),
+    );
+    const execution = await runCanonicalWorkflowNode({
+      request: { ...request, definition: resolved.definition },
       canonicalWorkflowRuntimeGuard,
       runtime,
     });
+    return {
+      ...execution,
+      ...(resolved.provenance.length
+        ? { promptProvenance: resolved.provenance }
+        : {}),
+    };
+  };
 
   const testProviderNode = async (request: {
     workflow: WorkflowDefinitionRecord;
@@ -229,6 +255,46 @@ export const createWorkflowRuntimeService = (input: {
     runWorkflow,
     runNode,
     testProviderNode,
+  };
+};
+
+export const resolveWorkflowPromptAssets = (
+  definition: WorkflowDefinitionRecord,
+  state: Pick<ApplicationState, "editableAssets">,
+): {
+  definition: WorkflowDefinitionRecord;
+  provenance: ReadonlyArray<ResolvedPinnedPrompt["provenance"]>;
+} => {
+  const assets: ReadonlyArray<PromptAsset> = state.editableAssets.records
+    .filter((asset) => asset.kind === AssetKind.Prompt && asset.prompt)
+    .map((asset) => ({
+      id: asset.id,
+      status: asset.status,
+      versions:
+        asset.prompt?.versions.map((version) => ({
+          version: version.version,
+          template: version.template,
+          variables: version.variables.map((variable) => ({
+            name: variable.name,
+            required: variable.required,
+          })),
+        })) ?? [],
+    }));
+  const resolvedPrompts: ResolvedPinnedPrompt[] = [];
+  const nodes = definition.nodes.map((node) => {
+    if (!node.config.promptAsset) {
+      return node;
+    }
+    const resolved = resolvePinnedPrompt({
+      reference: node.config.promptAsset,
+      assets,
+    });
+    resolvedPrompts.push(resolved);
+    return { ...node, config: { ...node.config, prompt: resolved.rendered } };
+  });
+  return {
+    definition: { ...definition, nodes },
+    provenance: resolvedPrompts.map((resolved) => resolved.provenance),
   };
 };
 

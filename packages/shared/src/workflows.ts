@@ -479,6 +479,14 @@ export type WorkflowNodeExecutionRecord = {
   outputSnapshot?: unknown;
 };
 
+export type WorkflowPromptProvenanceRecord = {
+  assetId: string;
+  version: number;
+  bindings: Readonly<Record<string, unknown>>;
+  renderedFingerprint: string;
+  validation: "passed";
+};
+
 export type WorkflowExecutionRecord = {
   id: string;
   workflowId: string;
@@ -492,6 +500,7 @@ export type WorkflowExecutionRecord = {
   totals: WorkflowUsageTotalsRecord;
   contextSessionId: string;
   nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>;
+  promptProvenance?: ReadonlyArray<WorkflowPromptProvenanceRecord>;
 };
 
 export type WorkflowCatalogState = {

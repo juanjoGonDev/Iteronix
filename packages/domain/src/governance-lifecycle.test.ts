@@ -4,6 +4,7 @@ import {
   GovernanceLifecycleState,
   GovernanceTransitionKind,
   createGovernanceLifecycle,
+  recordGovernancePromptExecution,
   transitionGovernanceLifecycle,
   parseGovernanceLifecycles,
 } from "./governance-lifecycle";
@@ -16,6 +17,76 @@ const fingerprints = {
 const limits = { execution: 2, repair: 1, review: 1 };
 
 describe("governance lifecycle", () => {
+  it("persists immutable rendered prompt provenance only while executing", () => {
+    const executing = createExecutingLifecycle();
+    const recorded = recordGovernancePromptExecution(executing, {
+      id: "prompt-1",
+      lifecycleId: executing.id,
+      assetId: "greeting",
+      version: 2,
+      bindings: { name: "Ada" },
+      renderedFingerprint: "fnv1a-12345678",
+      validation: "passed",
+      timestamp: "2026-07-18T00:00:03.000Z",
+    });
+
+    expect(recorded.promptExecutions).toEqual([
+      expect.objectContaining({ assetId: "greeting", version: 2 }),
+    ]);
+    expect(() =>
+      recordGovernancePromptExecution(
+        { ...recorded, state: GovernanceLifecycleState.Approved },
+        {
+          id: "prompt-2",
+          lifecycleId: recorded.id,
+          assetId: "greeting",
+          version: 2,
+          bindings: { name: "Grace" },
+          renderedFingerprint: "fnv1a-87654321",
+          validation: "passed",
+          timestamp: "2026-07-18T00:00:04.000Z",
+        },
+      ),
+    ).toThrow("Prompt executions require an executing lifecycle.");
+  });
+
+  it("rejects reloaded prompt provenance that is duplicate, forged, or not tied to an execution attempt", () => {
+    const executing = createExecutingLifecycle();
+    const recorded = recordGovernancePromptExecution(executing, {
+      id: "run-1:prompt:1:0",
+      lifecycleId: executing.id,
+      assetId: "greeting",
+      version: 2,
+      bindings: { name: "Ada" },
+      renderedFingerprint: "fnv1a-12345678",
+      validation: "passed",
+      timestamp: "2026-07-18T00:00:03.000Z",
+    });
+
+    expect(parseGovernanceLifecycles([recorded])).toHaveLength(1);
+    expect(
+      parseGovernanceLifecycles([
+        {
+          ...recorded,
+          promptExecutions: [
+            ...recorded.promptExecutions,
+            { ...recorded.promptExecutions[0]!, id: "run-1:prompt:1:0" },
+          ],
+        },
+      ]),
+    ).toEqual([]);
+    expect(
+      parseGovernanceLifecycles([
+        {
+          ...recorded,
+          promptExecutions: [
+            { ...recorded.promptExecutions[0]!, id: "run-1:prompt:2:0" },
+          ],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   it("records every finite state transition with immutable proof and budget usage", () => {
     const draft = createGovernanceLifecycle({
       id: "run-1",

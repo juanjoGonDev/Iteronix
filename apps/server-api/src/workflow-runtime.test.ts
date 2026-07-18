@@ -7,9 +7,18 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowNodeRecord,
 } from "../../../packages/shared/src/workflows";
-import { createDefaultApplicationState } from "./application-state";
+import {
+  createDefaultApplicationState,
+  type ApplicationState,
+} from "./application-state";
+import {
+  AssetKind,
+  AssetStatus,
+  type EditableAssetRecord,
+} from "./editable-assets";
 import {
   createWorkflowRuntimeService,
+  resolveWorkflowPromptAssets,
   resolveProviderApiKey,
 } from "./workflow-runtime";
 
@@ -27,6 +36,37 @@ describe("workflow runtime provider adapters", () => {
         environment,
       ),
     ).toBe("secret-token");
+  });
+
+  it("materializes the immutable pinned prompt version and keeps execution provenance", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: { records: [createPromptAsset()] },
+    };
+
+    expect(resolveWorkflowPromptAssets(definition, state)).toMatchObject({
+      definition: { nodes: [{ config: { prompt: "Hello Ada" } }] },
+      provenance: [
+        {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+          validation: "passed",
+        },
+      ],
+    });
   });
 
   it("rejects the legacy Codex profile before attempting a CLI invocation in fresh state", async () => {
@@ -207,4 +247,45 @@ const createWorkflowDefinition = (
     carryArtifactLimit: 1,
   },
   tags: [],
+});
+
+const createPromptAsset = (): EditableAssetRecord => ({
+  id: "prompt-1",
+  kind: AssetKind.Prompt,
+  name: "Greeting",
+  status: AssetStatus.Enabled,
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema: createSchema("prompt.input"),
+  outputSchema: createSchema("prompt.output"),
+  limits: { executions: 1, timeoutMs: 1000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "prompt-1",
+    registeredAt: "2026-07-18T00:00:00.000Z",
+  },
+  prompt: {
+    activeVersion: 1,
+    versions: [
+      {
+        version: 1,
+        template: "Hello {{name}}",
+        variables: [
+          { name: "name", required: true, schema: createSchema("name") },
+        ],
+        provenance: {
+          source: "test",
+          artifactFingerprint: "prompt-1-v1",
+          registeredAt: "2026-07-18T00:00:00.000Z",
+        },
+        createdAt: "2026-07-18T00:00:00.000Z",
+      },
+    ],
+  },
+});
+
+const createSchema = (id: string) => ({
+  id,
+  version: 1,
+  schema: { type: "object" as const, additionalProperties: false },
 });

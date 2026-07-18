@@ -1614,6 +1614,11 @@ const handleGovernanceLifecycleResume = async (
           throw new Error(result.error.message);
         }
         execution = result.value;
+        await persistPromptExecutionProvenance({
+          lifecycleId: lifecycle.id,
+          execution: result.value,
+          governanceLifecycle,
+        });
       },
       classifyFailure: classifyExternalWorkflowFailure,
       now: () => new Date().toISOString(),
@@ -1624,6 +1629,32 @@ const handleGovernanceLifecycleResume = async (
     respondJson(res, HttpStatus.Ok, { lifecycle: resumed });
   } catch (error: unknown) {
     respondError(res, mapGovernanceError(error));
+  }
+};
+
+const persistPromptExecutionProvenance = async (input: {
+  lifecycleId: string;
+  execution: WorkflowExecutionRecord;
+  governanceLifecycle: GovernanceLifecycleService;
+}): Promise<void> => {
+  const attempt = input.governanceLifecycle.read(input.lifecycleId)?.budgets
+    .execution;
+  if (!attempt) {
+    throw new Error("Prompt provenance requires an active execution attempt.");
+  }
+  for (const [index, provenance] of (
+    input.execution.promptProvenance ?? []
+  ).entries()) {
+    await input.governanceLifecycle.recordPromptExecution({
+      id: `${input.lifecycleId}:prompt:${attempt.toString()}:${index.toString()}`,
+      lifecycleId: input.lifecycleId,
+      assetId: provenance.assetId,
+      version: provenance.version,
+      bindings: provenance.bindings,
+      renderedFingerprint: provenance.renderedFingerprint,
+      validation: provenance.validation,
+      timestamp: input.execution.finishedAt ?? input.execution.startedAt,
+    });
   }
 };
 
@@ -3822,6 +3853,11 @@ const handleExternalWorkflowRequest = async (input: {
         throw new Error(result.error.message);
       }
       execution = result.value;
+      await persistPromptExecutionProvenance({
+        lifecycleId: lifecycle.id,
+        execution: result.value,
+        governanceLifecycle: input.governanceLifecycle,
+      });
     },
     classifyFailure: classifyExternalWorkflowFailure,
     now: () => new Date().toISOString(),

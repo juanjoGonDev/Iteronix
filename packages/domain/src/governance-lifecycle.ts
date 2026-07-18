@@ -96,6 +96,17 @@ export type GovernanceAgentExecutionRecord = {
   timestamp: string;
 };
 
+export type GovernancePromptExecutionRecord = {
+  id: string;
+  lifecycleId: string;
+  assetId: string;
+  version: number;
+  bindings: Readonly<Record<string, unknown>>;
+  renderedFingerprint: string;
+  validation: "passed";
+  timestamp: string;
+};
+
 export type GovernanceLifecycle = {
   id: string;
   workflowId: string;
@@ -106,6 +117,7 @@ export type GovernanceLifecycle = {
   transitions: ReadonlyArray<GovernanceTransition>;
   repairProposals: ReadonlyArray<RepairProposal>;
   agentExecutions: ReadonlyArray<GovernanceAgentExecutionRecord>;
+  promptExecutions: ReadonlyArray<GovernancePromptExecutionRecord>;
   userAuthorizedPasses: number;
 };
 
@@ -146,7 +158,39 @@ export const createGovernanceLifecycle = (input: {
     transitions: [],
     repairProposals: [],
     agentExecutions: [],
+    promptExecutions: [],
     userAuthorizedPasses: 0,
+  };
+};
+
+export const recordGovernancePromptExecution = (
+  lifecycle: GovernanceLifecycle,
+  input: GovernancePromptExecutionRecord,
+): GovernanceLifecycle => {
+  if (lifecycle.state !== GovernanceLifecycleState.Executing) {
+    throw new Error("Prompt executions require an executing lifecycle.");
+  }
+  if (
+    !input.id.trim() ||
+    input.lifecycleId !== lifecycle.id ||
+    !input.assetId.trim() ||
+    !Number.isInteger(input.version) ||
+    input.version < 1 ||
+    !input.renderedFingerprint.trim() ||
+    input.validation !== "passed" ||
+    !input.timestamp.trim()
+  ) {
+    throw new Error("Prompt execution provenance is invalid.");
+  }
+  if (lifecycle.promptExecutions.some((record) => record.id === input.id)) {
+    throw new Error("Governance prompt execution id already exists.");
+  }
+  return {
+    ...lifecycle,
+    promptExecutions: [
+      ...lifecycle.promptExecutions,
+      { ...input, bindings: { ...input.bindings } },
+    ],
   };
 };
 
@@ -236,6 +280,10 @@ const parseGovernanceLifecycle = (
     value["agentExecutions"] === undefined
       ? []
       : parseAgentExecutions(value["agentExecutions"]);
+  const promptExecutions =
+    value["promptExecutions"] === undefined
+      ? []
+      : parsePromptExecutions(value["promptExecutions"]);
   const userAuthorizedPasses = value["userAuthorizedPasses"];
   if (
     !id ||
@@ -246,6 +294,7 @@ const parseGovernanceLifecycle = (
     !transitions ||
     !repairProposals ||
     !agentExecutions ||
+    !promptExecutions ||
     !isNonNegativeInteger(userAuthorizedPasses)
   ) {
     return undefined;
@@ -260,9 +309,61 @@ const parseGovernanceLifecycle = (
     transitions,
     repairProposals,
     agentExecutions,
+    promptExecutions,
     userAuthorizedPasses,
   };
-  return hasValidTransitionHistory(lifecycle) ? lifecycle : undefined;
+  return hasValidTransitionHistory(lifecycle) &&
+    hasValidPromptExecutionHistory(lifecycle)
+    ? lifecycle
+    : undefined;
+};
+
+const hasValidPromptExecutionHistory = (
+  lifecycle: GovernanceLifecycle,
+): boolean => {
+  const ids = new Set<string>();
+  const executionTransitions = lifecycle.transitions.filter(
+    (transition) => transition.kind === GovernanceTransitionKind.StartExecuting,
+  );
+  return lifecycle.promptExecutions.every((record) => {
+    if (ids.has(record.id) || record.lifecycleId !== lifecycle.id) {
+      return false;
+    }
+    ids.add(record.id);
+    const attempt = readPromptExecutionAttempt(record.id, lifecycle.id);
+    if (
+      attempt === undefined ||
+      attempt < 1 ||
+      attempt > executionTransitions.length
+    ) {
+      return false;
+    }
+    const start = executionTransitions[attempt - 1];
+    if (!start || record.timestamp < start.timestamp) {
+      return false;
+    }
+    const next = executionTransitions[attempt];
+    return !next || record.timestamp < next.timestamp;
+  });
+};
+
+const readPromptExecutionAttempt = (
+  id: string,
+  lifecycleId: string,
+): number | undefined => {
+  const prefix = `${lifecycleId}:prompt:`;
+  if (!id.startsWith(prefix)) {
+    return undefined;
+  }
+  const [attempt, index] = id.slice(prefix.length).split(":");
+  return attempt !== undefined &&
+    index !== undefined &&
+    /^\d+$/u.test(attempt) &&
+    /^\d+$/u.test(index) &&
+    Number.isSafeInteger(Number(attempt)) &&
+    Number.isSafeInteger(Number(index))
+    ? Number(attempt)
+    : undefined;
 };
 
 const hasValidTransitionHistory = (lifecycle: GovernanceLifecycle): boolean => {
@@ -423,6 +524,55 @@ const parseAgentExecution = (
     artifactFingerprint: parsed["artifactFingerprint"]!,
     responseFingerprint: parsed["responseFingerprint"]!,
     timestamp: parsed["timestamp"]!,
+  };
+};
+
+const parsePromptExecutions = (
+  value: unknown,
+): ReadonlyArray<GovernancePromptExecutionRecord> | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const records = value.map(parsePromptExecution);
+  return records.every(
+    (record): record is GovernancePromptExecutionRecord => record !== undefined,
+  )
+    ? records
+    : undefined;
+};
+
+const parsePromptExecution = (
+  value: unknown,
+): GovernancePromptExecutionRecord | undefined => {
+  if (!isRecord(value) || !isPositiveInteger(value["version"])) {
+    return undefined;
+  }
+  const id = readNonEmptyString(value["id"]);
+  const lifecycleId = readNonEmptyString(value["lifecycleId"]);
+  const assetId = readNonEmptyString(value["assetId"]);
+  const renderedFingerprint = readNonEmptyString(value["renderedFingerprint"]);
+  const timestamp = readNonEmptyString(value["timestamp"]);
+  const bindings = value["bindings"];
+  if (
+    !id ||
+    !lifecycleId ||
+    !assetId ||
+    !renderedFingerprint ||
+    !timestamp ||
+    !isRecord(bindings) ||
+    value["validation"] !== "passed"
+  ) {
+    return undefined;
+  }
+  return {
+    id,
+    lifecycleId,
+    assetId,
+    version: value["version"],
+    bindings: { ...bindings },
+    renderedFingerprint,
+    validation: "passed",
+    timestamp,
   };
 };
 

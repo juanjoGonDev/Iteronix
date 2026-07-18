@@ -3,10 +3,12 @@ import {
   GovernanceLifecycleState,
   GovernanceTransitionKind,
   createGovernanceLifecycle,
+  recordGovernancePromptExecution,
   transitionGovernanceLifecycle,
   type GovernanceBudgetLimits,
   type GovernanceFingerprints,
   type GovernanceLifecycle,
+  type GovernancePromptExecutionRecord,
 } from "../../../packages/domain/src/governance-lifecycle";
 import {
   createRepairProposal,
@@ -63,6 +65,9 @@ export type GovernanceLifecycleService = {
     guardrailInput: WorkflowGuardrailInput;
     now: string;
   }) => Promise<{ lifecycle: GovernanceLifecycle; proposal: RepairProposal }>;
+  recordPromptExecution: (
+    input: GovernancePromptExecutionRecord,
+  ) => Promise<GovernanceLifecycle>;
 };
 
 export const createGovernanceLifecycleService = (
@@ -111,6 +116,27 @@ export const createGovernanceLifecycleService = (
       now: input.now,
     });
     return { lifecycle: next, proposal };
+  },
+  recordPromptExecution: async (input) => {
+    let next: GovernanceLifecycle | undefined;
+    await persistence.mutateGovernanceLifecycles((lifecycles) => {
+      const current = lifecycles.find(
+        (lifecycle) => lifecycle.id === input.lifecycleId,
+      );
+      if (!current) {
+        throw new Error(
+          `Governance lifecycle ${input.lifecycleId} was not found.`,
+        );
+      }
+      next = recordGovernancePromptExecution(current, input);
+      return lifecycles.map((lifecycle) =>
+        lifecycle.id === input.lifecycleId ? next! : lifecycle,
+      );
+    });
+    if (!next) {
+      throw new Error("Governance prompt execution was not persisted.");
+    }
+    return next;
   },
   executeBoundedPass: async (input) => {
     const executing = await transitionPersistedLifecycle(persistence, {

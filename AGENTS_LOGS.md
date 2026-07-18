@@ -5140,3 +5140,12 @@
 - Commands: RED/GREEN focused server and web Vitest suites; `pnpm typecheck`.
 - Issues/Risks: Prompt runtime resolution and governance provenance remain separate incomplete Phase 4 work.
 - Next: Run full quality gates and bounded review before delivery.
+
+### 2026-07-18 23:50 (Europe/Madrid) — Prompt asset runtime provenance
+
+- Summary: Connected version-pinned Prompt Assets to the workflow runtime and governed external invocation lifecycle.
+- Decisions: Prompt resolution uses the exact persisted version and explicit bindings; disabled, missing, or invalid prompt references fail before provider execution. Rendered prompt text is transient while asset/version/bindings/fingerprint/validation provenance is persisted.
+- Changes: Added deterministic domain rendering and fingerprinting, runtime materialization of prompt-backed nodes, execution-level prompt provenance, and lifecycle prompt execution audit records.
+- Commands: RED/GREEN focused prompt, lifecycle, and runtime Vitest suites; full format, lint, typecheck, test, build, and dependency gates passed.
+- Issues/Risks: Prompt catalog/editor UI and broader Phase 4 asset runtime integration remain incomplete.
+- Next: Run native bounded review, then commit and push this scoped runtime slice.

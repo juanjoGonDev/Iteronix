@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { validatePinnedPromptReference } from "./prompt-assets";
+import {
+  resolvePinnedPrompt,
+  validatePinnedPromptReference,
+} from "./prompt-assets";
 
 describe("pinned prompt references", () => {
   it("requires a version pin and exact explicit bindings", () => {
@@ -27,5 +30,93 @@ describe("pinned prompt references", () => {
       { code: "prompt.binding-required-missing", variable: "name" },
       { code: "prompt.binding-undeclared", variable: "other" },
     ]);
+  });
+
+  it("resolves an immutable version with deterministic rendering and provenance", () => {
+    expect(
+      resolvePinnedPrompt({
+        reference: {
+          assetId: "greeting",
+          version: 2,
+          bindings: { name: "Ada" },
+        },
+        assets: [
+          {
+            id: "greeting",
+            status: "enabled",
+            versions: [
+              {
+                version: 1,
+                template: "Hello {{name}} from v1",
+                variables: [{ name: "name", required: true }],
+              },
+              {
+                version: 2,
+                template: "Hello {{name}} from v2",
+                variables: [{ name: "name", required: true }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      rendered: "Hello Ada from v2",
+      provenance: {
+        assetId: "greeting",
+        version: 2,
+        bindings: { name: "Ada" },
+      },
+    });
+  });
+
+  it("rejects disabled assets, unavailable versions, and invalid bindings", () => {
+    expect(() =>
+      resolvePinnedPrompt({
+        reference: { assetId: "greeting", version: 1, bindings: {} },
+        assets: [
+          {
+            id: "greeting",
+            status: "disabled",
+            versions: [
+              {
+                version: 1,
+                template: "Hello {{name}}",
+                variables: [{ name: "name", required: true }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Prompt asset greeting is disabled.");
+    expect(() =>
+      resolvePinnedPrompt({
+        reference: { assetId: "greeting", version: 2, bindings: {} },
+        assets: [
+          {
+            id: "greeting",
+            status: "enabled",
+            versions: [{ version: 1, template: "Hello", variables: [] }],
+          },
+        ],
+      }),
+    ).toThrow("Prompt asset greeting version 2 was not found.");
+    expect(() =>
+      resolvePinnedPrompt({
+        reference: { assetId: "greeting", version: 1, bindings: {} },
+        assets: [
+          {
+            id: "greeting",
+            status: "enabled",
+            versions: [
+              {
+                version: 1,
+                template: "Hello {{name}}",
+                variables: [{ name: "name", required: true }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Prompt bindings are invalid.");
   });
 });
