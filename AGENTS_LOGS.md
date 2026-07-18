@@ -5099,3 +5099,11 @@
 - Commands: RED tests for domain and service; targeted Vitest tests; typecheck; lint; Prettier.
 - Issues/Risks: No UI or public HTTP proposal endpoint was added; Phase 3 is deliberately domain/server-adapter scoped. Approved lifecycle repair attempts fail before any persisted mutation.
 - Next: Run complete quality gates and native bounded review, then commit and push without bypassing hooks.
+
+### 2026-07-18 20:00 (Europe/Madrid) — Phase 4 agent/tool governance
+
+- Summary: Added provider-agnostic agent/tool, skill, memory/RAG, MCP, and plugin contracts with governed server execution.
+- Decisions: Agent execution provenance is immutable lifecycle data; MCP output is validated before persistence; plugins are server-only and process-isolated.
+- Changes: Added domain contracts/tests, governed server service/tests, restart-safe agent execution parsing, and Phase 4 plan completion.
+- Commands: Strict RED/GREEN tests and typecheck passed; full gates/review/delivery pending.
+- Next: Run full gates, bounded review, commit, and push.

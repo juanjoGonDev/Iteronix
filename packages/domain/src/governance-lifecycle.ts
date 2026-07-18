@@ -81,6 +81,21 @@ export type GovernanceTransition = {
   failure?: GovernanceFailureEvidence;
 };
 
+export type GovernanceAgentExecutionRecord = {
+  id: string;
+  lifecycleId: string;
+  agentId: string;
+  pluginId: string;
+  skillId: string;
+  skillVersion: number;
+  toolId: string;
+  inputFingerprint: string;
+  outputFingerprint: string;
+  artifactFingerprint: string;
+  responseFingerprint: string;
+  timestamp: string;
+};
+
 export type GovernanceLifecycle = {
   id: string;
   workflowId: string;
@@ -90,6 +105,7 @@ export type GovernanceLifecycle = {
   budgets: GovernanceBudgetUsage;
   transitions: ReadonlyArray<GovernanceTransition>;
   repairProposals: ReadonlyArray<RepairProposal>;
+  agentExecutions: ReadonlyArray<GovernanceAgentExecutionRecord>;
   userAuthorizedPasses: number;
 };
 
@@ -129,7 +145,25 @@ export const createGovernanceLifecycle = (input: {
     budgets: createEmptyBudgets(),
     transitions: [],
     repairProposals: [],
+    agentExecutions: [],
     userAuthorizedPasses: 0,
+  };
+};
+
+export const recordGovernanceAgentExecution = (
+  lifecycle: GovernanceLifecycle,
+  input: GovernanceAgentExecutionRecord,
+): GovernanceLifecycle => {
+  if (lifecycle.state !== GovernanceLifecycleState.Executing) {
+    throw new Error("Agent executions require an executing lifecycle.");
+  }
+  assertAgentExecutionRecord(input, lifecycle.id);
+  if (lifecycle.agentExecutions.some((record) => record.id === input.id)) {
+    throw new Error("Governance agent execution id already exists.");
+  }
+  return {
+    ...lifecycle,
+    agentExecutions: [...lifecycle.agentExecutions, { ...input }],
   };
 };
 
@@ -198,6 +232,10 @@ const parseGovernanceLifecycle = (
     value["repairProposals"] === undefined
       ? []
       : parseRepairProposals(value["repairProposals"]);
+  const agentExecutions =
+    value["agentExecutions"] === undefined
+      ? []
+      : parseAgentExecutions(value["agentExecutions"]);
   const userAuthorizedPasses = value["userAuthorizedPasses"];
   if (
     !id ||
@@ -207,6 +245,7 @@ const parseGovernanceLifecycle = (
     !budgets ||
     !transitions ||
     !repairProposals ||
+    !agentExecutions ||
     !isNonNegativeInteger(userAuthorizedPasses)
   ) {
     return undefined;
@@ -220,6 +259,7 @@ const parseGovernanceLifecycle = (
     budgets,
     transitions,
     repairProposals,
+    agentExecutions,
     userAuthorizedPasses,
   };
   return hasValidTransitionHistory(lifecycle) ? lifecycle : undefined;
@@ -254,9 +294,26 @@ const hasValidTransitionHistory = (lifecycle: GovernanceLifecycle): boolean => {
     hasSameFingerprints(replayed.fingerprints, lifecycle.fingerprints) &&
     hasSameBudgets(replayed.budgets, lifecycle.budgets) &&
     replayed.userAuthorizedPasses === lifecycle.userAuthorizedPasses &&
-    hasValidRepairProposals(lifecycle)
+    hasValidRepairProposals(lifecycle) &&
+    hasValidAgentExecutions(lifecycle)
   );
 };
+
+const hasValidAgentExecutions = (lifecycle: GovernanceLifecycle): boolean =>
+  lifecycle.agentExecutions.every((record) => {
+    try {
+      assertAgentExecutionRecord(record, lifecycle.id);
+      return lifecycle.transitions.some(
+        (transition) =>
+          transition.kind === GovernanceTransitionKind.StartExecuting &&
+          transition.to === GovernanceLifecycleState.Executing,
+      );
+    } catch {
+      return false;
+    }
+  }) &&
+  new Set(lifecycle.agentExecutions.map((record) => record.id)).size ===
+    lifecycle.agentExecutions.length;
 
 const hasValidRepairProposals = (lifecycle: GovernanceLifecycle): boolean =>
   lifecycle.repairProposals.every((proposal) =>
@@ -312,6 +369,61 @@ const parseTransitions = (
   )
     ? parsed
     : undefined;
+};
+
+const parseAgentExecutions = (
+  value: unknown,
+): ReadonlyArray<GovernanceAgentExecutionRecord> | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const records = value.map(parseAgentExecution);
+  return records.every(
+    (record): record is GovernanceAgentExecutionRecord => record !== undefined,
+  )
+    ? records
+    : undefined;
+};
+
+const parseAgentExecution = (
+  value: unknown,
+): GovernanceAgentExecutionRecord | undefined => {
+  if (!isRecord(value) || !isPositiveInteger(value["skillVersion"])) {
+    return undefined;
+  }
+  const fields = [
+    "id",
+    "lifecycleId",
+    "agentId",
+    "pluginId",
+    "skillId",
+    "toolId",
+    "inputFingerprint",
+    "outputFingerprint",
+    "artifactFingerprint",
+    "responseFingerprint",
+    "timestamp",
+  ] as const;
+  const parsed = Object.fromEntries(
+    fields.map((field) => [field, readNonEmptyString(value[field])]),
+  );
+  if (fields.some((field) => !parsed[field])) {
+    return undefined;
+  }
+  return {
+    id: parsed["id"]!,
+    lifecycleId: parsed["lifecycleId"]!,
+    agentId: parsed["agentId"]!,
+    pluginId: parsed["pluginId"]!,
+    skillId: parsed["skillId"]!,
+    skillVersion: value["skillVersion"],
+    toolId: parsed["toolId"]!,
+    inputFingerprint: parsed["inputFingerprint"]!,
+    outputFingerprint: parsed["outputFingerprint"]!,
+    artifactFingerprint: parsed["artifactFingerprint"]!,
+    responseFingerprint: parsed["responseFingerprint"]!,
+    timestamp: parsed["timestamp"]!,
+  };
 };
 
 const parseTransition = (value: unknown): GovernanceTransition | undefined => {
@@ -436,6 +548,9 @@ const readNonEmptyString = (value: unknown): string | undefined =>
 const isNonNegativeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
 const readTransition = (
   from: GovernanceLifecycleState,
   kind: GovernanceTransitionKind,
@@ -537,6 +652,32 @@ const assertFingerprints = (fingerprints: GovernanceFingerprints): void => {
 const assertNonEmpty = (value: string, message: string): void => {
   if (value.trim().length === 0) {
     throw new Error(`${message}.`);
+  }
+};
+
+const assertAgentExecutionRecord = (
+  input: GovernanceAgentExecutionRecord,
+  lifecycleId: string,
+): void => {
+  if (input.lifecycleId !== lifecycleId) {
+    throw new Error("Governance agent execution lifecycle does not match.");
+  }
+  if (!isPositiveInteger(input.skillVersion)) {
+    throw new Error("Governance agent execution skill version is invalid.");
+  }
+  for (const value of [
+    input.id,
+    input.agentId,
+    input.pluginId,
+    input.skillId,
+    input.toolId,
+    input.inputFingerprint,
+    input.outputFingerprint,
+    input.artifactFingerprint,
+    input.responseFingerprint,
+    input.timestamp,
+  ]) {
+    assertNonEmpty(value, "Governance agent execution field is required");
   }
 };
 
