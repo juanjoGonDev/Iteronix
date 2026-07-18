@@ -86,7 +86,7 @@ export const verifyDatabaseMigrations = async (
     };
   });
 
-export const calculateMigrationChecksum = (sql: string): string =>
+const calculateMigrationChecksum = (sql: string): string =>
   createHash("sha256").update(sql).digest("hex");
 
 const withMigrationTransaction = async <TValue>(

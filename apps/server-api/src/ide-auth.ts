@@ -3,7 +3,7 @@ import { pbkdf2Sync, timingSafeEqual } from "node:crypto";
 export const IdeUserRole = { Admin: "admin", Member: "member" } as const;
 export type IdeUserRole = (typeof IdeUserRole)[keyof typeof IdeUserRole];
 
-export type IdeUser = {
+type IdeUser = {
   id: string;
   email: string;
   passwordHash: string;
@@ -12,14 +12,14 @@ export type IdeUser = {
   createdAt: string;
   updatedAt: string;
 };
-export type IdeSession = {
+type IdeSession = {
   tokenHash: string;
   userId: string;
   expiresAt: string;
   createdAt: string;
 };
-export type IdeSessionGrant = { token: string };
-export type IdePasswordReset = {
+type IdeSessionGrant = { token: string };
+type IdePasswordReset = {
   tokenHash: string;
   userId: string;
   expiresAt: string;

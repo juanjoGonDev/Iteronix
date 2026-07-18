@@ -65,13 +65,13 @@ export type EditableAssetRecord = {
   };
 };
 
-export type PromptVariableDefinition = {
+type PromptVariableDefinition = {
   name: string;
   required: boolean;
   schema: VersionedJsonSchema;
 };
 
-export type PromptAssetVersion = {
+type PromptAssetVersion = {
   version: number;
   template: string;
   variables: ReadonlyArray<PromptVariableDefinition>;
@@ -79,7 +79,7 @@ export type PromptAssetVersion = {
   createdAt: string;
 };
 
-export type AssetAuditEvent = { at: string; action: string; actorId: string };
+type AssetAuditEvent = { at: string; action: string; actorId: string };
 
 export type EditableAssetCatalog = {
   records: ReadonlyArray<EditableAssetRecord>;
