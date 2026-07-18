@@ -5,6 +5,11 @@ import {
 } from "./application-state";
 import { createPostgresApplicationStateStore } from "./postgres-application-state";
 import { resolveProviderApiKey } from "./workflow-runtime";
+import {
+  AssetKind,
+  AssetStatus,
+  type EditableAssetRecord,
+} from "./editable-assets";
 
 type QueryCall = {
   text: string;
@@ -45,6 +50,32 @@ describe("PostgreSQL application state store", () => {
     await expect(store.load()).resolves.toMatchObject({
       revision: 9007199254740991,
     });
+  });
+
+  it("reloads editable asset records from PostgreSQL JSONB and defaults missing catalogs safely", async () => {
+    const state = createDefaultApplicationState();
+    const asset = createEditableAsset();
+    const store = createPostgresApplicationStateStore(
+      createClient([
+        {
+          value: { ...state, editableAssets: { records: [asset] } },
+          revision: 4,
+        },
+      ]),
+    );
+
+    await expect(store.load()).resolves.toMatchObject({
+      revision: 4,
+      editableAssets: {
+        records: [
+          expect.objectContaining({ id: asset.id, kind: AssetKind.Agent }),
+        ],
+      },
+    });
+    expect(
+      parseApplicationState({ ...state, editableAssets: undefined })
+        .editableAssets.records,
+    ).toEqual([]);
   });
 
   it("reads the legacy PostgreSQL key until the application state is next saved", async () => {
@@ -202,6 +233,36 @@ const createClient = (
     },
   };
 };
+
+const createEditableAsset = (): EditableAssetRecord => ({
+  id: "postgres-agent",
+  kind: AssetKind.Agent,
+  name: "PostgreSQL agent",
+  status: AssetStatus.Enabled,
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema: {
+    id: "postgres-agent.input",
+    version: 1,
+    schema: { type: "object", additionalProperties: false },
+  },
+  outputSchema: {
+    id: "postgres-agent.output",
+    version: 1,
+    schema: { type: "object", additionalProperties: false },
+  },
+  limits: { executions: 1, timeoutMs: 1000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "postgres-agent-fingerprint",
+    registeredAt: "2026-07-18T00:00:00.000Z",
+  },
+  agent: {
+    providerId: "test",
+    model: "test-model",
+    toolPermissions: ["tool.invoke"],
+  },
+});
 
 const createRevisionedClient = (options: { rejectWrites?: boolean } = {}) => {
   let revision = 0;

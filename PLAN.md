@@ -110,18 +110,20 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 
 ### Phase 4 — Agents, skills, memory, RAG, MCP, and plugins
 
-- [x] Define provider-agnostic agent and tool ports with declared capabilities, schemas, limits, and redaction requirements.
-- [x] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
-- [x] Add memory and RAG ports with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.
-- [x] Add MCP client/server integration behind permission and capability controls; validate all untrusted tool results at the boundary.
-- [x] Create a server-side plugin manifest, permission model, lifecycle, isolation strategy, and audit events.
-- [x] Provide one end-to-end reference plugin and one reusable skill that execute through the governance lifecycle.
+- [x] Work unit 1: persist editable asset records and authenticated CRUD APIs for agents, tools/MCP, skills, memory/RAG sources, and server-side plugins, with safe JSONB compatibility defaults.
+- [ ] Integrate the persisted assets with governed workflow execution, including bounded permissions, schema validation, audit persistence, and approval checkpoints.
+- [ ] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
+- [ ] Add memory and RAG runtime integration with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.
+- [ ] Add MCP client/server runtime integration behind permission and capability controls; validate all untrusted tool results at the boundary.
+- [ ] Create server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
+- [ ] Provide one end-to-end reference plugin and one reusable skill that execute through the governance lifecycle.
 
 **Acceptance / verification**
 
-- [x] Contract tests run each port against a fake implementation and reject undeclared capability or permission use.
-- [x] Integration tests prove retrieval/tool/plugin provenance is visible in a workflow run and secrets are never exposed.
-- [x] Permission-denial, plugin failure, and malformed MCP response paths are deterministic and auditable.
+- [x] Work unit 1 API tests cover authenticated list/upsert/delete, malformed input rejection, and PostgreSQL JSONB reload compatibility.
+- [ ] Contract tests run each port against a fake implementation and reject undeclared capability or permission use.
+- [ ] Integration tests prove retrieval/tool/plugin provenance is visible in a workflow run and secrets are never exposed.
+- [ ] Permission-denial, plugin failure, and malformed MCP response paths are deterministic and auditable.
 
 **Dependencies**: Phases 1–3.
 

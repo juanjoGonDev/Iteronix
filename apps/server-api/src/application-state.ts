@@ -12,6 +12,11 @@ import {
   parseGovernanceLifecycles,
   type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
+import {
+  createEditableAssetCatalog,
+  parseEditableAssetCatalog,
+  type EditableAssetCatalog,
+} from "./editable-assets";
 
 const ApplicationStateVersion = {
   Current: 1,
@@ -53,6 +58,7 @@ export type ApplicationState = {
   workflows: WorkflowCatalogState;
   externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles: ReadonlyArray<GovernanceLifecycle>;
+  editableAssets: EditableAssetCatalog;
   createdAt: string;
   updatedAt: string;
 };
@@ -80,6 +86,7 @@ export const createDefaultApplicationState = (): ApplicationState => {
     workflows: createDefaultWorkflowCatalogState(),
     externalApiKeys: [],
     governanceLifecycles: [],
+    editableAssets: createEditableAssetCatalog(),
     createdAt: now,
     updatedAt: now,
   };
@@ -107,6 +114,7 @@ export const parseApplicationState = (value: unknown): ApplicationState => {
     governanceLifecycles: parseGovernanceLifecycles(
       application["governanceLifecycles"],
     ),
+    editableAssets: parseEditableAssetCatalog(application["editableAssets"]),
     createdAt,
     updatedAt: readString(application, "updatedAt") ?? createdAt,
   };
@@ -121,6 +129,7 @@ export const createApplicationStateFromStores = (input: {
   workflowSnapshot: WorkflowCatalogState;
   externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
+  editableAssets?: EditableAssetCatalog;
   previousState?: ApplicationState;
 }): ApplicationState => {
   const now = new Date().toISOString();
@@ -137,6 +146,10 @@ export const createApplicationStateFromStores = (input: {
       input.governanceLifecycles ??
       input.previousState?.governanceLifecycles ??
       [],
+    editableAssets:
+      input.editableAssets ??
+      input.previousState?.editableAssets ??
+      createEditableAssetCatalog(),
     createdAt: input.previousState?.createdAt ?? now,
     updatedAt: now,
   });

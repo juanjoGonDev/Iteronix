@@ -5107,3 +5107,12 @@
 - Changes: Added domain contracts/tests, governed server service/tests, restart-safe agent execution parsing, and Phase 4 plan completion.
 - Commands: Strict RED/GREEN tests and typecheck passed; full gates/review/delivery pending.
 - Next: Run full gates, bounded review, commit, and push.
+
+### 2026-07-18 20:45 (Europe/Madrid) — Phase 4 editable asset CRUD work unit
+
+- Summary: Added authenticated server CRUD acceptance coverage and restart-safe persistence verification for the Phase 4 editable asset catalog.
+- Decisions: Assets are persisted inside the versioned application-state JSONB document; missing or malformed legacy catalog data resolves to an empty safe catalog. Phase 4 remains incomplete until governed runtime integration and IDE delivery exist.
+- Changes: Added HTTP integration tests for authenticated list/upsert/delete, malformed and missing asset rejection, in-memory restart reload, and PostgreSQL JSONB parsing; corrected Phase 4 plan status to show only work unit 1 complete.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/editable-assets-api.test.ts`; GREEN focused asset/PostgreSQL Vitest suites; `pnpm typecheck`.
+- Issues/Risks: CRUD records do not yet execute through governance or have an IDE surface.
+- Next: Run full quality gates, bounded review, commit, and push this work unit.

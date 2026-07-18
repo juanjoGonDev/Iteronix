@@ -109,6 +109,12 @@ import {
   type ApplicationStateStore,
 } from "./application-state";
 import {
+  parseEditableAssetCatalog,
+  removeEditableAsset,
+  upsertEditableAsset,
+  type EditableAssetCatalog,
+} from "./editable-assets";
+import {
   createPostgresPool,
   createPostgresApplicationStateStore,
 } from "./postgres-application-state";
@@ -175,6 +181,9 @@ const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.GovernanceLifecyclesContinue,
   RoutePath.GovernanceLifecyclesReject,
   RoutePath.GovernanceLifecyclesResume,
+  RoutePath.EditableAssetsList,
+  RoutePath.EditableAssetsUpsert,
+  RoutePath.EditableAssetsDelete,
   RoutePath.ExternalApiKeysList,
   RoutePath.ExternalApiKeysCreate,
   RoutePath.ExternalApiKeysUpdate,
@@ -201,6 +210,9 @@ export type ApplicationPersistence = {
   ) => Promise<ApplicationState>;
   updateGovernanceLifecycles: (
     governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+  ) => Promise<ApplicationState>;
+  updateEditableAssets: (
+    editableAssets: EditableAssetCatalog,
   ) => Promise<ApplicationState>;
   mutateGovernanceLifecycles: (
     updater: (
@@ -338,6 +350,7 @@ export const createApplicationPersistence = (input: {
       settings?: ApplicationSettingsSnapshot;
       externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
       governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
+      editableAssets?: EditableAssetCatalog;
     } = {},
   ): ApplicationState =>
     createApplicationStateFromStores({
@@ -347,6 +360,7 @@ export const createApplicationPersistence = (input: {
       externalApiKeys: update.externalApiKeys ?? state.externalApiKeys,
       governanceLifecycles:
         update.governanceLifecycles ?? state.governanceLifecycles,
+      editableAssets: update.editableAssets ?? state.editableAssets,
       previousState: state,
     });
 
@@ -385,6 +399,11 @@ export const createApplicationPersistence = (input: {
   ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ governanceLifecycles })));
 
+  const updateEditableAssets = async (
+    editableAssets: EditableAssetCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ editableAssets })));
+
   const mutateGovernanceLifecycles = async (
     updater: (
       governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
@@ -404,6 +423,7 @@ export const createApplicationPersistence = (input: {
     updateUiState,
     updateExternalApiKeys,
     updateGovernanceLifecycles,
+    updateEditableAssets,
     mutateGovernanceLifecycles,
   };
 };
@@ -462,7 +482,7 @@ const handleRequest = async (
 
   if (
     !isAuthorized(req, config.authToken) ||
-    (isGovernanceLifecycleRoute(path) &&
+    (requiresStrictBearerAuthentication(path) &&
       readBearerToken(req) !== config.authToken)
   ) {
     respondUnauthorized(res);
@@ -474,6 +494,33 @@ const handleRequest = async (
       status: HttpStatus.NotFound,
       message: ErrorMessage.NotFound,
     });
+    return;
+  }
+
+  if (path === RoutePath.EditableAssetsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    respondJson(res, HttpStatus.Ok, {
+      assets: applicationPersistence.read().editableAssets.records,
+    });
+    return;
+  }
+  if (path === RoutePath.EditableAssetsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetUpsert(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.EditableAssetsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetDelete(req, res, applicationPersistence);
     return;
   }
 
@@ -1215,6 +1262,70 @@ const mapProviderStoreError = (error: ProviderStoreError): ApiError =>
   error.code === ProviderStoreErrorCode.NotFound
     ? { status: HttpStatus.NotFound, message: error.message }
     : { status: HttpStatus.BadRequest, message: error.message };
+
+const handleEditableAssetUpsert = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const parsed = parseEditableAssetCatalog({ records: [body.value] });
+  const asset = parsed.records[0];
+  if (!asset) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const assets = upsertEditableAsset(
+    applicationPersistence.read().editableAssets,
+    asset,
+  );
+  await applicationPersistence.updateEditableAssets(assets);
+  respondJson(res, HttpStatus.Ok, { asset });
+};
+
+const handleEditableAssetDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const assetId =
+    isRecord(body.value) &&
+    typeof body.value["assetId"] === "string" &&
+    body.value["assetId"].trim().length > 0
+      ? body.value["assetId"].trim()
+      : undefined;
+  if (!assetId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const current = applicationPersistence.read().editableAssets;
+  if (!current.records.some((asset) => asset.id === assetId)) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  await applicationPersistence.updateEditableAssets(
+    removeEditableAsset(current, assetId),
+  );
+  respondJson(res, HttpStatus.Ok, { assetId });
+};
 
 const handleGovernanceLifecycleGet = async (
   req: IncomingMessage,
@@ -3221,6 +3332,12 @@ const isGovernanceLifecycleRoute = (path: string): boolean =>
   path === RoutePath.GovernanceLifecyclesContinue ||
   path === RoutePath.GovernanceLifecyclesReject ||
   path === RoutePath.GovernanceLifecyclesResume;
+
+const requiresStrictBearerAuthentication = (path: string): boolean =>
+  isGovernanceLifecycleRoute(path) ||
+  path === RoutePath.EditableAssetsList ||
+  path === RoutePath.EditableAssetsUpsert ||
+  path === RoutePath.EditableAssetsDelete;
 
 const handleExternalWorkflowRequest = async (input: {
   req: IncomingMessage;
