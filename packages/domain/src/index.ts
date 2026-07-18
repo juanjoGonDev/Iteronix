@@ -4,3 +4,4 @@ export * from "./result";
 export * from "./external-api-keys";
 export * from "./governance-lifecycle";
 export * from "./workflow-contracts";
+export * from "./governance-validation";

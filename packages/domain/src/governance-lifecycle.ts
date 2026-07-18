@@ -1,3 +1,8 @@
+import {
+  parseRepairProposals,
+  type RepairProposal,
+} from "./governance-validation";
+
 export const GovernanceLifecycleState = {
   Approved: "approved",
   AwaitingUserApproval: "awaiting-user-approval",
@@ -84,6 +89,7 @@ export type GovernanceLifecycle = {
   limits: GovernanceBudgetLimits;
   budgets: GovernanceBudgetUsage;
   transitions: ReadonlyArray<GovernanceTransition>;
+  repairProposals: ReadonlyArray<RepairProposal>;
   userAuthorizedPasses: number;
 };
 
@@ -122,6 +128,7 @@ export const createGovernanceLifecycle = (input: {
     limits: copyBudgets(input.limits),
     budgets: createEmptyBudgets(),
     transitions: [],
+    repairProposals: [],
     userAuthorizedPasses: 0,
   };
 };
@@ -187,6 +194,10 @@ const parseGovernanceLifecycle = (
   const limits = parseBudgets(value["limits"]);
   const budgets = parseBudgets(value["budgets"]);
   const transitions = parseTransitions(value["transitions"]);
+  const repairProposals =
+    value["repairProposals"] === undefined
+      ? []
+      : parseRepairProposals(value["repairProposals"]);
   const userAuthorizedPasses = value["userAuthorizedPasses"];
   if (
     !id ||
@@ -195,6 +206,7 @@ const parseGovernanceLifecycle = (
     !limits ||
     !budgets ||
     !transitions ||
+    !repairProposals ||
     !isNonNegativeInteger(userAuthorizedPasses)
   ) {
     return undefined;
@@ -207,6 +219,7 @@ const parseGovernanceLifecycle = (
     limits,
     budgets,
     transitions,
+    repairProposals,
     userAuthorizedPasses,
   };
   return hasValidTransitionHistory(lifecycle) ? lifecycle : undefined;
@@ -240,9 +253,22 @@ const hasValidTransitionHistory = (lifecycle: GovernanceLifecycle): boolean => {
     replayed.state === lifecycle.state &&
     hasSameFingerprints(replayed.fingerprints, lifecycle.fingerprints) &&
     hasSameBudgets(replayed.budgets, lifecycle.budgets) &&
-    replayed.userAuthorizedPasses === lifecycle.userAuthorizedPasses
+    replayed.userAuthorizedPasses === lifecycle.userAuthorizedPasses &&
+    hasValidRepairProposals(lifecycle)
   );
 };
+
+const hasValidRepairProposals = (lifecycle: GovernanceLifecycle): boolean =>
+  lifecycle.repairProposals.every((proposal) =>
+    lifecycle.transitions.some(
+      (transition) =>
+        transition.kind === GovernanceTransitionKind.AutoRepair &&
+        transition.failure?.classification === "retryable" &&
+        transition.failure.before === proposal.failureEvidence &&
+        transition.failure.after === proposal.outputFingerprint &&
+        proposal.lifecycleId === lifecycle.id,
+    ),
+  );
 
 const hasSameTransition = (
   left: GovernanceTransition | undefined,

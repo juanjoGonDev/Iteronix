@@ -94,17 +94,17 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 
 ### Phase 3 — Validation, guardrails, and bounded repair
 
-- [ ] Implement JSON Schema-based input/output validation with versioned schemas and structured validation errors.
-- [ ] Add policy-driven guardrails for tools, data handling, model/provider capabilities, and workflow-level runtime limits.
-- [ ] Implement repair proposals that are bounded by the Phase 2 lifecycle, preserve the failing evidence, and never overwrite an approved result.
-- [ ] Support human-readable run traces showing validation decisions, policy decisions, repair attempts, and terminal outcomes.
-- [ ] Add evaluation contracts and repeatable datasets for workflow quality, safety, latency, and cost measurements.
+- [x] Implement JSON Schema-based input/output validation with versioned schemas and structured validation errors.
+- [x] Add policy-driven guardrails for tools, data handling, model/provider capabilities, and workflow-level runtime limits.
+- [x] Implement repair proposals that are bounded by the Phase 2 lifecycle, preserve the failing evidence, and never overwrite an approved result.
+- [x] Support human-readable run traces showing validation decisions, policy decisions, repair attempts, and terminal outcomes.
+- [x] Add evaluation contracts and repeatable datasets for workflow quality, safety, latency, and cost measurements.
 
 **Acceptance / verification**
 
-- Unit tests cover schema pass/fail, guardrail allow/deny, and redacted error reporting.
-- System tests prove a repair can resolve a valid classified failure, stops on budget exhaustion, and cannot bypass approval.
-- Evaluation fixtures are reproducible and report comparable results for the same workflow/provider/version.
+- [x] Unit tests cover schema pass/fail, guardrail allow/deny, and redacted error reporting.
+- [x] System tests prove a repair can resolve a valid classified failure, stops on budget exhaustion, and cannot bypass approval.
+- [x] Evaluation fixtures are reproducible and report comparable results for the same workflow/provider/version.
 
 **Dependencies**: Phases 1–2.
 

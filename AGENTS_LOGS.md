@@ -5090,3 +5090,12 @@
 - Issues/Risks: Resume binds the current immutable version/fingerprint tuple and rejects catalog drift; a separately persisted workflow snapshot is unnecessary while that tuple continues to identify an immutable catalog version.
 - Next: Parent should run full Phase 2 gates, bounded review, then stage and deliver the complete Phase 2 scope.
 - Follow-up: A second retryable failure after the sole repair allowance now transitions to terminal `Failed` rather than attempting an exhausted auto-repair transition; the service regression proves no lifecycle can remain `Executing` after that bound is spent.
+
+### 2026-07-18 18:00 (Europe/Madrid) — Phase 3 validation and repair
+
+- Summary: Added Phase 3 domain contracts and persisted governed repair integration.
+- Decisions: JSON Schema validation supports the required deterministic core subset; errors never include rejected values. Guardrails evaluate tools, sensitive data, provider capabilities, node count, and parallelism. Repair proposals are immutable evidence records and only create the existing lifecycle `AutoRepair` transition while execution and repair budget are available.
+- Changes: Added `packages/domain/src/governance-validation.ts` plus strict TDD tests; extended `GovernanceLifecycleService` with `proposeBoundedRepair`; added reproducible evaluation contracts/reports and governed repair tests; updated Phase 3 plan checkboxes.
+- Commands: RED tests for domain and service; targeted Vitest tests; typecheck; lint; Prettier.
+- Issues/Risks: No UI or public HTTP proposal endpoint was added; Phase 3 is deliberately domain/server-adapter scoped. Approved lifecycle repair attempts fail before any persisted mutation.
+- Next: Run complete quality gates and native bounded review, then commit and push without bypassing hooks.

@@ -8,6 +8,13 @@ import {
   type GovernanceFingerprints,
   type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
+import {
+  createRepairProposal,
+  type RepairProposal,
+  type VersionedJsonSchema,
+  type WorkflowGuardrailInput,
+  type WorkflowGuardrailPolicy,
+} from "../../../packages/domain/src/governance-validation";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 
 export type GovernanceLifecycleService = {
@@ -46,6 +53,16 @@ export type GovernanceLifecycleService = {
     };
     now: (step: number) => string;
   }) => Promise<GovernanceLifecycle>;
+  proposeBoundedRepair: (input: {
+    lifecycleId: string;
+    proposalId: string;
+    failureEvidence: string;
+    proposedOutput: unknown;
+    schema: VersionedJsonSchema;
+    guardrailPolicy: WorkflowGuardrailPolicy;
+    guardrailInput: WorkflowGuardrailInput;
+    now: string;
+  }) => Promise<{ lifecycle: GovernanceLifecycle; proposal: RepairProposal }>;
 };
 
 export const createGovernanceLifecycleService = (
@@ -71,6 +88,30 @@ export const createGovernanceLifecycleService = (
     return lifecycle;
   },
   transition: (input) => transitionPersistedLifecycle(persistence, input),
+  proposeBoundedRepair: async (input) => {
+    const lifecycle = readLifecycleForRepair(persistence, input.lifecycleId);
+    if (lifecycle.state === GovernanceLifecycleState.Approved) {
+      throw new Error("Approved lifecycle cannot receive a repair proposal.");
+    }
+    if (lifecycle.state !== GovernanceLifecycleState.Executing) {
+      throw new Error("Repair proposals require an executing lifecycle.");
+    }
+    const proposal = createRepairProposal({
+      id: input.proposalId,
+      lifecycleId: input.lifecycleId,
+      failureEvidence: input.failureEvidence,
+      proposedOutput: input.proposedOutput,
+      schema: input.schema,
+      guardrailPolicy: input.guardrailPolicy,
+      guardrailInput: input.guardrailInput,
+    });
+    const next = await persistRepairProposal(persistence, {
+      lifecycleId: input.lifecycleId,
+      proposal,
+      now: input.now,
+    });
+    return { lifecycle: next, proposal };
+  },
   executeBoundedPass: async (input) => {
     const executing = await transitionPersistedLifecycle(persistence, {
       lifecycleId: input.lifecycleId,
@@ -143,6 +184,68 @@ export const isRetryableResumeReady = (
 
 const hasRemainingRepairBudget = (lifecycle: GovernanceLifecycle): boolean =>
   lifecycle.budgets.repair < lifecycle.limits.repair;
+
+const readLifecycleForRepair = (
+  persistence: GovernanceLifecyclePersistencePort,
+  lifecycleId: string,
+): GovernanceLifecycle => {
+  const lifecycle = persistence
+    .read()
+    .governanceLifecycles.find((candidate) => candidate.id === lifecycleId);
+  if (!lifecycle) {
+    throw new Error(`Governance lifecycle ${lifecycleId} was not found.`);
+  }
+  return lifecycle;
+};
+
+const persistRepairProposal = async (
+  persistence: GovernanceLifecyclePersistencePort,
+  input: {
+    lifecycleId: string;
+    proposal: RepairProposal;
+    now: string;
+  },
+): Promise<GovernanceLifecycle> => {
+  let next: GovernanceLifecycle | undefined;
+  await persistence.mutateGovernanceLifecycles((lifecycles) => {
+    const current = lifecycles.find(
+      (lifecycle) => lifecycle.id === input.lifecycleId,
+    );
+    if (!current) {
+      throw new Error(
+        `Governance lifecycle ${input.lifecycleId} was not found.`,
+      );
+    }
+    if (current.state === GovernanceLifecycleState.Approved) {
+      throw new Error("Approved lifecycle cannot receive a repair proposal.");
+    }
+    if (current.state !== GovernanceLifecycleState.Executing) {
+      throw new Error("Repair proposals require an executing lifecycle.");
+    }
+    const transitioned = transitionGovernanceLifecycle(current, {
+      kind: GovernanceTransitionKind.AutoRepair,
+      actor: { kind: GovernanceActorKind.System, id: "repair-proposal" },
+      reason: "A bounded repair proposal was recorded.",
+      failure: {
+        classification: "retryable",
+        before: input.proposal.failureEvidence,
+        after: input.proposal.outputFingerprint,
+      },
+      now: input.now,
+    });
+    next = {
+      ...transitioned,
+      repairProposals: [...current.repairProposals, input.proposal],
+    };
+    return lifecycles.map((lifecycle) =>
+      lifecycle.id === next?.id ? next : lifecycle,
+    );
+  });
+  if (!next) {
+    throw new Error("Governance repair proposal was not persisted.");
+  }
+  return next;
+};
 
 const isUserControl = (kind: GovernanceTransitionKind): boolean =>
   kind === GovernanceTransitionKind.Approve ||
