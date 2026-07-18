@@ -47,6 +47,34 @@ describe("editable asset catalog", () => {
       parseEditableAssetCatalog({ records: [{ id: "unsafe" }] }).records,
     ).toEqual([]);
   });
+
+  it("preserves immutable prompt versions and only permits a sequential append", () => {
+    const first = createPromptAsset();
+    const catalog = upsertEditableAsset(createEditableAssetCatalog(), first);
+    const second = upsertEditableAsset(catalog, {
+      ...first,
+      prompt: {
+        activeVersion: 2,
+        versions: [
+          ...first.prompt!.versions,
+          createPromptVersion(2, "Hello {{name}}"),
+        ],
+      },
+    });
+    expect(second.records[0]?.prompt?.activeVersion).toBe(2);
+    expect(() =>
+      upsertEditableAsset(second, {
+        ...first,
+        prompt: {
+          activeVersion: 2,
+          versions: [
+            createPromptVersion(1, "Mutated"),
+            createPromptVersion(2, "Hello {{name}}"),
+          ],
+        },
+      }),
+    ).toThrow("Prompt versions are immutable");
+  });
 });
 
 const createAsset = (
@@ -72,4 +100,26 @@ const schema = (id: string) => ({
   id,
   version: 1,
   schema: { type: "object" as const, additionalProperties: false },
+});
+
+const createPromptAsset = (): EditableAssetRecord => ({
+  ...createAsset(AssetKind.Prompt),
+  id: "prompt-1",
+  name: "Greeting",
+  prompt: {
+    activeVersion: 1,
+    versions: [createPromptVersion(1, "Hello {{name}}")],
+  },
+});
+
+const createPromptVersion = (version: number, template: string) => ({
+  version,
+  template,
+  variables: [{ name: "name", required: true, schema: schema("prompt.name") }],
+  provenance: {
+    source: "test",
+    artifactFingerprint: `prompt-${version}`,
+    registeredAt: "2026-07-18T00:00:00.000Z",
+  },
+  createdAt: "2026-07-18T00:00:00.000Z",
 });

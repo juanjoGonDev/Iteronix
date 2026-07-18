@@ -5116,3 +5116,18 @@
 - Commands: RED `pnpm exec vitest run apps/server-api/src/editable-assets-api.test.ts`; GREEN focused asset/PostgreSQL Vitest suites; `pnpm typecheck`.
 - Issues/Risks: CRUD records do not yet execute through governance or have an IDE surface.
 - Next: Run full quality gates, bounded review, commit, and push this work unit.
+
+### 2026-07-18 20:20 (Europe/Madrid) — Prompt assets decision
+
+- Summary: Prompts are specified as reusable, independently versioned Assets rather than workflow-owned text.
+- Decisions: Workflow nodes pin a prompt asset version and declare explicit variable bindings; historical runs retain provenance through the pinned version.
+- Next: Implement prompt asset persistence, APIs, and IDE editor in the relevant Phase 4 work unit.
+
+### 2026-07-18 22:10 (Europe/Madrid) — PostgreSQL migration infrastructure
+
+- Summary: Replaced runtime application-state table creation with versioned PostgreSQL schema migration infrastructure.
+- Decisions: Every DB schema change requires a new immutable forward-only SQL migration. `schema_migrations` stores SHA-256 checksums and migrations run transactionally under a PostgreSQL advisory lock. Server startup verifies, but never applies, pending migrations.
+- Changes: Added migration ledger/executor, bootstrap `app_state` migration, `db:migrate`, `db:verify`, isolated `TEST_DATABASE_URL` validation, clean-schema backup/restore integration coverage, Docker migration asset packaging, and operator documentation.
+- Commands: RED focused migration test; GREEN focused migration/state/config Vitest suites and `pnpm typecheck`.
+- Issues/Risks: Live PostgreSQL backup/restore integration requires an explicitly configured `TEST_DATABASE_URL`; it is skipped by the normal unit suite when unavailable and run through `pnpm test:db` in CI.
+- Next: Configure a disposable PostgreSQL test database in CI and execute `pnpm test:db` there.

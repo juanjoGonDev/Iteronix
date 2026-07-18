@@ -13,6 +13,11 @@ import {
   type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
 import {
+  createDefaultIdeAuthState,
+  parseIdeAuthState,
+  type IdeAuthState,
+} from "./ide-auth";
+import {
   createEditableAssetCatalog,
   parseEditableAssetCatalog,
   type EditableAssetCatalog,
@@ -59,6 +64,7 @@ export type ApplicationState = {
   externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles: ReadonlyArray<GovernanceLifecycle>;
   editableAssets: EditableAssetCatalog;
+  ideAuth: IdeAuthState;
   createdAt: string;
   updatedAt: string;
 };
@@ -87,6 +93,7 @@ export const createDefaultApplicationState = (): ApplicationState => {
     externalApiKeys: [],
     governanceLifecycles: [],
     editableAssets: createEditableAssetCatalog(),
+    ideAuth: createDefaultIdeAuthState(),
     createdAt: now,
     updatedAt: now,
   };
@@ -115,6 +122,7 @@ export const parseApplicationState = (value: unknown): ApplicationState => {
       application["governanceLifecycles"],
     ),
     editableAssets: parseEditableAssetCatalog(application["editableAssets"]),
+    ideAuth: parseIdeAuthState(application["ideAuth"]),
     createdAt,
     updatedAt: readString(application, "updatedAt") ?? createdAt,
   };
@@ -130,6 +138,7 @@ export const createApplicationStateFromStores = (input: {
   externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
   editableAssets?: EditableAssetCatalog;
+  ideAuth?: IdeAuthState;
   previousState?: ApplicationState;
 }): ApplicationState => {
   const now = new Date().toISOString();
@@ -150,6 +159,10 @@ export const createApplicationStateFromStores = (input: {
       input.editableAssets ??
       input.previousState?.editableAssets ??
       createEditableAssetCatalog(),
+    ideAuth:
+      input.ideAuth ??
+      input.previousState?.ideAuth ??
+      createDefaultIdeAuthState(),
     createdAt: input.previousState?.createdAt ?? now,
     updatedAt: now,
   });

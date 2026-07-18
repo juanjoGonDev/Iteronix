@@ -6,6 +6,7 @@ export const COMPACT_VIEWPORT_MAX_WIDTH = 960;
 export const ROUTES = {
   WORKFLOWS: "/workflows",
   WORKFLOW_EDITOR: "/workflows/:workflowId",
+  PROMPT_ASSETS: "/assets/prompts",
   SETTINGS: "/settings",
 } as const;
 

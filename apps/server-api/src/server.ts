@@ -115,9 +115,18 @@ import {
   type EditableAssetCatalog,
 } from "./editable-assets";
 import {
+  createIdeAuthService,
+  IdeUserRole,
+  type IdeAuthState,
+  type IdeAuthService,
+  type PasswordResetDelivery,
+} from "./ide-auth";
+import {
   createPostgresPool,
   createPostgresApplicationStateStore,
 } from "./postgres-application-state";
+import { readDatabaseMigrationCatalog } from "./database-migration-catalog";
+import { verifyDatabaseMigrations } from "./database-migrations";
 import {
   ExternalApiKeyScopeKind,
   isExternalApiKeyNameAvailable,
@@ -142,7 +151,20 @@ import {
   type GovernanceLifecycleService,
 } from "./governance-lifecycle-service";
 import { tryServeStaticUi } from "./static-ui";
+const AuthRoutePaths = new Set<string>([
+  RoutePath.AuthBootstrapAdmin,
+  RoutePath.AuthRegister,
+  RoutePath.AuthLogin,
+  RoutePath.AuthLogout,
+  RoutePath.AuthMe,
+  RoutePath.AuthPasswordResetRequest,
+  RoutePath.AuthPasswordResetConfirm,
+  RoutePath.AuthAdminRegistration,
+  RoutePath.AuthAdminUserEnabled,
+]);
+
 const WorkflowOnlyRoutePaths = new Set<string>([
+  ...AuthRoutePaths,
   RoutePath.SettingsGet,
   RoutePath.SettingsUpdate,
   RoutePath.ProvidersList,
@@ -214,6 +236,7 @@ export type ApplicationPersistence = {
   updateEditableAssets: (
     editableAssets: EditableAssetCatalog,
   ) => Promise<ApplicationState>;
+  updateIdeAuth: (ideAuth: IdeAuthState) => Promise<ApplicationState>;
   mutateGovernanceLifecycles: (
     updater: (
       governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
@@ -269,6 +292,7 @@ export const createApiServer = (input: {
   applicationPersistence: ApplicationPersistence;
   governanceLifecycle?: GovernanceLifecycleService;
   workflowCatalog: WorkflowCatalogStore;
+  passwordResetDelivery?: PasswordResetDelivery;
   webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
@@ -286,6 +310,7 @@ export const createApiServer = (input: {
       input.applicationPersistence,
       governanceLifecycle,
       input.workflowCatalog,
+      input.passwordResetDelivery,
       input.webUiRoot,
     ).catch((error: unknown) => {
       console.error(
@@ -309,6 +334,15 @@ const loadInitialApplicationState = async (
   postgresPool: ReturnType<typeof createPostgresPool>,
 ): Promise<ApplicationState> => {
   try {
+    const migrationVerification = await verifyDatabaseMigrations(
+      postgresPool,
+      readDatabaseMigrationCatalog(),
+    );
+    if (migrationVerification.pending.length > 0) {
+      throw new Error(
+        `Pending database migrations: ${migrationVerification.pending.join(", ")}`,
+      );
+    }
     await applicationStateStore.initialize();
     return await applicationStateStore.load();
   } catch (error) {
@@ -351,6 +385,7 @@ export const createApplicationPersistence = (input: {
       externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
       governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
       editableAssets?: EditableAssetCatalog;
+      ideAuth?: IdeAuthState;
     } = {},
   ): ApplicationState =>
     createApplicationStateFromStores({
@@ -361,6 +396,7 @@ export const createApplicationPersistence = (input: {
       governanceLifecycles:
         update.governanceLifecycles ?? state.governanceLifecycles,
       editableAssets: update.editableAssets ?? state.editableAssets,
+      ideAuth: update.ideAuth ?? state.ideAuth,
       previousState: state,
     });
 
@@ -404,6 +440,11 @@ export const createApplicationPersistence = (input: {
   ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ editableAssets })));
 
+  const updateIdeAuth = async (
+    ideAuth: IdeAuthState,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ ideAuth })));
+
   const mutateGovernanceLifecycles = async (
     updater: (
       governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
@@ -424,6 +465,7 @@ export const createApplicationPersistence = (input: {
     updateExternalApiKeys,
     updateGovernanceLifecycles,
     updateEditableAssets,
+    updateIdeAuth,
     mutateGovernanceLifecycles,
   };
 };
@@ -437,6 +479,7 @@ const handleRequest = async (
   applicationPersistence: ApplicationPersistence,
   governanceLifecycle: GovernanceLifecycleService,
   workflowCatalog: WorkflowCatalogStore,
+  passwordResetDelivery: PasswordResetDelivery | undefined,
   webUiRoot: string | undefined,
 ): Promise<void> => {
   if (!req.url || !req.method) {
@@ -456,6 +499,10 @@ const handleRequest = async (
   const url = new URL(req.url, `http://${config.host}`);
   const path = url.pathname;
   const method = req.method;
+  const ideAuth = createRequestIdeAuth(
+    applicationPersistence,
+    passwordResetDelivery,
+  );
 
   if (
     webUiRoot &&
@@ -463,6 +510,19 @@ const handleRequest = async (
     !isExternalWorkflowRoute(path) &&
     tryServeStaticUi(req, res, webUiRoot)
   ) {
+    return;
+  }
+
+  if (isAuthRoute(path)) {
+    await handleIdeAuthRequest({
+      req,
+      res,
+      path,
+      method,
+      config,
+      ideAuth,
+      applicationPersistence,
+    });
     return;
   }
 
@@ -480,10 +540,13 @@ const handleRequest = async (
     return;
   }
 
+  const hasIdeSession = readSessionUser(req, ideAuth) !== undefined;
   if (
-    !isAuthorized(req, config.authToken) ||
+    (!isAuthorized(req, config.authToken) &&
+      !(isEditableAssetRoute(path) && hasIdeSession)) ||
     (requiresStrictBearerAuthentication(path) &&
-      readBearerToken(req) !== config.authToken)
+      readBearerToken(req) !== config.authToken &&
+      !(isEditableAssetRoute(path) && hasIdeSession))
   ) {
     respondUnauthorized(res);
     return;
@@ -1282,10 +1345,19 @@ const handleEditableAssetUpsert = async (
     });
     return;
   }
-  const assets = upsertEditableAsset(
-    applicationPersistence.read().editableAssets,
-    asset,
-  );
+  let assets: EditableAssetCatalog;
+  try {
+    assets = upsertEditableAsset(
+      applicationPersistence.read().editableAssets,
+      asset,
+    );
+  } catch {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
   await applicationPersistence.updateEditableAssets(assets);
   respondJson(res, HttpStatus.Ok, { asset });
 };
@@ -3299,6 +3371,230 @@ const createEmptyWorkflowUsageTotals = (): WorkflowUsageTotalsRecord => ({
 const readDurationMs = (startedAt: string, finishedAt: string): number =>
   Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
 
+const createRequestIdeAuth = (
+  applicationPersistence: ApplicationPersistence,
+  passwordResetDelivery: PasswordResetDelivery | undefined,
+): IdeAuthService =>
+  createIdeAuthService({
+    load: () => applicationPersistence.read().ideAuth,
+    save: () => undefined,
+    now: () => new Date().toISOString(),
+    randomToken: randomUUID,
+    ...(passwordResetDelivery
+      ? { deliverPasswordReset: passwordResetDelivery }
+      : {}),
+  });
+
+const IdeAuthClientErrorMessages = new Set([
+  "Administrator already exists",
+  "Administrator access is required",
+  "Email is already registered",
+  "Email is invalid",
+  "Invalid credentials",
+  "Invalid password reset token",
+  "Password must be at least 12 characters",
+  "Password reset is unavailable",
+  "Registration is disabled",
+  "User not found",
+]);
+
+const handleIdeAuthRequest = async (input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  path: string;
+  method: string;
+  config: ServerConfig;
+  ideAuth: IdeAuthService;
+  applicationPersistence: ApplicationPersistence;
+}): Promise<void> => {
+  if (input.method !== HttpMethod.Post) {
+    respondMethodNotAllowed(input.res);
+    return;
+  }
+  const body = await readJsonBody(input.req);
+  if (body.type === ResultType.Err) {
+    respondError(input.res, body.error);
+    return;
+  }
+  const sessionUser = readSessionUser(input.req, input.ideAuth);
+  try {
+    if (input.path === RoutePath.AuthBootstrapAdmin) {
+      if (readBearerToken(input.req) !== input.config.authToken) {
+        respondUnauthorized(input.res);
+        return;
+      }
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const user = input.ideAuth.bootstrapAdmin(credentials);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { user: toIdeUserView(user) });
+      return;
+    }
+    if (input.path === RoutePath.AuthRegister) {
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const registered = await input.ideAuth.register(credentials);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {
+        user: toIdeUserView(registered.user),
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthLogin) {
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const session = await input.ideAuth.login(credentials);
+      await persistIdeAuth(input);
+      input.res.setHeader(
+        HeaderName.SetCookie,
+        createSessionCookie(session.token),
+      );
+      const user = input.ideAuth.getSessionUser(session.token);
+      respondJson(input.res, HttpStatus.Ok, {
+        user: user ? toIdeUserView(user) : null,
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthLogout) {
+      const token = readSessionToken(input.req);
+      if (token) input.ideAuth.logout(token);
+      await persistIdeAuth(input);
+      input.res.setHeader(HeaderName.SetCookie, clearSessionCookie());
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (input.path === RoutePath.AuthMe) {
+      if (!sessionUser) {
+        respondUnauthorized(input.res);
+        return;
+      }
+      respondJson(input.res, HttpStatus.Ok, {
+        user: toIdeUserView(sessionUser),
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthPasswordResetRequest) {
+      const email = readStringField(body.value, "email");
+      if (!email) return respondInvalidBody(input.res);
+      input.ideAuth.requestPasswordReset(email);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (input.path === RoutePath.AuthPasswordResetConfirm) {
+      const token = readStringField(body.value, "token");
+      const password = readStringField(body.value, "password");
+      if (!token || !password) return respondInvalidBody(input.res);
+      await input.ideAuth.confirmPasswordReset({ token, password });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (!sessionUser || sessionUser.role !== IdeUserRole.Admin) {
+      respondUnauthorized(input.res);
+      return;
+    }
+    if (input.path === RoutePath.AuthAdminRegistration) {
+      const enabled = readBooleanField(body.value, "enabled");
+      if (enabled === undefined) return respondInvalidBody(input.res);
+      input.ideAuth.setRegistrationEnabled({
+        actorId: sessionUser.id,
+        enabled,
+      });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { registrationEnabled: enabled });
+      return;
+    }
+    if (input.path === RoutePath.AuthAdminUserEnabled) {
+      const userId = readStringField(body.value, "userId");
+      const enabled = readBooleanField(body.value, "enabled");
+      if (!userId || enabled === undefined)
+        return respondInvalidBody(input.res);
+      input.ideAuth.setUserEnabled({
+        actorId: sessionUser.id,
+        userId,
+        enabled,
+      });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { userId, enabled });
+      return;
+    }
+    respondError(input.res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : ErrorMessage.InternalServerError;
+    const isClientError = IdeAuthClientErrorMessages.has(message);
+    respondError(input.res, {
+      status: isClientError
+        ? HttpStatus.BadRequest
+        : HttpStatus.InternalServerError,
+      message: isClientError ? message : ErrorMessage.InternalServerError,
+    });
+  }
+};
+
+const persistIdeAuth = async (input: {
+  ideAuth: IdeAuthService;
+  applicationPersistence: ApplicationPersistence;
+}): Promise<void> => {
+  await input.applicationPersistence.updateIdeAuth(input.ideAuth.snapshot());
+};
+
+const readSessionUser = (req: IncomingMessage, ideAuth: IdeAuthService) => {
+  const token = readSessionToken(req);
+  return token ? ideAuth.getSessionUser(token) : undefined;
+};
+
+const readSessionToken = (req: IncomingMessage): string | undefined => {
+  const raw = req.headers[HeaderName.Cookie];
+  if (!raw) return undefined;
+  const values = raw.split(";").map((entry) => entry.trim());
+  const session = values.find((entry) => entry.startsWith("iteronix_session="));
+  return session
+    ? decodeURIComponent(session.slice("iteronix_session=".length))
+    : undefined;
+};
+
+const createSessionCookie = (token: string): string =>
+  `iteronix_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800`;
+const clearSessionCookie = (): string =>
+  "iteronix_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0";
+const toIdeUserView = (user: {
+  id: string;
+  email: string;
+  role: IdeUserRole;
+  enabled: boolean;
+}) => ({
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  enabled: user.enabled,
+});
+const readCredentials = (
+  value: unknown,
+): { email: string; password: string } | undefined => {
+  const email = readStringField(value, "email");
+  const password = readStringField(value, "password");
+  return email && password ? { email, password } : undefined;
+};
+const readStringField = (value: unknown, key: string): string | undefined =>
+  isRecord(value) &&
+  typeof value[key] === "string" &&
+  value[key].trim().length > 0
+    ? value[key].trim()
+    : undefined;
+const readBooleanField = (value: unknown, key: string): boolean | undefined =>
+  isRecord(value) && typeof value[key] === "boolean" ? value[key] : undefined;
+const respondInvalidBody = (res: ServerResponse): void =>
+  respondError(res, {
+    status: HttpStatus.BadRequest,
+    message: ErrorMessage.InvalidBody,
+  });
+const isAuthRoute = (path: string): boolean => AuthRoutePaths.has(path);
+
 const isAuthorized = (req: IncomingMessage, authToken: string): boolean => {
   const token = readBearerToken(req);
   return token === authToken || isColocatedWebUiRequest(req);
@@ -3312,10 +3608,7 @@ const isColocatedWebUiRequest = (req: IncomingMessage): boolean => {
   }
   try {
     const originUrl = new URL(origin);
-    return (
-      originUrl.host === host ||
-      (isAllowedCorsOrigin(origin) && originUrl.port === "4000")
-    );
+    return originUrl.host === host || originUrl.port === "4000";
   } catch {
     return false;
   }
@@ -3333,11 +3626,13 @@ const isGovernanceLifecycleRoute = (path: string): boolean =>
   path === RoutePath.GovernanceLifecyclesReject ||
   path === RoutePath.GovernanceLifecyclesResume;
 
-const requiresStrictBearerAuthentication = (path: string): boolean =>
-  isGovernanceLifecycleRoute(path) ||
+const isEditableAssetRoute = (path: string): boolean =>
   path === RoutePath.EditableAssetsList ||
   path === RoutePath.EditableAssetsUpsert ||
   path === RoutePath.EditableAssetsDelete;
+
+const requiresStrictBearerAuthentication = (path: string): boolean =>
+  isGovernanceLifecycleRoute(path) || isEditableAssetRoute(path);
 
 const handleExternalWorkflowRequest = async (input: {
   req: IncomingMessage;
@@ -3611,6 +3906,7 @@ const CorsHeaderName = {
   AccessControlAllowOrigin: "access-control-allow-origin",
   AccessControlAllowHeaders: "access-control-allow-headers",
   AccessControlAllowMethods: "access-control-allow-methods",
+  AccessControlAllowCredentials: "access-control-allow-credentials",
   AccessControlMaxAge: "access-control-max-age",
   Vary: "vary",
 } as const;
@@ -3621,6 +3917,7 @@ const CorsHeaderValue = {
   MaxAgeSeconds: "600",
   OptionsMethod: "OPTIONS",
   VaryOrigin: "origin",
+  AllowCredentials: "true",
 } as const;
 
 const handleCorsPreflight = (
@@ -3650,6 +3947,10 @@ const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
 
   res.setHeader(CorsHeaderName.AccessControlAllowOrigin, origin);
   res.setHeader(
+    CorsHeaderName.AccessControlAllowCredentials,
+    CorsHeaderValue.AllowCredentials,
+  );
+  res.setHeader(
     CorsHeaderName.AccessControlAllowHeaders,
     CorsHeaderValue.AllowHeaders,
   );
@@ -3669,18 +3970,12 @@ const readCorsOrigin = (req: IncomingMessage): string | undefined => {
   return typeof originHeader === "string" ? originHeader : undefined;
 };
 
-const isAllowedCorsOrigin = (origin: string): boolean => {
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return false;
-    }
-
-    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  } catch {
-    return false;
-  }
-};
+const DefaultIdeUiOrigins = [
+  "http://localhost:4000",
+  "http://127.0.0.1:4000",
+] as const;
+const isAllowedCorsOrigin = (origin: string): boolean =>
+  DefaultIdeUiOrigins.some((trustedOrigin) => trustedOrigin === origin);
 
 const respondUnauthorized = (res: ServerResponse): void => {
   res.setHeader(HeaderName.WwwAuthenticate, BearerScheme);

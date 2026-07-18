@@ -8,14 +8,6 @@ import {
 
 const ApplicationStateKey = "application";
 const LegacyApplicationStateKey = "workspace";
-const CreateStateTableSql = `
-  CREATE TABLE IF NOT EXISTS app_state (
-    key TEXT PRIMARY KEY,
-    value JSONB NOT NULL,
-    revision BIGINT NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )
-`;
 const LoadStateSql = "SELECT value, revision FROM app_state WHERE key = $1";
 const SaveStateSql = `
   INSERT INTO app_state (key, value, revision)
@@ -49,9 +41,7 @@ export const createPostgresApplicationStateStore = (
 ): PostgresApplicationStateStore => {
   let saveQueue: Promise<unknown> = Promise.resolve();
   let knownRevision = 0;
-  const initialize = async (): Promise<void> => {
-    await client.query(CreateStateTableSql);
-  };
+  const initialize = async (): Promise<void> => undefined;
 
   const load = async (): Promise<ApplicationState> => {
     const applicationResult = await client.query(LoadStateSql, [

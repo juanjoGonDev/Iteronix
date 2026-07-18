@@ -20,4 +20,5 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/apps/web-ui/index.html ./web-ui/index.html
 COPY --from=build /app/apps/web-ui/dist ./web-ui/dist
-CMD ["node", "dist/apps/server-api/src/index.js"]
+COPY --from=build /app/apps/server-api/migrations ./migrations
+CMD ["sh", "-c", "node dist/apps/server-api/src/database-migration-cli.js migrate && exec node dist/apps/server-api/src/index.js"]

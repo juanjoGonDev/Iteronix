@@ -87,6 +87,40 @@ describe("editable assets API", () => {
     expect(forged.status).toBe(401);
     expect((await request(url, "/assets/list", {})).body["assets"]).toEqual([]);
   });
+
+  it("persists immutable prompt versions and rejects a mutated historical version", async () => {
+    const testServer = createTestServer(
+      createMemoryStore(createDefaultApplicationState()),
+    );
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const first = createPromptAsset();
+    expect((await request(url, "/assets/upsert", first)).status).toBe(200);
+    const prompt = first.prompt;
+    if (!prompt) throw new Error("Expected prompt metadata.");
+    const second = {
+      ...first,
+      prompt: {
+        activeVersion: 2,
+        versions: [
+          ...prompt.versions,
+          createPromptVersion(2, "Hello {{name}}"),
+        ],
+      },
+    };
+    expect((await request(url, "/assets/upsert", second)).status).toBe(200);
+    const mutation = {
+      ...second,
+      prompt: {
+        ...second.prompt,
+        versions: [
+          createPromptVersion(1, "Changed"),
+          second.prompt.versions[1]!,
+        ],
+      },
+    };
+    expect((await request(url, "/assets/upsert", mutation)).status).toBe(400);
+  });
 });
 
 const createTestServer = (
@@ -145,6 +179,29 @@ const schema = (id: string) => ({
   id,
   version: 1,
   schema: { type: "object" as const, additionalProperties: false },
+});
+
+const createPromptAsset = (): EditableAssetRecord => ({
+  ...createAsset(),
+  id: "prompt-reference",
+  kind: "prompt",
+  name: "Greeting",
+  prompt: {
+    activeVersion: 1,
+    versions: [createPromptVersion(1, "Hello {{name}}")],
+  },
+});
+
+const createPromptVersion = (version: number, template: string) => ({
+  version,
+  template,
+  variables: [{ name: "name", required: true, schema: schema("prompt.name") }],
+  provenance: {
+    source: "test",
+    artifactFingerprint: `prompt-${version}`,
+    registeredAt: "2026-07-18T00:00:00.000Z",
+  },
+  createdAt: "2026-07-18T00:00:00.000Z",
 });
 
 const request = async (

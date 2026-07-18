@@ -34,6 +34,8 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - Build domain contracts and test fixtures before adapters and UI. Core orchestration and policy logic follow strict RED → GREEN → REFACTOR TDD.
 - Treat every workflow run, repair, evaluation, review, and user decision as auditable persisted data.
 - Maintain the existing TypeScript strictness, clean architecture, credential-redaction, and Docker-first deployment constraints.
+- Every PostgreSQL schema change MUST ship as an immutable forward-only migration with a ledger checksum, transactional advisory locking, and clean-database verification. Runtime application code MUST NOT perform schema DDL.
+- Database integration and backup/restore tests MUST use a dedicated `TEST_DATABASE_URL` that differs from `DATABASE_URL`.
 
 ## Ordered roadmap
 
@@ -42,6 +44,7 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [x] Create a compatibility inventory for current workflow-only routes, PostgreSQL records, external API keys, runtime policies, and execution history.
 - [x] Classify every current workflow-only artifact as retain, migrate, replace, or retire against this charter; include the unarchived live-execution OpenSpec change.
 - [x] Define versioned import/export and database migration rules before changing workflow schemas.
+- [x] Implement a versioned PostgreSQL migration ledger, forward-only SQL executor, startup verification, and isolated clean-database backup/restore test contract.
 - [x] Update product documentation and OpenSpec artifacts to remove obsolete workflow-only closure assumptions without restoring excluded workbench surfaces.
 - [x] Record the resolution of the `AGENTS.md` scope conflict in a separately approved governance update; this plan does not modify `AGENTS.md`.
 
@@ -111,6 +114,7 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 ### Phase 4 — Agents, skills, memory, RAG, MCP, and plugins
 
 - [x] Work unit 1: persist editable asset records and authenticated CRUD APIs for agents, tools/MCP, skills, memory/RAG sources, and server-side plugins, with safe JSONB compatibility defaults.
+- [ ] Implement Prompts as first-class reusable Assets: immutable version history, typed variable schemas, provenance, and independently governed lifecycle state. Workflow nodes MUST reference a version-pinned prompt asset with explicit variable bindings; they MUST NOT own duplicated prompt text.
 - [ ] Integrate the persisted assets with governed workflow execution, including bounded permissions, schema validation, audit persistence, and approval checkpoints.
 - [ ] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
 - [ ] Add memory and RAG runtime integration with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.

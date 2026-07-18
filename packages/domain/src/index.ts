@@ -6,3 +6,4 @@ export * from "./governance-lifecycle";
 export * from "./workflow-contracts";
 export * from "./governance-validation";
 export * from "./agent-tool-contracts";
+export * from "./prompt-assets";

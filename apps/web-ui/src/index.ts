@@ -15,10 +15,12 @@ import { sanitizeBrowserUrlState } from "./shared/url-state.js";
 import { SettingsScreen } from "./screens/Settings.js";
 import { WorkflowsScreen } from "./screens/Workflows.js";
 import { WorkflowsCatalogScreen } from "./screens/WorkflowsCatalog.js";
+import { PromptAssetsScreen } from "./screens/PromptAssets.js";
 
 const ScreenId = {
   WorkflowCatalog: "workflow-catalog",
   WorkflowEditor: "workflow-editor",
+  PromptAssets: "prompt-assets",
   Settings: "settings",
 } as const;
 
@@ -29,6 +31,7 @@ const RootRoute = "/";
 const ScreenLabel: Record<ScreenId, string> = {
   "workflow-catalog": "Workflows",
   "workflow-editor": "Workflow editor",
+  "prompt-assets": "Prompt assets",
   settings: "Settings",
 };
 
@@ -116,6 +119,9 @@ export class App extends Component<AppProps, AppState> {
     router.register(ROUTES.WORKFLOW_EDITOR, ({ workflowId }) =>
       this.updateScreen(ScreenId.WorkflowEditor, workflowId ?? null),
     );
+    router.register(ROUTES.PROMPT_ASSETS, () =>
+      this.updateScreen(ScreenId.PromptAssets),
+    );
     router.register(ROUTES.SETTINGS, () =>
       this.updateScreen(ScreenId.Settings),
     );
@@ -135,6 +141,12 @@ export class App extends Component<AppProps, AppState> {
         "account_tree",
         ScreenLabel[ScreenId.WorkflowCatalog],
         ROUTES.WORKFLOWS,
+      ),
+      this.createNavigationItem(
+        ScreenId.PromptAssets,
+        "chat",
+        ScreenLabel[ScreenId.PromptAssets],
+        ROUTES.PROMPT_ASSETS,
       ),
       this.createNavigationItem(
         ScreenId.Settings,
@@ -272,6 +284,10 @@ export class App extends Component<AppProps, AppState> {
 
     if (screen === ScreenId.Settings) {
       return new SettingsScreen({});
+    }
+
+    if (screen === ScreenId.PromptAssets) {
+      return new PromptAssetsScreen({});
     }
 
     return new SettingsScreen({});

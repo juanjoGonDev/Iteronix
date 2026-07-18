@@ -63,7 +63,11 @@ export type CanonicalPort = {
 };
 
 export type CanonicalNodeContract =
-  | { kind: "agent.invocation"; agentId?: string }
+  | {
+      kind: "agent.invocation";
+      agentId?: string;
+      prompt?: import("./prompt-assets").PinnedPromptReference;
+    }
   | {
       kind: "workflow.invocation";
       workflowId: string;

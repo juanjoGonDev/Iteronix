@@ -45,6 +45,15 @@ export const RoutePath = {
   GovernanceLifecyclesContinue: "/governance/lifecycles/continue",
   GovernanceLifecyclesReject: "/governance/lifecycles/reject",
   GovernanceLifecyclesResume: "/governance/lifecycles/resume",
+  AuthBootstrapAdmin: "/auth/bootstrap-admin",
+  AuthRegister: "/auth/register",
+  AuthLogin: "/auth/login",
+  AuthLogout: "/auth/logout",
+  AuthMe: "/auth/me",
+  AuthPasswordResetRequest: "/auth/password-reset/request",
+  AuthPasswordResetConfirm: "/auth/password-reset/confirm",
+  AuthAdminRegistration: "/auth/admin/registration",
+  AuthAdminUserEnabled: "/auth/admin/user-enabled",
   EditableAssetsList: "/assets/list",
   EditableAssetsUpsert: "/assets/upsert",
   EditableAssetsDelete: "/assets/delete",
@@ -64,6 +73,8 @@ export const HeaderName = {
   ContentType: "content-type",
   CacheControl: "cache-control",
   Connection: "connection",
+  Cookie: "cookie",
+  SetCookie: "set-cookie",
 } as const;
 
 export const BearerPrefix = "Bearer ";
@@ -74,6 +85,7 @@ export const EnvKey = {
   Host: "HOST",
   AuthToken: "AUTH_TOKEN",
   DatabaseUrl: "DATABASE_URL",
+  IdeUiOrigins: "IDE_UI_ORIGINS",
 } as const;
 
 export const DefaultServerConfig = {

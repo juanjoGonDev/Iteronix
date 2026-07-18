@@ -220,6 +220,11 @@ export type WorkflowProviderSelectionRecord = {
 
 export type WorkflowNodeConfigRecord = {
   assetId?: string;
+  promptAsset?: {
+    assetId: string;
+    version: number;
+    bindings: Readonly<Record<string, unknown>>;
+  };
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;

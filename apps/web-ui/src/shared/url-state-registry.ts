@@ -61,6 +61,14 @@ const UrlStatePolicies = [
     reason: "Restores workflow panels, modals and useful debug/editor state.",
   },
   {
+    route: ROUTES.PROMPT_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "prompt", "version"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores prompt catalog editor selection without serializing drafts.",
+  },
+  {
     route: ROUTES.SETTINGS,
     status: "replace",
     allowedParams: ["tab", "profile"],

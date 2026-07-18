@@ -12,6 +12,7 @@ export const AssetKind = {
   Skill: "skill",
   MemorySource: "memory-source",
   Plugin: "plugin",
+  Prompt: "prompt",
 } as const;
 
 export type AssetKind = (typeof AssetKind)[keyof typeof AssetKind];
@@ -58,6 +59,24 @@ export type EditableAssetRecord = {
     isolation: "process";
     auditEvents: ReadonlyArray<AssetAuditEvent>;
   };
+  prompt?: {
+    activeVersion: number;
+    versions: ReadonlyArray<PromptAssetVersion>;
+  };
+};
+
+export type PromptVariableDefinition = {
+  name: string;
+  required: boolean;
+  schema: VersionedJsonSchema;
+};
+
+export type PromptAssetVersion = {
+  version: number;
+  template: string;
+  variables: ReadonlyArray<PromptVariableDefinition>;
+  provenance: ArtifactProvenance;
+  createdAt: string;
 };
 
 export type AssetAuditEvent = { at: string; action: string; actorId: string };
@@ -75,6 +94,12 @@ export const upsertEditableAsset = (
   input: EditableAssetRecord,
 ): EditableAssetCatalog => {
   const asset = normalizeEditableAsset(input);
+  const existing = catalog.records.find(
+    (candidate) => candidate.id === asset.id,
+  );
+  if (existing?.kind === AssetKind.Prompt || asset.kind === AssetKind.Prompt) {
+    assertPromptUpdate(existing, asset);
+  }
   const records = catalog.records.filter(
     (candidate) => candidate.id !== asset.id,
   );
@@ -160,6 +185,14 @@ const normalizeEditableAsset = (
           },
         }
       : {}),
+    ...(asset.prompt
+      ? {
+          prompt: {
+            activeVersion: asset.prompt.activeVersion,
+            versions: asset.prompt.versions.map(copyPromptVersion),
+          },
+        }
+      : {}),
   });
 };
 
@@ -203,6 +236,7 @@ const readEditableAsset = (
   const skill = readSkill(value["skill"]);
   const memory = readMemory(value["memory"]);
   const plugin = readPlugin(value["plugin"]);
+  const prompt = readPrompt(value["prompt"]);
   if (
     !id ||
     !name ||
@@ -230,6 +264,7 @@ const readEditableAsset = (
     ...(skill ? { skill } : {}),
     ...(memory ? { memory } : {}),
     ...(plugin ? { plugin } : {}),
+    ...(prompt ? { prompt } : {}),
   });
 };
 
@@ -323,6 +358,57 @@ const readPlugin = (
         auditEvents: readAuditEvents(value["auditEvents"]),
       }
     : undefined;
+const readPrompt = (
+  value: unknown,
+): EditableAssetRecord["prompt"] | undefined => {
+  if (
+    !isRecord(value) ||
+    typeof value["activeVersion"] !== "number" ||
+    !Array.isArray(value["versions"])
+  ) {
+    return undefined;
+  }
+  const versions = value["versions"].flatMap((candidate) => {
+    const version = readPromptVersion(candidate);
+    return version ? [version] : [];
+  });
+  return versions.length === value["versions"].length
+    ? { activeVersion: value["activeVersion"], versions }
+    : undefined;
+};
+const readPromptVersion = (value: unknown): PromptAssetVersion | undefined => {
+  if (
+    !isRecord(value) ||
+    typeof value["version"] !== "number" ||
+    !isNonEmptyString(value["template"]) ||
+    !isNonEmptyString(value["createdAt"])
+  ) {
+    return undefined;
+  }
+  const provenance = readProvenance(value["provenance"]);
+  if (!provenance || !Array.isArray(value["variables"])) return undefined;
+  const variables = value["variables"].flatMap((candidate) => {
+    if (
+      !isRecord(candidate) ||
+      !isNonEmptyString(candidate["name"]) ||
+      typeof candidate["required"] !== "boolean"
+    )
+      return [];
+    const schema = readSchema(candidate["schema"]);
+    return schema
+      ? [{ name: candidate["name"], required: candidate["required"], schema }]
+      : [];
+  });
+  return variables.length === value["variables"].length
+    ? {
+        version: value["version"],
+        template: value["template"],
+        variables,
+        provenance,
+        createdAt: value["createdAt"],
+      }
+    : undefined;
+};
 const readAuditEvents = (value: unknown): ReadonlyArray<AssetAuditEvent> =>
   Array.isArray(value)
     ? value.flatMap((event) =>
@@ -391,7 +477,85 @@ const assertDetails = (asset: EditableAssetRecord): void => {
       throw new Error("Plugin isolation must be process.");
     assertAuditEvents(asset.plugin.auditEvents);
   }
+  if (asset.kind === AssetKind.Prompt) {
+    if (!asset.prompt) throw new Error("Prompt versions are required.");
+    assertPrompt(asset.prompt);
+  }
 };
+
+const assertPrompt = (
+  prompt: NonNullable<EditableAssetRecord["prompt"]>,
+): void => {
+  if (
+    !Number.isInteger(prompt.activeVersion) ||
+    prompt.activeVersion < 1 ||
+    prompt.versions.length === 0
+  )
+    throw new Error("Prompt active version is invalid.");
+  const versions = new Set<number>();
+  for (const version of prompt.versions) {
+    if (
+      !Number.isInteger(version.version) ||
+      version.version < 1 ||
+      versions.has(version.version) ||
+      !isNonEmptyString(version.template) ||
+      !isNonEmptyString(version.createdAt)
+    )
+      throw new Error("Prompt version is invalid.");
+    versions.add(version.version);
+    assertProvenance(version.provenance);
+    const variables = new Set<string>();
+    for (const variable of version.variables) {
+      if (!isNonEmptyString(variable.name) || variables.has(variable.name))
+        throw new Error("Prompt variable is invalid.");
+      variables.add(variable.name);
+      assertSchema(variable.schema);
+    }
+  }
+  if (!versions.has(prompt.activeVersion))
+    throw new Error("Prompt active version is missing.");
+};
+
+const assertPromptUpdate = (
+  existing: EditableAssetRecord | undefined,
+  next: EditableAssetRecord,
+): void => {
+  if (next.kind !== AssetKind.Prompt || !next.prompt)
+    throw new Error("Prompt asset kind is immutable.");
+  if (!existing) return;
+  if (existing.kind !== AssetKind.Prompt || !existing.prompt)
+    throw new Error("Asset kind is immutable.");
+  const nextByVersion = new Map(
+    next.prompt.versions.map((version) => [version.version, version]),
+  );
+  for (const version of existing.prompt.versions) {
+    const candidate = nextByVersion.get(version.version);
+    if (!candidate || JSON.stringify(candidate) !== JSON.stringify(version))
+      throw new Error("Prompt versions are immutable.");
+  }
+  const highestExisting = Math.max(
+    ...existing.prompt.versions.map((version) => version.version),
+  );
+  const additions = next.prompt.versions.filter(
+    (version) => version.version > highestExisting,
+  );
+  if (
+    additions.length > 1 ||
+    (additions.length === 1 && additions[0]?.version !== highestExisting + 1)
+  )
+    throw new Error("Prompt versions must be appended sequentially.");
+};
+
+const copyPromptVersion = (
+  version: PromptAssetVersion,
+): PromptAssetVersion => ({
+  ...version,
+  variables: version.variables.map((variable) => ({
+    ...variable,
+    schema: { ...variable.schema, schema: { ...variable.schema.schema } },
+  })),
+  provenance: { ...version.provenance },
+});
 
 const assertCapabilities = (values: ReadonlyArray<AgentCapability>): void => {
   if (!values.every((value) => Object.values(AgentCapability).includes(value)))

@@ -20,7 +20,7 @@ const StateKey = "application";
 const LegacyStateKey = "workspace";
 
 describe("PostgreSQL application state store", () => {
-  it("creates the empty workflow baseline when PostgreSQL has no state", async () => {
+  it("loads the empty workflow baseline without issuing runtime schema DDL", async () => {
     const client = createClient([]);
     const store = createPostgresApplicationStateStore(client);
 
@@ -29,10 +29,7 @@ describe("PostgreSQL application state store", () => {
 
     expect(state.workflows.definitions).toEqual([]);
     expect(state.settings.providerProfiles).toEqual([]);
-    expect(client.calls[0]?.text).toContain(
-      "CREATE TABLE IF NOT EXISTS app_state",
-    );
-    expect(client.calls[1]).toEqual({
+    expect(client.calls[0]).toEqual({
       text: "SELECT value, revision FROM app_state WHERE key = $1",
       values: [StateKey],
     });

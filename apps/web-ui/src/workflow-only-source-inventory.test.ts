@@ -88,12 +88,13 @@ describe("workflow-only web source inventory", () => {
     ).toEqual([]);
   });
 
-  it("registers only workflow and settings navigation routes", () => {
+  it("registers workflow, prompt asset, and settings navigation routes", () => {
     const constants = readFileSync(
       join(WebSourceRoot, "shared", "constants.ts"),
       "utf8",
     );
     expect(constants).toContain('WORKFLOWS: "/workflows"');
+    expect(constants).toContain('PROMPT_ASSETS: "/assets/prompts"');
     expect(constants).toContain('SETTINGS: "/settings"');
     expect(constants).not.toMatch(/OVERVIEW|PROJECTS|EXPLORER|KANBAN|HISTORY/);
   });

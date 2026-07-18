@@ -12,6 +12,7 @@ describe("url state registry", () => {
     expect(listUrlStateRoutePolicies().map((policy) => policy.route)).toEqual([
       ROUTES.WORKFLOWS,
       ROUTES.WORKFLOW_EDITOR,
+      ROUTES.PROMPT_ASSETS,
       ROUTES.SETTINGS,
     ]);
   });
