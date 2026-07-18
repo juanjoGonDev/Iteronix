@@ -27,7 +27,7 @@ export type PromptAssetsClient = {
   }) => Promise<void>;
 };
 
-export type PromptAssetUsage = {
+type PromptAssetUsage = {
   workflowId: string;
   workflowName: string;
   nodeId: string;

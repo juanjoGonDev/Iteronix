@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-export type PromptAssetUsage = {
+type PromptAssetUsage = {
   workflowId: string;
   workflowName: string;
   nodeId: string;
