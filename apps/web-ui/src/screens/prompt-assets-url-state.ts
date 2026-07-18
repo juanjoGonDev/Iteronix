@@ -2,6 +2,7 @@ export const PromptAssetsUrlMode = {
   Catalog: "catalog",
   Create: "create",
   Edit: "edit",
+  Delete: "delete",
 } as const;
 
 export type PromptAssetsUrlMode =
@@ -29,7 +30,11 @@ export const readPromptAssetsUrlState = (
   const version = readPositiveInteger(url.searchParams.get(QueryKey.Version));
   const mode = readMode(url.searchParams.get(QueryKey.Mode));
 
-  if (mode === PromptAssetsUrlMode.Edit && !promptId) {
+  if (
+    (mode === PromptAssetsUrlMode.Edit ||
+      mode === PromptAssetsUrlMode.Delete) &&
+    !promptId
+  ) {
     return { mode: PromptAssetsUrlMode.Catalog, promptId: null, version: null };
   }
 
@@ -63,7 +68,9 @@ export const applyPromptAssetsUrlPatch = (
 };
 
 const readMode = (value: string | null): PromptAssetsUrlMode =>
-  value === PromptAssetsUrlMode.Create || value === PromptAssetsUrlMode.Edit
+  value === PromptAssetsUrlMode.Create ||
+  value === PromptAssetsUrlMode.Edit ||
+  value === PromptAssetsUrlMode.Delete
     ? value
     : PromptAssetsUrlMode.Catalog;
 

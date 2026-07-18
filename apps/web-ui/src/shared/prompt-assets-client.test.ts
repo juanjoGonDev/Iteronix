@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createPromptAssetRecord,
+  parsePromptAssetUsageResponse,
   parsePromptAssetsResponse,
 } from "./prompt-assets-client.js";
 
@@ -47,6 +48,33 @@ describe("prompt assets client", () => {
         },
       },
     ]);
+  });
+});
+
+describe("prompt asset usage response", () => {
+  it("parses a server-derived usage summary with direct workflow node metadata", () => {
+    expect(
+      parsePromptAssetUsageResponse({
+        assetId: "prompt-1",
+        workflowCount: 1,
+        nodeCount: 1,
+        fingerprint: "a".repeat(64),
+        usages: [
+          {
+            workflowId: "workflow-1",
+            workflowName: "Support",
+            nodeId: "node-1",
+            nodeLabel: "Reply",
+            promptVersion: 2,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      assetId: "prompt-1",
+      workflowCount: 1,
+      nodeCount: 1,
+      usages: [{ workflowId: "workflow-1", nodeId: "node-1" }],
+    });
   });
 });
 

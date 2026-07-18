@@ -55,6 +55,7 @@ export const RoutePath = {
   AuthAdminRegistration: "/auth/admin/registration",
   AuthAdminUserEnabled: "/auth/admin/user-enabled",
   EditableAssetsList: "/assets/list",
+  EditableAssetsUsage: "/assets/usage",
   EditableAssetsUpsert: "/assets/upsert",
   EditableAssetsDelete: "/assets/delete",
   ExternalApiKeysList: "/settings/api-keys/list",

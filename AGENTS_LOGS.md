@@ -5131,3 +5131,12 @@
 - Commands: RED focused migration test; GREEN focused migration/state/config Vitest suites and `pnpm typecheck`.
 - Issues/Risks: Live PostgreSQL backup/restore integration requires an explicitly configured `TEST_DATABASE_URL`; it is skipped by the normal unit suite when unavailable and run through `pnpm test:db` in CI.
 - Next: Configure a disposable PostgreSQL test database in CI and execute `pnpm test:db` there.
+
+### 2026-07-18 23:10 (Europe/Madrid) — Prompt asset usage safety
+
+- Summary: Added persisted workflow-reference discovery and safe deletion for reusable Prompt Assets.
+- Decisions: Usage is derived from persisted version-pinned `node.config.promptAsset` references on every query and delete request; a server-computed fingerprint and explicit impact confirmation are required before deleting a used prompt. Workflows are never cascaded or mutated.
+- Changes: Added authenticated `/assets/usage`, deterministic usage summaries, stale/forged impact rejection, catalog counts/direct workflow-node links, and URL-addressable responsive delete confirmation with Escape handling.
+- Commands: RED/GREEN focused server and web Vitest suites; `pnpm typecheck`.
+- Issues/Risks: Prompt runtime resolution and governance provenance remain separate incomplete Phase 4 work.
+- Next: Run full quality gates and bounded review before delivery.

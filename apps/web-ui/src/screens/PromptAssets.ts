@@ -10,6 +10,7 @@ import {
   createPromptAssetRecord,
   createPromptAssetsClient,
   type PromptAssetSummary,
+  type PromptAssetUsageSummary,
 } from "../shared/prompt-assets-client.js";
 import {
   PromptAssetsUrlMode,
@@ -28,6 +29,10 @@ const PromptAssetsSelector = {
   EditorTemplate: "prompt-assets-editor-template",
   EditorSave: "prompt-assets-editor-save",
   DeletePrefix: "prompt-assets-delete-",
+  UsagePrefix: "prompt-assets-usage-",
+  DeleteDialog: "prompt-assets-delete-dialog",
+  DeleteConfirm: "prompt-assets-delete-confirm",
+  DeleteCancel: "prompt-assets-delete-cancel",
   EditorClose: "prompt-assets-editor-close",
 } as const;
 
@@ -38,6 +43,7 @@ type PromptAssetsState = {
   url: PromptAssetsUrlState;
   draftName: string;
   draftTemplate: string;
+  usageByPromptId: Readonly<Record<string, PromptAssetUsageSummary>>;
 };
 
 export class PromptAssetsScreen extends Component<
@@ -55,16 +61,19 @@ export class PromptAssetsScreen extends Component<
       url,
       draftName: "",
       draftTemplate: "",
+      usageByPromptId: {},
     });
   }
 
   override onMount(): void {
     window.addEventListener("popstate", this.handleBrowserNavigation);
+    window.addEventListener("keydown", this.handleKeyboardShortcut);
     void this.loadPrompts();
   }
 
   override onUnmount(): void {
     window.removeEventListener("popstate", this.handleBrowserNavigation);
+    window.removeEventListener("keydown", this.handleKeyboardShortcut);
   }
 
   override render(): HTMLElement {
@@ -79,7 +88,12 @@ export class PromptAssetsScreen extends Component<
         createElement(
           "div",
           { className: "mx-auto flex max-w-6xl flex-col gap-5" },
-          [this.renderToolbar(), this.renderContent(), this.renderEditor()],
+          [
+            this.renderToolbar(),
+            this.renderContent(),
+            this.renderEditor(),
+            this.renderDeleteConfirmation(),
+          ],
         ),
       ],
     );
@@ -194,6 +208,8 @@ export class PromptAssetsScreen extends Component<
             { className: "mt-1 text-sm text-text-secondary" },
             [`Version ${prompt.activeVersion} · ${prompt.status}`],
           ),
+          this.renderUsageSummary(prompt),
+          this.renderUsageLinks(prompt),
         ]),
         createElement(Button, {
           variant: "secondary",
@@ -213,7 +229,7 @@ export class PromptAssetsScreen extends Component<
           icon: "delete",
           children: "Delete",
           onClick: () => {
-            void this.deletePrompt(prompt);
+            this.openDeleteConfirmation(prompt);
           },
           dataset: {
             testid: `${PromptAssetsSelector.DeletePrefix}${prompt.id}`,
@@ -223,8 +239,153 @@ export class PromptAssetsScreen extends Component<
     );
   }
 
+  private renderUsageSummary(prompt: PromptAssetSummary): HTMLElement {
+    const usage = this.state.usageByPromptId[prompt.id];
+    const summary = usage
+      ? `${usage.workflowCount} workflow${usage.workflowCount === 1 ? "" : "s"} · ${usage.nodeCount} node${usage.nodeCount === 1 ? "" : "s"}`
+      : "Usage unavailable";
+    return createElement(
+      "p",
+      {
+        className: "mt-1 text-xs text-text-secondary",
+        "data-testid": `${PromptAssetsSelector.UsagePrefix}${prompt.id}`,
+      },
+      [summary],
+    );
+  }
+
+  private renderUsageLinks(prompt: PromptAssetSummary): HTMLElement | string {
+    const usage = this.state.usageByPromptId[prompt.id];
+    if (!usage || usage.nodeCount === 0) return "";
+    return createElement(
+      "ul",
+      { className: "mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs" },
+      usage.usages.map((item) =>
+        createElement("li", {}, [
+          createElement(
+            "a",
+            {
+              href: createWorkflowNodeHref(item.workflowId, item.nodeId),
+              className:
+                "text-primary underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-primary",
+            },
+            [
+              `${item.workflowName} / ${item.nodeLabel} · v${item.promptVersion}`,
+            ],
+          ),
+        ]),
+      ),
+    );
+  }
+
+  private renderDeleteConfirmation(): HTMLElement | string {
+    if (
+      this.state.url.mode !== PromptAssetsUrlMode.Delete ||
+      !this.state.url.promptId
+    ) {
+      return "";
+    }
+    const prompt = this.state.prompts.find(
+      (candidate) => candidate.id === this.state.url.promptId,
+    );
+    if (!prompt) return "";
+    const usage = this.state.usageByPromptId[prompt.id];
+    const hasUsages = (usage?.nodeCount ?? 0) > 0;
+    return createElement(
+      "section",
+      {
+        className:
+          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-labelledby": "prompt-assets-delete-title",
+        "data-testid": PromptAssetsSelector.DeleteDialog,
+      },
+      [
+        createElement(
+          "div",
+          {
+            className:
+              "w-full max-w-xl border border-rose-500/40 bg-[#151b22] p-5 shadow-2xl",
+          },
+          [
+            createElement(
+              "h2",
+              {
+                id: "prompt-assets-delete-title",
+                className: "text-base font-semibold text-white",
+              },
+              [
+                hasUsages
+                  ? "Delete prompt with workflow impact"
+                  : "Delete prompt asset",
+              ],
+            ),
+            createElement(
+              "p",
+              { className: "mt-2 text-sm text-text-secondary" },
+              [
+                hasUsages
+                  ? `This deletes ${prompt.name} without changing ${usage?.workflowCount ?? 0} workflow(s) or ${usage?.nodeCount ?? 0} node(s).`
+                  : "This prompt is not referenced by any persisted workflow node.",
+              ],
+            ),
+            ...(hasUsages && usage
+              ? [
+                  createElement(
+                    "ul",
+                    {
+                      className:
+                        "mt-4 max-h-48 space-y-2 overflow-auto border-y border-border-dark py-3 text-sm",
+                    },
+                    usage.usages.map((item) =>
+                      createElement("li", {}, [
+                        createElement(
+                          "a",
+                          {
+                            href: createWorkflowNodeHref(
+                              item.workflowId,
+                              item.nodeId,
+                            ),
+                            className:
+                              "text-primary underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-primary",
+                          },
+                          [
+                            `${item.workflowName} / ${item.nodeLabel} · v${item.promptVersion}`,
+                          ],
+                        ),
+                      ]),
+                    ),
+                  ),
+                ]
+              : []),
+            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
+              createElement(Button, {
+                variant: "ghost",
+                size: "sm",
+                children: "Cancel",
+                onClick: () => this.closeDeleteConfirmation(),
+                dataset: { testid: PromptAssetsSelector.DeleteCancel },
+              }),
+              createElement(Button, {
+                variant: "danger",
+                size: "sm",
+                children: "Delete prompt",
+                onClick: () => void this.deletePrompt(prompt, usage),
+                dataset: { testid: PromptAssetsSelector.DeleteConfirm },
+              }),
+            ]),
+          ],
+        ),
+      ],
+    );
+  }
+
   private renderEditor(): HTMLElement | string {
-    if (this.state.url.mode === PromptAssetsUrlMode.Catalog) {
+    if (
+      this.state.url.mode === PromptAssetsUrlMode.Catalog ||
+      this.state.url.mode === PromptAssetsUrlMode.Delete
+    ) {
       return "";
     }
 
@@ -323,7 +484,17 @@ export class PromptAssetsScreen extends Component<
     this.setState({ loading: true, errorMessage: null });
     try {
       const prompts = await this.client.list();
-      this.setState({ prompts, loading: false });
+      const usageEntries = await Promise.all(
+        prompts.map(
+          async (prompt) =>
+            [prompt.id, await this.client.usage(prompt.id)] as const,
+        ),
+      );
+      this.setState({
+        prompts,
+        loading: false,
+        usageByPromptId: Object.fromEntries(usageEntries),
+      });
     } catch (error) {
       this.setState({ loading: false, errorMessage: readErrorMessage(error) });
     }
@@ -343,7 +514,20 @@ export class PromptAssetsScreen extends Component<
   }
 
   private readonly handleBrowserNavigation = (): void => {
-    this.setState({ url: readPromptAssetsUrlState(window.location.href) });
+    const url = readPromptAssetsUrlState(window.location.href);
+    this.setState({ url });
+    if (url.mode === PromptAssetsUrlMode.Delete && url.promptId) {
+      void this.loadPromptUsage(url.promptId);
+    }
+  };
+
+  private readonly handleKeyboardShortcut = (event: KeyboardEvent): void => {
+    if (
+      event.key === "Escape" &&
+      this.state.url.mode === PromptAssetsUrlMode.Delete
+    ) {
+      this.closeDeleteConfirmation();
+    }
   };
 
   private updateDraftName(event: Event): void {
@@ -395,20 +579,52 @@ export class PromptAssetsScreen extends Component<
     }
   }
 
-  private async deletePrompt(prompt: PromptAssetSummary): Promise<void> {
+  private openDeleteConfirmation(prompt: PromptAssetSummary): void {
+    this.openEditor({
+      mode: PromptAssetsUrlMode.Delete,
+      promptId: prompt.id,
+      version: prompt.activeVersion,
+    });
+    void this.loadPromptUsage(prompt.id);
+  }
+
+  private closeDeleteConfirmation(): void {
+    this.openEditor({
+      mode: PromptAssetsUrlMode.Catalog,
+      promptId: null,
+      version: null,
+    });
+  }
+
+  private async loadPromptUsage(promptId: string): Promise<void> {
     try {
-      await this.client.delete(prompt.id);
+      const usage = await this.client.usage(promptId);
+      this.setState({
+        usageByPromptId: { ...this.state.usageByPromptId, [promptId]: usage },
+      });
+    } catch (error) {
+      this.setState({ errorMessage: readErrorMessage(error) });
+    }
+  }
+
+  private async deletePrompt(
+    prompt: PromptAssetSummary,
+    usage: PromptAssetUsageSummary | undefined,
+  ): Promise<void> {
+    try {
+      await this.client.delete({
+        assetId: prompt.id,
+        ...(usage?.nodeCount
+          ? { usageFingerprint: usage.fingerprint, confirmImpact: true }
+          : {}),
+      });
       this.setState({
         prompts: this.state.prompts.filter(
           (candidate) => candidate.id !== prompt.id,
         ),
       });
       if (this.state.url.promptId === prompt.id) {
-        this.openEditor({
-          mode: PromptAssetsUrlMode.Catalog,
-          promptId: null,
-          version: null,
-        });
+        this.closeDeleteConfirmation();
       }
     } catch (error) {
       this.setState({ errorMessage: readErrorMessage(error) });
@@ -420,3 +636,6 @@ const readErrorMessage = (error: unknown): string =>
   error instanceof Error && error.message.trim().length > 0
     ? error.message
     : "Could not load prompt assets.";
+
+const createWorkflowNodeHref = (workflowId: string, nodeId: string): string =>
+  `/workflows/${encodeURIComponent(workflowId)}?panel=nodes&modal=node-editor&node=${encodeURIComponent(nodeId)}`;

@@ -10,6 +10,11 @@ import { createProviderStore } from "./providers";
 import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
 import { createWorkflowRuntimeService } from "./workflow-runtime";
+import {
+  WorkflowNodeKind,
+  WorkflowRecordStatus,
+  WorkflowTriggerKind,
+} from "../../../packages/shared/src/workflows";
 
 const AuthToken = "editable-assets-api-token";
 const servers: Server[] = [];
@@ -121,6 +126,66 @@ describe("editable assets API", () => {
     };
     expect((await request(url, "/assets/upsert", mutation)).status).toBe(400);
   });
+
+  it("recomputes persisted prompt usage before allowing an impact-confirmed delete", async () => {
+    const initial = createDefaultApplicationState();
+    initial.workflows = {
+      ...initial.workflows,
+      definitions: [createPromptReferenceWorkflow()],
+    };
+    const testServer = createTestServer(createMemoryStore(initial), initial);
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    expect(
+      (await request(url, "/assets/upsert", createPromptAsset())).status,
+    ).toBe(200);
+
+    const usage = await request(url, "/assets/usage", {
+      assetId: "prompt-reference",
+    });
+    expect(usage.status).toBe(200);
+    expect(usage.body).toMatchObject({ workflowCount: 1, nodeCount: 1 });
+
+    const blocked = await request(url, "/assets/delete", {
+      assetId: "prompt-reference",
+      usageFingerprint: usage.body["fingerprint"],
+    });
+    expect(blocked.status).toBe(409);
+
+    const stale = await request(url, "/assets/delete", {
+      assetId: "prompt-reference",
+      usageFingerprint: "forged",
+      confirmImpact: true,
+    });
+    expect(stale.status).toBe(409);
+
+    const deleted = await request(url, "/assets/delete", {
+      assetId: "prompt-reference",
+      usageFingerprint: usage.body["fingerprint"],
+      confirmImpact: true,
+    });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toMatchObject({
+      assetId: "prompt-reference",
+      tombstoned: true,
+    });
+    expect(
+      (await request(url, "/assets/list", {})).body["assets"],
+    ).toMatchObject([
+      {
+        id: "prompt-reference",
+        status: "disabled",
+        prompt: { activeVersion: 1 },
+      },
+    ]);
+    expect(
+      (await request(url, "/assets/usage", { assetId: "prompt-reference" }))
+        .body,
+    ).toMatchObject({
+      workflowCount: 1,
+      nodeCount: 1,
+    });
+  });
 });
 
 const createTestServer = (
@@ -128,7 +193,7 @@ const createTestServer = (
   initialState = createDefaultApplicationState(),
 ) => {
   const providerStore = createProviderStore();
-  const workflowCatalog = createWorkflowCatalogStore();
+  const workflowCatalog = createWorkflowCatalogStore(initialState.workflows);
   const persistence = createApplicationPersistence({
     stateStore,
     initialState,
@@ -202,6 +267,46 @@ const createPromptVersion = (version: number, template: string) => ({
     registeredAt: "2026-07-18T00:00:00.000Z",
   },
   createdAt: "2026-07-18T00:00:00.000Z",
+});
+
+const createPromptReferenceWorkflow = () => ({
+  id: "workflow-support",
+  name: "Support workflow",
+  description: "Uses the global prompt.",
+  status: WorkflowRecordStatus.Draft,
+  version: 1,
+  createdAt: "2026-07-18T00:00:00.000Z",
+  updatedAt: "2026-07-18T00:00:00.000Z",
+  trigger: { kind: WorkflowTriggerKind.Manual, enabled: true, config: {} },
+  viewport: { x: 0, y: 0, zoom: 1 },
+  executionPolicy: { maxNodeRetries: 1, allowManualCheckpointResume: true },
+  defaultContextPolicy: {
+    language: "en",
+    carryMessagesLimit: 8,
+    carryArtifactLimit: 8,
+  },
+  tags: [],
+  nodes: [
+    {
+      id: "node-reply",
+      kind: WorkflowNodeKind.AssetPrompt,
+      label: "Support reply",
+      position: { x: 0, y: 0 },
+      width: 320,
+      collapsed: false,
+      config: {
+        promptAsset: {
+          assetId: "prompt-reference",
+          version: 1,
+          bindings: {},
+        },
+      },
+      inputPorts: [],
+      outputPorts: [],
+      attachedGuardrails: [],
+    },
+  ],
+  edges: [],
 });
 
 const request = async (

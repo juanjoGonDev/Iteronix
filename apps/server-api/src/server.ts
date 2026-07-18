@@ -109,11 +109,13 @@ import {
   type ApplicationStateStore,
 } from "./application-state";
 import {
+  AssetStatus,
   parseEditableAssetCatalog,
   removeEditableAsset,
   upsertEditableAsset,
   type EditableAssetCatalog,
 } from "./editable-assets";
+import { summarizePromptAssetUsage } from "./prompt-asset-usage";
 import {
   createIdeAuthService,
   IdeUserRole,
@@ -204,6 +206,7 @@ const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.GovernanceLifecyclesReject,
   RoutePath.GovernanceLifecyclesResume,
   RoutePath.EditableAssetsList,
+  RoutePath.EditableAssetsUsage,
   RoutePath.EditableAssetsUpsert,
   RoutePath.EditableAssetsDelete,
   RoutePath.ExternalApiKeysList,
@@ -568,6 +571,14 @@ const handleRequest = async (
     respondJson(res, HttpStatus.Ok, {
       assets: applicationPersistence.read().editableAssets.records,
     });
+    return;
+  }
+  if (path === RoutePath.EditableAssetsUsage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetUsage(req, res, applicationPersistence);
     return;
   }
   if (path === RoutePath.EditableAssetsUpsert) {
@@ -1372,12 +1383,7 @@ const handleEditableAssetDelete = async (
     respondError(res, body.error);
     return;
   }
-  const assetId =
-    isRecord(body.value) &&
-    typeof body.value["assetId"] === "string" &&
-    body.value["assetId"].trim().length > 0
-      ? body.value["assetId"].trim()
-      : undefined;
+  const assetId = readEditableAssetId(body.value);
   if (!assetId) {
     respondError(res, {
       status: HttpStatus.BadRequest,
@@ -1386,11 +1392,32 @@ const handleEditableAssetDelete = async (
     return;
   }
   const current = applicationPersistence.read().editableAssets;
-  if (!current.records.some((asset) => asset.id === assetId)) {
+  const asset = current.records.find((candidate) => candidate.id === assetId);
+  if (!asset) {
     respondError(res, {
       status: HttpStatus.NotFound,
       message: ErrorMessage.NotFound,
     });
+    return;
+  }
+  const usage = summarizePromptAssetUsage({
+    assetId,
+    definitions: applicationPersistence.read().workflows.definitions,
+  });
+  if (usage.nodeCount > 0) {
+    const usageFingerprint = readUsageFingerprint(body.value);
+    const confirmImpact = readImpactConfirmation(body.value);
+    if (usageFingerprint !== usage.fingerprint || !confirmImpact) {
+      respondError(res, {
+        status: HttpStatus.Conflict,
+        message: "Prompt asset usage changed or impact was not confirmed.",
+      });
+      return;
+    }
+    await applicationPersistence.updateEditableAssets(
+      upsertEditableAsset(current, { ...asset, status: AssetStatus.Disabled }),
+    );
+    respondJson(res, HttpStatus.Ok, { assetId, tombstoned: true });
     return;
   }
   await applicationPersistence.updateEditableAssets(
@@ -1398,6 +1425,59 @@ const handleEditableAssetDelete = async (
   );
   respondJson(res, HttpStatus.Ok, { assetId });
 };
+
+const handleEditableAssetUsage = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const assetId = readEditableAssetId(body.value);
+  if (!assetId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const asset = applicationPersistence
+    .read()
+    .editableAssets.records.find((candidate) => candidate.id === assetId);
+  if (!asset || asset.kind !== "prompt") {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(
+    res,
+    HttpStatus.Ok,
+    summarizePromptAssetUsage({
+      assetId,
+      definitions: applicationPersistence.read().workflows.definitions,
+    }),
+  );
+};
+
+const readEditableAssetId = (value: unknown): string | undefined =>
+  isRecord(value) &&
+  typeof value["assetId"] === "string" &&
+  value["assetId"].trim().length > 0
+    ? value["assetId"].trim()
+    : undefined;
+
+const readUsageFingerprint = (value: unknown): string | undefined =>
+  isRecord(value) && typeof value["usageFingerprint"] === "string"
+    ? value["usageFingerprint"]
+    : undefined;
+
+const readImpactConfirmation = (value: unknown): boolean =>
+  isRecord(value) && value["confirmImpact"] === true;
 
 const handleGovernanceLifecycleGet = async (
   req: IncomingMessage,
@@ -3628,6 +3708,7 @@ const isGovernanceLifecycleRoute = (path: string): boolean =>
 
 const isEditableAssetRoute = (path: string): boolean =>
   path === RoutePath.EditableAssetsList ||
+  path === RoutePath.EditableAssetsUsage ||
   path === RoutePath.EditableAssetsUpsert ||
   path === RoutePath.EditableAssetsDelete;
 

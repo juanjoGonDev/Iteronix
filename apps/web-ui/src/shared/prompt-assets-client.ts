@@ -2,6 +2,7 @@ import { requestJson } from "./server-api-client.js";
 
 const EndpointPath = {
   List: "/assets/list",
+  Usage: "/assets/usage",
   Upsert: "/assets/upsert",
   Delete: "/assets/delete",
 } as const;
@@ -17,8 +18,29 @@ export type PromptAssetSummary = {
 
 export type PromptAssetsClient = {
   list: () => Promise<ReadonlyArray<PromptAssetSummary>>;
+  usage: (assetId: string) => Promise<PromptAssetUsageSummary>;
   upsert: (asset: Record<string, unknown>) => Promise<PromptAssetSummary>;
-  delete: (assetId: string) => Promise<void>;
+  delete: (input: {
+    assetId: string;
+    usageFingerprint?: string;
+    confirmImpact?: boolean;
+  }) => Promise<void>;
+};
+
+export type PromptAssetUsage = {
+  workflowId: string;
+  workflowName: string;
+  nodeId: string;
+  nodeLabel: string;
+  promptVersion: number;
+};
+
+export type PromptAssetUsageSummary = {
+  assetId: string;
+  workflowCount: number;
+  nodeCount: number;
+  fingerprint: string;
+  usages: ReadonlyArray<PromptAssetUsage>;
 };
 
 export const createPromptAssetsClient = (): PromptAssetsClient => ({
@@ -28,16 +50,22 @@ export const createPromptAssetsClient = (): PromptAssetsClient => ({
       body: {},
       parse: parsePromptAssetsResponse,
     }),
+  usage: (assetId) =>
+    requestJson({
+      path: EndpointPath.Usage,
+      body: { assetId },
+      parse: parsePromptAssetUsageResponse,
+    }),
   upsert: (asset) =>
     requestJson({
       path: EndpointPath.Upsert,
       body: asset,
       parse: parsePromptAssetResponse,
     }),
-  delete: async (assetId) => {
+  delete: async (input) => {
     await requestJson({
       path: EndpointPath.Delete,
-      body: { assetId },
+      body: input,
       parse: () => undefined,
     });
   },
@@ -141,6 +169,39 @@ export const parsePromptAssetsResponse = (
   return assets.flatMap((asset) => parsePromptAssetSummary(asset));
 };
 
+export const parsePromptAssetUsageResponse = (
+  value: unknown,
+): PromptAssetUsageSummary => {
+  const response = readRecord(value, "promptAssetUsageResponse");
+  const assetId = readRequiredString(response["assetId"], "assetId");
+  const workflowCount = readCount(response["workflowCount"], "workflowCount");
+  const nodeCount = readCount(response["nodeCount"], "nodeCount");
+  const fingerprint = readRequiredString(
+    response["fingerprint"],
+    "fingerprint",
+  );
+  const usages = readArray(response["usages"], "usages").map((usage) => {
+    const record = readRecord(usage, "usage");
+    return {
+      workflowId: readRequiredString(record["workflowId"], "workflowId"),
+      workflowName: readRequiredString(record["workflowName"], "workflowName"),
+      nodeId: readRequiredString(record["nodeId"], "nodeId"),
+      nodeLabel: readRequiredString(record["nodeLabel"], "nodeLabel"),
+      promptVersion: readPositiveIntegerValue(
+        record["promptVersion"],
+        "promptVersion",
+      ),
+    };
+  });
+  if (
+    usages.length !== nodeCount ||
+    new Set(usages.map((usage) => usage.workflowId)).size !== workflowCount
+  ) {
+    throw new Error("Invalid promptAssetUsageResponse counts");
+  }
+  return { assetId, workflowCount, nodeCount, fingerprint, usages };
+};
+
 const parsePromptAssetSummary = (
   value: unknown,
 ): ReadonlyArray<PromptAssetSummary> => {
@@ -199,6 +260,27 @@ const isPromptStatus = (
 
 const isPositiveInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value > 0;
+
+const readRequiredString = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Invalid promptAssetUsageResponse.${label}`);
+  }
+  return value;
+};
+
+const readCount = (value: unknown, label: string): number => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid promptAssetUsageResponse.${label}`);
+  }
+  return value;
+};
+
+const readPositiveIntegerValue = (value: unknown, label: string): number => {
+  if (!isPositiveInteger(value)) {
+    throw new Error(`Invalid promptAssetUsageResponse.${label}`);
+  }
+  return value;
+};
 
 const readRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

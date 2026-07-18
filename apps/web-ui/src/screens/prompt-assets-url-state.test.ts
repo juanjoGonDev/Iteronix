@@ -32,4 +32,16 @@ describe("prompt assets URL state", () => {
       version: null,
     });
   });
+
+  it("restores a selected prompt deletion confirmation from a deep link", () => {
+    expect(
+      readPromptAssetsUrlState(
+        "http://localhost/assets/prompts?mode=delete&prompt=prompt-support",
+      ),
+    ).toEqual({
+      mode: PromptAssetsUrlMode.Delete,
+      promptId: "prompt-support",
+      version: null,
+    });
+  });
 });
