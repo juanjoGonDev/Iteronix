@@ -1,6 +1,7 @@
 import {
   createWorkflowRuntime,
   WorkflowRuntimeEvent,
+  type GovernedNodeExecutionRequest,
   type WorkflowProviderRunRequest,
   type WorkflowProviderRunResult,
 } from "../../../packages/agents/src/workflow-runtime";
@@ -50,6 +51,9 @@ export type WorkflowRuntimeService = {
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }) => Promise<WorkflowExecutionRecord>;
   runNode: (input: {
     definition: WorkflowDefinitionRecord;
@@ -130,6 +134,9 @@ export const createWorkflowRuntimeService = (input: {
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }): Promise<WorkflowExecutionRecord> => {
     const resolved = resolveWorkflowPromptAssets(
       request.definition,
@@ -147,6 +154,9 @@ export const createWorkflowRuntimeService = (input: {
         : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+      ...(request.runGovernedNode
+        ? { runGovernedNode: request.runGovernedNode }
+        : {}),
     });
     await notifyWorkflowExecution(
       input.readApplicationState(),

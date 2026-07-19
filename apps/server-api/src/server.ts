@@ -152,6 +152,23 @@ import {
   isRetryableResumeReady,
   type GovernanceLifecycleService,
 } from "./governance-lifecycle-service";
+import {
+  createGovernedAgentToolService,
+  type GovernedAgentToolService,
+} from "./governed-agent-tool-service";
+import {
+  createRunGovernedNodeCallback,
+  registerSkillsAndPlugins,
+} from "./governed-workflow-runtime";
+import {
+  createMemoryScope,
+  type ArtifactProvenance,
+  type McpToolResult,
+  type RagPort,
+} from "../../../packages/domain/src/agent-tool-contracts";
+import { McpToolResultStatus } from "../../../packages/domain/src/agent-tool-contracts";
+
+import type { JsonValue } from "../../../packages/domain/src/governance-validation";
 import { tryServeStaticUi } from "./static-ui";
 
 const UiSafeRedactedBindingKey = "[redacted]";
@@ -165,6 +182,29 @@ const SensitivePromptBindingKeyFragments = [
   "secret",
   "token",
 ] as const;
+const createNoopRagPort = (): RagPort => ({
+  retrieve: async () => [],
+});
+
+const createNoopPluginInvoke =
+  () =>
+  async (input: {
+    toolId: string;
+    input: JsonValue;
+    provenance: ArtifactProvenance;
+  }): Promise<McpToolResult> => ({
+    toolId: input.toolId,
+    status: McpToolResultStatus.Failure,
+    output: {
+      error: "MCP/plugin invocation is not available in this server context.",
+    },
+    provenance: {
+      serverId: "none",
+      toolVersion: "0.0.0",
+      responseFingerprint: "noop-fingerprint",
+    },
+  });
+
 const AuthRoutePaths = new Set<string>([
   RoutePath.AuthBootstrapAdmin,
   RoutePath.AuthRegister,
@@ -314,6 +354,21 @@ export const createApiServer = (input: {
   const governanceLifecycle =
     input.governanceLifecycle ??
     createGovernanceLifecycleService(input.applicationPersistence);
+
+  const governedService = createGovernedAgentToolService(
+    input.applicationPersistence,
+    createNoopRagPort(),
+  );
+
+  const initialAssets = input.applicationPersistence.read().editableAssets;
+  const initialInvoke = createNoopPluginInvoke();
+  registerSkillsAndPlugins(
+    governedService,
+    { ...input.applicationPersistence.read(), editableAssets: initialAssets },
+    "server-agent",
+    initialInvoke,
+  );
+
   return createServer((req, res) => {
     void handleRequest(
       req,
@@ -327,6 +382,7 @@ export const createApiServer = (input: {
       input.workflowCatalog,
       input.passwordResetDelivery,
       input.webUiRoot,
+      governedService,
     ).catch((error: unknown) => {
       console.error(
         "server.unhandled",
@@ -496,6 +552,7 @@ const handleRequest = async (
   workflowCatalog: WorkflowCatalogStore,
   passwordResetDelivery: PasswordResetDelivery | undefined,
   webUiRoot: string | undefined,
+  governedService: GovernedAgentToolService,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -551,6 +608,7 @@ const handleRequest = async (
       workflowRuntime,
       applicationPersistence,
       governanceLifecycle,
+      governedService,
     });
     return;
   }
@@ -700,6 +758,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       applicationPersistence,
+      governedService,
     );
     return;
   }
@@ -1102,6 +1161,7 @@ const handleRequest = async (
       workflowRuntime,
       applicationPersistence,
       governanceLifecycle,
+      governedService,
     );
     return;
   }
@@ -1137,6 +1197,7 @@ const handleRequest = async (
       activeWorkflowExecutions,
       applicationPersistence,
       governanceLifecycle,
+      governedService,
     );
     return;
   }
@@ -1633,6 +1694,7 @@ const handleGovernanceLifecycleResume = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   applicationPersistence: ApplicationPersistence,
+  governedService: GovernedAgentToolService,
 ): Promise<void> => {
   const body = await readJsonBody(req);
   if (body.type === ResultType.Err) {
@@ -1662,6 +1724,12 @@ const handleGovernanceLifecycleResume = async (
   }
   try {
     let execution: WorkflowExecutionRecord | undefined;
+    const memoryScope = createMemoryScope({
+      tenantId: workflow.id,
+      workflowId: workflow.id,
+      enabled: true,
+      retentionDays: 30,
+    });
     const resumed = await governanceLifecycle.executeBoundedPass({
       lifecycleId: lifecycle.id,
       execute: async () => {
@@ -1670,6 +1738,13 @@ const handleGovernanceLifecycleResume = async (
           {
             catalog: workflowCatalog,
             runWorkflow: workflowRuntime.runWorkflow,
+            runGovernedNode: createRunGovernedNodeCallback({
+              governedService,
+              lifecycleId: lifecycle.id,
+              grantedPermissions: [],
+              memoryScope,
+              now: () => new Date(),
+            }),
           },
         );
         if (result.type === ResultType.Err) {
@@ -2901,6 +2976,7 @@ const handleWorkflowExecutionRun = async (
   workflowRuntime: WorkflowRuntimeService,
   applicationPersistence: ApplicationPersistence,
   governanceLifecycle: GovernanceLifecycleService,
+  governedService: GovernedAgentToolService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2919,6 +2995,7 @@ const handleWorkflowExecutionRun = async (
     runWorkflow: workflowRuntime.runWorkflow,
     governanceLifecycle,
     applicationPersistence,
+    governedService,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -2941,6 +3018,7 @@ const executeGovernedWorkflowExecution = async (
     runWorkflow: WorkflowRuntimeService["runWorkflow"];
     governanceLifecycle: GovernanceLifecycleService;
     applicationPersistence: ApplicationPersistence;
+    governedService: GovernedAgentToolService;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   },
@@ -2973,6 +3051,12 @@ const executeGovernedWorkflowExecution = async (
   });
 
   let execution: WorkflowExecutionRecord | undefined;
+  const memoryScope = createMemoryScope({
+    tenantId: workflow.id,
+    workflowId: workflow.id,
+    enabled: true,
+    retentionDays: 30,
+  });
   await dependencies.governanceLifecycle.executeBoundedPass({
     lifecycleId: lifecycle.id,
     execute: async () => {
@@ -2981,6 +3065,13 @@ const executeGovernedWorkflowExecution = async (
         runWorkflow: dependencies.runWorkflow,
         ...(dependencies.signal ? { signal: dependencies.signal } : {}),
         ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
+        runGovernedNode: createRunGovernedNodeCallback({
+          governedService: dependencies.governedService,
+          lifecycleId: lifecycle.id,
+          grantedPermissions: [],
+          memoryScope,
+          now: () => new Date(),
+        }),
       });
       if (result.type === ResultType.Err) {
         throw new Error(result.error.message);
@@ -3052,6 +3143,7 @@ const handleWorkflowExecutionStream = async (
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   applicationPersistence: ApplicationPersistence,
   governanceLifecycle: GovernanceLifecycleService,
+  governedService: GovernedAgentToolService,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
@@ -3092,6 +3184,7 @@ const handleWorkflowExecutionStream = async (
       onEvent: streamEvents.onEvent,
       governanceLifecycle,
       applicationPersistence,
+      governedService,
     });
 
     if (result.type === ResultType.Err) {
@@ -3905,6 +3998,7 @@ const handleExternalWorkflowRequest = async (input: {
   workflowRuntime: WorkflowRuntimeService;
   applicationPersistence: ApplicationPersistence;
   governanceLifecycle: GovernanceLifecycleService;
+  governedService: GovernedAgentToolService;
 }): Promise<void> => {
   if (input.method !== HttpMethod.Post) {
     respondMethodNotAllowed(input.res);
@@ -3989,6 +4083,12 @@ const handleExternalWorkflowRequest = async (input: {
     now: new Date().toISOString(),
   });
   let execution: WorkflowExecutionRecord | undefined;
+  const memoryScope = createMemoryScope({
+    tenantId: workflow.id,
+    workflowId: workflow.id,
+    enabled: true,
+    retentionDays: 30,
+  });
   await input.governanceLifecycle.executeBoundedPass({
     lifecycleId: lifecycle.id,
     execute: async () => {
@@ -3997,6 +4097,13 @@ const handleExternalWorkflowRequest = async (input: {
         {
           catalog: input.workflowCatalog,
           runWorkflow: input.workflowRuntime.runWorkflow,
+          runGovernedNode: createRunGovernedNodeCallback({
+            governedService: input.governedService,
+            lifecycleId: lifecycle.id,
+            grantedPermissions: [],
+            memoryScope,
+            now: () => new Date(),
+          }),
         },
       );
       if (result.type === ResultType.Err) {

@@ -10,7 +10,11 @@ import type {
   WorkflowVersionRestorePart,
   WorkflowVersionTimelineExportRecord,
 } from "../../../packages/agents/src/workflow-versioning";
-import type { WorkflowRuntimeEvent } from "../../../packages/agents/src/workflow-runtime";
+import type {
+  GovernedNodeExecutionRequest,
+  WorkflowProviderRunResult,
+  WorkflowRuntimeEvent,
+} from "../../../packages/agents/src/workflow-runtime";
 import {
   isWorkflowTriggerKindSupportedInMvp,
   type WorkflowAssetUsageRecord,
@@ -483,9 +487,15 @@ export const executeWorkflowExecutionRun = async (
       seedNodeOutputs?: Readonly<Record<string, unknown>>;
       signal?: AbortSignal;
       onEvent?: (event: WorkflowRuntimeEvent) => void;
+      runGovernedNode?: (
+        request: GovernedNodeExecutionRequest,
+      ) => Promise<WorkflowProviderRunResult>;
     }) => Promise<WorkflowExecutionRecord>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   },
 ): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
   const workflow = dependencies.catalog.getWorkflow(input.workflowId);
@@ -505,6 +515,9 @@ export const executeWorkflowExecutionRun = async (
       : {}),
     ...(dependencies.signal ? { signal: dependencies.signal } : {}),
     ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
+    ...(dependencies.runGovernedNode
+      ? { runGovernedNode: dependencies.runGovernedNode }
+      : {}),
   });
   return ok(dependencies.catalog.upsertExecution(execution));
 };

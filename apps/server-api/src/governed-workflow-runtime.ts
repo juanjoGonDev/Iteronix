@@ -1,5 +1,6 @@
 import {
   createWorkflowRuntime,
+  type GovernedNodeExecutionRequest,
   type WorkflowProviderRunResult,
 } from "../../../packages/agents/src/workflow-runtime";
 import {
@@ -72,63 +73,6 @@ export const createGovernedWorkflowRuntimeService = (input: {
     input.rag,
   );
 
-  const buildGovernedService = (state: ApplicationState): void => {
-    const plugins = state.editableAssets.records.filter(
-      (asset) => asset.kind === AssetKind.Plugin && asset.plugin,
-    );
-    const skills = state.editableAssets.records.filter(
-      (asset) => asset.kind === AssetKind.Skill && asset.skill,
-    );
-
-    for (const skill of skills) {
-      if (!skill.skill) continue;
-      governedService.registerSkill({
-        id: skill.id,
-        version: skill.skill.version,
-        description: skill.name,
-        inputSchema: skill.inputSchema,
-        outputSchema: skill.outputSchema,
-        requiredPermissions: [...skill.permissions],
-        provenance: {
-          source: `asset:${skill.id}`,
-          artifactFingerprint: skill.provenance.artifactFingerprint,
-          registeredAt: skill.provenance.registeredAt,
-        },
-      });
-    }
-
-    for (const plugin of plugins) {
-      governedService.registerPlugin({
-        manifest: {
-          id: plugin.id,
-          version: "1",
-          runtime: plugin.plugin!.runtime,
-          isolation: plugin.plugin!.isolation,
-          permissions: [...plugin.permissions],
-          tools: skills
-            .filter(
-              (
-                entry,
-              ): entry is typeof entry & {
-                skill: NonNullable<(typeof entry)["skill"]>;
-              } => entry.skill !== undefined,
-            )
-            .map((skill) => ({
-              id: skill.id,
-              inputSchema: skill.inputSchema,
-              outputSchema: skill.outputSchema,
-            })),
-          audit: {
-            manifestFingerprint: plugin.provenance.artifactFingerprint,
-            publishedAt: plugin.provenance.registeredAt,
-          },
-        },
-        agentId: input.agentId,
-        invoke: input.invoke,
-      });
-    }
-  };
-
   const runGovernedWorkflow = async (workflowInput: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
@@ -146,7 +90,12 @@ export const createGovernedWorkflowRuntimeService = (input: {
     lifecycle: GovernanceLifecycle;
   }> => {
     const state = input.readApplicationState();
-    buildGovernedService(state);
+    registerSkillsAndPlugins(
+      governedService,
+      state,
+      input.agentId,
+      input.invoke,
+    );
 
     const resolved = resolveWorkflowPromptAssets(
       workflowInput.definition,
@@ -182,33 +131,13 @@ export const createGovernedWorkflowRuntimeService = (input: {
             if (!definition) return undefined;
             return { definition };
           },
-          runGovernedNode: async (governedRequest) => {
-            const node = governedRequest.node;
-            if (!node.config.skillId) {
-              throw new Error(`Governed node ${node.id} is missing a skillId.`);
-            }
-            const result = await governedService.invoke({
-              lifecycleId,
-              skillId: node.config.skillId,
-              input: governedRequest.inputValue as unknown as JsonValue,
-              grantedPermissions: (node.config.grantedPermissions ??
-                workflowInput.grantedPermissions) as unknown as Parameters<
-                GovernedAgentToolService["invoke"]
-              >[0]["grantedPermissions"],
-              memoryScope,
-              now: now().toISOString(),
-            });
-            const outputStr =
-              typeof result.output === "string"
-                ? result.output
-                : JSON.stringify(result.output);
-            return {
-              outputText: outputStr,
-              outputSnapshot: result.output,
-              alerts: [],
-              citations: [],
-            } as WorkflowProviderRunResult;
-          },
+          runGovernedNode: createRunGovernedNodeCallback({
+            governedService,
+            lifecycleId,
+            grantedPermissions: workflowInput.grantedPermissions,
+            memoryScope,
+            now,
+          }),
           runProviderNode: async (request) =>
             executeProviderNode(
               request,
@@ -262,6 +191,110 @@ export const createGovernedWorkflowRuntimeService = (input: {
   };
 
   return { runGovernedWorkflow };
+};
+
+export const registerSkillsAndPlugins = (
+  governedService: GovernedAgentToolService,
+  state: ApplicationState,
+  agentId: string,
+  invoke: (input: {
+    toolId: string;
+    input: JsonValue;
+    provenance: ArtifactProvenance;
+  }) => Promise<McpToolResult>,
+): void => {
+  const plugins = state.editableAssets.records.filter(
+    (asset) => asset.kind === AssetKind.Plugin && asset.plugin,
+  );
+  const skills = state.editableAssets.records.filter(
+    (asset) => asset.kind === AssetKind.Skill && asset.skill,
+  );
+
+  for (const skill of skills) {
+    if (!skill.skill) continue;
+    governedService.registerSkill({
+      id: skill.id,
+      version: skill.skill.version,
+      description: skill.name,
+      inputSchema: skill.inputSchema,
+      outputSchema: skill.outputSchema,
+      requiredPermissions: [...skill.permissions],
+      provenance: {
+        source: `asset:${skill.id}`,
+        artifactFingerprint: skill.provenance.artifactFingerprint,
+        registeredAt: skill.provenance.registeredAt,
+      },
+    });
+  }
+
+  for (const plugin of plugins) {
+    governedService.registerPlugin({
+      manifest: {
+        id: plugin.id,
+        version: "1",
+        runtime: plugin.plugin!.runtime,
+        isolation: plugin.plugin!.isolation,
+        permissions: [...plugin.permissions],
+        tools: skills
+          .filter(
+            (
+              entry,
+            ): entry is typeof entry & {
+              skill: NonNullable<(typeof entry)["skill"]>;
+            } => entry.skill !== undefined,
+          )
+          .map((skill) => ({
+            id: skill.id,
+            inputSchema: skill.inputSchema,
+            outputSchema: skill.outputSchema,
+          })),
+        audit: {
+          manifestFingerprint: plugin.provenance.artifactFingerprint,
+          publishedAt: plugin.provenance.registeredAt,
+        },
+      },
+      agentId,
+      invoke,
+    });
+  }
+};
+
+export const createRunGovernedNodeCallback = (input: {
+  governedService: GovernedAgentToolService;
+  lifecycleId: string;
+  grantedPermissions: ReadonlyArray<string>;
+  memoryScope: MemoryScope;
+  now: () => Date;
+}): ((
+  request: GovernedNodeExecutionRequest,
+) => Promise<WorkflowProviderRunResult>) => {
+  return async (governedRequest) => {
+    const node = governedRequest.node;
+    if (!node.config.skillId) {
+      throw new Error(`Governed node ${node.id} is missing a skillId.`);
+    }
+    const result = await input.governedService.invoke({
+      lifecycleId: input.lifecycleId,
+      skillId: node.config.skillId,
+      input: governedRequest.inputValue as unknown as JsonValue,
+      grantedPermissions: (node.config.grantedPermissions ??
+        input.grantedPermissions) as unknown as Parameters<
+        GovernedAgentToolService["invoke"]
+      >[0]["grantedPermissions"],
+      memoryScope: input.memoryScope,
+      now: input.now().toISOString(),
+    });
+    const outputStr =
+      typeof result.output === "string"
+        ? result.output
+        : JSON.stringify(result.output);
+    return {
+      outputText: outputStr,
+      outputSnapshot: result.output,
+      alerts: [],
+      citations: [],
+    } as WorkflowProviderRunResult;
+  };
 };
 
 const createLifecycle = async (

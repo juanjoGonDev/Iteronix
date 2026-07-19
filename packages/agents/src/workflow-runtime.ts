@@ -156,6 +156,9 @@ export type WorkflowRuntime = {
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
     executionPlan?: ExecutionPlan;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }) => Promise<WorkflowExecutionRecord>;
   runNode: (input: {
     definition: WorkflowDefinitionRecord;
@@ -198,6 +201,9 @@ export const createWorkflowRuntime = (input: {
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
     executionPlan?: ExecutionPlan;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }): Promise<WorkflowExecutionRecord> =>
     runWorkflowNodes({
       definition: request.definition,
@@ -211,6 +217,9 @@ export const createWorkflowRuntime = (input: {
         : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+      ...(request.runGovernedNode
+        ? { runGovernedNode: request.runGovernedNode }
+        : {}),
     });
 
   const runNode = async (request: {
@@ -264,6 +273,9 @@ export const createWorkflowRuntime = (input: {
     contextSessionId?: string;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }): Promise<WorkflowExecutionRecord> => {
     const workflowRunId = randomUUID();
     const startedAt = now().toISOString();
@@ -319,8 +331,11 @@ export const createWorkflowRuntime = (input: {
               outputs,
               now,
               runProviderNode: input.runProviderNode,
-              ...(input.runGovernedNode
-                ? { runGovernedNode: input.runGovernedNode }
+              ...((request.runGovernedNode ?? input.runGovernedNode)
+                ? {
+                    runGovernedNode:
+                      request.runGovernedNode ?? input.runGovernedNode,
+                  }
                 : {}),
               runWorkflowInvocation: async (invocationNode) => {
                 const invocation = invocationNode.config.workflowInvocation;
