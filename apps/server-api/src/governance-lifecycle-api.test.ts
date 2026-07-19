@@ -1,6 +1,9 @@
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { GovernanceTransitionKind } from "../../../packages/domain/src/governance-lifecycle";
+import {
+  GovernanceTransitionKind,
+  recordGovernanceAgentExecution,
+} from "../../../packages/domain/src/governance-lifecycle";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
 import {
   WorkflowNodeKind,
@@ -197,6 +200,159 @@ describe("governance lifecycle API", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it("proves agent tool/plugin/retrieval provenance is visible through the lifecycle API and secrets are never exposed", async () => {
+    const testServer = createTestServer();
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const service = createGovernanceLifecycleService(testServer.persistence);
+
+    const draft = await service.begin({
+      id: "provenance-secrets",
+      workflowId: "workflow-1",
+      fingerprints: {
+        scope: "scope-provenance",
+        evidence: "evidence-provenance",
+      },
+      limits: { execution: 1, repair: 1, review: 1 },
+      now: readNow(0),
+    });
+    const planning = await transition(
+      service,
+      draft.id,
+      GovernanceTransitionKind.StartPlanning,
+      1,
+    );
+    const executing = await transition(
+      service,
+      planning.id,
+      GovernanceTransitionKind.StartExecuting,
+      2,
+    );
+
+    // Record two agent executions with full provenance via persistence
+    // (simulating what governed-agent-tool-service does during a workflow run)
+    await testServer.persistence.mutateGovernanceLifecycles((lifecycles) => {
+      const current = lifecycles.find((l) => l.id === executing.id);
+      if (!current) {
+        return lifecycles;
+      }
+      const withPlugin = recordGovernanceAgentExecution(current, {
+        id: "agent-exec-plugin",
+        lifecycleId: executing.id,
+        agentId: "plugin-agent",
+        pluginId: "reference-knowledge",
+        skillId: "rag.query",
+        skillVersion: 2,
+        toolId: "knowledge.search",
+        inputFingerprint: "sha256-input-fp",
+        outputFingerprint: "sha256-output-fp",
+        artifactFingerprint: "sha256-artifact-fp",
+        responseFingerprint: "mcp-response-fingerprint",
+        timestamp: readNow(3),
+      });
+      const withTool = recordGovernanceAgentExecution(withPlugin, {
+        id: "agent-exec-tool",
+        lifecycleId: executing.id,
+        agentId: "tool-agent",
+        pluginId: "code-runner",
+        skillId: "code.execute",
+        skillVersion: 1,
+        toolId: "code.run",
+        inputFingerprint: "sha256-input-fp-2",
+        outputFingerprint: "sha256-output-fp-2",
+        artifactFingerprint: "sha256-artifact-fp-2",
+        responseFingerprint: "mcp-response-fp-2",
+        timestamp: readNow(4),
+      });
+      return lifecycles.map((l) => (l.id === executing.id ? withTool : l));
+    });
+
+    // Record a prompt execution with secret-like bindings
+    await service.recordPromptExecution({
+      id: `${executing.id}:prompt:1:0`,
+      lifecycleId: executing.id,
+      assetId: "prompt-sensitive",
+      version: 1,
+      bindings: {
+        apiKey: "raw-api-key-value",
+        api_key: "underscore-key-value",
+        context: { nestedToken: "nested-token-secret" },
+        subject: "Visible binding",
+      },
+      renderedFingerprint: "rendered-fingerprint",
+      validation: "passed",
+      timestamp: readNow(5),
+    });
+
+    // Read lifecycle via the API
+    const response = await request(url, "/governance/lifecycles/get", {
+      lifecycleId: executing.id,
+    });
+
+    expect(response.status).toBe(200);
+    const lifecycle = response.body.lifecycle;
+
+    // === ASSERTION 1: Agent execution provenance is visible ===
+    const agentExecutions = lifecycle["agentExecutions"] as ReadonlyArray<
+      Record<string, unknown>
+    >;
+    expect(agentExecutions).toHaveLength(2);
+
+    expect(agentExecutions[0]).toMatchObject({
+      agentId: "plugin-agent",
+      pluginId: "reference-knowledge",
+      skillId: "rag.query",
+      skillVersion: 2,
+      toolId: "knowledge.search",
+      inputFingerprint: "sha256-input-fp",
+      outputFingerprint: "sha256-output-fp",
+      artifactFingerprint: "sha256-artifact-fp",
+      responseFingerprint: "mcp-response-fingerprint",
+    });
+
+    expect(agentExecutions[1]).toMatchObject({
+      agentId: "tool-agent",
+      pluginId: "code-runner",
+      skillId: "code.execute",
+      skillVersion: 1,
+      toolId: "code.run",
+      responseFingerprint: "mcp-response-fp-2",
+    });
+
+    // === ASSERTION 2: Secrets are never exposed in the API response ===
+    const serialized = JSON.stringify(lifecycle);
+
+    // Secret plaintext values must NOT appear
+    expect(serialized).not.toContain("raw-api-key-value");
+    expect(serialized).not.toContain("underscore-key-value");
+    expect(serialized).not.toContain("nested-token-secret");
+
+    // Sensitive binding keys must NOT appear
+    expect(serialized).not.toContain("apiKey");
+    expect(serialized).not.toContain("nestedToken");
+
+    // The redacted marker must be present
+    expect(serialized).toContain("[redacted]");
+
+    // Non-sensitive values must still be visible
+    expect(serialized).toContain("Visible binding");
+    expect(serialized).toContain("plugin-agent");
+    expect(serialized).toContain("reference-knowledge");
+    expect(serialized).toContain("mcp-response-fingerprint");
+
+    // === ASSERTION 3: Persisted state retains raw values ===
+    const persisted = testServer.persistence
+      .read()
+      .governanceLifecycles.find((entry) => entry.id === executing.id);
+    expect(persisted?.promptExecutions[0]?.bindings).toEqual({
+      apiKey: "raw-api-key-value",
+      api_key: "underscore-key-value",
+      context: { nestedToken: "nested-token-secret" },
+      subject: "Visible binding",
+    });
+    expect(persisted?.agentExecutions).toHaveLength(2);
   });
 });
 

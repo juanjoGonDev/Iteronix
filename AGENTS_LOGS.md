@@ -5170,3 +5170,14 @@
 - Commands: RED/GREEN contract enforcement tests; full lint, typecheck, test (357/357), and build passed.
 - Issues/Risks: Acceptance criteria for integration/provenance, permission-denial/plugin/MCP paths remain unchecked.
 - Next: Continue Phase 4 with runtime asset integration enforcement or provenance acceptance coverage.
+
+### 2026-07-19 18:47 (Europe/Madrid) — Phase 4 provenance integration test
+
+- Summary: Added integration test proving agent/tool/plugin provenance is visible through lifecycle API and secrets are never exposed.
+- Decisions: New test in `governance-lifecycle-api.test.ts` covers both visibility (agentId, pluginId, skillId, toolId, fingerprints in API response) and redaction (secret binding values hidden, `[redacted]` present, raw values persisted). No implementation changes needed — `toUiSafeGovernanceLifecycle` already passes agentExecutions through spread.
+- Changes:
+  - `apps/server-api/src/governance-lifecycle-api.test.ts` — Added integration test with 2 agent executions (plugin + tool), prompt execution with secret bindings, lifecycle GET API assertions for provenance visibility and redaction
+  - `PLAN.md` — Checked line 132 acceptance criterion
+- Commands: `pnpm vitest run apps/server-api/src/governance-lifecycle-api.test.ts` (6/6), `pnpm test` (358/359), `pnpm lint`, `pnpm typecheck`, `pnpm build` — all green.
+- Issues/Risks: Remaining Phase 4 items unchecked: runtime asset integration, skills, memory/RAG, MCP, plugins, and permission-denial/plugin-failure acceptance criterion.
+- Next: Commit and push this test-only change, then continue with remaining Phase 4 implementation.
