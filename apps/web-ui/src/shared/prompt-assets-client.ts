@@ -13,7 +13,15 @@ export type PromptAssetSummary = {
   status: "disabled" | "enabled" | "error";
   activeVersion: number;
   template: string;
+  variables: ReadonlyArray<string>;
+  versions: ReadonlyArray<PromptAssetVersionSummary>;
   asset: Record<string, unknown>;
+};
+
+type PromptAssetVersionSummary = {
+  version: number;
+  template: string;
+  variables: ReadonlyArray<string>;
 };
 
 export type PromptAssetsClient = {
@@ -230,6 +238,25 @@ const parsePromptAssetSummary = (
   if (typeof template !== "string") {
     throw new Error("Invalid promptAsset.activeVersion.template");
   }
+  const parsedVersions = versions.map((version) => {
+    const record = readRecord(version, "promptAsset.version");
+    const versionNumber = readPositiveIntegerValue(
+      record["version"],
+      "version",
+    );
+    const versionTemplate = readRequiredString(record["template"], "template");
+    return {
+      version: versionNumber,
+      template: versionTemplate,
+      variables: readPromptVariables(record["variables"]),
+    };
+  });
+  const activeVersionRecord = parsedVersions.find(
+    (version) => version.version === activeVersion,
+  );
+  if (!activeVersionRecord) {
+    throw new Error("Invalid promptAsset.activeVersion");
+  }
 
   return [
     {
@@ -238,9 +265,24 @@ const parsePromptAssetSummary = (
       status,
       activeVersion,
       template,
+      variables: activeVersionRecord.variables,
+      versions: parsedVersions,
       asset,
     },
   ];
+};
+
+const readPromptVariables = (value: unknown): ReadonlyArray<string> => {
+  if (value === undefined) {
+    return [];
+  }
+  return readArray(value, "promptAsset.version.variables").map((variable) => {
+    if (typeof variable === "string" && variable.trim().length > 0) {
+      return variable;
+    }
+    const record = readRecord(variable, "promptAsset.version.variable");
+    return readRequiredString(record["name"], "variable.name");
+  });
 };
 
 const parsePromptAssetResponse = (value: unknown): PromptAssetSummary => {

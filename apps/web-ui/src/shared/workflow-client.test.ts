@@ -286,6 +286,7 @@ describe("workflow client parsers", () => {
       executions: [
         {
           id: "execution-1",
+          lifecycleId: "ide:workflow-1:run-1",
           workflowId: "workflow-1",
           triggerKind: "manual",
           status: "completed",
@@ -328,6 +329,7 @@ describe("workflow client parsers", () => {
     expect(executions).toHaveLength(1);
     expect(executions[0]?.totals.totalTokens).toBe(30);
     expect(executions[0]?.warningsCount).toBe(1);
+    expect(executions[0]?.lifecycleId).toBe("ide:workflow-1:run-1");
     expect(executions[0]?.nodeRuns[0]?.guardrailFindings[0]?.message).toBe(
       "Summary present.",
     );

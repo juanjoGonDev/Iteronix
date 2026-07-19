@@ -19,6 +19,15 @@ import {
   type WorkflowVersionTimelineExportRecord,
 } from "../shared/workflow-client.js";
 import { createSettingsClient } from "../shared/settings-client.js";
+import {
+  createPromptAssetsClient,
+  type PromptAssetSummary,
+} from "../shared/prompt-assets-client.js";
+import {
+  createGovernanceLifecycleClient,
+  redactLifecyclePromptBindings,
+  type GovernanceLifecycleTrace,
+} from "../shared/governance-lifecycle-client.js";
 import type { SettingsSnapshot } from "../shared/settings-storage.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
@@ -46,6 +55,11 @@ import {
   type WorkflowsUrlPatch,
   type WorkflowsUrlState,
 } from "./workflows-url-state.js";
+import {
+  createPromptNodeConfig,
+  readPromptNodeConfig,
+  renderPromptNodePreview,
+} from "./prompt-node-config-state.js";
 import {
   buildWorkflowDebugInputSources,
   readExecutionRefreshPollingAction,
@@ -228,6 +242,12 @@ const WorkflowScreenSelector = {
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
   NodePromptInput: "workflows-node-prompt-input",
+  PromptAssetSelect: "workflows-prompt-asset-select",
+  PromptAssetVersionSelect: "workflows-prompt-version-select",
+  PromptAssetBindingsInput: "workflows-prompt-bindings-input",
+  PromptAssetPreview: "workflows-prompt-preview",
+  PromptAssetValidation: "workflows-prompt-validation",
+  PromptProvenance: "workflows-prompt-provenance",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
   NodeProviderTest: "workflows-node-provider-test",
@@ -720,9 +740,11 @@ interface WorkflowsScreenState {
   settingsSnapshot: SettingsSnapshot | null;
   workflows: ReadonlyArray<WorkflowDefinitionRecord>;
   assets: ReadonlyArray<WorkflowAssetRecord>;
+  promptAssets: ReadonlyArray<PromptAssetSummary>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
+  governanceLifecycle: GovernanceLifecycleTrace | null;
   workflowLogsFilter: WorkflowLogsFilter;
   executionHistoryFilter: ExecutionHistoryFilter;
   executionAutoRefreshEnabled: boolean;
@@ -801,6 +823,9 @@ export class WorkflowsScreen extends Component<
 > {
   private readonly settingsClient = createSettingsClient();
   private readonly workflowClient = createWorkflowClient();
+  private readonly promptAssetsClient = createPromptAssetsClient();
+  private readonly governanceLifecycleClient =
+    createGovernanceLifecycleClient();
   private draggingNodeId: string | null = null;
   private dragPointerOffset: { x: number; y: number } | null = null;
   private connectionDragging = false;
@@ -819,9 +844,11 @@ export class WorkflowsScreen extends Component<
       settingsSnapshot: null,
       workflows: [],
       assets: [],
+      promptAssets: [],
       assetUsages: [],
       workflowVersions: [],
       executions: [],
+      governanceLifecycle: null,
       workflowLogsFilter: WorkflowLogsFilter.Errors,
       executionHistoryFilter: ExecutionHistoryFilter.All,
       executionAutoRefreshEnabled: true,
@@ -1092,6 +1119,65 @@ export class WorkflowsScreen extends Component<
               },
             }),
           ],
+        ),
+      ],
+    );
+  }
+
+  private renderGovernanceProvenance(
+    execution: WorkflowExecutionRecord,
+  ): HTMLElement {
+    const lifecycle = this.state.governanceLifecycle;
+    if (!execution.lifecycleId) {
+      return createElement(
+        "div",
+        {
+          className:
+            "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-xs text-text-secondary",
+        },
+        ["This historical run has no governance lifecycle."],
+      );
+    }
+    if (!lifecycle || lifecycle.id !== execution.lifecycleId) {
+      return createElement(
+        "div",
+        {
+          className:
+            "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-xs text-text-secondary",
+          "data-testid": WorkflowScreenSelector.PromptProvenance,
+        },
+        ["Loading governed prompt provenance…"],
+      );
+    }
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+        "data-testid": WorkflowScreenSelector.PromptProvenance,
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Governance and prompt provenance",
+        ]),
+        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+          `State: ${lifecycle.state} · execution ${readLifecycleBudget(lifecycle.budgets, "execution")} · repairs ${readLifecycleBudget(lifecycle.budgets, "repair")}`,
+        ]),
+        ...lifecycle.promptExecutions.map((prompt) =>
+          createElement(
+            "div",
+            {
+              key: `${prompt.assetId}:${prompt.version}:${prompt.timestamp}`,
+              className:
+                "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
+            },
+            [
+              `Prompt ${prompt.assetId} v${prompt.version} · ${prompt.validation} · ${prompt.renderedFingerprint}`,
+              createElement("p", { className: "mt-1 break-all" }, [
+                JSON.stringify(redactLifecyclePromptBindings(prompt.bindings)),
+              ]),
+            ],
+          ),
         ),
       ],
     );
@@ -5931,6 +6017,7 @@ export class WorkflowsScreen extends Component<
             ),
           ],
         ),
+        this.renderGovernanceProvenance(execution),
         createElement(
           "div",
           {
@@ -8858,6 +8945,9 @@ export class WorkflowsScreen extends Component<
         readNodeInputPorts(node).length,
         node.outputPorts.length,
       ),
+      node.kind === WorkflowNodeKind.AssetPrompt
+        ? this.renderPromptAssetNodeConfig(node)
+        : "",
       compatibleAssetKind
         ? createElement(
             "div",
@@ -8938,6 +9028,198 @@ export class WorkflowsScreen extends Component<
         ? this.renderGuardrailAttachmentSection(node, guardrailAssets)
         : "",
     ]);
+  }
+
+  private renderPromptAssetNodeConfig(node: WorkflowNodeRecord): HTMLElement {
+    const reference = readPromptNodeConfig(node.config);
+    const asset = reference
+      ? (this.state.promptAssets.find(
+          (entry) => entry.id === reference.assetId,
+        ) ?? null)
+      : null;
+    const version = asset?.versions.find(
+      (entry) => entry.version === reference?.version,
+    );
+    const variables = version?.variables ?? [];
+    const bindings = reference?.bindings ?? {};
+    const preview = version
+      ? renderPromptNodePreview({
+          template: version.template,
+          variables,
+          bindings,
+        })
+      : null;
+    const bindingText = JSON.stringify(bindings, null, 2);
+
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/[0.04] px-3 py-3",
+      },
+      [
+        createElement("div", {}, [
+          createElement("p", { className: "text-sm font-medium text-white" }, [
+            "Version-pinned Prompt Asset",
+          ]),
+          createElement(
+            "p",
+            { className: "mt-1 text-xs leading-5 text-text-secondary" },
+            [
+              "The runtime executes this exact immutable version. Bind every declared variable before saving.",
+            ],
+          ),
+        ]),
+        createElement(
+          "label",
+          { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+          [
+            "Prompt asset",
+            createElement(
+              "select",
+              {
+                className: InspectorSelectClassName,
+                value: asset?.id ?? "",
+                "data-testid": WorkflowScreenSelector.PromptAssetSelect,
+                onChange: (event: Event) => {
+                  const selected = this.state.promptAssets.find(
+                    (entry) =>
+                      entry.id === (event.target as HTMLSelectElement).value,
+                  );
+                  if (!selected) {
+                    return;
+                  }
+                  this.patchPromptNodeReference(
+                    node.id,
+                    selected.id,
+                    selected.activeVersion,
+                    {},
+                  );
+                },
+              },
+              [
+                createElement("option", { value: "" }, [
+                  "Select a prompt asset",
+                ]),
+                this.state.promptAssets
+                  .filter((entry) => entry.status === "enabled")
+                  .map((entry) =>
+                    createElement("option", { value: entry.id }, [entry.name]),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        asset
+          ? createElement(
+              "label",
+              { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+              [
+                "Pinned version",
+                createElement(
+                  "select",
+                  {
+                    className: InspectorSelectClassName,
+                    value: reference?.version.toString() ?? "",
+                    "data-testid":
+                      WorkflowScreenSelector.PromptAssetVersionSelect,
+                    onChange: (event: Event) => {
+                      const nextVersion = Number(
+                        (event.target as HTMLSelectElement).value,
+                      );
+                      if (Number.isInteger(nextVersion) && nextVersion > 0) {
+                        this.patchPromptNodeReference(
+                          node.id,
+                          asset.id,
+                          nextVersion,
+                          {},
+                        );
+                      }
+                    },
+                  },
+                  [
+                    asset.versions.map((entry) =>
+                      createElement(
+                        "option",
+                        { value: entry.version.toString() },
+                        [`v${entry.version.toString()}`],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : "",
+        asset && version
+          ? createElement(
+              "label",
+              { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+              [
+                `Bindings${variables.length > 0 ? ` (${variables.join(", ")})` : ""}`,
+                createElement("textarea", {
+                  className: `${InspectorTextAreaClassName} min-h-28 font-mono text-xs`,
+                  value: bindingText,
+                  "data-testid":
+                    WorkflowScreenSelector.PromptAssetBindingsInput,
+                  onInput: (event: Event) => {
+                    const parsed = readPromptBindings(
+                      (event.target as HTMLTextAreaElement).value,
+                    );
+                    if (parsed) {
+                      this.patchPromptNodeReference(
+                        node.id,
+                        asset.id,
+                        version.version,
+                        parsed,
+                      );
+                    }
+                  },
+                }),
+              ],
+            )
+          : "",
+        preview
+          ? createElement("div", { className: "flex flex-col gap-2" }, [
+              createElement(
+                "p",
+                {
+                  className: preview.valid
+                    ? "text-xs text-emerald-300"
+                    : "text-xs text-rose-300",
+                  "data-testid": WorkflowScreenSelector.PromptAssetValidation,
+                },
+                [preview.valid ? "Bindings valid" : preview.errors.join(" · ")],
+              ),
+              createElement(
+                "pre",
+                {
+                  className:
+                    "max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#0d1117] px-3 py-2 font-mono text-[11px] leading-5 text-slate-200",
+                  "data-testid": WorkflowScreenSelector.PromptAssetPreview,
+                },
+                [preview.value],
+              ),
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              "Select an enabled Prompt Asset to preview its pinned version.",
+            ]),
+      ],
+    );
+  }
+
+  private patchPromptNodeReference(
+    nodeId: string,
+    assetId: string,
+    version: number,
+    bindings: Readonly<Record<string, string>>,
+  ): void {
+    this.patchNode(nodeId, (current) => ({
+      ...current,
+      config: {
+        ...current.config,
+        ...createPromptNodeConfig({ assetId, version, bindings }),
+      },
+    }));
   }
 
   private renderNodeOutputContractSection(
@@ -12990,12 +13272,14 @@ export class WorkflowsScreen extends Component<
   private async reloadCatalog(
     options: { preserveLocalDraft?: boolean } = {},
   ): Promise<void> {
-    const [workflows, assets, assetUsages, executions] = await Promise.all([
-      this.workflowClient.listDefinitions(),
-      this.workflowClient.listAssets(),
-      this.workflowClient.listAssetUsages({}),
-      this.workflowClient.listExecutions(),
-    ]);
+    const [workflows, assets, assetUsages, executions, promptAssets] =
+      await Promise.all([
+        this.workflowClient.listDefinitions(),
+        this.workflowClient.listAssets(),
+        this.workflowClient.listAssetUsages({}),
+        this.workflowClient.listExecutions(),
+        this.promptAssetsClient.list(),
+      ]);
     const currentWorkflow = readWorkflowEditorTarget(
       workflows,
       this.props.workflowId,
@@ -13043,6 +13327,7 @@ export class WorkflowsScreen extends Component<
     this.setState({
       workflows,
       assets,
+      promptAssets,
       assetUsages,
       workflowVersions,
       executions,
@@ -13094,14 +13379,16 @@ export class WorkflowsScreen extends Component<
   }
 
   private async reloadAssetCatalog(): Promise<void> {
-    const [assets, assetUsages] = await Promise.all([
+    const [assets, assetUsages, promptAssets] = await Promise.all([
       this.workflowClient.listAssets(),
       this.workflowClient.listAssetUsages({}),
+      this.promptAssetsClient.list(),
     ]);
 
     this.setState({
       assets,
       assetUsages,
+      promptAssets,
     });
   }
 
@@ -13662,6 +13949,11 @@ export class WorkflowsScreen extends Component<
       const hydratedExecution = await this.workflowClient.getExecution({
         executionId,
       });
+      const governanceLifecycle = hydratedExecution.lifecycleId
+        ? await this.governanceLifecycleClient.get(
+            hydratedExecution.lifecycleId,
+          )
+        : null;
       this.setState({
         executions: this.state.executions.map((entry) =>
           entry.id === executionId ? hydratedExecution : entry,
@@ -13669,6 +13961,7 @@ export class WorkflowsScreen extends Component<
         loadingExecutionId: null,
         selection: { type: "execution", id: executionId },
         debugExecutionId: executionId,
+        governanceLifecycle,
       });
       void this.refreshWorkflowLogs();
     } catch (error) {
@@ -15850,6 +16143,14 @@ const edgeDeletePointOverlapsNode = (
 const hoveredPortUsesActiveArrow = (hoveredPort: HoveredPort | null): boolean =>
   hoveredPort?.side === "input";
 
+const readLifecycleBudget = (
+  budgets: Readonly<Record<string, unknown>>,
+  key: string,
+): string => {
+  const value = budgets[key];
+  return typeof value === "number" ? value.toString() : "0";
+};
+
 const createLiveExecutionState = (
   workflow: WorkflowDefinitionRecord,
 ): LiveExecutionState => ({
@@ -17423,6 +17724,25 @@ const readWorkflowFitViewport = (
     y: Number((viewportHeight / 2 - centerY * zoom).toFixed(2)),
     zoom: Number(zoom.toFixed(2)),
   };
+};
+
+const readPromptBindings = (
+  value: string,
+): Readonly<Record<string, string>> | null => {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      Object.values(parsed).some((binding) => typeof binding !== "string")
+    ) {
+      return null;
+    }
+    return parsed as Record<string, string>;
+  } catch {
+    return null;
+  }
 };
 
 const toSlugValue = (value: string): string =>

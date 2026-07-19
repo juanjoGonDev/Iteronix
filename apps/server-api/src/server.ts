@@ -153,6 +153,18 @@ import {
   type GovernanceLifecycleService,
 } from "./governance-lifecycle-service";
 import { tryServeStaticUi } from "./static-ui";
+
+const UiSafeRedactedBindingKey = "[redacted]";
+const UiSafeRedactedBindingValue = "[redacted]";
+const SensitivePromptBindingKeyFragments = [
+  "apikey",
+  "authorization",
+  "credential",
+  "password",
+  "private",
+  "secret",
+  "token",
+] as const;
 const AuthRoutePaths = new Set<string>([
   RoutePath.AuthBootstrapAdmin,
   RoutePath.AuthRegister,
@@ -544,12 +556,16 @@ const handleRequest = async (
   }
 
   const hasIdeSession = readSessionUser(req, ideAuth) !== undefined;
+  const acceptsIdeSession =
+    hasIdeSession &&
+    (isEditableAssetRoute(path) ||
+      path === RoutePath.GovernanceLifecyclesGet ||
+      isIdeWorkflowExecutionRoute(path));
   if (
-    (!isAuthorized(req, config.authToken) &&
-      !(isEditableAssetRoute(path) && hasIdeSession)) ||
+    (!isAuthorized(req, config.authToken) && !acceptsIdeSession) ||
     (requiresStrictBearerAuthentication(path) &&
       readBearerToken(req) !== config.authToken &&
-      !(isEditableAssetRoute(path) && hasIdeSession))
+      !acceptsIdeSession)
   ) {
     respondUnauthorized(res);
     return;
@@ -1085,6 +1101,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       applicationPersistence,
+      governanceLifecycle,
     );
     return;
   }
@@ -1119,6 +1136,7 @@ const handleRequest = async (
       workflowRuntime,
       activeWorkflowExecutions,
       applicationPersistence,
+      governanceLifecycle,
     );
     return;
   }
@@ -1506,7 +1524,51 @@ const handleGovernanceLifecycleGet = async (
     });
     return;
   }
-  respondJson(res, HttpStatus.Ok, { lifecycle });
+  respondJson(res, HttpStatus.Ok, {
+    lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
+  });
+};
+
+const toUiSafeGovernanceLifecycle = (
+  lifecycle: GovernanceLifecycle,
+): GovernanceLifecycle => ({
+  ...lifecycle,
+  promptExecutions: lifecycle.promptExecutions.map((execution) => ({
+    ...execution,
+    bindings: redactPromptBindingsForUi(execution.bindings),
+  })),
+});
+
+const redactPromptBindingsForUi = (
+  bindings: Readonly<Record<string, unknown>>,
+): Record<string, unknown> => {
+  const uiSafeBindings: Record<string, unknown> = {};
+  let redacted = false;
+  for (const [key, value] of Object.entries(bindings)) {
+    if (isSensitivePromptBindingKey(key)) {
+      redacted = true;
+      continue;
+    }
+    uiSafeBindings[key] = redactPromptBindingValueForUi(value);
+  }
+  if (redacted) {
+    uiSafeBindings[UiSafeRedactedBindingKey] = UiSafeRedactedBindingValue;
+  }
+  return uiSafeBindings;
+};
+
+const redactPromptBindingValueForUi = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(redactPromptBindingValueForUi);
+  }
+  return isRecord(value) ? redactPromptBindingsForUi(value) : value;
+};
+
+const isSensitivePromptBindingKey = (key: string): boolean => {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return SensitivePromptBindingKeyFragments.some((fragment) =>
+    normalized.includes(fragment),
+  );
 };
 
 const handleGovernanceLifecycleBegin = async (
@@ -2838,6 +2900,7 @@ const handleWorkflowExecutionRun = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2851,9 +2914,11 @@ const handleWorkflowExecutionRun = async (
     return;
   }
 
-  const result = await executeWorkflowExecutionRun(parsed.value, {
+  const result = await executeGovernedWorkflowExecution(parsed.value, {
     catalog: workflowCatalog,
     runWorkflow: workflowRuntime.runWorkflow,
+    governanceLifecycle,
+    applicationPersistence,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
@@ -2864,6 +2929,84 @@ const handleWorkflowExecutionRun = async (
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
+};
+
+const executeGovernedWorkflowExecution = async (
+  request: {
+    workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    runWorkflow: WorkflowRuntimeService["runWorkflow"];
+    governanceLifecycle: GovernanceLifecycleService;
+    applicationPersistence: ApplicationPersistence;
+    signal?: AbortSignal;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  },
+): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(request.workflowId);
+  if (!workflow) {
+    return err({ status: HttpStatus.NotFound, message: ErrorMessage.NotFound });
+  }
+
+  const lifecycle = await dependencies.governanceLifecycle.begin({
+    id: `ide:${workflow.id}:${randomUUID()}`,
+    workflowId: workflow.id,
+    fingerprints: {
+      scope: `${workflow.id}@${workflow.version.toString()}`,
+      evidence: workflow.updatedAt,
+    },
+    limits: {
+      execution: workflow.executionPolicy.maxNodeRetries + 1,
+      repair: workflow.executionPolicy.maxNodeRetries,
+      review: 1,
+    },
+    now: new Date().toISOString(),
+  });
+  await dependencies.governanceLifecycle.transition({
+    lifecycleId: lifecycle.id,
+    kind: GovernanceTransitionKind.StartPlanning,
+    actorId: "ide-session",
+    reason: "IDE requested a bounded workflow pass.",
+    now: new Date().toISOString(),
+  });
+
+  let execution: WorkflowExecutionRecord | undefined;
+  await dependencies.governanceLifecycle.executeBoundedPass({
+    lifecycleId: lifecycle.id,
+    execute: async () => {
+      const result = await executeWorkflowExecutionRun(request, {
+        catalog: dependencies.catalog,
+        runWorkflow: dependencies.runWorkflow,
+        ...(dependencies.signal ? { signal: dependencies.signal } : {}),
+        ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
+      });
+      if (result.type === ResultType.Err) {
+        throw new Error(result.error.message);
+      }
+      execution = dependencies.catalog.upsertExecution({
+        ...result.value,
+        lifecycleId: lifecycle.id,
+      });
+      await persistPromptExecutionProvenance({
+        lifecycleId: lifecycle.id,
+        execution,
+        governanceLifecycle: dependencies.governanceLifecycle,
+      });
+    },
+    classifyFailure: classifyExternalWorkflowFailure,
+    now: () => new Date().toISOString(),
+  });
+  await dependencies.applicationPersistence.saveCurrent();
+
+  if (!execution) {
+    return err({
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.InternalServerError,
+    });
+  }
+  return ok(execution);
 };
 
 const handleWorkflowNodeExecutionRun = async (
@@ -2908,6 +3051,7 @@ const handleWorkflowExecutionStream = async (
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
@@ -2941,11 +3085,13 @@ const handleWorkflowExecutionStream = async (
   });
 
   try {
-    const result = await executeWorkflowExecutionRun(parsed.value, {
+    const result = await executeGovernedWorkflowExecution(parsed.value, {
       catalog: workflowCatalog,
       runWorkflow: workflowRuntime.runWorkflow,
       signal: executionAbortController.signal,
       onEvent: streamEvents.onEvent,
+      governanceLifecycle,
+      applicationPersistence,
     });
 
     if (result.type === ResultType.Err) {
@@ -3742,6 +3888,10 @@ const isEditableAssetRoute = (path: string): boolean =>
   path === RoutePath.EditableAssetsUsage ||
   path === RoutePath.EditableAssetsUpsert ||
   path === RoutePath.EditableAssetsDelete;
+
+const isIdeWorkflowExecutionRoute = (path: string): boolean =>
+  path === RoutePath.WorkflowExecutionsRun ||
+  path === RoutePath.WorkflowExecutionsStream;
 
 const requiresStrictBearerAuthentication = (path: string): boolean =>
   isGovernanceLifecycleRoute(path) || isEditableAssetRoute(path);

@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { GovernanceTransitionKind } from "../../../packages/domain/src/governance-lifecycle";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
 import {
+  WorkflowNodeKind,
+  WorkflowRecordStatus,
+  WorkflowTriggerKind,
+} from "../../../packages/shared/src/workflows";
+import {
   createDefaultApplicationState,
   type ApplicationState,
   type ApplicationStateStore,
@@ -20,6 +25,27 @@ afterEach(async () => {
 });
 
 describe("governance lifecycle API", () => {
+  it("links an IDE workflow run to its persisted governed prompt trace", async () => {
+    const testServer = createTestServer();
+    testServer.workflowCatalog.upsertWorkflow(createWorkflow());
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const run = await request(url, "/workflows/executions/run", {
+      workflowId: "workflow-governed-run",
+    });
+
+    expect(run.status).toBe(200);
+    const execution = run.body.execution as Record<string, unknown>;
+    expect(typeof execution["lifecycleId"]).toBe("string");
+    const lifecycle = testServer.persistence
+      .read()
+      .governanceLifecycles.find(
+        (entry) => entry.id === execution["lifecycleId"],
+      );
+    expect(lifecycle?.state).toBe("awaiting-user-approval");
+  });
+
   it("reads and records approve, continue, and reject controls with persisted audit data", async () => {
     const testServer = createTestServer();
     servers.push(testServer.server);
@@ -91,6 +117,44 @@ describe("governance lifecycle API", () => {
     );
   });
 
+  it("redacts sensitive prompt binding keys and values from the browser lifecycle response", async () => {
+    const testServer = createTestServer();
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const lifecycle = await createAwaitingLifecycleWithSecret(
+      testServer.persistence,
+      "redacted",
+    );
+
+    const response = await request(url, "/governance/lifecycles/get", {
+      lifecycleId: lifecycle.id,
+    });
+    const promptExecutions = response.body.lifecycle["promptExecutions"];
+
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(promptExecutions)).not.toContain("apiKey");
+    expect(JSON.stringify(promptExecutions)).not.toContain("api_key");
+    expect(JSON.stringify(promptExecutions)).not.toContain("nestedToken");
+    expect(JSON.stringify(promptExecutions)).not.toContain(
+      "raw-browser-secret",
+    );
+    expect(JSON.stringify(promptExecutions)).not.toContain(
+      "nested-browser-secret",
+    );
+    expect(JSON.stringify(promptExecutions)).toContain("[redacted]");
+    expect(
+      testServer.persistence
+        .read()
+        .governanceLifecycles.find((entry) => entry.id === lifecycle.id)
+        ?.promptExecutions[0]?.bindings,
+    ).toEqual({
+      apiKey: "raw-browser-secret",
+      api_key: "underscore-browser-secret",
+      context: { nestedToken: "nested-browser-secret" },
+      subject: "Visible",
+    });
+  });
+
   it("rejects a rerun request for an approved unchanged fingerprint", async () => {
     const testServer = createTestServer();
     servers.push(testServer.server);
@@ -139,6 +203,7 @@ describe("governance lifecycle API", () => {
 const createTestServer = (): {
   server: Server;
   persistence: ReturnType<typeof createApplicationPersistence>;
+  workflowCatalog: ReturnType<typeof createWorkflowCatalogStore>;
 } => {
   const initialState = createDefaultApplicationState();
   const providerStore = createProviderStore();
@@ -151,6 +216,7 @@ const createTestServer = (): {
   });
   return {
     persistence,
+    workflowCatalog,
     server: createApiServer({
       config: {
         port: 0,
@@ -167,6 +233,37 @@ const createTestServer = (): {
     }),
   };
 };
+
+const createWorkflow = () => ({
+  id: "workflow-governed-run",
+  name: "Governed IDE run",
+  description: "Persists lifecycle provenance for an IDE run.",
+  status: WorkflowRecordStatus.Draft,
+  trigger: { kind: WorkflowTriggerKind.Manual, enabled: true, config: {} },
+  viewport: { x: 0, y: 0, zoom: 1 },
+  executionPolicy: { maxNodeRetries: 0, allowManualCheckpointResume: false },
+  defaultContextPolicy: {
+    language: "en",
+    carryMessagesLimit: 1,
+    carryArtifactLimit: 1,
+  },
+  tags: [],
+  nodes: [
+    {
+      id: "review",
+      kind: WorkflowNodeKind.HumanReview,
+      label: "Review",
+      position: { x: 0, y: 0 },
+      width: 320,
+      collapsed: false,
+      config: {},
+      inputPorts: [],
+      outputPorts: [],
+      attachedGuardrails: [],
+    },
+  ],
+  edges: [],
+});
 
 const createAwaitingLifecycle = async (
   persistence: ReturnType<typeof createApplicationPersistence>,
@@ -212,6 +309,65 @@ const createAwaitingLifecycle = async (
   );
 };
 
+const createAwaitingLifecycleWithSecret = async (
+  persistence: ReturnType<typeof createApplicationPersistence>,
+  id: string,
+) => {
+  const service = createGovernanceLifecycleService(persistence);
+  const draft = await service.begin({
+    id,
+    workflowId: "workflow-1",
+    fingerprints: { scope: `scope-${id}`, evidence: `evidence-${id}` },
+    limits: { execution: 1, repair: 1, review: 1 },
+    now: readNow(0),
+  });
+  const planning = await transition(
+    service,
+    draft.id,
+    GovernanceTransitionKind.StartPlanning,
+    1,
+  );
+  const executing = await transition(
+    service,
+    planning.id,
+    GovernanceTransitionKind.StartExecuting,
+    2,
+  );
+  await service.recordPromptExecution({
+    id: `${id}:prompt:1:0`,
+    lifecycleId: executing.id,
+    assetId: "prompt-secret",
+    version: 1,
+    bindings: {
+      apiKey: "raw-browser-secret",
+      api_key: "underscore-browser-secret",
+      context: { nestedToken: "nested-browser-secret" },
+      subject: "Visible",
+    },
+    renderedFingerprint: "fingerprint",
+    validation: "passed",
+    timestamp: readNow(3),
+  });
+  const verifying = await transition(
+    service,
+    executing.id,
+    GovernanceTransitionKind.StartVerifying,
+    4,
+  );
+  const reviewing = await transition(
+    service,
+    verifying.id,
+    GovernanceTransitionKind.StartReviewing,
+    5,
+  );
+  return transition(
+    service,
+    reviewing.id,
+    GovernanceTransitionKind.AwaitUserApproval,
+    6,
+  );
+};
+
 const transition = (
   service: ReturnType<typeof createGovernanceLifecycleService>,
   lifecycleId: string,
@@ -237,6 +393,7 @@ const request = async (
       string,
       unknown
     >;
+    execution?: unknown;
     error?: unknown;
   };
 }> => {
@@ -255,6 +412,7 @@ const request = async (
         string,
         unknown
       >;
+      execution?: unknown;
       error?: unknown;
     },
   };

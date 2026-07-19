@@ -1,4 +1,4 @@
-import { requestJson, streamText } from "./server-api-client.js";
+import { readBackendOrigin } from "./backend-origin.js";
 import { WorkflowAssetScope } from "../screens/workflows-editor-state.js";
 import type {
   WorkflowAlertRecord,
@@ -15,6 +15,82 @@ import type {
   WorkflowProviderSelectionRecord,
   WorkflowUsageTotalsRecord,
 } from "../screens/workflows-editor-state.js";
+
+const requestJson = <TResult>(input: {
+  path: string;
+  method?: "GET" | "POST";
+  body?: Readonly<Record<string, unknown>>;
+  parse: (value: unknown) => TResult;
+}): Promise<TResult> => requestCredentialedJson(input);
+
+const streamText = (input: {
+  path: string;
+  signal?: AbortSignal;
+  onChunk: (chunk: string) => void;
+}): Promise<void> => streamCredentialedText(input);
+
+const requestCredentialedJson = async <TResult>(input: {
+  path: string;
+  method?: "GET" | "POST";
+  body?: Readonly<Record<string, unknown>>;
+  parse: (value: unknown) => TResult;
+}): Promise<TResult> => {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
+    method: input.method ?? "POST",
+    credentials: "include",
+    headers: input.body ? { "Content-Type": "application/json" } : {},
+    ...(input.body ? { body: JSON.stringify(input.body) } : {}),
+  });
+  const payload = await readCredentialedJson(response);
+  if (!response.ok)
+    throw new Error(readCredentialedError(payload, response.status));
+  return input.parse(payload);
+};
+
+const streamCredentialedText = async (input: {
+  path: string;
+  signal?: AbortSignal;
+  onChunk: (chunk: string) => void;
+}): Promise<void> => {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
+    method: "GET",
+    credentials: "include",
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  if (!response.ok)
+    throw new Error(
+      readCredentialedError(
+        await readCredentialedJson(response),
+        response.status,
+      ),
+    );
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    const chunk = decoder.decode(result.value, { stream: true });
+    if (chunk) input.onChunk(chunk);
+  }
+  const finalChunk = decoder.decode();
+  if (finalChunk) input.onChunk(finalChunk);
+};
+
+const readCredentialedJson = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+};
+const readCredentialedError = (value: unknown, status: number): string =>
+  value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  typeof (value as Record<string, unknown>)["message"] === "string"
+    ? ((value as Record<string, unknown>)["message"] as string)
+    : `Request failed with status ${status}`;
 
 const EndpointPath = {
   DefinitionsList: "/workflows/definitions/list",
@@ -1494,9 +1570,11 @@ const parseWorkflowExecutionRecord = (
 ): WorkflowExecutionRecord => {
   const finishedAt = readOptionalString(value, "finishedAt");
   const durationMs = readOptionalNumber(value, "durationMs");
+  const lifecycleId = readOptionalString(value, "lifecycleId");
 
   return {
     id: readRequiredString(value, "workflowExecutionRecord", "id"),
+    ...(lifecycleId ? { lifecycleId } : {}),
     workflowId: readRequiredString(
       value,
       "workflowExecutionRecord",

@@ -36,6 +36,8 @@ describe("prompt assets client", () => {
         status: "enabled",
         activeVersion: 3,
         template: "Hello",
+        variables: [],
+        versions: [{ version: 3, template: "Hello", variables: [] }],
         asset: {
           id: "prompt-1",
           kind: "prompt",

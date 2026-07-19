@@ -27,49 +27,6 @@ export const requestJson = async <TResult>(input: {
   return input.parse(payload);
 };
 
-export const streamText = async (input: {
-  path: string;
-  signal?: AbortSignal;
-  onChunk: (chunk: string) => void;
-}): Promise<void> => {
-  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
-    method: "GET",
-    headers: createHeaders(false),
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
-
-  if (!response.ok) {
-    const payload = await readJson(response);
-    throw new Error(readErrorMessage(payload, response.status));
-  }
-
-  if (!response.body) {
-    return;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const result = await reader.read();
-    if (result.done) {
-      break;
-    }
-
-    const chunk = decoder.decode(result.value, {
-      stream: true,
-    });
-    if (chunk.length > 0) {
-      input.onChunk(chunk);
-    }
-  }
-
-  const finalChunk = decoder.decode();
-  if (finalChunk.length > 0) {
-    input.onChunk(finalChunk);
-  }
-};
-
 const createHeaders = (
   includeJsonContentType: boolean,
 ): Record<string, string> => ({

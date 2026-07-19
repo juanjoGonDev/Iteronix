@@ -489,6 +489,7 @@ export type WorkflowPromptProvenanceRecord = {
 
 export type WorkflowExecutionRecord = {
   id: string;
+  lifecycleId?: string;
   workflowId: string;
   triggerKind: WorkflowTriggerKind;
   status: WorkflowExecutionStatus;

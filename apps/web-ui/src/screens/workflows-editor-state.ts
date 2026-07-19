@@ -110,6 +110,11 @@ export type WorkflowProviderSelectionRecord = {
 
 type WorkflowNodeConfigRecord = {
   assetId?: string;
+  promptAsset?: {
+    assetId: string;
+    version: number;
+    bindings: Readonly<Record<string, unknown>>;
+  };
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
@@ -534,6 +539,7 @@ export type WorkflowNodeExecutionRecord = {
 
 export type WorkflowExecutionRecord = {
   id: string;
+  lifecycleId?: string;
   workflowId: string;
   triggerKind: WorkflowTriggerKind;
   status:

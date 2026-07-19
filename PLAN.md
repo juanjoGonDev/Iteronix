@@ -117,6 +117,7 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [ ] Implement Prompts as first-class reusable Assets: immutable version history, typed variable schemas, provenance, and independently governed lifecycle state. Workflow nodes MUST reference a version-pinned prompt asset with explicit variable bindings; they MUST NOT own duplicated prompt text.
   - [x] Add persisted usage discovery for version-pinned prompt references, direct workflow/node links, and impact-confirmed deletion that recomputes persisted usage server-side.
   - [x] Resolve pinned prompt versions deterministically at runtime, reject invalid bindings, and persist rendered prompt provenance in governed external workflow runs.
+  - [x] Link IDE workflow runs to persisted governance lifecycles and expose governed prompt provenance in the reloadable execution inspector.
 - [ ] Integrate the persisted assets with governed workflow execution, including bounded permissions, schema validation, audit persistence, and approval checkpoints.
 - [ ] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
 - [ ] Add memory and RAG runtime integration with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.

@@ -5149,3 +5149,12 @@
 - Commands: RED/GREEN focused prompt, lifecycle, and runtime Vitest suites; full format, lint, typecheck, test, build, and dependency gates passed.
 - Issues/Risks: Prompt catalog/editor UI and broader Phase 4 asset runtime integration remain incomplete.
 - Next: Run native bounded review, then commit and push this scoped runtime slice.
+
+### 2026-07-19 01:40 (Europe/Madrid) — Governed IDE prompt inspection
+
+- Summary: Linked regular IDE workflow runs to persisted Phase 2 governance lifecycle records and exposed prompt provenance in the workflow execution inspector.
+- Decisions: Browser inspection uses the HttpOnly IDE session only for lifecycle reads; external bearer authentication remains unchanged. The persisted execution lifecycle ID is the reload-stable join key.
+- Changes: Governed direct/SSE workflow runs, lifecycle-aware execution persistence, lifecycle client, inspector governance/prompt evidence, and integration/parser coverage.
+- Commands: Full format, lint, typecheck, test, build, and dependency checks passed.
+- Issues/Risks: Phase 4 remains incomplete; broader asset execution and Playwright acceptance coverage remain pending.
+- Next: Run bounded review, commit, and push the integrated Prompt Asset IDE slice.

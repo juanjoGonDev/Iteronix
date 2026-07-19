@@ -613,6 +613,14 @@ const createExecutionRecord = (
     next.durationMs = input.durationMs;
   }
 
+  if (input.lifecycleId !== undefined) {
+    next.lifecycleId = input.lifecycleId;
+  }
+
+  if (input.promptProvenance !== undefined) {
+    next.promptProvenance = input.promptProvenance;
+  }
+
   return next;
 };
 
