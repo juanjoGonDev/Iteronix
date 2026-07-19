@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentCapability,
+  AgentPermission,
   McpToolResultStatus,
   PluginRuntimeKind,
   createMemoryScope,
   createSkillDefinition,
+  enforceAssetCapabilities,
+  enforceAssetPermissions,
   validateMcpToolResult,
   validatePluginManifest,
+  type AgentPort,
+  type ToolPort,
 } from "./agent-tool-contracts";
 
 const schema = {
@@ -132,3 +138,198 @@ describe("agent and tool contracts", () => {
     );
   });
 });
+
+describe("port contract enforcement", () => {
+  const declaredCapabilities = [
+    AgentCapability.ToolCalls,
+    AgentCapability.Streaming,
+  ] as const;
+  const declaredPermissions = [
+    AgentPermission.ToolInvoke,
+    AgentPermission.McpInvoke,
+  ] as const;
+
+  it("rejects undeclared capabilities with a deterministic error", () => {
+    expect(() =>
+      enforceAssetCapabilities(declaredCapabilities, [AgentCapability.Memory]),
+    ).toThrow("Undeclared capability: memory.");
+    expect(() =>
+      enforceAssetCapabilities(declaredCapabilities, [
+        AgentCapability.ToolCalls,
+        AgentCapability.Mcp,
+      ]),
+    ).toThrow("Undeclared capability: mcp.");
+    expect(() =>
+      enforceAssetCapabilities(declaredCapabilities, []),
+    ).not.toThrow();
+  });
+
+  it("rejects undeclared permissions with a deterministic error", () => {
+    expect(() =>
+      enforceAssetPermissions(declaredPermissions, [
+        AgentPermission.MemoryRead,
+      ]),
+    ).toThrow("Undeclared permission: memory.read.");
+    expect(() =>
+      enforceAssetPermissions(declaredPermissions, [
+        AgentPermission.ToolInvoke,
+        AgentPermission.RagQuery,
+      ]),
+    ).toThrow("Undeclared permission: rag.query.");
+    expect(() =>
+      enforceAssetPermissions(declaredPermissions, []),
+    ).not.toThrow();
+  });
+
+  it("rejects AgentPort invoke with undeclared capabilities", async () => {
+    const port = createFakeAgentPort();
+    await expect(
+      port.invoke({
+        agentId: "test-agent",
+        workflowId: "test-workflow",
+        input: {},
+        requestedCapabilities: [AgentCapability.Memory],
+        grantedPermissions: port.permissions,
+      }),
+    ).rejects.toThrow("Undeclared capability: memory.");
+  });
+
+  it("rejects AgentPort invoke with undeclared permissions", async () => {
+    const port = createFakeAgentPort();
+    await expect(
+      port.invoke({
+        agentId: "test-agent",
+        workflowId: "test-workflow",
+        input: {},
+        requestedCapabilities: port.capabilities,
+        grantedPermissions: [AgentPermission.MemoryRead],
+      }),
+    ).rejects.toThrow("Undeclared permission: memory.read.");
+  });
+
+  it("accepts AgentPort invoke with declared capabilities and permissions", async () => {
+    const port = createFakeAgentPort();
+    const result = await port.invoke({
+      agentId: "test-agent",
+      workflowId: "test-workflow",
+      input: { prompt: "Hello" },
+      requestedCapabilities: port.capabilities,
+      grantedPermissions: port.permissions,
+    });
+    expect(result.output).toEqual({ result: "ok" });
+    expect(result.provenance.source).toBe("fake-agent");
+    expect(result.provenance.artifactFingerprint).toBeTruthy();
+    expect(result.provenance.registeredAt).toBeTruthy();
+  });
+
+  it("invokes ToolPort with matching tool and returns validated output", async () => {
+    const port = createFakeToolPort();
+    const result = await port.invoke({
+      toolId: "knowledge.query",
+      input: { query: "test" },
+      provenance: {
+        source: "test",
+        artifactFingerprint: "test",
+        registeredAt: new Date().toISOString(),
+      },
+    });
+    expect(result.toolId).toBe("knowledge.query");
+    expect(result.status).toBe("success");
+  });
+
+  it("rejects ToolPort invoke for a non-existent tool", async () => {
+    const port = createFakeToolPort();
+    await expect(
+      port.invoke({
+        toolId: "missing.tool",
+        input: {},
+        provenance: {
+          source: "test",
+          artifactFingerprint: "test",
+          registeredAt: new Date().toISOString(),
+        },
+      }),
+    ).rejects.toThrow("Tool not found.");
+  });
+});
+
+const createFakeAgentPort = (): AgentPort => {
+  const capabilities: AgentPort["capabilities"] = [
+    AgentCapability.ToolCalls,
+    AgentCapability.Streaming,
+  ];
+  const permissions: AgentPort["permissions"] = [
+    AgentPermission.ToolInvoke,
+    AgentPermission.McpInvoke,
+  ];
+  return {
+    id: "fake-agent",
+    capabilities,
+    permissions,
+    invoke: async (request) => {
+      enforceAssetCapabilities(capabilities, request.requestedCapabilities);
+      enforceAssetPermissions(permissions, request.grantedPermissions);
+      return {
+        output: { result: "ok" },
+        provenance: {
+          source: "fake-agent",
+          artifactFingerprint: "fake-fingerprint",
+          registeredAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+};
+
+const createFakeToolPort = (): ToolPort => {
+  const capabilities: ToolPort["capabilities"] = [AgentCapability.ToolCalls];
+  const permissions: ToolPort["permissions"] = [AgentPermission.ToolInvoke];
+  const declaredTools: ToolPort["tools"] = [
+    {
+      id: "knowledge.query",
+      inputSchema: {
+        id: "knowledge.query.input",
+        version: 1,
+        schema: {
+          type: "object",
+          properties: { query: { type: "string", minLength: 1 } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+      outputSchema: {
+        id: "knowledge.query.output",
+        version: 1,
+        schema: {
+          type: "object",
+          properties: { result: { type: "string" } },
+          required: ["result"],
+          additionalProperties: false,
+        },
+      },
+      requiredPermissions: [AgentPermission.ToolInvoke],
+    },
+  ];
+  return {
+    id: "fake-tool",
+    capabilities,
+    permissions,
+    tools: declaredTools,
+    invoke: async (request) => {
+      const declared = declaredTools.find(
+        (candidate) => candidate.id === request.toolId,
+      );
+      if (!declared) throw new Error("Tool not found.");
+      return {
+        toolId: request.toolId,
+        status: "success",
+        output: { result: "queried" },
+        provenance: {
+          serverId: "fake-server",
+          toolVersion: "1.0.0",
+          responseFingerprint: "resp-fp",
+        },
+      };
+    },
+  };
+};

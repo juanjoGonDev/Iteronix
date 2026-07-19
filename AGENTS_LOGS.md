@@ -5158,3 +5158,15 @@
 - Commands: Full format, lint, typecheck, test, build, and dependency checks passed.
 - Issues/Risks: Phase 4 remains incomplete; broader asset execution and Playwright acceptance coverage remain pending.
 - Next: Run bounded review, commit, and push the integrated Prompt Asset IDE slice.
+
+### 2026-07-19 18:30 (Europe/Madrid) — Asset contract enforcement acceptance
+
+- Summary: Added domain contract tests that run each port (AgentPort, ToolPort) against a fake implementation and reject undeclared capability or permission use, fulfilling the first unchecked Phase 4 acceptance criterion.
+- Decisions: `enforceAssetCapabilities` and `enforceAssetPermissions` are domain-pure validation functions that throw deterministic errors on undeclared values. Fake AgentPort and ToolPort implementations enforce the contract inside their `invoke` handlers.
+- Changes:
+  - `packages/domain/src/agent-tool-contracts.ts` — Added `enforceAssetCapabilities` and `enforceAssetPermissions` enforcement functions
+  - `packages/domain/src/agent-tool-contracts.test.ts` — Added contract tests: AgentPort/ToolPort fakes, capability/permission enforcement, and deterministic error assertions
+  - `PLAN.md` — Checked Phase 4 acceptance criterion for contract tests
+- Commands: RED/GREEN contract enforcement tests; full lint, typecheck, test (357/357), and build passed.
+- Issues/Risks: Acceptance criteria for integration/provenance, permission-denial/plugin/MCP paths remain unchecked.
+- Next: Continue Phase 4 with runtime asset integration enforcement or provenance acceptance coverage.

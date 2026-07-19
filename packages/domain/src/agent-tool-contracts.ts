@@ -174,6 +174,30 @@ export type PluginManifestValidation = {
   errors: ReadonlyArray<{ code: string; message: string }>;
 };
 
+export const enforceAssetCapabilities = (
+  declared: ReadonlyArray<AgentCapability>,
+  requested: ReadonlyArray<AgentCapability>,
+): void => {
+  const undeclared = requested.filter(
+    (capability) => !declared.includes(capability),
+  );
+  if (undeclared.length > 0) {
+    throw new Error(`Undeclared capability: ${undeclared.join(", ")}.`);
+  }
+};
+
+export const enforceAssetPermissions = (
+  declared: ReadonlyArray<AgentPermission>,
+  granted: ReadonlyArray<AgentPermission>,
+): void => {
+  const undeclared = granted.filter(
+    (permission) => !declared.includes(permission),
+  );
+  if (undeclared.length > 0) {
+    throw new Error(`Undeclared permission: ${undeclared.join(", ")}.`);
+  }
+};
+
 export const createSkillDefinition = (
   input: SkillDefinition,
 ): SkillDefinition => {
