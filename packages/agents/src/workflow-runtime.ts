@@ -169,6 +169,12 @@ export type WorkflowRuntime = {
   }) => Promise<WorkflowExecutionRecord>;
 };
 
+export type GovernedNodeExecutionRequest = {
+  node: WorkflowNodeRecord;
+  inputValue: unknown;
+  workflowRunId: string;
+};
+
 export const createWorkflowRuntime = (input: {
   now?: () => Date;
   runProviderNode: (
@@ -178,6 +184,9 @@ export const createWorkflowRuntime = (input: {
     workflowId: string;
     workflowVersion: number;
   }) => WorkflowInvocationResolution | undefined;
+  runGovernedNode?: (
+    request: GovernedNodeExecutionRequest,
+  ) => Promise<WorkflowProviderRunResult>;
 }): WorkflowRuntime => {
   const now = input.now ?? (() => new Date());
 
@@ -310,6 +319,9 @@ export const createWorkflowRuntime = (input: {
               outputs,
               now,
               runProviderNode: input.runProviderNode,
+              ...(input.runGovernedNode
+                ? { runGovernedNode: input.runGovernedNode }
+                : {}),
               runWorkflowInvocation: async (invocationNode) => {
                 const invocation = invocationNode.config.workflowInvocation;
                 if (!invocation) {
@@ -443,6 +455,9 @@ const runWorkflowStageNode = async (input: {
   runProviderNode: (
     request: WorkflowProviderRunRequest,
   ) => Promise<WorkflowProviderRunResult>;
+  runGovernedNode?: (
+    request: GovernedNodeExecutionRequest,
+  ) => Promise<WorkflowProviderRunResult>;
   runWorkflowInvocation: (node: WorkflowNodeRecord) => Promise<unknown>;
   signal?: AbortSignal;
   onEvent?: (event: WorkflowRuntimeEvent) => void;
@@ -502,6 +517,9 @@ const runWorkflowStageNode = async (input: {
       nodeStartedAt: startedAt,
       now: input.now,
       runProviderNode: input.runProviderNode,
+      ...(input.runGovernedNode
+        ? { runGovernedNode: input.runGovernedNode }
+        : {}),
       runWorkflowInvocation: input.runWorkflowInvocation,
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.onEvent ? { onEvent: input.onEvent } : {}),
@@ -609,6 +627,9 @@ const executeWorkflowNode = async (input: {
   now: () => Date;
   runProviderNode: (
     request: WorkflowProviderRunRequest,
+  ) => Promise<WorkflowProviderRunResult>;
+  runGovernedNode?: (
+    request: GovernedNodeExecutionRequest,
   ) => Promise<WorkflowProviderRunResult>;
   runWorkflowInvocation: (node: WorkflowNodeRecord) => Promise<unknown>;
   signal?: AbortSignal;
@@ -720,6 +741,60 @@ const executeWorkflowNode = async (input: {
     input.node.kind === WorkflowNodeKind.AiProviderRun ||
     input.node.kind === WorkflowNodeKind.AiAgent
   ) {
+    if (
+      input.node.kind === WorkflowNodeKind.AiAgent &&
+      input.node.config.skillId &&
+      input.runGovernedNode
+    ) {
+      const governedResult = await input.runGovernedNode({
+        node: input.node,
+        inputValue: input.inputValue,
+        workflowRunId: input.workflowRunId,
+      });
+      if (governedResult.outputText.trim().length > 0) {
+        input.onEvent?.({
+          type: WorkflowRuntimeEventType.NodeDelta,
+          workflowId: input.definition.id,
+          workflowRunId: input.workflowRunId,
+          nodeId: input.node.id,
+          delta: governedResult.outputText,
+          emittedAt: input.now().toISOString(),
+        });
+      }
+      const guardrailFindings = evaluateNodeGuardrails({
+        node: input.node,
+        inputValue: input.inputValue,
+        outputSnapshot: governedResult.outputSnapshot,
+        envelope: input.envelope,
+        outputs: input.outputs,
+        assetsById: input.assetsById,
+      });
+      const nextEnvelope = appendEnvelopeOutput(input.envelope, {
+        nodeId: input.node.id,
+        outputSnapshot: governedResult.outputSnapshot,
+        message: governedResult.outputText,
+        citations: governedResult.citations ?? [],
+        guardrailFindings,
+      });
+      const usage = normalizeUsage(governedResult.usage);
+      const guardrailAlerts = createGuardrailAlerts(
+        guardrailFindings,
+        input.now,
+      );
+      const failedByGuardrail = guardrailFindings.some(
+        (finding) => finding.severity === WorkflowGuardrailSeverity.Error,
+      );
+
+      return {
+        envelope: nextEnvelope,
+        outputSnapshot: governedResult.outputSnapshot,
+        alerts: [...(governedResult.alerts ?? []), ...guardrailAlerts],
+        guardrailFindings,
+        failedByGuardrail,
+        ...(usage ? { usage } : {}),
+      };
+    }
+
     const provider = input.node.config.provider;
     if (!provider) {
       throw new Error(

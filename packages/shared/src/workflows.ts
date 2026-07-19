@@ -226,6 +226,8 @@ export type WorkflowNodeConfigRecord = {
     bindings: Readonly<Record<string, unknown>>;
   };
   role?: WorkflowNodeRole;
+  skillId?: string;
+  grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
   pinnedTestOutput?: {

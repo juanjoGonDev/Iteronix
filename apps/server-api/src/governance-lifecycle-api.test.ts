@@ -3,7 +3,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   GovernanceTransitionKind,
   recordGovernanceAgentExecution,
+  type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
+import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
+import {
+  McpToolResultStatus,
+  PluginRuntimeKind,
+  type ArtifactProvenance,
+  type McpToolResult,
+  type RagPort,
+} from "../../../packages/domain/src/agent-tool-contracts";
+import type { JsonValue } from "../../../packages/domain/src/governance-validation";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
 import {
   WorkflowNodeKind,
@@ -16,6 +26,7 @@ import {
   type ApplicationStateStore,
 } from "./application-state";
 import { createGovernanceLifecycleService } from "./governance-lifecycle-service";
+import { createGovernedAgentToolService } from "./governed-agent-tool-service";
 import { createProviderStore } from "./providers";
 import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowRuntimeService } from "./workflow-runtime";
@@ -353,6 +364,260 @@ describe("governance lifecycle API", () => {
       subject: "Visible binding",
     });
     expect(persisted?.agentExecutions).toHaveLength(2);
+  });
+});
+
+describe("governed skill auditable error paths", () => {
+  const inputSchema = {
+    id: "test.query.input",
+    version: 1,
+    schema: {
+      type: "object" as const,
+      properties: { query: { type: "string" as const, minLength: 1 } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  };
+  const outputSchema = {
+    id: "test.query.output",
+    version: 1,
+    schema: {
+      type: "object" as const,
+      properties: {
+        answers: {
+          type: "array" as const,
+          items: { type: "string" as const },
+        },
+      },
+      required: ["answers"],
+      additionalProperties: false,
+    },
+  };
+  const pluginManifest = {
+    id: "test-plugin",
+    version: "1.0.0",
+    runtime: PluginRuntimeKind.Server,
+    isolation: "process" as const,
+    permissions: ["rag.query", "tool.invoke"] as const,
+    tools: [{ id: "test.skill", inputSchema, outputSchema }],
+    audit: {
+      manifestFingerprint: "plugin-fp",
+      publishedAt: "2026-07-18T00:00:00.000Z",
+    },
+  };
+  const skillDefinition = {
+    id: "test.skill",
+    version: 1,
+    description: "Test skill.",
+    inputSchema,
+    outputSchema,
+    requiredPermissions: ["rag.query", "tool.invoke"] as const,
+    provenance: {
+      source: "plugin:test-plugin",
+      artifactFingerprint: "skill-fp",
+      registeredAt: "2026-07-18T00:00:00.000Z",
+    },
+  };
+  const scope = {
+    tenantId: "tenant-1",
+    workflowId: "workflow-1",
+    enabled: true,
+    retentionDays: 7,
+  };
+
+  const createLifecycleAndServices = () => {
+    let governanceLifecycles: ReadonlyArray<GovernanceLifecycle> = [];
+    const persistence: GovernanceLifecyclePersistencePort = {
+      read: () => ({ governanceLifecycles }),
+      mutateGovernanceLifecycles: async (updater) => {
+        governanceLifecycles = updater(governanceLifecycles);
+      },
+    };
+    const lifecycleService = createGovernanceLifecycleService(persistence);
+    const ragPort: RagPort = {
+      retrieve: async () => [],
+    };
+    const governedService = createGovernedAgentToolService(
+      persistence,
+      ragPort,
+    );
+    return { persistence, lifecycleService, governedService };
+  };
+
+  const beginPlanningLifecycle = async (
+    lifecycleService: ReturnType<typeof createGovernanceLifecycleService>,
+    id: string,
+  ) => {
+    const draft = await lifecycleService.begin({
+      id,
+      workflowId: "workflow-1",
+      fingerprints: { scope: `scope-${id}`, evidence: `evidence-${id}` },
+      limits: { execution: 1, repair: 0, review: 1 },
+      now: readNow(0),
+    });
+    return lifecycleService.transition({
+      lifecycleId: draft.id,
+      kind: GovernanceTransitionKind.StartPlanning,
+      actorId: "runtime",
+      reason: "Start planning.",
+      now: readNow(1),
+    });
+  };
+
+  const registerPluginAndSkill = (
+    governedService: ReturnType<typeof createGovernedAgentToolService>,
+    invoke: (input: {
+      toolId: string;
+      input: JsonValue;
+      provenance: ArtifactProvenance;
+    }) => Promise<McpToolResult>,
+  ) => {
+    governedService.registerPlugin({
+      manifest: pluginManifest,
+      agentId: "test-agent",
+      invoke,
+    });
+    governedService.registerSkill(skillDefinition);
+  };
+
+  it("records permission-denial as a deterministic lifecycle failure transition", async () => {
+    const { lifecycleService, governedService, persistence } =
+      createLifecycleAndServices();
+    const lifecycle = await beginPlanningLifecycle(
+      lifecycleService,
+      "perm-denial",
+    );
+    registerPluginAndSkill(
+      governedService,
+      async (_input: {
+        toolId: string;
+        input: JsonValue;
+        provenance: ArtifactProvenance;
+      }) => ({
+        toolId: "test.skill",
+        status: McpToolResultStatus.Success,
+        output: { answers: ["data"] },
+        provenance: {
+          serverId: "test-plugin",
+          toolVersion: "1.0.0",
+          responseFingerprint: "fp",
+        },
+      }),
+    );
+
+    await lifecycleService.executeBoundedPass({
+      lifecycleId: lifecycle.id,
+      execute: async () => {
+        await governedService.invoke({
+          lifecycleId: lifecycle.id,
+          skillId: "test.skill",
+          input: { query: "test" },
+          grantedPermissions: [],
+          memoryScope: scope,
+          now: readNow(5),
+        });
+      },
+      now: (_step: number) => readNow(6),
+    });
+
+    const updated = persistence
+      .read()
+      .governanceLifecycles.find((l) => l.id === lifecycle.id);
+    expect(updated?.state).toBe("failed");
+    const lastTransition = updated?.transitions.at(-1);
+    expect(lastTransition?.kind).toBe("fail");
+    expect(lastTransition?.reason).toBe("Skill permissions were not granted.");
+  });
+
+  it("records plugin runtime failure as a deterministic lifecycle failure transition", async () => {
+    const { lifecycleService, governedService, persistence } =
+      createLifecycleAndServices();
+    const lifecycle = await beginPlanningLifecycle(
+      lifecycleService,
+      "plugin-fail",
+    );
+    registerPluginAndSkill(
+      governedService,
+      async (_input: {
+        toolId: string;
+        input: JsonValue;
+        provenance: ArtifactProvenance;
+      }) => {
+        throw new Error("Plugin provider connection refused.");
+      },
+    );
+
+    await lifecycleService.executeBoundedPass({
+      lifecycleId: lifecycle.id,
+      execute: async () => {
+        await governedService.invoke({
+          lifecycleId: lifecycle.id,
+          skillId: "test.skill",
+          input: { query: "test" },
+          grantedPermissions: ["rag.query", "tool.invoke"],
+          memoryScope: scope,
+          now: readNow(5),
+        });
+      },
+      now: (_step: number) => readNow(6),
+    });
+
+    const updated = persistence
+      .read()
+      .governanceLifecycles.find((l) => l.id === lifecycle.id);
+    expect(updated?.state).toBe("failed");
+    const lastTransition = updated?.transitions.at(-1);
+    expect(lastTransition?.kind).toBe("fail");
+    expect(lastTransition?.reason).toBe("Plugin provider connection refused.");
+  });
+
+  it("records malformed MCP response as a deterministic lifecycle failure transition", async () => {
+    const { lifecycleService, governedService, persistence } =
+      createLifecycleAndServices();
+    const lifecycle = await beginPlanningLifecycle(
+      lifecycleService,
+      "mcp-malformed",
+    );
+    registerPluginAndSkill(
+      governedService,
+      async (_input: {
+        toolId: string;
+        input: JsonValue;
+        provenance: ArtifactProvenance;
+      }) => ({
+        toolId: "test.skill",
+        status: McpToolResultStatus.Success,
+        output: { answers: [1] },
+        provenance: {
+          serverId: "test-plugin",
+          toolVersion: "1.0.0",
+          responseFingerprint: "fp",
+        },
+      }),
+    );
+
+    await lifecycleService.executeBoundedPass({
+      lifecycleId: lifecycle.id,
+      execute: async () => {
+        await governedService.invoke({
+          lifecycleId: lifecycle.id,
+          skillId: "test.skill",
+          input: { query: "test" },
+          grantedPermissions: ["rag.query", "tool.invoke"],
+          memoryScope: scope,
+          now: readNow(5),
+        });
+      },
+      now: (_step: number) => readNow(6),
+    });
+
+    const updated = persistence
+      .read()
+      .governanceLifecycles.find((l) => l.id === lifecycle.id);
+    expect(updated?.state).toBe("failed");
+    const lastTransition = updated?.transitions.at(-1);
+    expect(lastTransition?.kind).toBe("fail");
+    expect(lastTransition?.reason).toBe("MCP output failed schema validation.");
   });
 });
 

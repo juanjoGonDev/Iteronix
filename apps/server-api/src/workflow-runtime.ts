@@ -33,7 +33,7 @@ import { dispatchWorkflowNotification } from "./workflow-notifications";
 
 const SmokeTestPrompt = "Reply with OK.";
 
-type ProviderProfile = {
+export type ProviderProfile = {
   id: string;
   providerKind: string;
   modelId: string;
@@ -327,7 +327,7 @@ const runCanonicalWorkflowNode = (input: {
   });
 };
 
-const executeProviderNode = async (
+export const executeProviderNode = async (
   request: WorkflowProviderRunRequest,
   profile: ProviderProfile,
 ): Promise<WorkflowProviderRunResult> => {
@@ -494,7 +494,7 @@ const notifyWorkflowExecution = async (
   }
 };
 
-const resolveProviderProfile = (
+export const resolveProviderProfile = (
   applicationState: ApplicationState,
   profileId: string | undefined,
 ): ProviderProfile => {

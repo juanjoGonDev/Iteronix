@@ -130,7 +130,7 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [x] Work unit 1 API tests cover authenticated list/upsert/delete, malformed input rejection, and PostgreSQL JSONB reload compatibility.
 - [x] Contract tests run each port against a fake implementation and reject undeclared capability or permission use.
 - [x] Integration tests prove retrieval/tool/plugin provenance is visible in a workflow run and secrets are never exposed.
-- [ ] Permission-denial, plugin failure, and malformed MCP response paths are deterministic and auditable.
+- [x] Permission-denial, plugin failure, and malformed MCP response paths are deterministic and auditable.
 
 **Dependencies**: Phases 1–3.
 
