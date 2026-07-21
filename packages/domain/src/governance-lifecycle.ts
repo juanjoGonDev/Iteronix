@@ -96,6 +96,16 @@ export type GovernanceAgentExecutionRecord = {
   timestamp: string;
 };
 
+export type GovernanceRetrievalExecutionRecord = {
+  assetId: string;
+  scope: string;
+  workflowId?: string;
+  documentCount: number;
+  provenanceFingerprint: string;
+  redacted: boolean;
+  timestamp: string;
+};
+
 export type GovernancePromptExecutionRecord = {
   id: string;
   lifecycleId: string;
@@ -117,6 +127,7 @@ export type GovernanceLifecycle = {
   transitions: ReadonlyArray<GovernanceTransition>;
   repairProposals: ReadonlyArray<RepairProposal>;
   agentExecutions: ReadonlyArray<GovernanceAgentExecutionRecord>;
+  retrievalExecutions: ReadonlyArray<GovernanceRetrievalExecutionRecord>;
   promptExecutions: ReadonlyArray<GovernancePromptExecutionRecord>;
   userAuthorizedPasses: number;
 };
@@ -158,6 +169,7 @@ export const createGovernanceLifecycle = (input: {
     transitions: [],
     repairProposals: [],
     agentExecutions: [],
+    retrievalExecutions: [],
     promptExecutions: [],
     userAuthorizedPasses: 0,
   };
@@ -208,6 +220,20 @@ export const recordGovernanceAgentExecution = (
   return {
     ...lifecycle,
     agentExecutions: [...lifecycle.agentExecutions, { ...input }],
+  };
+};
+
+export const recordGovernanceRetrievalExecution = (
+  lifecycle: GovernanceLifecycle,
+  input: GovernanceRetrievalExecutionRecord,
+): GovernanceLifecycle => {
+  if (lifecycle.state !== GovernanceLifecycleState.Executing) {
+    throw new Error("Retrieval executions require an executing lifecycle.");
+  }
+  assertRetrievalExecutionRecord(input);
+  return {
+    ...lifecycle,
+    retrievalExecutions: [...lifecycle.retrievalExecutions, { ...input }],
   };
 };
 
@@ -280,6 +306,10 @@ const parseGovernanceLifecycle = (
     value["agentExecutions"] === undefined
       ? []
       : parseAgentExecutions(value["agentExecutions"]);
+  const retrievalExecutions =
+    value["retrievalExecutions"] === undefined
+      ? []
+      : parseRetrievalExecutions(value["retrievalExecutions"]);
   const promptExecutions =
     value["promptExecutions"] === undefined
       ? []
@@ -294,6 +324,7 @@ const parseGovernanceLifecycle = (
     !transitions ||
     !repairProposals ||
     !agentExecutions ||
+    !retrievalExecutions ||
     !promptExecutions ||
     !isNonNegativeInteger(userAuthorizedPasses)
   ) {
@@ -309,6 +340,7 @@ const parseGovernanceLifecycle = (
     transitions,
     repairProposals,
     agentExecutions,
+    retrievalExecutions,
     promptExecutions,
     userAuthorizedPasses,
   };
@@ -396,7 +428,8 @@ const hasValidTransitionHistory = (lifecycle: GovernanceLifecycle): boolean => {
     hasSameBudgets(replayed.budgets, lifecycle.budgets) &&
     replayed.userAuthorizedPasses === lifecycle.userAuthorizedPasses &&
     hasValidRepairProposals(lifecycle) &&
-    hasValidAgentExecutions(lifecycle)
+    hasValidAgentExecutions(lifecycle) &&
+    hasValidRetrievalExecutions(lifecycle)
   );
 };
 
@@ -525,6 +558,41 @@ const parseAgentExecution = (
     responseFingerprint: parsed["responseFingerprint"]!,
     timestamp: parsed["timestamp"]!,
   };
+};
+
+const parseRetrievalExecutions = (
+  value: unknown,
+): ReadonlyArray<GovernanceRetrievalExecutionRecord> | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const fields = [
+    "assetId",
+    "scope",
+    "provenanceFingerprint",
+    "timestamp",
+  ] as const;
+  const retrievals = value.flatMap((candidate) => {
+    if (!isRecord(candidate)) return [];
+    const parsed = Object.fromEntries(
+      fields.map((field) => [field, readNonEmptyString(candidate[field])]),
+    );
+    const workflowId = readNonEmptyString(candidate["workflowId"]);
+    return fields.every((field) => parsed[field]) &&
+      isNonNegativeInteger(candidate["documentCount"]) &&
+      typeof candidate["redacted"] === "boolean"
+      ? [
+          {
+            assetId: parsed["assetId"]!,
+            scope: parsed["scope"]!,
+            ...(workflowId ? { workflowId } : {}),
+            documentCount: candidate["documentCount"],
+            provenanceFingerprint: parsed["provenanceFingerprint"]!,
+            redacted: candidate["redacted"],
+            timestamp: parsed["timestamp"]!,
+          },
+        ]
+      : [];
+  });
+  return retrievals.length === value.length ? retrievals : undefined;
 };
 
 const parsePromptExecutions = (
@@ -828,6 +896,41 @@ const assertAgentExecutionRecord = (
     input.timestamp,
   ]) {
     assertNonEmpty(value, "Governance agent execution field is required");
+  }
+};
+
+const hasValidRetrievalExecutions = (lifecycle: GovernanceLifecycle): boolean =>
+  lifecycle.retrievalExecutions.every((record) => {
+    try {
+      assertRetrievalExecutionRecord(record);
+      return lifecycle.transitions.some(
+        (transition) =>
+          transition.kind === GovernanceTransitionKind.StartExecuting &&
+          transition.to === GovernanceLifecycleState.Executing,
+      );
+    } catch {
+      return false;
+    }
+  });
+
+const assertRetrievalExecutionRecord = (
+  input: GovernanceRetrievalExecutionRecord,
+): void => {
+  for (const value of [
+    input.assetId,
+    input.scope,
+    input.provenanceFingerprint,
+    input.timestamp,
+  ]) {
+    assertNonEmpty(value, "Governance retrieval provenance is required");
+  }
+  if (input.workflowId)
+    assertNonEmpty(
+      input.workflowId,
+      "Governance retrieval workflow is invalid",
+    );
+  if (!isNonNegativeInteger(input.documentCount)) {
+    throw new Error("Governance retrieval document count is invalid.");
   }
 };
 

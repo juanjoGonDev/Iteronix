@@ -86,6 +86,7 @@ export type MemoryScope = {
   workflowId: string;
   enabled: boolean;
   retentionDays: number;
+  sourceId?: string;
 };
 
 export type MemoryRetrievalProvenance = {

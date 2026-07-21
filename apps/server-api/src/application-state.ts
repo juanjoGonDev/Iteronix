@@ -22,6 +22,11 @@ import {
   parseEditableAssetCatalog,
   type EditableAssetCatalog,
 } from "./editable-assets";
+import {
+  createMemoryDocumentCatalog,
+  parseMemoryDocumentCatalog,
+  type MemoryDocumentCatalog,
+} from "./memory-rag";
 
 const ApplicationStateVersion = {
   Current: 1,
@@ -64,6 +69,7 @@ export type ApplicationState = {
   externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles: ReadonlyArray<GovernanceLifecycle>;
   editableAssets: EditableAssetCatalog;
+  memoryDocuments: MemoryDocumentCatalog;
   ideAuth: IdeAuthState;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +99,7 @@ export const createDefaultApplicationState = (): ApplicationState => {
     externalApiKeys: [],
     governanceLifecycles: [],
     editableAssets: createEditableAssetCatalog(),
+    memoryDocuments: createMemoryDocumentCatalog(),
     ideAuth: createDefaultIdeAuthState(),
     createdAt: now,
     updatedAt: now,
@@ -122,6 +129,7 @@ export const parseApplicationState = (value: unknown): ApplicationState => {
       application["governanceLifecycles"],
     ),
     editableAssets: parseEditableAssetCatalog(application["editableAssets"]),
+    memoryDocuments: parseMemoryDocumentCatalog(application["memoryDocuments"]),
     ideAuth: parseIdeAuthState(application["ideAuth"]),
     createdAt,
     updatedAt: readString(application, "updatedAt") ?? createdAt,
@@ -138,6 +146,7 @@ export const createApplicationStateFromStores = (input: {
   externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
   governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
   editableAssets?: EditableAssetCatalog;
+  memoryDocuments?: MemoryDocumentCatalog;
   ideAuth?: IdeAuthState;
   previousState?: ApplicationState;
 }): ApplicationState => {
@@ -159,6 +168,10 @@ export const createApplicationStateFromStores = (input: {
       input.editableAssets ??
       input.previousState?.editableAssets ??
       createEditableAssetCatalog(),
+    memoryDocuments:
+      input.memoryDocuments ??
+      input.previousState?.memoryDocuments ??
+      createMemoryDocumentCatalog(),
     ideAuth:
       input.ideAuth ??
       input.previousState?.ideAuth ??

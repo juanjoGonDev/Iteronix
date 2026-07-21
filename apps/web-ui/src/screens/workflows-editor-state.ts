@@ -119,6 +119,7 @@ type WorkflowNodeConfigRecord = {
     assetId: string;
     version: number;
   };
+  memorySourceId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;

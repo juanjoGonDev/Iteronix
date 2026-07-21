@@ -49,6 +49,7 @@ describe("governed agent tool service", () => {
         workflowId: lifecycle.workflowId,
         enabled: true,
         retentionDays: 7,
+        sourceId: "memory-source",
       },
       now: "2026-07-18T01:00:00.000Z",
     });
@@ -66,6 +67,19 @@ describe("governed agent tool service", () => {
         }),
       ],
     );
+    const retrievalExecution =
+      persistence.read().governanceLifecycles[0]?.retrievalExecutions[0];
+    expect(retrievalExecution).toBeDefined();
+    expect(retrievalExecution?.assetId).toBe("memory-source");
+    expect(retrievalExecution?.scope).toBe(`tenant-1:${lifecycle.workflowId}`);
+    expect(retrievalExecution?.workflowId).toBe(lifecycle.workflowId);
+    expect(retrievalExecution?.documentCount).toBe(1);
+    expect(retrievalExecution?.provenanceFingerprint.length).toBeGreaterThan(0);
+    expect(retrievalExecution?.redacted).toBe(true);
+    expect(retrievalExecution?.timestamp).toBe("2026-07-18T01:00:00.000Z");
+    expect(
+      JSON.stringify(persistence.read().governanceLifecycles[0]),
+    ).not.toContain(retrieval.content);
   });
 
   it("rejects cross-workflow memory, missing permissions, invalid MCP output, and approved lifecycle invocation", async () => {

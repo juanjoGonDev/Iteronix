@@ -15,6 +15,7 @@ import {
 import {
   GovernanceLifecycleState,
   recordGovernanceAgentExecution,
+  recordGovernanceRetrievalExecution,
   type GovernanceAgentExecutionRecord,
   type GovernanceLifecycle,
 } from "../../../packages/domain/src/governance-lifecycle";
@@ -73,6 +74,19 @@ export const createGovernedAgentToolService = (
         scope: createMemoryScope(input.memoryScope),
         query: readQuery(input.input),
         limit: MaxRagRetrievals,
+      });
+      await persistRetrievalExecution(persistence, lifecycle.id, {
+        assetId: input.memoryScope.sourceId ?? "none",
+        scope: `${input.memoryScope.tenantId}:${input.memoryScope.workflowId}`,
+        workflowId: input.memoryScope.workflowId,
+        documentCount: retrievals.length,
+        provenanceFingerprint: fingerprint(
+          retrievals.map(
+            (retrieval) => retrieval.provenance.documentFingerprint,
+          ),
+        ),
+        redacted: true,
+        timestamp: input.now,
       });
       const response = await plugin.invoke({
         toolId: skill.id,
@@ -229,6 +243,20 @@ const persistExecution = async (
     lifecycles.map((lifecycle) =>
       lifecycle.id === lifecycleId
         ? recordGovernanceAgentExecution(lifecycle, record)
+        : lifecycle,
+    ),
+  );
+};
+
+const persistRetrievalExecution = async (
+  persistence: GovernanceLifecyclePersistencePort,
+  lifecycleId: string,
+  record: Parameters<typeof recordGovernanceRetrievalExecution>[1],
+): Promise<void> => {
+  await persistence.mutateGovernanceLifecycles((lifecycles) =>
+    lifecycles.map((lifecycle) =>
+      lifecycle.id === lifecycleId
+        ? recordGovernanceRetrievalExecution(lifecycle, record)
         : lifecycle,
     ),
   );

@@ -115,6 +115,12 @@ import {
   upsertEditableAsset,
   type EditableAssetCatalog,
 } from "./editable-assets";
+import {
+  indexMemoryDocument,
+  createApplicationMemoryRagPort,
+  type MemoryDocument,
+  type MemoryDocumentCatalog,
+} from "./memory-rag";
 import { summarizePromptAssetUsage } from "./prompt-asset-usage";
 import {
   createIdeAuthService,
@@ -164,7 +170,6 @@ import {
   createMemoryScope,
   type ArtifactProvenance,
   type McpToolResult,
-  type RagPort,
 } from "../../../packages/domain/src/agent-tool-contracts";
 import { McpToolResultStatus } from "../../../packages/domain/src/agent-tool-contracts";
 
@@ -182,10 +187,6 @@ const SensitivePromptBindingKeyFragments = [
   "secret",
   "token",
 ] as const;
-const createNoopRagPort = (): RagPort => ({
-  retrieve: async () => [],
-});
-
 const createNoopPluginInvoke =
   () =>
   async (input: {
@@ -261,6 +262,8 @@ const WorkflowOnlyRoutePaths = new Set<string>([
   RoutePath.EditableAssetsUsage,
   RoutePath.EditableAssetsUpsert,
   RoutePath.EditableAssetsDelete,
+  RoutePath.MemoryDocumentsIndex,
+  RoutePath.MemoryDocumentsList,
   RoutePath.ExternalApiKeysList,
   RoutePath.ExternalApiKeysCreate,
   RoutePath.ExternalApiKeysUpdate,
@@ -290,6 +293,9 @@ export type ApplicationPersistence = {
   ) => Promise<ApplicationState>;
   updateEditableAssets: (
     editableAssets: EditableAssetCatalog,
+  ) => Promise<ApplicationState>;
+  updateMemoryDocuments: (
+    memoryDocuments: MemoryDocumentCatalog,
   ) => Promise<ApplicationState>;
   updateIdeAuth: (ideAuth: IdeAuthState) => Promise<ApplicationState>;
   mutateGovernanceLifecycles: (
@@ -357,7 +363,7 @@ export const createApiServer = (input: {
 
   const governedService = createGovernedAgentToolService(
     input.applicationPersistence,
-    createNoopRagPort(),
+    createApplicationMemoryRagPort({ read: input.applicationPersistence.read }),
   );
 
   const initialAssets = input.applicationPersistence.read().editableAssets;
@@ -456,6 +462,7 @@ export const createApplicationPersistence = (input: {
       externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
       governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
       editableAssets?: EditableAssetCatalog;
+      memoryDocuments?: MemoryDocumentCatalog;
       ideAuth?: IdeAuthState;
     } = {},
   ): ApplicationState =>
@@ -467,6 +474,7 @@ export const createApplicationPersistence = (input: {
       governanceLifecycles:
         update.governanceLifecycles ?? state.governanceLifecycles,
       editableAssets: update.editableAssets ?? state.editableAssets,
+      memoryDocuments: update.memoryDocuments ?? state.memoryDocuments,
       ideAuth: update.ideAuth ?? state.ideAuth,
       previousState: state,
     });
@@ -511,6 +519,11 @@ export const createApplicationPersistence = (input: {
   ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ editableAssets })));
 
+  const updateMemoryDocuments = async (
+    memoryDocuments: MemoryDocumentCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ memoryDocuments })));
+
   const updateIdeAuth = async (
     ideAuth: IdeAuthState,
   ): Promise<ApplicationState> =>
@@ -536,6 +549,7 @@ export const createApplicationPersistence = (input: {
     updateExternalApiKeys,
     updateGovernanceLifecycles,
     updateEditableAssets,
+    updateMemoryDocuments,
     updateIdeAuth,
     mutateGovernanceLifecycles,
   };
@@ -669,6 +683,22 @@ const handleRequest = async (
       return;
     }
     await handleEditableAssetDelete(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.MemoryDocumentsIndex) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleMemoryDocumentIndex(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.MemoryDocumentsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleMemoryDocumentList(req, res, applicationPersistence);
     return;
   }
 
@@ -1541,6 +1571,126 @@ const handleEditableAssetUsage = async (
       definitions: applicationPersistence.read().workflows.definitions,
     }),
   );
+};
+
+const handleMemoryDocumentIndex = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const document = readMemoryDocument(body.value);
+  if (!document) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const source = applicationPersistence
+    .read()
+    .editableAssets.records.find((asset) => asset.id === document.sourceId);
+  if (
+    !source ||
+    source.kind !== "memory-source" ||
+    source.status !== AssetStatus.Enabled ||
+    !source.memory?.optInIndexing ||
+    source.memory.tenantId !== document.tenantId ||
+    source.memory.workflowId !== document.workflowId
+  ) {
+    respondError(res, {
+      status: HttpStatus.Forbidden,
+      message: "Memory source does not permit this document.",
+    });
+    return;
+  }
+  try {
+    await applicationPersistence.updateMemoryDocuments(
+      indexMemoryDocument(
+        applicationPersistence.read().memoryDocuments,
+        document,
+      ),
+    );
+  } catch {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { document });
+};
+
+const handleMemoryDocumentList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const sourceId = readEditableAssetId(body.value);
+  if (!sourceId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, {
+    documents: applicationPersistence
+      .read()
+      .memoryDocuments.documents.filter(
+        (document) => document.sourceId === sourceId,
+      )
+      .map(toMemoryDocumentMetadata),
+  });
+};
+
+const toMemoryDocumentMetadata = (document: MemoryDocument) => ({
+  id: document.id,
+  sourceId: document.sourceId,
+  tenantId: document.tenantId,
+  workflowId: document.workflowId,
+  createdAt: document.createdAt,
+  provenance: { ...document.provenance },
+});
+
+const readMemoryDocument = (value: unknown): MemoryDocument | undefined => {
+  if (!isRecord(value) || !isRecord(value["document"])) return undefined;
+  const document = value["document"];
+  if (
+    typeof document["id"] !== "string" ||
+    typeof document["sourceId"] !== "string" ||
+    typeof document["tenantId"] !== "string" ||
+    typeof document["workflowId"] !== "string" ||
+    typeof document["content"] !== "string" ||
+    typeof document["createdAt"] !== "string" ||
+    !isRecord(document["provenance"]) ||
+    typeof document["provenance"]["source"] !== "string" ||
+    typeof document["provenance"]["artifactFingerprint"] !== "string" ||
+    typeof document["provenance"]["registeredAt"] !== "string"
+  )
+    return undefined;
+  return {
+    id: document["id"],
+    sourceId: document["sourceId"],
+    tenantId: document["tenantId"],
+    workflowId: document["workflowId"],
+    content: document["content"],
+    createdAt: document["createdAt"],
+    provenance: {
+      source: document["provenance"]["source"],
+      artifactFingerprint: document["provenance"]["artifactFingerprint"],
+      registeredAt: document["provenance"]["registeredAt"],
+    },
+  };
 };
 
 const readEditableAssetId = (value: unknown): string | undefined =>
@@ -3980,7 +4130,9 @@ const isEditableAssetRoute = (path: string): boolean =>
   path === RoutePath.EditableAssetsList ||
   path === RoutePath.EditableAssetsUsage ||
   path === RoutePath.EditableAssetsUpsert ||
-  path === RoutePath.EditableAssetsDelete;
+  path === RoutePath.EditableAssetsDelete ||
+  path === RoutePath.MemoryDocumentsIndex ||
+  path === RoutePath.MemoryDocumentsList;
 
 const isIdeWorkflowExecutionRoute = (path: string): boolean =>
   path === RoutePath.WorkflowExecutionsRun ||

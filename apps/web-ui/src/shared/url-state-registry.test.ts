@@ -14,6 +14,7 @@ describe("url state registry", () => {
       ROUTES.WORKFLOW_EDITOR,
       ROUTES.PROMPT_ASSETS,
       ROUTES.SKILL_ASSETS,
+      ROUTES.MEMORY_ASSETS,
       ROUTES.SETTINGS,
     ]);
   });

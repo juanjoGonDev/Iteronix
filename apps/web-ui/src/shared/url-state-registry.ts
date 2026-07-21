@@ -77,6 +77,14 @@ const UrlStatePolicies = [
       "Restores skill catalog editor selection without serializing drafts.",
   },
   {
+    route: ROUTES.MEMORY_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "memory", "panel"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores memory source editor selection and document panel without serializing drafts.",
+  },
+  {
     route: ROUTES.SETTINGS,
     status: "replace",
     allowedParams: ["tab", "profile"],

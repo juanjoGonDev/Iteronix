@@ -29,6 +29,11 @@ import {
   type SkillAssetSummary,
 } from "../shared/skill-assets-client.js";
 import {
+  createMemoryAssetsClient,
+  selectEnabledMemoryAssets,
+  type MemoryAssetSummary,
+} from "../shared/memory-assets-client.js";
+import {
   createGovernanceLifecycleClient,
   redactLifecyclePromptBindings,
   type GovernanceLifecycleTrace,
@@ -254,6 +259,7 @@ const WorkflowScreenSelector = {
   PromptAssetValidation: "workflows-prompt-validation",
   PromptProvenance: "workflows-prompt-provenance",
   SkillAssetSelect: "workflows-skill-asset-select",
+  MemoryAssetSelect: "workflows-memory-asset-select",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
   NodeProviderTest: "workflows-node-provider-test",
@@ -748,6 +754,7 @@ interface WorkflowsScreenState {
   assets: ReadonlyArray<WorkflowAssetRecord>;
   promptAssets: ReadonlyArray<PromptAssetSummary>;
   skillAssets: ReadonlyArray<SkillAssetSummary>;
+  memoryAssets: ReadonlyArray<MemoryAssetSummary>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
@@ -832,6 +839,7 @@ export class WorkflowsScreen extends Component<
   private readonly workflowClient = createWorkflowClient();
   private readonly promptAssetsClient = createPromptAssetsClient();
   private readonly skillAssetsClient = createSkillAssetsClient();
+  private readonly memoryAssetsClient = createMemoryAssetsClient();
   private readonly governanceLifecycleClient =
     createGovernanceLifecycleClient();
   private draggingNodeId: string | null = null;
@@ -854,6 +862,7 @@ export class WorkflowsScreen extends Component<
       assets: [],
       promptAssets: [],
       skillAssets: [],
+      memoryAssets: [],
       assetUsages: [],
       workflowVersions: [],
       executions: [],
@@ -1209,6 +1218,22 @@ export class WorkflowsScreen extends Component<
                 ),
               ]
             : [],
+        ),
+        ...lifecycle.retrievalExecutions.map((retrieval) =>
+          createElement(
+            "div",
+            {
+              key: `${retrieval.assetId}:${retrieval.provenanceFingerprint}:${retrieval.timestamp}`,
+              className:
+                "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
+            },
+            [
+              `Memory ${retrieval.assetId} · ${retrieval.documentCount} retrieval${retrieval.documentCount === 1 ? "" : "s"} · ${retrieval.redacted ? "redacted" : "unredacted"}`,
+              createElement("p", { className: "mt-1 break-all" }, [
+                `Scope: ${retrieval.scope}${retrieval.workflowId ? ` · workflow ${retrieval.workflowId}` : ""} · Provenance: ${retrieval.provenanceFingerprint}`,
+              ]),
+            ],
+          ),
         ),
       ],
     );
@@ -12683,6 +12708,7 @@ export class WorkflowsScreen extends Component<
         ),
         this.renderNodePromptField(node),
         this.renderSkillAssetSelection(node),
+        this.renderMemorySourceSelection(node),
         this.renderProviderSelectionFields(node, provider),
       ],
     );
@@ -12738,6 +12764,55 @@ export class WorkflowsScreen extends Component<
               enabledSkills.length === 0
                 ? "No enabled Skill Assets are available."
                 : "Select an enabled Skill Asset for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderMemorySourceSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledSources = selectEnabledMemoryAssets(this.state.memoryAssets);
+    const selectedSourceId = node.config.memorySourceId ?? "";
+    const selected = enabledSources.find(
+      (source) => source.id === selectedSourceId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Bounded memory source",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled sources can be used. Retrieval remains tenant and workflow bounded.",
+        ]),
+        this.renderInspectorSelect(
+          "Memory source",
+          selectedSourceId,
+          enabledSources.map((source) => source.id),
+          (value) => {
+            if (!enabledSources.some((source) => source.id === value)) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: { ...current.config, memorySourceId: value },
+            }));
+          },
+          enabledSources.map((source) => ({
+            value: source.id,
+            label: `${source.name} · ${source.workflowId ?? "workflow"}`,
+          })),
+          WorkflowScreenSelector.MemoryAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Bounded to ${selected.workflowId ?? "workflow"} · ${selected.retentionDays} day retention · ${selected.redactionEnabled ? "trace redaction on" : "trace redaction off"}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledSources.length === 0
+                ? "No enabled Memory & RAG sources are available."
+                : "Select an enabled memory source for retrieval.",
             ]),
       ],
     );
@@ -13366,6 +13441,7 @@ export class WorkflowsScreen extends Component<
       executions,
       promptAssets,
       skillAssets,
+      memoryAssets,
     ] = await Promise.all([
       this.workflowClient.listDefinitions(),
       this.workflowClient.listAssets(),
@@ -13373,6 +13449,7 @@ export class WorkflowsScreen extends Component<
       this.workflowClient.listExecutions(),
       this.promptAssetsClient.list(),
       this.skillAssetsClient.list(),
+      this.memoryAssetsClient.list(),
     ]);
     const currentWorkflow = readWorkflowEditorTarget(
       workflows,
@@ -13423,6 +13500,7 @@ export class WorkflowsScreen extends Component<
       assets,
       promptAssets,
       skillAssets,
+      memoryAssets,
       assetUsages,
       workflowVersions,
       executions,
@@ -13474,18 +13552,21 @@ export class WorkflowsScreen extends Component<
   }
 
   private async reloadAssetCatalog(): Promise<void> {
-    const [assets, assetUsages, promptAssets, skillAssets] = await Promise.all([
-      this.workflowClient.listAssets(),
-      this.workflowClient.listAssetUsages({}),
-      this.promptAssetsClient.list(),
-      this.skillAssetsClient.list(),
-    ]);
+    const [assets, assetUsages, promptAssets, skillAssets, memoryAssets] =
+      await Promise.all([
+        this.workflowClient.listAssets(),
+        this.workflowClient.listAssetUsages({}),
+        this.promptAssetsClient.list(),
+        this.skillAssetsClient.list(),
+        this.memoryAssetsClient.list(),
+      ]);
 
     this.setState({
       assets,
       assetUsages,
       promptAssets,
       skillAssets,
+      memoryAssets,
     });
   }
 

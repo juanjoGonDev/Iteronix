@@ -231,6 +231,7 @@ export type WorkflowNodeConfigRecord = {
     assetId: string;
     version: number;
   };
+  memorySourceId?: string;
   grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;

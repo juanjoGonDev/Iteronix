@@ -58,6 +58,8 @@ export const RoutePath = {
   EditableAssetsUsage: "/assets/usage",
   EditableAssetsUpsert: "/assets/upsert",
   EditableAssetsDelete: "/assets/delete",
+  MemoryDocumentsIndex: "/memory/documents/index",
+  MemoryDocumentsList: "/memory/documents/list",
   ExternalApiKeysList: "/settings/api-keys/list",
   ExternalApiKeysCreate: "/settings/api-keys/create",
   ExternalApiKeysUpdate: "/settings/api-keys/update",

@@ -63,6 +63,16 @@ type AgentExecutionTrace = {
   artifactFingerprint: string | null;
 };
 
+type RetrievalExecutionTrace = {
+  assetId: string;
+  scope: string;
+  workflowId: string | null;
+  documentCount: number;
+  provenanceFingerprint: string;
+  redacted: boolean;
+  timestamp: string;
+};
+
 export type GovernanceLifecycleTrace = {
   id: string;
   state: string;
@@ -70,6 +80,7 @@ export type GovernanceLifecycleTrace = {
   transitions: ReadonlyArray<unknown>;
   promptExecutions: ReadonlyArray<PromptExecutionTrace>;
   agentExecutions: ReadonlyArray<AgentExecutionTrace>;
+  retrievalExecutions: ReadonlyArray<RetrievalExecutionTrace>;
 };
 
 export const redactLifecyclePromptBindings = (
@@ -130,6 +141,33 @@ export const parseGovernanceLifecycleResponse = (
       };
     },
   );
+  const retrievalExecutions = readOptionalArray(
+    lifecycle["retrievalExecutions"],
+  ).map((entry) => {
+    const record = readRecord(entry, "retrievalExecution");
+    const documentCount = record["documentCount"];
+    if (
+      typeof documentCount !== "number" ||
+      !Number.isInteger(documentCount) ||
+      documentCount < 0
+    )
+      throw new Error("Invalid retrieval execution documentCount");
+    const redacted = record["redacted"];
+    if (typeof redacted !== "boolean")
+      throw new Error("Invalid retrieval execution redacted");
+    return {
+      assetId: readString(record["assetId"], "assetId"),
+      scope: readString(record["scope"], "scope"),
+      workflowId: readOptionalString(record["workflowId"]),
+      documentCount,
+      provenanceFingerprint: readString(
+        record["provenanceFingerprint"],
+        "provenanceFingerprint",
+      ),
+      redacted,
+      timestamp: readString(record["timestamp"], "timestamp"),
+    };
+  });
   return {
     id: readString(lifecycle["id"], "id"),
     state: readString(lifecycle["state"], "state"),
@@ -137,6 +175,7 @@ export const parseGovernanceLifecycleResponse = (
     transitions: readArray(lifecycle["transitions"], "transitions"),
     promptExecutions,
     agentExecutions,
+    retrievalExecutions,
   };
 };
 

@@ -17,12 +17,14 @@ import { WorkflowsScreen } from "./screens/Workflows.js";
 import { WorkflowsCatalogScreen } from "./screens/WorkflowsCatalog.js";
 import { PromptAssetsScreen } from "./screens/PromptAssets.js";
 import { SkillAssetsScreen } from "./screens/SkillAssets.js";
+import { MemoryAssetsScreen } from "./screens/MemoryAssets.js";
 
 const ScreenId = {
   WorkflowCatalog: "workflow-catalog",
   WorkflowEditor: "workflow-editor",
   PromptAssets: "prompt-assets",
   SkillAssets: "skill-assets",
+  MemoryAssets: "memory-assets",
   Settings: "settings",
 } as const;
 
@@ -35,6 +37,7 @@ const ScreenLabel: Record<ScreenId, string> = {
   "workflow-editor": "Workflow editor",
   "prompt-assets": "Prompt assets",
   "skill-assets": "Skill assets",
+  "memory-assets": "Memory & RAG",
   settings: "Settings",
 };
 
@@ -128,6 +131,9 @@ export class App extends Component<AppProps, AppState> {
     router.register(ROUTES.SKILL_ASSETS, () =>
       this.updateScreen(ScreenId.SkillAssets),
     );
+    router.register(ROUTES.MEMORY_ASSETS, () =>
+      this.updateScreen(ScreenId.MemoryAssets),
+    );
     router.register(ROUTES.SETTINGS, () =>
       this.updateScreen(ScreenId.Settings),
     );
@@ -159,6 +165,12 @@ export class App extends Component<AppProps, AppState> {
         "extension",
         ScreenLabel[ScreenId.SkillAssets],
         ROUTES.SKILL_ASSETS,
+      ),
+      this.createNavigationItem(
+        ScreenId.MemoryAssets,
+        "database",
+        ScreenLabel[ScreenId.MemoryAssets],
+        ROUTES.MEMORY_ASSETS,
       ),
       this.createNavigationItem(
         ScreenId.Settings,
@@ -304,6 +316,10 @@ export class App extends Component<AppProps, AppState> {
 
     if (screen === ScreenId.SkillAssets) {
       return new SkillAssetsScreen({});
+    }
+
+    if (screen === ScreenId.MemoryAssets) {
+      return new MemoryAssetsScreen({});
     }
 
     return new SettingsScreen({});

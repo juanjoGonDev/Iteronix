@@ -281,6 +281,7 @@ export const createRunGovernedNodeCallback = (input: {
   lifecycleId: string;
   grantedPermissions: ReadonlyArray<string>;
   memoryScope: MemoryScope;
+  resolveMemoryScope?: (sourceId: string) => MemoryScope;
   now: () => Date;
 }): ((
   request: GovernedNodeExecutionRequest,
@@ -291,6 +292,13 @@ export const createRunGovernedNodeCallback = (input: {
     if (!skillId) {
       throw new Error(`Governed node ${node.id} is missing a skillId.`);
     }
+    const sourceId = node.config.memorySourceId;
+    const memoryScope = sourceId
+      ? (input.resolveMemoryScope?.(sourceId) ?? {
+          ...input.memoryScope,
+          sourceId,
+        })
+      : input.memoryScope;
     const result = await input.governedService.invoke({
       lifecycleId: input.lifecycleId,
       skillId,
@@ -302,7 +310,7 @@ export const createRunGovernedNodeCallback = (input: {
         input.grantedPermissions) as unknown as Parameters<
         GovernedAgentToolService["invoke"]
       >[0]["grantedPermissions"],
-      memoryScope: input.memoryScope,
+      memoryScope,
       now: input.now().toISOString(),
     });
     const outputStr =

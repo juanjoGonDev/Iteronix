@@ -62,3 +62,35 @@ describe("governance lifecycle skill provenance", () => {
     });
   });
 });
+
+describe("governance lifecycle retrieval provenance", () => {
+  it("parses metadata-only redacted retrieval traces for the inspector", () => {
+    expect(
+      parseGovernanceLifecycleResponse({
+        lifecycle: {
+          id: "lifecycle-1",
+          state: "Approved",
+          budgets: {},
+          transitions: [],
+          promptExecutions: [],
+          agentExecutions: [],
+          retrievalExecutions: [
+            {
+              assetId: "memory-1",
+              scope: "tenant/workflow",
+              workflowId: "workflow-1",
+              documentCount: 2,
+              provenanceFingerprint: "retrieval-fingerprint",
+              redacted: true,
+              timestamp: "2026-07-21T20:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      retrievalExecutions: [
+        { assetId: "memory-1", documentCount: 2, redacted: true },
+      ],
+    });
+  });
+});

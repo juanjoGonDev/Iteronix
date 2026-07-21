@@ -186,6 +186,40 @@ describe("editable assets API", () => {
       nodeCount: 1,
     });
   });
+
+  it("requires authentication and persists only documents allowed by an opted-in memory source", async () => {
+    const testServer = createTestServer(
+      createMemoryStore(createDefaultApplicationState()),
+    );
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    expect(
+      (await request(url, "/assets/upsert", createMemoryAsset())).status,
+    ).toBe(200);
+    const document = createMemoryDocument();
+    expect(
+      (await request(url, "/memory/documents/index", { document }, "")).status,
+    ).toBe(401);
+    expect(
+      (await request(url, "/memory/documents/index", { document })).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(url, "/memory/documents/list", {
+          assetId: "memory-source",
+        })
+      ).body["documents"],
+    ).toEqual([expect.objectContaining({ id: "memory-document" })]);
+    const listed = await request(url, "/memory/documents/list", {
+      assetId: "memory-source",
+    });
+    expect(JSON.stringify(listed.body)).not.toContain("private knowledge");
+    const forged = { ...document, workflowId: "other-workflow" };
+    expect(
+      (await request(url, "/memory/documents/index", { document: forged }))
+        .status,
+    ).toBe(403);
+  });
 });
 
 const createTestServer = (
@@ -237,6 +271,36 @@ const createAsset = (): EditableAssetRecord => ({
     providerId: "test",
     model: "test-model",
     toolPermissions: ["tool.invoke"],
+  },
+});
+
+const createMemoryAsset = (): EditableAssetRecord => ({
+  ...createAsset(),
+  id: "memory-source",
+  kind: "memory-source",
+  name: "Memory source",
+  capabilities: [],
+  permissions: [],
+  memory: {
+    tenantId: "tenant-1",
+    workflowId: "workflow-1",
+    optInIndexing: true,
+    retentionDays: 7,
+    redactRetrievals: true,
+  },
+});
+
+const createMemoryDocument = () => ({
+  id: "memory-document",
+  sourceId: "memory-source",
+  tenantId: "tenant-1",
+  workflowId: "workflow-1",
+  content: "private knowledge",
+  createdAt: "2026-07-21T00:00:00.000Z",
+  provenance: {
+    source: "upload",
+    artifactFingerprint: "memory-fingerprint",
+    registeredAt: "2026-07-21T00:00:00.000Z",
   },
 });
 
