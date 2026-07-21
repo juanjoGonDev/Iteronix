@@ -5181,3 +5181,12 @@
 - Commands: `pnpm vitest run apps/server-api/src/governance-lifecycle-api.test.ts` (6/6), `pnpm test` (358/359), `pnpm lint`, `pnpm typecheck`, `pnpm build` — all green.
 - Issues/Risks: Remaining Phase 4 items unchecked: runtime asset integration, skills, memory/RAG, MCP, plugins, and permission-denial/plugin-failure acceptance criterion.
 - Next: Commit and push this test-only change, then continue with remaining Phase 4 implementation.
+
+### 2026-07-21 (Europe/Madrid) — Phase 4 version-pinned Skill Assets
+
+- Summary: Delivered Skills as versioned reusable assets from authenticated IDE editing through governed AiAgent execution.
+- Decisions: AiAgent nodes store immutable `{ assetId, version }` Skill pins and use the legacy `skillId` only as a Phase 0-compatible fallback. Disabled, missing, mismatched, and unauthorized Skill Assets fail before invocation; lifecycle traces preserve executed skill version and provenance.
+- Changes: Added immutable Skill Asset snapshots, governed pinned resolution, authenticated `/assets/skills` catalog/editor deep links, enabled-only node selector, and governed inspector provenance.
+- Commands: Strict RED/GREEN focused tests, full quality gates, native review, hooks, commit, and push.
+- Issues/Risks: Phase 4 remains incomplete: memory/RAG, MCP, plugins, and reference assets are separate work units.
+- Next: Implement the next bounded Phase 4 runtime integration slice without expanding into generic asset UI.

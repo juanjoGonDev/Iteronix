@@ -43,6 +43,7 @@ type RegisteredServerPlugin = {
 type GovernedSkillInvocation = {
   lifecycleId: string;
   skillId: string;
+  skillVersion?: number;
   input: JsonValue;
   grantedPermissions: ReadonlyArray<AgentPermission>;
   memoryScope: MemoryScope;
@@ -65,7 +66,7 @@ export const createGovernedAgentToolService = (
     registerSkill: (skill) => registerSkill(skills, skill),
     invoke: async (input) => {
       const lifecycle = readLifecycle(persistence, input.lifecycleId);
-      const skill = readSkill(skills, input.skillId);
+      const skill = readSkill(skills, input.skillId, input.skillVersion);
       const plugin = readPluginForSkill(plugins, skill.id);
       assertInvocation(lifecycle, skill, plugin, input);
       const retrievals = await rag.retrieve({
@@ -122,7 +123,7 @@ const registerSkill = (
   skill: SkillDefinition,
 ): void => {
   const registered = createSkillDefinition(skill);
-  skills.set(registered.id, registered);
+  skills.set(skillKey(registered.id, registered.version), registered);
 };
 
 const readLifecycle = (
@@ -141,13 +142,32 @@ const readLifecycle = (
 const readSkill = (
   skills: ReadonlyMap<string, SkillDefinition>,
   skillId: string,
+  skillVersion?: number,
 ): SkillDefinition => {
-  const skill = skills.get(skillId);
+  const skill = skills.get(
+    skillKey(skillId, skillVersion ?? readLatestVersion(skills, skillId)),
+  );
   if (!skill) {
     throw new Error(`Skill ${skillId} was not registered.`);
   }
   return skill;
 };
+
+const readLatestVersion = (
+  skills: ReadonlyMap<string, SkillDefinition>,
+  skillId: string,
+): number => {
+  const versions = [...skills.values()]
+    .filter((skill) => skill.id === skillId)
+    .map((skill) => skill.version);
+  const version = Math.max(...versions);
+  if (!Number.isFinite(version))
+    throw new Error(`Skill ${skillId} was not registered.`);
+  return version;
+};
+
+const skillKey = (skillId: string, version: number): string =>
+  `${skillId}@${version}`;
 
 const readPluginForSkill = (
   plugins: ReadonlyMap<string, RegisteredServerPlugin>,

@@ -227,6 +227,10 @@ export type WorkflowNodeConfigRecord = {
   };
   role?: WorkflowNodeRole;
   skillId?: string;
+  skillAsset?: {
+    assetId: string;
+    version: number;
+  };
   grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;

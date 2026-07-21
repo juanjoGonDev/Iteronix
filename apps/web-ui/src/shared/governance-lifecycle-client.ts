@@ -56,12 +56,20 @@ type PromptExecutionTrace = {
   timestamp: string;
 };
 
+type AgentExecutionTrace = {
+  agentId: string;
+  skillId: string | null;
+  skillVersion: number | null;
+  artifactFingerprint: string | null;
+};
+
 export type GovernanceLifecycleTrace = {
   id: string;
   state: string;
   budgets: Readonly<Record<string, unknown>>;
   transitions: ReadonlyArray<unknown>;
   promptExecutions: ReadonlyArray<PromptExecutionTrace>;
+  agentExecutions: ReadonlyArray<AgentExecutionTrace>;
 };
 
 export const redactLifecyclePromptBindings = (
@@ -85,7 +93,7 @@ export const createGovernanceLifecycleClient = () => ({
     }),
 });
 
-const parseGovernanceLifecycleResponse = (
+export const parseGovernanceLifecycleResponse = (
   value: unknown,
 ): GovernanceLifecycleTrace => {
   const response = readRecord(value, "governanceLifecycleResponse");
@@ -111,12 +119,24 @@ const parseGovernanceLifecycleResponse = (
       timestamp: readString(record["timestamp"], "timestamp"),
     };
   });
+  const agentExecutions = readOptionalArray(lifecycle["agentExecutions"]).map(
+    (entry) => {
+      const record = readRecord(entry, "agentExecution");
+      return {
+        agentId: readString(record["agentId"], "agentId"),
+        skillId: readOptionalString(record["skillId"]),
+        skillVersion: readOptionalPositiveInteger(record["skillVersion"]),
+        artifactFingerprint: readOptionalString(record["artifactFingerprint"]),
+      };
+    },
+  );
   return {
     id: readString(lifecycle["id"], "id"),
     state: readString(lifecycle["state"], "state"),
     budgets: readRecord(lifecycle["budgets"], "budgets"),
     transitions: readArray(lifecycle["transitions"], "transitions"),
     promptExecutions,
+    agentExecutions,
   };
 };
 
@@ -134,6 +154,9 @@ const readArray = (value: unknown, label: string): ReadonlyArray<unknown> => {
   return value;
 };
 
+const readOptionalArray = (value: unknown): ReadonlyArray<unknown> =>
+  value === undefined ? [] : readArray(value, "agentExecutions");
+
 const readString = (value: unknown, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`Invalid ${label}`);
@@ -147,6 +170,14 @@ const readPositiveInteger = (value: unknown, label: string): number => {
   }
   return value;
 };
+
+const readOptionalString = (value: unknown): string | null =>
+  value === undefined || value === null ? null : readString(value, "optional");
+
+const readOptionalPositiveInteger = (value: unknown): number | null =>
+  value === undefined || value === null
+    ? null
+    : readPositiveInteger(value, "optional");
 
 const isSensitivePromptBindingKey = (key: string): boolean => {
   const normalizedKey = key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

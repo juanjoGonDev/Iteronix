@@ -16,11 +16,13 @@ import { SettingsScreen } from "./screens/Settings.js";
 import { WorkflowsScreen } from "./screens/Workflows.js";
 import { WorkflowsCatalogScreen } from "./screens/WorkflowsCatalog.js";
 import { PromptAssetsScreen } from "./screens/PromptAssets.js";
+import { SkillAssetsScreen } from "./screens/SkillAssets.js";
 
 const ScreenId = {
   WorkflowCatalog: "workflow-catalog",
   WorkflowEditor: "workflow-editor",
   PromptAssets: "prompt-assets",
+  SkillAssets: "skill-assets",
   Settings: "settings",
 } as const;
 
@@ -32,6 +34,7 @@ const ScreenLabel: Record<ScreenId, string> = {
   "workflow-catalog": "Workflows",
   "workflow-editor": "Workflow editor",
   "prompt-assets": "Prompt assets",
+  "skill-assets": "Skill assets",
   settings: "Settings",
 };
 
@@ -122,6 +125,9 @@ export class App extends Component<AppProps, AppState> {
     router.register(ROUTES.PROMPT_ASSETS, () =>
       this.updateScreen(ScreenId.PromptAssets),
     );
+    router.register(ROUTES.SKILL_ASSETS, () =>
+      this.updateScreen(ScreenId.SkillAssets),
+    );
     router.register(ROUTES.SETTINGS, () =>
       this.updateScreen(ScreenId.Settings),
     );
@@ -147,6 +153,12 @@ export class App extends Component<AppProps, AppState> {
         "chat",
         ScreenLabel[ScreenId.PromptAssets],
         ROUTES.PROMPT_ASSETS,
+      ),
+      this.createNavigationItem(
+        ScreenId.SkillAssets,
+        "extension",
+        ScreenLabel[ScreenId.SkillAssets],
+        ROUTES.SKILL_ASSETS,
       ),
       this.createNavigationItem(
         ScreenId.Settings,
@@ -288,6 +300,10 @@ export class App extends Component<AppProps, AppState> {
 
     if (screen === ScreenId.PromptAssets) {
       return new PromptAssetsScreen({});
+    }
+
+    if (screen === ScreenId.SkillAssets) {
+      return new SkillAssetsScreen({});
     }
 
     return new SettingsScreen({});

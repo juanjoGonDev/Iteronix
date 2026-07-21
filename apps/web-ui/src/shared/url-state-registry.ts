@@ -69,6 +69,14 @@ const UrlStatePolicies = [
       "Restores prompt catalog editor selection without serializing drafts.",
   },
   {
+    route: ROUTES.SKILL_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "skill"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores skill catalog editor selection without serializing drafts.",
+  },
+  {
     route: ROUTES.SETTINGS,
     status: "replace",
     allowedParams: ["tab", "profile"],

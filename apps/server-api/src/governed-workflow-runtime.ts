@@ -26,7 +26,7 @@ import {
   type WorkflowExecutionRecord,
 } from "../../../packages/shared/src/workflows";
 import type { ApplicationState } from "./application-state";
-import { AssetKind } from "./editable-assets";
+import { AssetKind, AssetStatus } from "./editable-assets";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 import {
   executeProviderNode,
@@ -207,24 +207,41 @@ export const registerSkillsAndPlugins = (
     (asset) => asset.kind === AssetKind.Plugin && asset.plugin,
   );
   const skills = state.editableAssets.records.filter(
-    (asset) => asset.kind === AssetKind.Skill && asset.skill,
+    (asset) =>
+      asset.kind === AssetKind.Skill &&
+      asset.status === AssetStatus.Enabled &&
+      asset.skill?.lifecycle === AssetStatus.Enabled,
   );
 
   for (const skill of skills) {
     if (!skill.skill) continue;
-    governedService.registerSkill({
-      id: skill.id,
-      version: skill.skill.version,
-      description: skill.name,
-      inputSchema: skill.inputSchema,
-      outputSchema: skill.outputSchema,
-      requiredPermissions: [...skill.permissions],
-      provenance: {
-        source: `asset:${skill.id}`,
-        artifactFingerprint: skill.provenance.artifactFingerprint,
-        registeredAt: skill.provenance.registeredAt,
+    const versions = skill.skill.versions ?? [
+      {
+        version: skill.skill.version,
+        capabilities: skill.capabilities,
+        permissions: skill.permissions,
+        inputSchema: skill.inputSchema,
+        outputSchema: skill.outputSchema,
+        limits: skill.limits,
+        provenance: skill.provenance,
+        createdAt: skill.provenance.registeredAt,
       },
-    });
+    ];
+    for (const version of versions) {
+      governedService.registerSkill({
+        id: skill.id,
+        version: version.version,
+        description: skill.name,
+        inputSchema: version.inputSchema,
+        outputSchema: version.outputSchema,
+        requiredPermissions: [...version.permissions],
+        provenance: {
+          source: `asset:${skill.id}`,
+          artifactFingerprint: version.provenance.artifactFingerprint,
+          registeredAt: version.provenance.registeredAt,
+        },
+      });
+    }
   }
 
   for (const plugin of plugins) {
@@ -270,12 +287,16 @@ export const createRunGovernedNodeCallback = (input: {
 ) => Promise<WorkflowProviderRunResult>) => {
   return async (governedRequest) => {
     const node = governedRequest.node;
-    if (!node.config.skillId) {
+    const skillId = node.config.skillAsset?.assetId ?? node.config.skillId;
+    if (!skillId) {
       throw new Error(`Governed node ${node.id} is missing a skillId.`);
     }
     const result = await input.governedService.invoke({
       lifecycleId: input.lifecycleId,
-      skillId: node.config.skillId,
+      skillId,
+      ...(node.config.skillAsset
+        ? { skillVersion: node.config.skillAsset.version }
+        : {}),
       input: governedRequest.inputValue as unknown as JsonValue,
       grantedPermissions: (node.config.grantedPermissions ??
         input.grantedPermissions) as unknown as Parameters<

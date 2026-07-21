@@ -13,6 +13,7 @@ describe("url state registry", () => {
       ROUTES.WORKFLOWS,
       ROUTES.WORKFLOW_EDITOR,
       ROUTES.PROMPT_ASSETS,
+      ROUTES.SKILL_ASSETS,
       ROUTES.SETTINGS,
     ]);
   });

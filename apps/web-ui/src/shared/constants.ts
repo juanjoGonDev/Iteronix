@@ -7,6 +7,7 @@ export const ROUTES = {
   WORKFLOWS: "/workflows",
   WORKFLOW_EDITOR: "/workflows/:workflowId",
   PROMPT_ASSETS: "/assets/prompts",
+  SKILL_ASSETS: "/assets/skills",
   SETTINGS: "/settings",
 } as const;
 

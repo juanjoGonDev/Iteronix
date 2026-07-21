@@ -46,7 +46,11 @@ export type EditableAssetRecord = {
     toolVersion: string;
     auditEvents: ReadonlyArray<AssetAuditEvent>;
   };
-  skill?: { version: number; lifecycle: AssetStatus };
+  skill?: {
+    version: number;
+    lifecycle: AssetStatus;
+    versions?: ReadonlyArray<SkillAssetVersion>;
+  };
   memory?: {
     tenantId: string;
     workflowId: string;
@@ -79,6 +83,17 @@ type PromptAssetVersion = {
   createdAt: string;
 };
 
+type SkillAssetVersion = {
+  version: number;
+  capabilities: ReadonlyArray<AgentCapability>;
+  permissions: ReadonlyArray<AgentPermission>;
+  inputSchema: VersionedJsonSchema;
+  outputSchema: VersionedJsonSchema;
+  limits: EditableAssetRecord["limits"];
+  provenance: ArtifactProvenance;
+  createdAt: string;
+};
+
 type AssetAuditEvent = { at: string; action: string; actorId: string };
 
 export type EditableAssetCatalog = {
@@ -99,6 +114,9 @@ export const upsertEditableAsset = (
   );
   if (existing?.kind === AssetKind.Prompt || asset.kind === AssetKind.Prompt) {
     assertPromptUpdate(existing, asset);
+  }
+  if (existing?.kind === AssetKind.Skill || asset.kind === AssetKind.Skill) {
+    assertSkillUpdate(existing, asset);
   }
   const records = catalog.records.filter(
     (candidate) => candidate.id !== asset.id,
@@ -149,9 +167,13 @@ const normalizeEditableAsset = (
   if (!Number.isInteger(asset.limits.timeoutMs) || asset.limits.timeoutMs < 1)
     throw new Error("Asset timeout must be positive.");
   assertProvenance(asset.provenance);
-  assertDetails(asset);
-  return withSafeDetails({
+  const normalized = {
     ...asset,
+    ...(asset.kind === AssetKind.Skill ? { skill: normalizeSkill(asset) } : {}),
+  };
+  assertDetails(normalized);
+  return withSafeDetails({
+    ...normalized,
     capabilities: [...new Set(asset.capabilities)],
     permissions: [...new Set(asset.permissions)],
     inputSchema: {
@@ -175,7 +197,14 @@ const normalizeEditableAsset = (
     ...(asset.mcp
       ? { mcp: { ...asset.mcp, auditEvents: [...asset.mcp.auditEvents] } }
       : {}),
-    ...(asset.skill ? { skill: { ...asset.skill } } : {}),
+    ...(normalized.skill
+      ? {
+          skill: {
+            ...normalized.skill,
+            versions: normalized.skill.versions?.map(copySkillVersion) ?? [],
+          },
+        }
+      : {}),
     ...(asset.memory ? { memory: { ...asset.memory } } : {}),
     ...(asset.plugin
       ? {
@@ -194,6 +223,33 @@ const normalizeEditableAsset = (
         }
       : {}),
   });
+};
+
+const normalizeSkill = (
+  asset: EditableAssetRecord,
+): NonNullable<EditableAssetRecord["skill"]> => {
+  const skill = asset.skill;
+  const version = skill?.version ?? 1;
+  const lifecycle = skill?.lifecycle ?? asset.status;
+  return {
+    version,
+    lifecycle,
+    versions:
+      skill?.versions && skill.versions.length > 0
+        ? skill.versions
+        : [
+            {
+              version,
+              capabilities: asset.capabilities,
+              permissions: asset.permissions,
+              inputSchema: asset.inputSchema,
+              outputSchema: asset.outputSchema,
+              limits: asset.limits,
+              provenance: asset.provenance,
+              createdAt: asset.provenance.registeredAt,
+            },
+          ],
+  };
 };
 
 const withSafeDetails = (asset: EditableAssetRecord): EditableAssetRecord => ({
@@ -327,8 +383,45 @@ const readSkill = (value: unknown): EditableAssetRecord["skill"] | undefined =>
   isRecord(value) &&
   typeof value["version"] === "number" &&
   isAssetStatus(value["lifecycle"])
-    ? { version: value["version"], lifecycle: value["lifecycle"] }
+    ? {
+        version: value["version"],
+        lifecycle: value["lifecycle"],
+        versions: readSkillVersions(value["versions"]),
+      }
     : undefined;
+const readSkillVersions = (value: unknown): ReadonlyArray<SkillAssetVersion> =>
+  Array.isArray(value)
+    ? value.flatMap((candidate) => {
+        const version = readSkillVersion(candidate);
+        return version ? [version] : [];
+      })
+    : [];
+const readSkillVersion = (value: unknown): SkillAssetVersion | undefined => {
+  if (!isRecord(value) || typeof value["version"] !== "number")
+    return undefined;
+  const inputSchema = readSchema(value["inputSchema"]);
+  const outputSchema = readSchema(value["outputSchema"]);
+  const limits = readLimits(value["limits"]);
+  const provenance = readProvenance(value["provenance"]);
+  if (
+    !inputSchema ||
+    !outputSchema ||
+    !limits ||
+    !provenance ||
+    !isNonEmptyString(value["createdAt"])
+  )
+    return undefined;
+  return {
+    version: value["version"],
+    capabilities: readCapabilities(value["capabilities"]),
+    permissions: readPermissions(value["permissions"]),
+    inputSchema,
+    outputSchema,
+    limits,
+    provenance,
+    createdAt: value["createdAt"],
+  };
+};
 const readMemory = (
   value: unknown,
 ): EditableAssetRecord["memory"] | undefined =>
@@ -453,14 +546,10 @@ const assertDetails = (asset: EditableAssetRecord): void => {
     assertString(asset.mcp.toolVersion, "MCP tool version is required");
     assertAuditEvents(asset.mcp.auditEvents);
   }
-  if (
-    asset.kind === AssetKind.Skill &&
-    asset.skill &&
-    (!Number.isInteger(asset.skill.version) ||
-      asset.skill.version < 1 ||
-      !isAssetStatus(asset.skill.lifecycle))
-  )
-    throw new Error("Skill lifecycle is invalid.");
+  if (asset.kind === AssetKind.Skill) {
+    if (!asset.skill) throw new Error("Skill versions are required.");
+    assertSkill(asset.skill, asset);
+  }
   if (asset.kind === AssetKind.MemorySource && asset.memory) {
     assertString(asset.memory.tenantId, "Memory tenant is required");
     assertString(asset.memory.workflowId, "Memory workflow is required");
@@ -516,6 +605,58 @@ const assertPrompt = (
     throw new Error("Prompt active version is missing.");
 };
 
+const assertSkill = (
+  skill: NonNullable<EditableAssetRecord["skill"]>,
+  asset: EditableAssetRecord,
+): void => {
+  const versions = skill.versions ?? [];
+  if (
+    !Number.isInteger(skill.version) ||
+    skill.version < 1 ||
+    !isAssetStatus(skill.lifecycle) ||
+    versions.length === 0
+  )
+    throw new Error("Skill lifecycle is invalid.");
+  const versionNumbers = new Set<number>();
+  for (const version of versions) {
+    if (
+      !Number.isInteger(version.version) ||
+      version.version < 1 ||
+      versionNumbers.has(version.version) ||
+      !isNonEmptyString(version.createdAt)
+    )
+      throw new Error("Skill version is invalid.");
+    versionNumbers.add(version.version);
+    assertCapabilities(version.capabilities);
+    assertPermissions(version.permissions);
+    assertSchema(version.inputSchema);
+    assertSchema(version.outputSchema);
+    if (
+      !Number.isInteger(version.limits.executions) ||
+      version.limits.executions < 1 ||
+      !Number.isInteger(version.limits.timeoutMs) ||
+      version.limits.timeoutMs < 1
+    )
+      throw new Error("Skill version limits are invalid.");
+    assertProvenance(version.provenance);
+  }
+  if (!versionNumbers.has(skill.version))
+    throw new Error("Skill active version is missing.");
+  const active = versions.find((version) => version.version === skill.version);
+  if (!active) throw new Error("Skill active version is missing.");
+  if (
+    JSON.stringify(active.capabilities) !==
+      JSON.stringify(asset.capabilities) ||
+    JSON.stringify(active.permissions) !== JSON.stringify(asset.permissions) ||
+    JSON.stringify(active.inputSchema) !== JSON.stringify(asset.inputSchema) ||
+    JSON.stringify(active.outputSchema) !==
+      JSON.stringify(asset.outputSchema) ||
+    JSON.stringify(active.limits) !== JSON.stringify(asset.limits) ||
+    JSON.stringify(active.provenance) !== JSON.stringify(asset.provenance)
+  )
+    throw new Error("Skill active version must match the asset contract.");
+};
+
 const assertPromptUpdate = (
   existing: EditableAssetRecord | undefined,
   next: EditableAssetRecord,
@@ -546,6 +687,38 @@ const assertPromptUpdate = (
     throw new Error("Prompt versions must be appended sequentially.");
 };
 
+const assertSkillUpdate = (
+  existing: EditableAssetRecord | undefined,
+  next: EditableAssetRecord,
+): void => {
+  if (next.kind !== AssetKind.Skill || !next.skill)
+    throw new Error("Skill asset kind is immutable.");
+  if (!existing) return;
+  if (existing.kind !== AssetKind.Skill || !existing.skill)
+    throw new Error("Asset kind is immutable.");
+  const nextVersions = next.skill.versions ?? [];
+  const existingVersions = existing.skill.versions ?? [];
+  const nextByVersion = new Map(
+    nextVersions.map((version) => [version.version, version]),
+  );
+  for (const version of existingVersions) {
+    const candidate = nextByVersion.get(version.version);
+    if (!candidate || JSON.stringify(candidate) !== JSON.stringify(version))
+      throw new Error("Skill versions are immutable.");
+  }
+  const highestExisting = Math.max(
+    ...existingVersions.map((version) => version.version),
+  );
+  const additions = nextVersions.filter(
+    (version) => version.version > highestExisting,
+  );
+  if (
+    additions.length > 1 ||
+    (additions.length === 1 && additions[0]?.version !== highestExisting + 1)
+  )
+    throw new Error("Skill versions must be appended sequentially.");
+};
+
 const copyPromptVersion = (
   version: PromptAssetVersion,
 ): PromptAssetVersion => ({
@@ -554,6 +727,22 @@ const copyPromptVersion = (
     ...variable,
     schema: { ...variable.schema, schema: { ...variable.schema.schema } },
   })),
+  provenance: { ...version.provenance },
+});
+
+const copySkillVersion = (version: SkillAssetVersion): SkillAssetVersion => ({
+  ...version,
+  capabilities: [...version.capabilities],
+  permissions: [...version.permissions],
+  inputSchema: {
+    ...version.inputSchema,
+    schema: { ...version.inputSchema.schema },
+  },
+  outputSchema: {
+    ...version.outputSchema,
+    schema: { ...version.outputSchema.schema },
+  },
+  limits: { ...version.limits },
   provenance: { ...version.provenance },
 });
 

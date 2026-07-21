@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { redactLifecyclePromptBindings } from "./governance-lifecycle-client.js";
+import {
+  parseGovernanceLifecycleResponse,
+  redactLifecyclePromptBindings,
+} from "./governance-lifecycle-client.js";
 
 const OpenAiApiKeyBinding = "OpenAI API Key";
 
@@ -23,6 +26,39 @@ describe("prompt execution binding redaction", () => {
       database_password: "[REDACTED]",
       apiKey: "[REDACTED]",
       [OpenAiApiKeyBinding]: "[REDACTED]",
+    });
+  });
+});
+
+describe("governance lifecycle skill provenance", () => {
+  it("parses governed skill provenance for the execution inspector", () => {
+    expect(
+      parseGovernanceLifecycleResponse({
+        lifecycle: {
+          id: "lifecycle-1",
+          state: "Approved",
+          budgets: {},
+          transitions: [],
+          promptExecutions: [],
+          agentExecutions: [
+            {
+              agentId: "agent-1",
+              skillId: "skill-support",
+              skillVersion: 2,
+              artifactFingerprint: "skill-fingerprint",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      agentExecutions: [
+        {
+          agentId: "agent-1",
+          skillId: "skill-support",
+          skillVersion: 2,
+          artifactFingerprint: "skill-fingerprint",
+        },
+      ],
     });
   });
 });

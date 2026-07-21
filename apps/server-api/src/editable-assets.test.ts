@@ -75,6 +75,45 @@ describe("editable asset catalog", () => {
       }),
     ).toThrow("Prompt versions are immutable");
   });
+
+  it("preserves immutable skill versions and only permits a sequential append", () => {
+    const first = createSkillAsset();
+    const catalog = upsertEditableAsset(createEditableAssetCatalog(), first);
+    const second = upsertEditableAsset(catalog, {
+      ...first,
+      provenance: {
+        ...first.provenance,
+        artifactFingerprint: "skill-2-fingerprint",
+      },
+      skill: {
+        version: 2,
+        lifecycle: AssetStatus.Enabled,
+        versions: [
+          ...(first.skill!.versions ?? []),
+          createSkillVersion(first, 2, "skill-2-fingerprint"),
+        ],
+      },
+    });
+
+    expect(second.records[0]?.skill?.version).toBe(2);
+    expect(() =>
+      upsertEditableAsset(second, {
+        ...first,
+        provenance: {
+          ...first.provenance,
+          artifactFingerprint: "skill-2-fingerprint",
+        },
+        skill: {
+          version: 2,
+          lifecycle: AssetStatus.Enabled,
+          versions: [
+            createSkillVersion(first, 1, "mutated-fingerprint"),
+            createSkillVersion(first, 2, "skill-2-fingerprint"),
+          ],
+        },
+      }),
+    ).toThrow("Skill versions are immutable");
+  });
 });
 
 const createAsset = (
@@ -122,4 +161,38 @@ const createPromptVersion = (version: number, template: string) => ({
     registeredAt: "2026-07-18T00:00:00.000Z",
   },
   createdAt: "2026-07-18T00:00:00.000Z",
+});
+
+const createSkillAsset = (): EditableAssetRecord => {
+  const asset = createAsset(AssetKind.Skill);
+  return {
+    ...asset,
+    provenance: {
+      ...asset.provenance,
+      artifactFingerprint: "skill-1-fingerprint",
+    },
+    skill: {
+      version: 1,
+      lifecycle: AssetStatus.Enabled,
+      versions: [createSkillVersion(asset, 1, "skill-1-fingerprint")],
+    },
+  };
+};
+
+const createSkillVersion = (
+  asset: EditableAssetRecord,
+  version: number,
+  artifactFingerprint: string,
+) => ({
+  version,
+  capabilities: [...asset.capabilities],
+  permissions: [...asset.permissions],
+  inputSchema: asset.inputSchema,
+  outputSchema: asset.outputSchema,
+  limits: asset.limits,
+  provenance: {
+    ...asset.provenance,
+    artifactFingerprint,
+  },
+  createdAt: "2026-07-21T00:00:00.000Z",
 });

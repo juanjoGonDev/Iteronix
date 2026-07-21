@@ -115,6 +115,10 @@ type WorkflowNodeConfigRecord = {
     version: number;
     bindings: Readonly<Record<string, unknown>>;
   };
+  skillAsset?: {
+    assetId: string;
+    version: number;
+  };
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;

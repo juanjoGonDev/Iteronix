@@ -119,8 +119,8 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
   - [x] Resolve pinned prompt versions deterministically at runtime, reject invalid bindings, and persist rendered prompt provenance in governed external workflow runs.
   - [x] Link IDE workflow runs to persisted governance lifecycles and expose governed prompt provenance in the reloadable execution inspector.
 - [x] Integrate the persisted assets with governed workflow execution: `buildGovernedService` + `runGovernedWorkflow` with skill registration, plugin tool ID resolution, permission validation, schema validation, provenance tracking, and fallback to provider path for ungoverned nodes (tested: 5 integration tests covering happy path, provenance fingerprints, schema failure, non-governed routing, permission rejection).
-- [ ] Wire governed workflow runtime into real server API routes and connect approval checkpoints.
-- [ ] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
+- [x] Wire governed workflow runtime into real server API routes and connect approval checkpoints.
+- [x] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
 - [ ] Add memory and RAG runtime integration with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.
 - [ ] Add MCP client/server runtime integration behind permission and capability controls; validate all untrusted tool results at the boundary.
 - [ ] Create server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.

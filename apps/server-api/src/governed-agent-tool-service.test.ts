@@ -119,6 +119,65 @@ describe("governed agent tool service", () => {
       "Agent executions require an executing lifecycle",
     );
   });
+
+  it("uses a requested immutable skill version and rejects an unavailable version", async () => {
+    const persistence = createMemoryPersistence();
+    const lifecycle = createExecutingLifecycle();
+    await persistence.mutateGovernanceLifecycles(() => [lifecycle]);
+    const service = createGovernedAgentToolService(
+      persistence,
+      createRagPort(),
+    );
+    service.registerPlugin({
+      manifest,
+      agentId: "reference-agent",
+      invoke: async () => ({
+        toolId: skill.id,
+        status: McpToolResultStatus.Success,
+        output: { answers: ["versioned"] },
+        provenance: {
+          serverId: "reference-knowledge",
+          toolVersion: "1.0.0",
+          responseFingerprint: "response-fingerprint",
+        },
+      }),
+    });
+    service.registerSkill(skill);
+    service.registerSkill({
+      ...skill,
+      version: 2,
+      provenance: { ...skill.provenance, artifactFingerprint: "skill-v2" },
+    });
+
+    await service.invoke({
+      lifecycleId: lifecycle.id,
+      skillId: skill.id,
+      skillVersion: 2,
+      input: { query: "versioned" },
+      grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      memoryScope: scope,
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(
+      persistence.read().governanceLifecycles[0]?.agentExecutions[0],
+    ).toMatchObject({
+      skillId: skill.id,
+      skillVersion: 2,
+      artifactFingerprint: "skill-v2",
+    });
+    await expect(
+      service.invoke({
+        lifecycleId: lifecycle.id,
+        skillId: skill.id,
+        skillVersion: 3,
+        input: { query: "missing" },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+        memoryScope: scope,
+        now: "2026-07-21T00:00:01.000Z",
+      }),
+    ).rejects.toThrow("Skill knowledge.query was not registered");
+  });
 });
 
 const inputSchema = {
