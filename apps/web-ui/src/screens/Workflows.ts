@@ -34,6 +34,11 @@ import {
   type MemoryAssetSummary,
 } from "../shared/memory-assets-client.js";
 import {
+  createMcpAssetsClient,
+  selectEnabledMcpAssets,
+  type McpAssetSummary,
+} from "../shared/mcp-assets-client.js";
+import {
   createGovernanceLifecycleClient,
   redactLifecyclePromptBindings,
   type GovernanceLifecycleTrace,
@@ -259,6 +264,7 @@ const WorkflowScreenSelector = {
   PromptAssetValidation: "workflows-prompt-validation",
   PromptProvenance: "workflows-prompt-provenance",
   SkillAssetSelect: "workflows-skill-asset-select",
+  McpAssetSelect: "workflows-mcp-asset-select",
   MemoryAssetSelect: "workflows-memory-asset-select",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
@@ -754,6 +760,7 @@ interface WorkflowsScreenState {
   assets: ReadonlyArray<WorkflowAssetRecord>;
   promptAssets: ReadonlyArray<PromptAssetSummary>;
   skillAssets: ReadonlyArray<SkillAssetSummary>;
+  mcpAssets: ReadonlyArray<McpAssetSummary>;
   memoryAssets: ReadonlyArray<MemoryAssetSummary>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
@@ -839,6 +846,7 @@ export class WorkflowsScreen extends Component<
   private readonly workflowClient = createWorkflowClient();
   private readonly promptAssetsClient = createPromptAssetsClient();
   private readonly skillAssetsClient = createSkillAssetsClient();
+  private readonly mcpAssetsClient = createMcpAssetsClient();
   private readonly memoryAssetsClient = createMemoryAssetsClient();
   private readonly governanceLifecycleClient =
     createGovernanceLifecycleClient();
@@ -862,6 +870,7 @@ export class WorkflowsScreen extends Component<
       assets: [],
       promptAssets: [],
       skillAssets: [],
+      mcpAssets: [],
       memoryAssets: [],
       assetUsages: [],
       workflowVersions: [],
@@ -1212,6 +1221,13 @@ export class WorkflowsScreen extends Component<
                     agent.artifactFingerprint
                       ? createElement("p", { className: "mt-1 break-all" }, [
                           `Provenance: ${agent.artifactFingerprint}`,
+                        ])
+                      : "",
+                    agent.mcpAssetId &&
+                    agent.mcpServerId &&
+                    agent.mcpToolVersion
+                      ? createElement("p", { className: "mt-1 break-all" }, [
+                          `MCP: ${agent.mcpAssetId} · ${agent.mcpServerId} · v${agent.mcpToolVersion}${agent.responseFingerprint ? ` · Response: ${agent.responseFingerprint}` : ""}`,
                         ])
                       : "",
                   ],
@@ -12708,6 +12724,7 @@ export class WorkflowsScreen extends Component<
         ),
         this.renderNodePromptField(node),
         this.renderSkillAssetSelection(node),
+        this.renderMcpAssetSelection(node),
         this.renderMemorySourceSelection(node),
         this.renderProviderSelectionFields(node, provider),
       ],
@@ -12764,6 +12781,65 @@ export class WorkflowsScreen extends Component<
               enabledSkills.length === 0
                 ? "No enabled Skill Assets are available."
                 : "Select an enabled Skill Asset for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderMcpAssetSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledConnections = selectEnabledMcpAssets(this.state.mcpAssets);
+    const selectedAssetId = node.config.mcpConnection?.assetId ?? "";
+    const selected = enabledConnections.find(
+      (connection) => connection.id === selectedAssetId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Pinned MCP connection",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled connections can be selected. Tool permissions and untrusted response validation remain server-governed.",
+        ]),
+        this.renderInspectorSelect(
+          "MCP connection",
+          selectedAssetId,
+          enabledConnections.map((connection) => connection.id),
+          (value) => {
+            const connection = enabledConnections.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!connection) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: {
+                ...current.config,
+                mcpConnection: {
+                  assetId: connection.id,
+                  serverId: connection.serverId,
+                  toolVersion: connection.toolVersion,
+                },
+              },
+            }));
+          },
+          enabledConnections.map((connection) => ({
+            value: connection.id,
+            label: `${connection.name} · ${connection.serverId} · v${connection.toolVersion}`,
+          })),
+          WorkflowScreenSelector.McpAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Pinned: ${selected.id} · ${node.config.mcpConnection?.serverId ?? selected.serverId} · v${node.config.mcpConnection?.toolVersion ?? selected.toolVersion}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledConnections.length === 0
+                ? "No enabled MCP connections are available."
+                : "Select an enabled MCP connection for this agent.",
             ]),
       ],
     );
@@ -13441,6 +13517,7 @@ export class WorkflowsScreen extends Component<
       executions,
       promptAssets,
       skillAssets,
+      mcpAssets,
       memoryAssets,
     ] = await Promise.all([
       this.workflowClient.listDefinitions(),
@@ -13449,6 +13526,7 @@ export class WorkflowsScreen extends Component<
       this.workflowClient.listExecutions(),
       this.promptAssetsClient.list(),
       this.skillAssetsClient.list(),
+      this.mcpAssetsClient.list(),
       this.memoryAssetsClient.list(),
     ]);
     const currentWorkflow = readWorkflowEditorTarget(
@@ -13500,6 +13578,7 @@ export class WorkflowsScreen extends Component<
       assets,
       promptAssets,
       skillAssets,
+      mcpAssets,
       memoryAssets,
       assetUsages,
       workflowVersions,
@@ -13552,20 +13631,28 @@ export class WorkflowsScreen extends Component<
   }
 
   private async reloadAssetCatalog(): Promise<void> {
-    const [assets, assetUsages, promptAssets, skillAssets, memoryAssets] =
-      await Promise.all([
-        this.workflowClient.listAssets(),
-        this.workflowClient.listAssetUsages({}),
-        this.promptAssetsClient.list(),
-        this.skillAssetsClient.list(),
-        this.memoryAssetsClient.list(),
-      ]);
+    const [
+      assets,
+      assetUsages,
+      promptAssets,
+      skillAssets,
+      mcpAssets,
+      memoryAssets,
+    ] = await Promise.all([
+      this.workflowClient.listAssets(),
+      this.workflowClient.listAssetUsages({}),
+      this.promptAssetsClient.list(),
+      this.skillAssetsClient.list(),
+      this.mcpAssetsClient.list(),
+      this.memoryAssetsClient.list(),
+    ]);
 
     this.setState({
       assets,
       assetUsages,
       promptAssets,
       skillAssets,
+      mcpAssets,
       memoryAssets,
     });
   }

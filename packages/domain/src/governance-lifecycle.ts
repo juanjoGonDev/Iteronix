@@ -93,6 +93,9 @@ export type GovernanceAgentExecutionRecord = {
   outputFingerprint: string;
   artifactFingerprint: string;
   responseFingerprint: string;
+  mcpAssetId?: string;
+  mcpServerId?: string;
+  mcpToolVersion?: string;
   timestamp: string;
 };
 
@@ -544,6 +547,10 @@ const parseAgentExecution = (
   if (fields.some((field) => !parsed[field])) {
     return undefined;
   }
+  const mcpProvenance = readMcpProvenance(value);
+  if (hasMcpProvenanceFields(value) && !mcpProvenance) {
+    return undefined;
+  }
   return {
     id: parsed["id"]!,
     lifecycleId: parsed["lifecycleId"]!,
@@ -556,7 +563,42 @@ const parseAgentExecution = (
     outputFingerprint: parsed["outputFingerprint"]!,
     artifactFingerprint: parsed["artifactFingerprint"]!,
     responseFingerprint: parsed["responseFingerprint"]!,
+    ...(mcpProvenance ?? {}),
     timestamp: parsed["timestamp"]!,
+  };
+};
+
+const hasMcpProvenanceFields = (value: Record<string, unknown>): boolean =>
+  value["mcpAssetId"] !== undefined ||
+  value["mcpServerId"] !== undefined ||
+  value["mcpToolVersion"] !== undefined;
+
+const readMcpProvenance = (
+  value: Record<string, unknown>,
+):
+  | {
+      mcpAssetId: string;
+      mcpServerId: string;
+      mcpToolVersion: string;
+    }
+  | undefined => {
+  const rawAssetId = value["mcpAssetId"];
+  const rawServerId = value["mcpServerId"];
+  const rawToolVersion = value["mcpToolVersion"];
+  if (
+    rawAssetId === undefined &&
+    rawServerId === undefined &&
+    rawToolVersion === undefined
+  )
+    return undefined;
+  const assetId = readNonEmptyString(rawAssetId);
+  const serverId = readNonEmptyString(rawServerId);
+  const toolVersion = readNonEmptyString(rawToolVersion);
+  if (!assetId || !serverId || !toolVersion) return undefined;
+  return {
+    mcpAssetId: assetId,
+    mcpServerId: serverId,
+    mcpToolVersion: toolVersion,
   };
 };
 
@@ -896,6 +938,16 @@ const assertAgentExecutionRecord = (
     input.timestamp,
   ]) {
     assertNonEmpty(value, "Governance agent execution field is required");
+  }
+  const hasMcpProvenance =
+    input.mcpAssetId !== undefined ||
+    input.mcpServerId !== undefined ||
+    input.mcpToolVersion !== undefined;
+  if (
+    hasMcpProvenance &&
+    (!input.mcpAssetId || !input.mcpServerId || !input.mcpToolVersion)
+  ) {
+    throw new Error("Governance MCP provenance is incomplete.");
   }
 };
 

@@ -165,7 +165,12 @@ import {
 import {
   createRunGovernedNodeCallback,
   registerSkillsAndPlugins,
+  resolveMcpConnection,
 } from "./governed-workflow-runtime";
+import {
+  createLocalMcpConnectionPort,
+  type ServerMcpConnectionPort,
+} from "./mcp-connection-port";
 import {
   createMemoryScope,
   type ArtifactProvenance,
@@ -354,6 +359,7 @@ export const createApiServer = (input: {
   governanceLifecycle?: GovernanceLifecycleService;
   workflowCatalog: WorkflowCatalogStore;
   passwordResetDelivery?: PasswordResetDelivery;
+  mcpConnectionPort?: ServerMcpConnectionPort;
   webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
@@ -367,7 +373,9 @@ export const createApiServer = (input: {
   );
 
   const initialAssets = input.applicationPersistence.read().editableAssets;
-  const initialInvoke = createNoopPluginInvoke();
+  const initialInvoke =
+    input.mcpConnectionPort ??
+    createLocalMcpConnectionPort({ invoke: createNoopPluginInvoke() });
   registerSkillsAndPlugins(
     governedService,
     { ...input.applicationPersistence.read(), editableAssets: initialAssets },
@@ -1893,6 +1901,8 @@ const handleGovernanceLifecycleResume = async (
               lifecycleId: lifecycle.id,
               grantedPermissions: [],
               memoryScope,
+              resolveMcpConnection: (connection) =>
+                resolveMcpConnection(applicationPersistence.read(), connection),
               now: () => new Date(),
             }),
           },
@@ -3220,6 +3230,11 @@ const executeGovernedWorkflowExecution = async (
           lifecycleId: lifecycle.id,
           grantedPermissions: [],
           memoryScope,
+          resolveMcpConnection: (connection) =>
+            resolveMcpConnection(
+              dependencies.applicationPersistence.read(),
+              connection,
+            ),
           now: () => new Date(),
         }),
       });
@@ -4254,6 +4269,11 @@ const handleExternalWorkflowRequest = async (input: {
             lifecycleId: lifecycle.id,
             grantedPermissions: [],
             memoryScope,
+            resolveMcpConnection: (connection) =>
+              resolveMcpConnection(
+                input.applicationPersistence.read(),
+                connection,
+              ),
             now: () => new Date(),
           }),
         },

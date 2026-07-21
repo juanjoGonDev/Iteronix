@@ -61,6 +61,10 @@ type AgentExecutionTrace = {
   skillId: string | null;
   skillVersion: number | null;
   artifactFingerprint: string | null;
+  responseFingerprint: string | null;
+  mcpAssetId: string | null;
+  mcpServerId: string | null;
+  mcpToolVersion: string | null;
 };
 
 type RetrievalExecutionTrace = {
@@ -138,6 +142,10 @@ export const parseGovernanceLifecycleResponse = (
         skillId: readOptionalString(record["skillId"]),
         skillVersion: readOptionalPositiveInteger(record["skillVersion"]),
         artifactFingerprint: readOptionalString(record["artifactFingerprint"]),
+        responseFingerprint: readOptionalString(record["responseFingerprint"]),
+        mcpAssetId: readOptionalString(record["mcpAssetId"]),
+        mcpServerId: readOptionalString(record["mcpServerId"]),
+        mcpToolVersion: readOptionalString(record["mcpToolVersion"]),
       };
     },
   );

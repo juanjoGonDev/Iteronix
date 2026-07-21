@@ -94,3 +94,36 @@ describe("governance lifecycle retrieval provenance", () => {
     });
   });
 });
+
+describe("governance lifecycle MCP provenance", () => {
+  it("parses MCP metadata from agent provenance without untrusted response content", () => {
+    expect(
+      parseGovernanceLifecycleResponse({
+        lifecycle: {
+          id: "lifecycle-1",
+          state: "Approved",
+          budgets: {},
+          transitions: [],
+          promptExecutions: [],
+          agentExecutions: [
+            {
+              agentId: "agent-1",
+              mcpAssetId: "mcp-1",
+              mcpServerId: "search-server",
+              mcpToolVersion: "2.0.0",
+              responseFingerprint: "mcp-fingerprint",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      agentExecutions: [
+        {
+          mcpAssetId: "mcp-1",
+          mcpServerId: "search-server",
+          mcpToolVersion: "2.0.0",
+        },
+      ],
+    });
+  });
+});

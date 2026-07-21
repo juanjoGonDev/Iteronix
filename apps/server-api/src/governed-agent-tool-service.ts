@@ -24,6 +24,7 @@ import {
   type JsonValue,
 } from "../../../packages/domain/src/governance-validation";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
+import type { McpConnectionBinding } from "./mcp-connection-port";
 
 export type GovernedAgentToolService = {
   registerPlugin: (plugin: RegisteredServerPlugin) => void;
@@ -35,6 +36,7 @@ type RegisteredServerPlugin = {
   manifest: ServerPluginManifest;
   agentId: string;
   invoke: (input: {
+    connection?: McpConnectionBinding;
     toolId: string;
     input: JsonValue;
     provenance: ArtifactProvenance;
@@ -47,7 +49,8 @@ type GovernedSkillInvocation = {
   skillVersion?: number;
   input: JsonValue;
   grantedPermissions: ReadonlyArray<AgentPermission>;
-  memoryScope: MemoryScope;
+  memoryScope?: MemoryScope;
+  mcpConnection?: McpConnectionBinding;
   now: string;
 };
 
@@ -70,25 +73,11 @@ export const createGovernedAgentToolService = (
       const skill = readSkill(skills, input.skillId, input.skillVersion);
       const plugin = readPluginForSkill(plugins, skill.id);
       assertInvocation(lifecycle, skill, plugin, input);
-      const retrievals = await rag.retrieve({
-        scope: createMemoryScope(input.memoryScope),
-        query: readQuery(input.input),
-        limit: MaxRagRetrievals,
-      });
-      await persistRetrievalExecution(persistence, lifecycle.id, {
-        assetId: input.memoryScope.sourceId ?? "none",
-        scope: `${input.memoryScope.tenantId}:${input.memoryScope.workflowId}`,
-        workflowId: input.memoryScope.workflowId,
-        documentCount: retrievals.length,
-        provenanceFingerprint: fingerprint(
-          retrievals.map(
-            (retrieval) => retrieval.provenance.documentFingerprint,
-          ),
-        ),
-        redacted: true,
-        timestamp: input.now,
-      });
+      const retrievals = input.memoryScope
+        ? await retrieveAndPersist(persistence, rag, lifecycle.id, input)
+        : [];
       const response = await plugin.invoke({
+        ...(input.mcpConnection ? { connection: input.mcpConnection } : {}),
         toolId: skill.id,
         input: input.input,
         provenance: skill.provenance,
@@ -97,6 +86,7 @@ export const createGovernedAgentToolService = (
       if (!validated.valid || validated.output === undefined) {
         throw new Error("MCP output failed schema validation.");
       }
+      assertMcpConnectionResponse(input.mcpConnection, response);
       await persistExecution(persistence, lifecycle.id, {
         id: `${lifecycle.id}:agent:${(lifecycle.agentExecutions.length + 1).toString()}`,
         lifecycleId: lifecycle.id,
@@ -109,6 +99,13 @@ export const createGovernedAgentToolService = (
         outputFingerprint: fingerprint(validated.output),
         artifactFingerprint: skill.provenance.artifactFingerprint,
         responseFingerprint: response.provenance.responseFingerprint,
+        ...(input.mcpConnection
+          ? {
+              mcpAssetId: input.mcpConnection.assetId,
+              mcpServerId: input.mcpConnection.serverId,
+              mcpToolVersion: input.mcpConnection.toolVersion,
+            }
+          : {}),
         timestamp: input.now,
       });
       return { output: validated.output, retrievals };
@@ -205,10 +202,13 @@ const assertInvocation = (
   if (lifecycle.state !== GovernanceLifecycleState.Executing) {
     throw new Error("Agent executions require an executing lifecycle.");
   }
-  if (input.memoryScope.workflowId !== lifecycle.workflowId) {
+  if (
+    input.memoryScope &&
+    input.memoryScope.workflowId !== lifecycle.workflowId
+  ) {
     throw new Error("Memory scope workflow must match the lifecycle.");
   }
-  if (!input.memoryScope.enabled) {
+  if (input.memoryScope && !input.memoryScope.enabled) {
     throw new Error("Memory scope must be enabled for governed retrieval.");
   }
   if (!hasPermissions(input.grantedPermissions, skill.requiredPermissions)) {
@@ -217,8 +217,55 @@ const assertInvocation = (
   if (!hasPermissions(input.grantedPermissions, plugin.manifest.permissions)) {
     throw new Error("Plugin permissions were not granted.");
   }
+  if (
+    input.mcpConnection &&
+    !hasPermissions(input.grantedPermissions, ["mcp.invoke"])
+  ) {
+    throw new Error("MCP permission was not granted.");
+  }
   if (!validateVersionedJsonSchema(skill.inputSchema, input.input).valid) {
     throw new Error("Skill input failed schema validation.");
+  }
+};
+
+const retrieveAndPersist = async (
+  persistence: GovernanceLifecyclePersistencePort,
+  rag: RagPort,
+  lifecycleId: string,
+  input: GovernedSkillInvocation,
+): Promise<ReadonlyArray<MemoryRetrieval>> => {
+  const scope = createMemoryScope(input.memoryScope!);
+  const retrievals = await rag.retrieve({
+    scope,
+    query: readQuery(input.input),
+    limit: MaxRagRetrievals,
+  });
+  await persistRetrievalExecution(persistence, lifecycleId, {
+    assetId: scope.sourceId ?? "none",
+    scope: `${scope.tenantId}:${scope.workflowId}`,
+    workflowId: scope.workflowId,
+    documentCount: retrievals.length,
+    provenanceFingerprint: fingerprint(
+      retrievals.map((retrieval) => retrieval.provenance.documentFingerprint),
+    ),
+    redacted: true,
+    timestamp: input.now,
+  });
+  return retrievals;
+};
+
+const assertMcpConnectionResponse = (
+  connection: GovernedSkillInvocation["mcpConnection"],
+  response: McpToolResult,
+): void => {
+  if (!connection) return;
+  if (
+    response.provenance.serverId !== connection.serverId ||
+    response.provenance.toolVersion !== connection.toolVersion
+  ) {
+    throw new Error(
+      "MCP response provenance does not match the pinned connection.",
+    );
   }
 };
 

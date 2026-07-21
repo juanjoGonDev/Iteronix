@@ -231,6 +231,11 @@ export type WorkflowNodeConfigRecord = {
     assetId: string;
     version: number;
   };
+  mcpConnection?: {
+    assetId: string;
+    serverId: string;
+    toolVersion: string;
+  };
   memorySourceId?: string;
   grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;

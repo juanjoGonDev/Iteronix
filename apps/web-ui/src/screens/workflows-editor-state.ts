@@ -119,6 +119,11 @@ type WorkflowNodeConfigRecord = {
     assetId: string;
     version: number;
   };
+  mcpConnection?: {
+    assetId: string;
+    serverId: string;
+    toolVersion: string;
+  };
   memorySourceId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;

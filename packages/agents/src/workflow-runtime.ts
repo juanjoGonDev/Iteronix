@@ -758,7 +758,9 @@ const executeWorkflowNode = async (input: {
   ) {
     if (
       input.node.kind === WorkflowNodeKind.AiAgent &&
-      (input.node.config.skillId || input.node.config.skillAsset) &&
+      (input.node.config.skillId ||
+        input.node.config.skillAsset ||
+        input.node.config.mcpConnection) &&
       input.runGovernedNode
     ) {
       const governedResult = await input.runGovernedNode({

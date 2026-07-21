@@ -109,6 +109,115 @@ describe("governed workflow runtime service", () => {
     expect(agentExecution.skillVersion).toBe(1);
   });
 
+  it("uses an enabled pinned MCP connection and persists only its safe provenance", async () => {
+    const persistence = createMemoryPersistence();
+    const fixture = createFixture(persistence, [assetMcpConnection]);
+    const definition = createDefinitionWithSkillNode();
+
+    const result = await fixture.service.runGovernedWorkflow({
+      definition: {
+        ...definition,
+        nodes: definition.nodes.map((node) =>
+          node.id === "skill-node"
+            ? {
+                ...node,
+                config: {
+                  ...node.config,
+                  mcpConnection: {
+                    assetId: "mcp-knowledge",
+                    serverId: "reference-knowledge",
+                    toolVersion: "1.0.0",
+                  },
+                  grantedPermissions: [
+                    "memory.read",
+                    "rag.query",
+                    "tool.invoke",
+                    "mcp.invoke",
+                  ],
+                },
+              }
+            : node,
+        ),
+      },
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-mcp-1",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: [
+        "memory.read",
+        "rag.query",
+        "tool.invoke",
+        "mcp.invoke",
+      ],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: true,
+        retentionDays: 7,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(result.execution.status).toBe("completed");
+    expect(result.lifecycle.agentExecutions[0]).toMatchObject({
+      mcpAssetId: "mcp-knowledge",
+      mcpServerId: "reference-knowledge",
+      mcpToolVersion: "1.0.0",
+    });
+  });
+
+  it("executes a standalone MCP AiAgent without a Skill or Memory/RAG source", async () => {
+    const persistence = createMemoryPersistence();
+    const fixture = createFixture(persistence, [assetMcpConnection]);
+    const definition = createDefinitionWithSkillNode();
+
+    const result = await fixture.service.runGovernedWorkflow({
+      definition: {
+        ...definition,
+        nodes: definition.nodes.map((node) =>
+          node.id === "skill-node"
+            ? {
+                ...node,
+                config: {
+                  mcpConnection: {
+                    assetId: "mcp-knowledge",
+                    serverId: "reference-knowledge",
+                    toolVersion: "1.0.0",
+                  },
+                  grantedPermissions: ["mcp.invoke"],
+                },
+              }
+            : node,
+        ),
+      },
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-mcp-standalone",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: ["mcp.invoke"],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: false,
+        retentionDays: 0,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(result.execution.status).toBe("completed");
+    expect(result.lifecycle.retrievalExecutions).toEqual([]);
+    expect(result.lifecycle.agentExecutions[0]).toMatchObject({
+      skillId: "mcp-knowledge",
+      mcpAssetId: "mcp-knowledge",
+    });
+  });
+
   it("transitions to failed lifecycle when skill input fails schema validation", async () => {
     const persistence = createMemoryPersistence();
     const fixture = createFixture(persistence);
@@ -537,6 +646,28 @@ const assetSkill: EditableAssetRecord = {
   },
 };
 
+const assetMcpConnection: EditableAssetRecord = {
+  id: "mcp-knowledge",
+  kind: AssetKind.McpTool,
+  name: "Reference MCP",
+  status: AssetStatus.Enabled,
+  capabilities: ["mcp"],
+  permissions: ["mcp.invoke"],
+  inputSchema,
+  outputSchema,
+  limits: { executions: 10, timeoutMs: 5000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "mcp-knowledge-fingerprint",
+    registeredAt: "2026-07-21T00:00:00.000Z",
+  },
+  mcp: {
+    serverId: "reference-knowledge",
+    toolVersion: "1.0.0",
+    auditEvents: [],
+  },
+};
+
 const retrieval: MemoryRetrieval = {
   content: "governed knowledge",
   provenance: {
@@ -558,10 +689,11 @@ type Fixture = {
 
 const createFixture = (
   persistence: GovernanceLifecyclePersistencePort,
+  additionalAssets: ReadonlyArray<EditableAssetRecord> = [],
 ): Fixture => {
   const state: ApplicationState = {
     ...createDefaultApplicationState(),
-    editableAssets: { records: [assetPlugin, assetSkill] },
+    editableAssets: { records: [assetPlugin, assetSkill, ...additionalAssets] },
   };
 
   const lifecycleService = createGovernanceLifecycleService(persistence);

@@ -85,6 +85,14 @@ const UrlStatePolicies = [
       "Restores memory source editor selection and document panel without serializing drafts.",
   },
   {
+    route: ROUTES.MCP_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "mcp"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores MCP connection editor selection without serializing credentials or remote payloads.",
+  },
+  {
     route: ROUTES.SETTINGS,
     status: "replace",
     allowedParams: ["tab", "profile"],

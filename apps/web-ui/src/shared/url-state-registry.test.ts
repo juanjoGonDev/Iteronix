@@ -15,6 +15,7 @@ describe("url state registry", () => {
       ROUTES.PROMPT_ASSETS,
       ROUTES.SKILL_ASSETS,
       ROUTES.MEMORY_ASSETS,
+      ROUTES.MCP_ASSETS,
       ROUTES.SETTINGS,
     ]);
   });

@@ -4,6 +4,7 @@ import {
   GovernanceLifecycleState,
   GovernanceTransitionKind,
   createGovernanceLifecycle,
+  recordGovernanceAgentExecution,
   recordGovernancePromptExecution,
   transitionGovernanceLifecycle,
   parseGovernanceLifecycles,
@@ -17,6 +18,40 @@ const fingerprints = {
 const limits = { execution: 2, repair: 1, review: 1 };
 
 describe("governance lifecycle", () => {
+  it("persists complete MCP connection provenance and rejects partial persisted records", () => {
+    const executing = createExecutingLifecycle();
+    const recorded = recordGovernanceAgentExecution(executing, {
+      id: "agent-mcp-1",
+      lifecycleId: executing.id,
+      agentId: "agent-1",
+      pluginId: "plugin-1",
+      skillId: "skill-1",
+      skillVersion: 1,
+      toolId: "tool-1",
+      inputFingerprint: "input-fingerprint",
+      outputFingerprint: "output-fingerprint",
+      artifactFingerprint: "asset-fingerprint",
+      responseFingerprint: "response-fingerprint",
+      mcpAssetId: "mcp-1",
+      mcpServerId: "server-1",
+      mcpToolVersion: "1.0.0",
+      timestamp: "2026-07-21T00:00:03.000Z",
+    });
+
+    expect(parseGovernanceLifecycles([recorded])).toEqual([recorded]);
+    expect(
+      parseGovernanceLifecycles([
+        {
+          ...recorded,
+          agentExecutions: recorded.agentExecutions.map((execution) => ({
+            ...execution,
+            mcpServerId: "",
+          })),
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   it("persists immutable rendered prompt provenance only while executing", () => {
     const executing = createExecutingLifecycle();
     const recorded = recordGovernancePromptExecution(executing, {

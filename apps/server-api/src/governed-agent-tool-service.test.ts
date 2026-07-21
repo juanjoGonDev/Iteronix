@@ -192,6 +192,71 @@ describe("governed agent tool service", () => {
       }),
     ).rejects.toThrow("Skill knowledge.query was not registered");
   });
+
+  it("rejects an unpermitted or forged MCP connection before it persists provenance", async () => {
+    const persistence = createMemoryPersistence();
+    const lifecycle = createExecutingLifecycle();
+    await persistence.mutateGovernanceLifecycles(() => [lifecycle]);
+    const service = createGovernedAgentToolService(
+      persistence,
+      createRagPort(),
+    );
+    service.registerPlugin({
+      manifest,
+      agentId: "reference-agent",
+      invoke: async () => ({
+        toolId: skill.id,
+        status: McpToolResultStatus.Success,
+        output: { answers: ["connection"] },
+        provenance: {
+          serverId: "reference-knowledge",
+          toolVersion: "1.0.0",
+          responseFingerprint: "response-fingerprint",
+        },
+      }),
+    });
+    service.registerSkill(skill);
+
+    await expect(
+      service.invoke({
+        lifecycleId: lifecycle.id,
+        skillId: skill.id,
+        input: { query: "connection" },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+        memoryScope: scope,
+        mcpConnection: {
+          assetId: "mcp-1",
+          serverId: "reference-knowledge",
+          toolVersion: "1.0.0",
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("MCP permission was not granted");
+
+    await expect(
+      service.invoke({
+        lifecycleId: lifecycle.id,
+        skillId: skill.id,
+        input: { query: "connection" },
+        grantedPermissions: [
+          "memory.read",
+          "rag.query",
+          "tool.invoke",
+          "mcp.invoke",
+        ],
+        memoryScope: scope,
+        mcpConnection: {
+          assetId: "mcp-1",
+          serverId: "forged-server",
+          toolVersion: "1.0.0",
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("MCP response provenance does not match");
+    expect(persistence.read().governanceLifecycles[0]?.agentExecutions).toEqual(
+      [],
+    );
+  });
 });
 
 const inputSchema = {
