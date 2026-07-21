@@ -28,8 +28,63 @@ import {
   type GovernedWorkflowRuntimeService,
 } from "./governed-workflow-runtime";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
+import {
+  createProcessIsolatedPluginHost,
+  createTrustedPluginRegistry,
+} from "./server-plugin-runtime";
 
 describe("governed workflow runtime service", () => {
+  it("executes a version-pinned plugin without a Skill and persists plugin provenance", async () => {
+    const persistence = createMemoryPersistence();
+    const fixture = createFixture(persistence, [], false);
+    const definition = createDefinitionWithSkillNode();
+
+    const result = await fixture.service.runGovernedWorkflow({
+      definition: {
+        ...definition,
+        nodes: definition.nodes.map((node) =>
+          node.id === "skill-node"
+            ? {
+                ...node,
+                config: {
+                  grantedPermissions: [
+                    "memory.read",
+                    "rag.query",
+                    "tool.invoke",
+                  ],
+                  pluginAsset: { assetId: assetPlugin.id, version: "1" },
+                },
+              }
+            : node,
+        ),
+      },
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-plugin-1",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: true,
+        retentionDays: 7,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(result.execution.status).toBe("completed");
+    expect(result.lifecycle.agentExecutions[0]).toMatchObject({
+      pluginAssetId: assetPlugin.id,
+      pluginVersion: "1",
+      pluginFingerprint: assetPlugin.provenance.artifactFingerprint,
+      pluginIsolation: "process",
+      pluginAuditAction: "invoked",
+    });
+  });
+
   it("executes a governed AiAgent node through the governance lifecycle with skill provenance", async () => {
     const persistence = createMemoryPersistence();
     const fixture = createFixture(persistence);
@@ -690,13 +745,26 @@ type Fixture = {
 const createFixture = (
   persistence: GovernanceLifecyclePersistencePort,
   additionalAssets: ReadonlyArray<EditableAssetRecord> = [],
+  includeLegacySkill: boolean = true,
 ): Fixture => {
   const state: ApplicationState = {
     ...createDefaultApplicationState(),
-    editableAssets: { records: [assetPlugin, assetSkill, ...additionalAssets] },
+    editableAssets: {
+      records: [
+        assetPlugin,
+        ...(includeLegacySkill ? [assetSkill] : []),
+        ...additionalAssets,
+      ],
+    },
   };
 
   const lifecycleService = createGovernanceLifecycleService(persistence);
+  const pluginRegistry = createTrustedPluginRegistry({
+    allowedPluginIds: [assetPlugin.id],
+    host: createProcessIsolatedPluginHost({
+      invoke: async (request) => ({ answers: [request.pluginId] }),
+    }),
+  });
 
   const service = createGovernedWorkflowRuntimeService({
     readApplicationState: () => state,
@@ -714,6 +782,7 @@ const createFixture = (
       },
     }),
     agentId: "test-agent",
+    pluginRegistry,
   });
 
   return { service, persistence };

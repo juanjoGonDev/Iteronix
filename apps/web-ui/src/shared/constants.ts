@@ -10,6 +10,7 @@ export const ROUTES = {
   SKILL_ASSETS: "/assets/skills",
   MEMORY_ASSETS: "/assets/memory",
   MCP_ASSETS: "/assets/mcp",
+  PLUGIN_ASSETS: "/assets/plugins",
   SETTINGS: "/settings",
 } as const;
 

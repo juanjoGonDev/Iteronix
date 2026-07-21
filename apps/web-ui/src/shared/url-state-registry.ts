@@ -93,6 +93,14 @@ const UrlStatePolicies = [
       "Restores MCP connection editor selection without serializing credentials or remote payloads.",
   },
   {
+    route: ROUTES.PLUGIN_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "plugin"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores server plugin manifest inspection without serializing code or secrets.",
+  },
+  {
     route: ROUTES.SETTINGS,
     status: "replace",
     allowedParams: ["tab", "profile"],

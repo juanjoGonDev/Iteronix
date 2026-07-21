@@ -236,6 +236,10 @@ export type WorkflowNodeConfigRecord = {
     serverId: string;
     toolVersion: string;
   };
+  pluginAsset?: {
+    assetId: string;
+    version: string;
+  };
   memorySourceId?: string;
   grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;

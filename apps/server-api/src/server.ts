@@ -110,9 +110,11 @@ import {
 } from "./application-state";
 import {
   AssetStatus,
+  appendPluginAuditEvent,
   parseEditableAssetCatalog,
   removeEditableAsset,
   upsertEditableAsset,
+  withServerOwnedPluginAudit,
   type EditableAssetCatalog,
 } from "./editable-assets";
 import {
@@ -172,6 +174,11 @@ import {
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import {
+  createChildProcessReferencePluginHost,
+  createTrustedPluginRegistry,
+  type TrustedPluginRegistry,
+} from "./server-plugin-runtime";
+import {
   createMemoryScope,
   type ArtifactProvenance,
   type McpToolResult,
@@ -192,6 +199,7 @@ const SensitivePromptBindingKeyFragments = [
   "secret",
   "token",
 ] as const;
+const ReferencePluginId = "reference.echo";
 const createNoopPluginInvoke =
   () =>
   async (input: {
@@ -360,6 +368,7 @@ export const createApiServer = (input: {
   workflowCatalog: WorkflowCatalogStore;
   passwordResetDelivery?: PasswordResetDelivery;
   mcpConnectionPort?: ServerMcpConnectionPort;
+  pluginRegistry?: TrustedPluginRegistry;
   webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
@@ -370,20 +379,49 @@ export const createApiServer = (input: {
   const governedService = createGovernedAgentToolService(
     input.applicationPersistence,
     createApplicationMemoryRagPort({ read: input.applicationPersistence.read }),
+    async (audit) => {
+      await input.applicationPersistence.updateEditableAssets(
+        appendPluginAuditEvent(
+          input.applicationPersistence.read().editableAssets,
+          {
+            assetId: audit.assetId,
+            action: audit.action,
+            actorId: "server-runtime",
+            at: audit.at,
+          },
+        ),
+      );
+    },
   );
 
   const initialAssets = input.applicationPersistence.read().editableAssets;
   const initialInvoke =
     input.mcpConnectionPort ??
     createLocalMcpConnectionPort({ invoke: createNoopPluginInvoke() });
+  const pluginRegistry =
+    input.pluginRegistry ??
+    createTrustedPluginRegistry({
+      allowedPluginIds: [ReferencePluginId],
+      host: createChildProcessReferencePluginHost(),
+    });
   registerSkillsAndPlugins(
     governedService,
     { ...input.applicationPersistence.read(), editableAssets: initialAssets },
     "server-agent",
     initialInvoke,
+    pluginRegistry,
   );
+  const refreshGovernedAssetRegistry = (): void =>
+    registerSkillsAndPlugins(
+      governedService,
+      input.applicationPersistence.read(),
+      "server-agent",
+      initialInvoke,
+      pluginRegistry,
+    );
 
   return createServer((req, res) => {
+    refreshGovernedAssetRegistry();
     void handleRequest(
       req,
       res,
@@ -397,6 +435,7 @@ export const createApiServer = (input: {
       input.passwordResetDelivery,
       input.webUiRoot,
       governedService,
+      pluginRegistry,
     ).catch((error: unknown) => {
       console.error(
         "server.unhandled",
@@ -575,6 +614,7 @@ const handleRequest = async (
   passwordResetDelivery: PasswordResetDelivery | undefined,
   webUiRoot: string | undefined,
   governedService: GovernedAgentToolService,
+  pluginRegistry: TrustedPluginRegistry,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -682,7 +722,12 @@ const handleRequest = async (
       respondMethodNotAllowed(res);
       return;
     }
-    await handleEditableAssetUpsert(req, res, applicationPersistence);
+    await handleEditableAssetUpsert(
+      req,
+      res,
+      applicationPersistence,
+      pluginRegistry,
+    );
     return;
   }
   if (path === RoutePath.EditableAssetsDelete) {
@@ -1458,6 +1503,7 @@ const handleEditableAssetUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
   applicationPersistence: ApplicationPersistence,
+  pluginRegistry: TrustedPluginRegistry,
 ): Promise<void> => {
   const body = await readJsonBody(req);
   if (body.type === ResultType.Err) {
@@ -1473,11 +1519,26 @@ const handleEditableAssetUpsert = async (
     });
     return;
   }
+  if (asset.kind === "plugin" && !pluginRegistry.isAllowed(asset.id)) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: "Plugin registry key is not trusted.",
+    });
+    return;
+  }
+  const existing = applicationPersistence
+    .read()
+    .editableAssets.records.find((candidate) => candidate.id === asset.id);
+  const serverOwnedAsset = withServerOwnedPluginAudit(asset, existing, {
+    action: existing ? "updated" : "registered",
+    actorId: "ide-session",
+    at: new Date().toISOString(),
+  });
   let assets: EditableAssetCatalog;
   try {
     assets = upsertEditableAsset(
       applicationPersistence.read().editableAssets,
-      asset,
+      serverOwnedAsset,
     );
   } catch {
     respondError(res, {
@@ -1487,7 +1548,7 @@ const handleEditableAssetUpsert = async (
     return;
   }
   await applicationPersistence.updateEditableAssets(assets);
-  respondJson(res, HttpStatus.Ok, { asset });
+  respondJson(res, HttpStatus.Ok, { asset: serverOwnedAsset });
 };
 
 const handleEditableAssetDelete = async (

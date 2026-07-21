@@ -39,6 +39,11 @@ import {
   type McpAssetSummary,
 } from "../shared/mcp-assets-client.js";
 import {
+  createPluginAssetsClient,
+  selectEnabledPluginAssets,
+  type PluginAssetSummary,
+} from "../shared/plugin-assets-client.js";
+import {
   createGovernanceLifecycleClient,
   redactLifecyclePromptBindings,
   type GovernanceLifecycleTrace,
@@ -265,6 +270,7 @@ const WorkflowScreenSelector = {
   PromptProvenance: "workflows-prompt-provenance",
   SkillAssetSelect: "workflows-skill-asset-select",
   McpAssetSelect: "workflows-mcp-asset-select",
+  PluginAssetSelect: "workflows-plugin-asset-select",
   MemoryAssetSelect: "workflows-memory-asset-select",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
@@ -761,6 +767,7 @@ interface WorkflowsScreenState {
   promptAssets: ReadonlyArray<PromptAssetSummary>;
   skillAssets: ReadonlyArray<SkillAssetSummary>;
   mcpAssets: ReadonlyArray<McpAssetSummary>;
+  pluginAssets: ReadonlyArray<PluginAssetSummary>;
   memoryAssets: ReadonlyArray<MemoryAssetSummary>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
@@ -847,6 +854,7 @@ export class WorkflowsScreen extends Component<
   private readonly promptAssetsClient = createPromptAssetsClient();
   private readonly skillAssetsClient = createSkillAssetsClient();
   private readonly mcpAssetsClient = createMcpAssetsClient();
+  private readonly pluginAssetsClient = createPluginAssetsClient();
   private readonly memoryAssetsClient = createMemoryAssetsClient();
   private readonly governanceLifecycleClient =
     createGovernanceLifecycleClient();
@@ -871,6 +879,7 @@ export class WorkflowsScreen extends Component<
       promptAssets: [],
       skillAssets: [],
       mcpAssets: [],
+      pluginAssets: [],
       memoryAssets: [],
       assetUsages: [],
       workflowVersions: [],
@@ -1207,7 +1216,7 @@ export class WorkflowsScreen extends Component<
           ),
         ),
         ...lifecycle.agentExecutions.flatMap((agent) =>
-          agent.skillId && agent.skillVersion
+          agent.skillId || agent.mcpAssetId || agent.pluginAssetId
             ? [
                 createElement(
                   "div",
@@ -1217,8 +1226,10 @@ export class WorkflowsScreen extends Component<
                       "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
                   },
                   [
-                    `Skill ${agent.skillId} v${agent.skillVersion} · agent ${agent.agentId}`,
-                    agent.artifactFingerprint
+                    agent.skillId && agent.skillVersion
+                      ? `Skill ${agent.skillId} v${agent.skillVersion} · agent ${agent.agentId}`
+                      : `Agent ${agent.agentId}`,
+                    agent.artifactFingerprint && agent.skillId
                       ? createElement("p", { className: "mt-1 break-all" }, [
                           `Provenance: ${agent.artifactFingerprint}`,
                         ])
@@ -1228,6 +1239,13 @@ export class WorkflowsScreen extends Component<
                     agent.mcpToolVersion
                       ? createElement("p", { className: "mt-1 break-all" }, [
                           `MCP: ${agent.mcpAssetId} · ${agent.mcpServerId} · v${agent.mcpToolVersion}${agent.responseFingerprint ? ` · Response: ${agent.responseFingerprint}` : ""}`,
+                        ])
+                      : "",
+                    agent.pluginAssetId &&
+                    agent.pluginVersion &&
+                    agent.pluginIsolation
+                      ? createElement("p", { className: "mt-1 break-all" }, [
+                          `Plugin: ${agent.pluginAssetId} · v${agent.pluginVersion} · ${agent.pluginIsolation}${agent.pluginFingerprint ? ` · Provenance: ${agent.pluginFingerprint}` : ""}${agent.pluginAuditAction ? ` · Audit: ${agent.pluginAuditAction}` : ""}`,
                         ])
                       : "",
                   ],
@@ -12725,6 +12743,7 @@ export class WorkflowsScreen extends Component<
         this.renderNodePromptField(node),
         this.renderSkillAssetSelection(node),
         this.renderMcpAssetSelection(node),
+        this.renderPluginAssetSelection(node),
         this.renderMemorySourceSelection(node),
         this.renderProviderSelectionFields(node, provider),
       ],
@@ -12840,6 +12859,61 @@ export class WorkflowsScreen extends Component<
               enabledConnections.length === 0
                 ? "No enabled MCP connections are available."
                 : "Select an enabled MCP connection for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderPluginAssetSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledPlugins = selectEnabledPluginAssets(this.state.pluginAssets);
+    const selectedAssetId = node.config.pluginAsset?.assetId ?? "";
+    const selected = enabledPlugins.find(
+      (plugin) => plugin.id === selectedAssetId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Pinned server plugin",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled trusted manifests can be selected. Plugin code and secrets remain server-side.",
+        ]),
+        this.renderInspectorSelect(
+          "Server plugin",
+          selectedAssetId,
+          enabledPlugins.map((plugin) => plugin.id),
+          (value) => {
+            const plugin = enabledPlugins.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!plugin) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: {
+                ...current.config,
+                pluginAsset: { assetId: plugin.id, version: "1" },
+              },
+            }));
+          },
+          enabledPlugins.map((plugin) => ({
+            value: plugin.id,
+            label: `${plugin.name} · ${plugin.runtime}/${plugin.isolation}`,
+          })),
+          WorkflowScreenSelector.PluginAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Pinned: ${selected.id} v${node.config.pluginAsset?.version ?? "1"} · ${selected.runtime}/${selected.isolation}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledPlugins.length === 0
+                ? "No enabled server plugins are available."
+                : "Select an enabled trusted plugin for this agent.",
             ]),
       ],
     );
@@ -13518,6 +13592,7 @@ export class WorkflowsScreen extends Component<
       promptAssets,
       skillAssets,
       mcpAssets,
+      pluginAssets,
       memoryAssets,
     ] = await Promise.all([
       this.workflowClient.listDefinitions(),
@@ -13527,6 +13602,7 @@ export class WorkflowsScreen extends Component<
       this.promptAssetsClient.list(),
       this.skillAssetsClient.list(),
       this.mcpAssetsClient.list(),
+      this.pluginAssetsClient.list(),
       this.memoryAssetsClient.list(),
     ]);
     const currentWorkflow = readWorkflowEditorTarget(
@@ -13579,6 +13655,7 @@ export class WorkflowsScreen extends Component<
       promptAssets,
       skillAssets,
       mcpAssets,
+      pluginAssets,
       memoryAssets,
       assetUsages,
       workflowVersions,
@@ -13637,6 +13714,7 @@ export class WorkflowsScreen extends Component<
       promptAssets,
       skillAssets,
       mcpAssets,
+      pluginAssets,
       memoryAssets,
     ] = await Promise.all([
       this.workflowClient.listAssets(),
@@ -13644,6 +13722,7 @@ export class WorkflowsScreen extends Component<
       this.promptAssetsClient.list(),
       this.skillAssetsClient.list(),
       this.mcpAssetsClient.list(),
+      this.pluginAssetsClient.list(),
       this.memoryAssetsClient.list(),
     ]);
 
@@ -13653,6 +13732,7 @@ export class WorkflowsScreen extends Component<
       promptAssets,
       skillAssets,
       mcpAssets,
+      pluginAssets,
       memoryAssets,
     });
   }

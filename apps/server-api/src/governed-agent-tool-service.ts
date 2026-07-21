@@ -30,6 +30,9 @@ export type GovernedAgentToolService = {
   registerPlugin: (plugin: RegisteredServerPlugin) => void;
   registerSkill: (skill: SkillDefinition) => void;
   invoke: (input: GovernedSkillInvocation) => Promise<GovernedSkillResult>;
+  invokePlugin: (
+    input: GovernedPluginInvocation,
+  ) => Promise<GovernedSkillResult>;
 };
 
 type RegisteredServerPlugin = {
@@ -59,9 +62,23 @@ type GovernedSkillResult = {
   retrievals: ReadonlyArray<MemoryRetrieval>;
 };
 
+type GovernedPluginInvocation = {
+  lifecycleId: string;
+  pluginAssetId: string;
+  pluginVersion: string;
+  input: JsonValue;
+  grantedPermissions: ReadonlyArray<AgentPermission>;
+  now: string;
+};
+
 export const createGovernedAgentToolService = (
   persistence: GovernanceLifecyclePersistencePort,
   rag: RagPort,
+  auditPlugin?: (input: {
+    assetId: string;
+    action: string;
+    at: string;
+  }) => Promise<void>,
 ): GovernedAgentToolService => {
   const plugins = new Map<string, RegisteredServerPlugin>();
   const skills = new Map<string, SkillDefinition>();
@@ -99,6 +116,7 @@ export const createGovernedAgentToolService = (
         outputFingerprint: fingerprint(validated.output),
         artifactFingerprint: skill.provenance.artifactFingerprint,
         responseFingerprint: response.provenance.responseFingerprint,
+        ...pluginExecutionProvenance(plugin),
         ...(input.mcpConnection
           ? {
               mcpAssetId: input.mcpConnection.assetId,
@@ -110,8 +128,79 @@ export const createGovernedAgentToolService = (
       });
       return { output: validated.output, retrievals };
     },
+    invokePlugin: async (input) => {
+      const lifecycle = readLifecycle(persistence, input.lifecycleId);
+      const plugin = readPinnedPlugin(
+        plugins,
+        input.pluginAssetId,
+        input.pluginVersion,
+      );
+      const tool = plugin.manifest.tools[0];
+      if (!tool) {
+        throw new Error("Plugin manifest does not declare a tool.");
+      }
+      assertPluginInvocation(lifecycle, plugin, tool, input);
+      try {
+        const response = await plugin.invoke({
+          toolId: tool.id,
+          input: input.input,
+          provenance: {
+            source: `plugin:${input.pluginAssetId}`,
+            artifactFingerprint: plugin.manifest.audit.manifestFingerprint,
+            registeredAt: plugin.manifest.audit.publishedAt,
+          },
+        });
+        const validated = validateMcpToolResult(response, tool.outputSchema);
+        if (!validated.valid || validated.output === undefined) {
+          throw new Error("Plugin output failed schema validation.");
+        }
+        await persistExecution(persistence, lifecycle.id, {
+          id: `${lifecycle.id}:agent:${(lifecycle.agentExecutions.length + 1).toString()}`,
+          lifecycleId: lifecycle.id,
+          agentId: plugin.agentId,
+          pluginId: plugin.manifest.id,
+          skillId: tool.id,
+          skillVersion: 1,
+          toolId: tool.id,
+          inputFingerprint: fingerprint(input.input),
+          outputFingerprint: fingerprint(validated.output),
+          artifactFingerprint: plugin.manifest.audit.manifestFingerprint,
+          responseFingerprint: response.provenance.responseFingerprint,
+          ...pluginExecutionProvenance(plugin),
+          timestamp: input.now,
+        });
+        await auditPlugin?.({
+          assetId: input.pluginAssetId,
+          action: "executed",
+          at: input.now,
+        });
+        return { output: validated.output, retrievals: [] };
+      } catch (error) {
+        await auditPlugin?.({
+          assetId: input.pluginAssetId,
+          action: "failed",
+          at: input.now,
+        });
+        throw error;
+      }
+    },
   };
 };
+
+const PluginAssetPrefix = "plugin:";
+
+const pluginExecutionProvenance = (
+  plugin: RegisteredServerPlugin,
+): Partial<GovernanceAgentExecutionRecord> =>
+  plugin.manifest.id.startsWith(PluginAssetPrefix)
+    ? {
+        pluginAssetId: plugin.manifest.id.slice(PluginAssetPrefix.length),
+        pluginVersion: plugin.manifest.version,
+        pluginFingerprint: plugin.manifest.audit.manifestFingerprint,
+        pluginIsolation: plugin.manifest.isolation,
+        pluginAuditAction: "invoked",
+      }
+    : {};
 
 const MaxRagRetrievals = 10;
 
@@ -193,6 +282,21 @@ const readPluginForSkill = (
   return plugin;
 };
 
+const readPinnedPlugin = (
+  plugins: ReadonlyMap<string, RegisteredServerPlugin>,
+  assetId: string,
+  version: string,
+): RegisteredServerPlugin => {
+  const plugin = plugins.get(`${PluginAssetPrefix}${assetId}`);
+  if (!plugin) {
+    throw new Error("Plugin asset is unavailable.");
+  }
+  if (plugin.manifest.version !== version) {
+    throw new Error("Plugin pin does not match the persisted asset.");
+  }
+  return plugin;
+};
+
 const assertInvocation = (
   lifecycle: GovernanceLifecycle,
   skill: SkillDefinition,
@@ -225,6 +329,23 @@ const assertInvocation = (
   }
   if (!validateVersionedJsonSchema(skill.inputSchema, input.input).valid) {
     throw new Error("Skill input failed schema validation.");
+  }
+};
+
+const assertPluginInvocation = (
+  lifecycle: GovernanceLifecycle,
+  plugin: RegisteredServerPlugin,
+  tool: ServerPluginManifest["tools"][number],
+  input: GovernedPluginInvocation,
+): void => {
+  if (lifecycle.state !== GovernanceLifecycleState.Executing) {
+    throw new Error("Plugin executions require an executing lifecycle.");
+  }
+  if (!hasPermissions(input.grantedPermissions, plugin.manifest.permissions)) {
+    throw new Error("Plugin permissions were not granted.");
+  }
+  if (!validateVersionedJsonSchema(tool.inputSchema, input.input).valid) {
+    throw new Error("Plugin input failed schema validation.");
   }
 };
 

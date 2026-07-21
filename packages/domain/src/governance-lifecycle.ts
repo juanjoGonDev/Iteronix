@@ -96,6 +96,11 @@ export type GovernanceAgentExecutionRecord = {
   mcpAssetId?: string;
   mcpServerId?: string;
   mcpToolVersion?: string;
+  pluginAssetId?: string;
+  pluginVersion?: string;
+  pluginFingerprint?: string;
+  pluginIsolation?: "process";
+  pluginAuditAction?: string;
   timestamp: string;
 };
 
@@ -551,6 +556,10 @@ const parseAgentExecution = (
   if (hasMcpProvenanceFields(value) && !mcpProvenance) {
     return undefined;
   }
+  const pluginProvenance = readPluginProvenance(value);
+  if (hasPluginProvenanceFields(value) && !pluginProvenance) {
+    return undefined;
+  }
   return {
     id: parsed["id"]!,
     lifecycleId: parsed["lifecycleId"]!,
@@ -564,8 +573,46 @@ const parseAgentExecution = (
     artifactFingerprint: parsed["artifactFingerprint"]!,
     responseFingerprint: parsed["responseFingerprint"]!,
     ...(mcpProvenance ?? {}),
+    ...(pluginProvenance ?? {}),
     timestamp: parsed["timestamp"]!,
   };
+};
+
+const hasPluginProvenanceFields = (value: Record<string, unknown>): boolean =>
+  value["pluginAssetId"] !== undefined ||
+  value["pluginVersion"] !== undefined ||
+  value["pluginFingerprint"] !== undefined ||
+  value["pluginIsolation"] !== undefined ||
+  value["pluginAuditAction"] !== undefined;
+
+const readPluginProvenance = (
+  value: Record<string, unknown>,
+):
+  | {
+      pluginAssetId: string;
+      pluginVersion: string;
+      pluginFingerprint: string;
+      pluginIsolation: "process";
+      pluginAuditAction: string;
+    }
+  | undefined => {
+  const pluginAssetId = readNonEmptyString(value["pluginAssetId"]);
+  const pluginVersion = readNonEmptyString(value["pluginVersion"]);
+  const pluginFingerprint = readNonEmptyString(value["pluginFingerprint"]);
+  const pluginAuditAction = readNonEmptyString(value["pluginAuditAction"]);
+  return pluginAssetId &&
+    pluginVersion &&
+    pluginFingerprint &&
+    pluginAuditAction &&
+    value["pluginIsolation"] === "process"
+    ? {
+        pluginAssetId,
+        pluginVersion,
+        pluginFingerprint,
+        pluginIsolation: "process",
+        pluginAuditAction,
+      }
+    : undefined;
 };
 
 const hasMcpProvenanceFields = (value: Record<string, unknown>): boolean =>
@@ -948,6 +995,22 @@ const assertAgentExecutionRecord = (
     (!input.mcpAssetId || !input.mcpServerId || !input.mcpToolVersion)
   ) {
     throw new Error("Governance MCP provenance is incomplete.");
+  }
+  const hasPluginProvenance =
+    input.pluginAssetId !== undefined ||
+    input.pluginVersion !== undefined ||
+    input.pluginFingerprint !== undefined ||
+    input.pluginIsolation !== undefined ||
+    input.pluginAuditAction !== undefined;
+  if (
+    hasPluginProvenance &&
+    (!input.pluginAssetId ||
+      !input.pluginVersion ||
+      !input.pluginFingerprint ||
+      input.pluginIsolation !== "process" ||
+      !input.pluginAuditAction)
+  ) {
+    throw new Error("Governance plugin provenance is incomplete.");
   }
 };
 

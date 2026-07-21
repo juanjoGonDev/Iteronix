@@ -131,6 +131,48 @@ export const removeEditableAsset = (
   records: catalog.records.filter((asset) => asset.id !== assetId),
 });
 
+export const appendPluginAuditEvent = (
+  catalog: EditableAssetCatalog,
+  input: { assetId: string; action: string; actorId: string; at: string },
+): EditableAssetCatalog => ({
+  records: catalog.records.map((asset) =>
+    asset.id === input.assetId &&
+    asset.kind === AssetKind.Plugin &&
+    asset.plugin
+      ? {
+          ...asset,
+          plugin: {
+            ...asset.plugin,
+            auditEvents: [
+              ...asset.plugin.auditEvents,
+              { at: input.at, action: input.action, actorId: input.actorId },
+            ],
+          },
+        }
+      : asset,
+  ),
+});
+
+export const withServerOwnedPluginAudit = (
+  asset: EditableAssetRecord,
+  existing: EditableAssetRecord | undefined,
+  input: { action: string; actorId: string; at: string },
+): EditableAssetRecord =>
+  asset.kind !== AssetKind.Plugin || !asset.plugin
+    ? asset
+    : {
+        ...asset,
+        plugin: {
+          ...asset.plugin,
+          auditEvents: [
+            ...(existing?.kind === AssetKind.Plugin && existing.plugin
+              ? existing.plugin.auditEvents
+              : []),
+            { at: input.at, action: input.action, actorId: input.actorId },
+          ],
+        },
+      };
+
 export const parseEditableAssetCatalog = (
   value: unknown,
 ): EditableAssetCatalog => {

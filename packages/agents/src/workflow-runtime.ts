@@ -760,6 +760,7 @@ const executeWorkflowNode = async (input: {
       input.node.kind === WorkflowNodeKind.AiAgent &&
       (input.node.config.skillId ||
         input.node.config.skillAsset ||
+        input.node.config.pluginAsset ||
         input.node.config.mcpConnection) &&
       input.runGovernedNode
     ) {

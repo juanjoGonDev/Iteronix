@@ -65,6 +65,11 @@ type AgentExecutionTrace = {
   mcpAssetId: string | null;
   mcpServerId: string | null;
   mcpToolVersion: string | null;
+  pluginAssetId: string | null;
+  pluginVersion: string | null;
+  pluginFingerprint: string | null;
+  pluginIsolation: string | null;
+  pluginAuditAction: string | null;
 };
 
 type RetrievalExecutionTrace = {
@@ -146,6 +151,11 @@ export const parseGovernanceLifecycleResponse = (
         mcpAssetId: readOptionalString(record["mcpAssetId"]),
         mcpServerId: readOptionalString(record["mcpServerId"]),
         mcpToolVersion: readOptionalString(record["mcpToolVersion"]),
+        pluginAssetId: readOptionalString(record["pluginAssetId"]),
+        pluginVersion: readOptionalString(record["pluginVersion"]),
+        pluginFingerprint: readOptionalString(record["pluginFingerprint"]),
+        pluginIsolation: readOptionalString(record["pluginIsolation"]),
+        pluginAuditAction: readOptionalString(record["pluginAuditAction"]),
       };
     },
   );

@@ -9,6 +9,7 @@ import {
 } from "./governed-agent-tool-service";
 import {
   createMemoryScope,
+  McpToolResultStatus,
   type ArtifactProvenance,
   type McpToolResult,
   type MemoryScope,
@@ -26,7 +27,11 @@ import {
   type WorkflowExecutionRecord,
 } from "../../../packages/shared/src/workflows";
 import type { ApplicationState } from "./application-state";
-import { AssetKind, AssetStatus } from "./editable-assets";
+import {
+  AssetKind,
+  AssetStatus,
+  type EditableAssetRecord,
+} from "./editable-assets";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 import {
   executeProviderNode,
@@ -38,6 +43,7 @@ import {
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import type { GovernanceLifecycleService } from "./governance-lifecycle-service";
+import type { TrustedPluginRegistry } from "./server-plugin-runtime";
 
 export type GovernedWorkflowRuntimeService = {
   runGovernedWorkflow: (input: {
@@ -69,6 +75,7 @@ export const createGovernedWorkflowRuntimeService = (input: {
     provenance: ArtifactProvenance;
   }) => Promise<McpToolResult>;
   agentId: string;
+  pluginRegistry?: TrustedPluginRegistry;
   now?: () => Date;
 }): GovernedWorkflowRuntimeService => {
   const now = input.now ?? (() => new Date());
@@ -95,7 +102,13 @@ export const createGovernedWorkflowRuntimeService = (input: {
     lifecycle: GovernanceLifecycle;
   }> => {
     const state = input.readApplicationState();
-    registerSkillsAndPlugins(governedService, state, input.agentId, mcp);
+    registerSkillsAndPlugins(
+      governedService,
+      state,
+      input.agentId,
+      mcp,
+      input.pluginRegistry,
+    );
 
     const resolved = resolveWorkflowPromptAssets(
       workflowInput.definition,
@@ -206,6 +219,7 @@ export const registerSkillsAndPlugins = (
         input: JsonValue;
         provenance: ArtifactProvenance;
       }) => Promise<McpToolResult>),
+  pluginRegistry?: TrustedPluginRegistry,
 ): void => {
   const connectionPort =
     typeof mcp === "function"
@@ -214,6 +228,7 @@ export const registerSkillsAndPlugins = (
   const plugins = state.editableAssets.records.filter(
     (asset) => asset.kind === AssetKind.Plugin && asset.plugin,
   );
+  pluginRegistry?.refresh(state.editableAssets.records);
   const skills = state.editableAssets.records.filter(
     (asset) =>
       asset.kind === AssetKind.Skill &&
@@ -259,44 +274,14 @@ export const registerSkillsAndPlugins = (
   }
 
   for (const plugin of plugins) {
-    governedService.registerPlugin({
-      manifest: {
-        id: plugin.id,
-        version: "1",
-        runtime: plugin.plugin!.runtime,
-        isolation: plugin.plugin!.isolation,
-        permissions: [...plugin.permissions],
-        tools: skills
-          .filter(
-            (
-              entry,
-            ): entry is typeof entry & {
-              skill: NonNullable<(typeof entry)["skill"]>;
-            } => entry.skill !== undefined,
-          )
-          .map((skill) => ({
-            id: skill.id,
-            inputSchema: skill.inputSchema,
-            outputSchema: skill.outputSchema,
-          })),
-        audit: {
-          manifestFingerprint: plugin.provenance.artifactFingerprint,
-          publishedAt: plugin.provenance.registeredAt,
-        },
-      },
+    registerLegacyPluginForSkills(
+      governedService,
+      plugin,
+      skills,
       agentId,
-      invoke: (request) =>
-        connectionPort.invoke({
-          connection: request.connection ?? {
-            assetId: "legacy-mcp-connection",
-            serverId: plugin.id,
-            toolVersion: "1",
-          },
-          toolId: request.toolId,
-          input: request.input,
-          provenance: request.provenance,
-        }),
-    });
+      connectionPort,
+    );
+    registerDirectPlugin(governedService, plugin, agentId, pluginRegistry);
   }
 
   for (const mcpTool of mcpTools) {
@@ -344,6 +329,102 @@ export const registerSkillsAndPlugins = (
   }
 };
 
+const registerLegacyPluginForSkills = (
+  governedService: GovernedAgentToolService,
+  plugin: EditableAssetRecord,
+  skills: ReadonlyArray<EditableAssetRecord>,
+  agentId: string,
+  connectionPort: ServerMcpConnectionPort,
+): void => {
+  const tools = skills
+    .filter(
+      (
+        entry,
+      ): entry is typeof entry & {
+        skill: NonNullable<(typeof entry)["skill"]>;
+      } => entry.skill !== undefined,
+    )
+    .map((skill) => ({
+      id: skill.id,
+      inputSchema: skill.inputSchema,
+      outputSchema: skill.outputSchema,
+    }));
+  if (tools.length === 0 || !plugin.plugin) return;
+  governedService.registerPlugin({
+    manifest: {
+      id: plugin.id,
+      version: "1",
+      runtime: plugin.plugin.runtime,
+      isolation: plugin.plugin.isolation,
+      permissions: [...plugin.permissions],
+      tools,
+      audit: {
+        manifestFingerprint: plugin.provenance.artifactFingerprint,
+        publishedAt: plugin.provenance.registeredAt,
+      },
+    },
+    agentId,
+    invoke: (request) =>
+      connectionPort.invoke({
+        connection: request.connection ?? {
+          assetId: "legacy-mcp-connection",
+          serverId: plugin.id,
+          toolVersion: "1",
+        },
+        toolId: request.toolId,
+        input: request.input,
+        provenance: request.provenance,
+      }),
+  });
+};
+
+const registerDirectPlugin = (
+  governedService: GovernedAgentToolService,
+  plugin: EditableAssetRecord,
+  agentId: string,
+  registry: TrustedPluginRegistry | undefined,
+): void => {
+  if (!registry || plugin.status !== AssetStatus.Enabled || !plugin.plugin) {
+    return;
+  }
+  const version = 1;
+  governedService.registerPlugin({
+    manifest: {
+      id: `plugin:${plugin.id}`,
+      version: version.toString(),
+      runtime: plugin.plugin.runtime,
+      isolation: plugin.plugin.isolation,
+      permissions: plugin.permissions,
+      tools: [
+        {
+          id: plugin.id,
+          inputSchema: plugin.inputSchema,
+          outputSchema: plugin.outputSchema,
+        },
+      ],
+      audit: {
+        manifestFingerprint: plugin.provenance.artifactFingerprint,
+        publishedAt: plugin.provenance.registeredAt,
+      },
+    },
+    agentId,
+    invoke: async (request) => ({
+      toolId: request.toolId,
+      status: McpToolResultStatus.Success,
+      output: await registry.invoke({
+        assetId: plugin.id,
+        version: version.toString(),
+        input: request.input,
+      }),
+      provenance: {
+        serverId: plugin.id,
+        toolVersion: version.toString(),
+        responseFingerprint: plugin.provenance.artifactFingerprint,
+      },
+    }),
+  });
+};
+
 export const createRunGovernedNodeCallback = (input: {
   governedService: GovernedAgentToolService;
   lifecycleId: string;
@@ -365,6 +446,20 @@ export const createRunGovernedNodeCallback = (input: {
 ) => Promise<WorkflowProviderRunResult>) => {
   return async (governedRequest) => {
     const node = governedRequest.node;
+    if (node.config.pluginAsset) {
+      const result = await input.governedService.invokePlugin({
+        lifecycleId: input.lifecycleId,
+        pluginAssetId: node.config.pluginAsset.assetId,
+        pluginVersion: node.config.pluginAsset.version,
+        input: governedRequest.inputValue as unknown as JsonValue,
+        grantedPermissions: (node.config.grantedPermissions ??
+          input.grantedPermissions) as Parameters<
+          GovernedAgentToolService["invokePlugin"]
+        >[0]["grantedPermissions"],
+        now: input.now().toISOString(),
+      });
+      return toWorkflowProviderRunResult(result.output);
+    }
     const skillId = node.config.skillAsset?.assetId ?? node.config.skillId;
     if (!skillId && !node.config.mcpConnection) {
       throw new Error(`Governed node ${node.id} is missing a skillId.`);
@@ -397,18 +492,18 @@ export const createRunGovernedNodeCallback = (input: {
         : {}),
       now: input.now().toISOString(),
     });
-    const outputStr =
-      typeof result.output === "string"
-        ? result.output
-        : JSON.stringify(result.output);
-    return {
-      outputText: outputStr,
-      outputSnapshot: result.output,
-      alerts: [],
-      citations: [],
-    } as WorkflowProviderRunResult;
+    return toWorkflowProviderRunResult(result.output);
   };
 };
+
+const toWorkflowProviderRunResult = (
+  output: JsonValue,
+): WorkflowProviderRunResult => ({
+  outputText: typeof output === "string" ? output : JSON.stringify(output),
+  outputSnapshot: output,
+  alerts: [],
+  citations: [],
+});
 
 export const resolveMcpConnection = (
   state: ApplicationState,

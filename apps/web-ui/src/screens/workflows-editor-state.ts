@@ -124,6 +124,10 @@ type WorkflowNodeConfigRecord = {
     serverId: string;
     toolVersion: string;
   };
+  pluginAsset?: {
+    assetId: string;
+    version: string;
+  };
   memorySourceId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;

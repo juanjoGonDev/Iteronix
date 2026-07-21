@@ -15,6 +15,51 @@ import { createGovernedAgentToolService } from "./governed-agent-tool-service";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 
 describe("governed agent tool service", () => {
+  it("persists direct plugin provenance and appends a server-owned execution audit", async () => {
+    const persistence = createMemoryPersistence();
+    const lifecycle = createExecutingLifecycle();
+    const audits: string[] = [];
+    await persistence.mutateGovernanceLifecycles(() => [lifecycle]);
+    const service = createGovernedAgentToolService(
+      persistence,
+      createRagPort(),
+      async (audit) => {
+        audits.push(`${audit.assetId}:${audit.action}`);
+      },
+    );
+    service.registerPlugin({
+      manifest: { ...manifest, id: "plugin:reference-knowledge" },
+      agentId: "reference-agent",
+      invoke: async () => ({
+        toolId: skill.id,
+        status: McpToolResultStatus.Success,
+        output: { answers: ["plugin result"] },
+        provenance: {
+          serverId: "reference-knowledge",
+          toolVersion: "1",
+          responseFingerprint: "plugin-response",
+        },
+      }),
+    });
+
+    await service.invokePlugin({
+      lifecycleId: lifecycle.id,
+      pluginAssetId: "reference-knowledge",
+      pluginVersion: "1.0.0",
+      input: { query: "plugin" },
+      grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(audits).toEqual(["reference-knowledge:executed"]);
+    expect(
+      persistence.read().governanceLifecycles[0]?.agentExecutions[0],
+    ).toMatchObject({
+      pluginAssetId: "reference-knowledge",
+      pluginAuditAction: "invoked",
+    });
+  });
+
   it("executes a reference server plugin through an executing lifecycle and persists provenance", async () => {
     const persistence = createMemoryPersistence();
     const lifecycle = createExecutingLifecycle();
