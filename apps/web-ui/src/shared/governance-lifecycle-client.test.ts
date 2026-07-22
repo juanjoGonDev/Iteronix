@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createGovernanceLifecycleClient,
   parseGovernanceLifecycleResponse,
   redactLifecyclePromptBindings,
 } from "./governance-lifecycle-client.js";
@@ -60,6 +61,54 @@ describe("governance lifecycle skill provenance", () => {
         },
       ],
     });
+  });
+});
+
+describe("governance lifecycle controls", () => {
+  it("sends credentialed approval controls and parses the UI-safe lifecycle", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    const requests: Array<RequestInit> = [];
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { location: { origin: "http://localhost:5173" } },
+    });
+    globalThis.fetch = async (_input, init) => {
+      requests.push(init ?? {});
+      return new Response(
+        JSON.stringify({
+          lifecycle: {
+            id: "lifecycle-1",
+            state: "approved",
+            budgets: {},
+            transitions: [],
+            promptExecutions: [],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    try {
+      const lifecycle = await createGovernanceLifecycleClient().approve({
+        lifecycleId: "lifecycle-1",
+        reason: "Evidence accepted",
+      });
+      expect(lifecycle.state).toBe("approved");
+      expect(requests[0]).toMatchObject({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({
+          lifecycleId: "lifecycle-1",
+          reason: "Evidence accepted",
+        }),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
   });
 });
 

@@ -39,6 +39,57 @@ afterEach(async () => {
 });
 
 describe("governance lifecycle API", () => {
+  it("allows an authenticated IDE session to control lifecycle only from a trusted origin and returns a redacted response", async () => {
+    const testServer = createTestServer();
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+    const lifecycle = await createAwaitingLifecycleWithSecret(
+      testServer.persistence,
+      "session-controlled",
+    );
+    await requestWithHeaders(
+      url,
+      "/auth/bootstrap-admin",
+      {
+        email: "admin@example.com",
+        password: "CorrectHorseBatteryStaple1",
+      },
+      { authorization: `Bearer ${AuthToken}` },
+    );
+    await requestWithHeaders(url, "/auth/register", {
+      email: "member@example.com",
+      password: "CorrectHorseBatteryStaple1",
+    });
+    const login = await requestWithHeaders(url, "/auth/login", {
+      email: "member@example.com",
+      password: "CorrectHorseBatteryStaple1",
+    });
+    const memberId = testServer.persistence
+      .read()
+      .ideAuth.users.find((user) => user.email === "member@example.com")?.id;
+    expect(memberId).toBeDefined();
+    const approved = await requestWithHeaders(
+      url,
+      "/governance/lifecycles/approve",
+      { lifecycleId: lifecycle.id, reason: "Approved from IDE." },
+      { cookie: login.cookie, origin: "http://127.0.0.1:4000" },
+    );
+    expect(approved.status).toBe(200);
+    expect(JSON.stringify(approved.body)).not.toContain("raw-browser-secret");
+    expect(JSON.stringify(approved.body)).toContain("[redacted]");
+    const persisted = testServer.persistence
+      .read()
+      .governanceLifecycles.find((entry) => entry.id === lifecycle.id);
+    expect(persisted?.transitions.at(-1)?.actor.id).toBe(memberId);
+    const forged = await requestWithHeaders(
+      url,
+      "/governance/lifecycles/approve",
+      { lifecycleId: lifecycle.id, reason: "Forged origin." },
+      { cookie: login.cookie, origin: "https://forged.example" },
+    );
+    expect(forged.status).toBe(401);
+  });
+
   it("links an IDE workflow run to its persisted governed prompt trace", async () => {
     const testServer = createTestServer();
     testServer.workflowCatalog.upsertWorkflow(createWorkflow());
@@ -836,6 +887,28 @@ const request = async (
       execution?: unknown;
       error?: unknown;
     },
+  };
+};
+
+const requestWithHeaders = async (
+  url: string,
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<{
+  status: number;
+  body: Record<string, unknown>;
+  cookie: string;
+}> => {
+  const response = await fetch(`${url}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+    cookie: response.headers.get("set-cookie") ?? "",
   };
 };
 

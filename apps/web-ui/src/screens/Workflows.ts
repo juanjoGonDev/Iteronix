@@ -102,6 +102,7 @@ import {
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
+  selectGovernanceLifecycleControlState,
   selectWorkflowCanvasExecution,
   selectWorkflowDebugExecution,
   selectWorkflowDraftAfterCatalogReload,
@@ -268,6 +269,10 @@ const WorkflowScreenSelector = {
   PromptAssetPreview: "workflows-prompt-preview",
   PromptAssetValidation: "workflows-prompt-validation",
   PromptProvenance: "workflows-prompt-provenance",
+  GovernanceApprove: "workflows-governance-approve",
+  GovernanceContinue: "workflows-governance-continue",
+  GovernanceReject: "workflows-governance-reject",
+  GovernanceFeedback: "workflows-governance-feedback",
   SkillAssetSelect: "workflows-skill-asset-select",
   McpAssetSelect: "workflows-mcp-asset-select",
   PluginAssetSelect: "workflows-plugin-asset-select",
@@ -773,6 +778,8 @@ interface WorkflowsScreenState {
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
   governanceLifecycle: GovernanceLifecycleTrace | null;
+  governanceFeedback: string;
+  governanceControlPending: boolean;
   workflowLogsFilter: WorkflowLogsFilter;
   executionHistoryFilter: ExecutionHistoryFilter;
   executionAutoRefreshEnabled: boolean;
@@ -885,6 +892,8 @@ export class WorkflowsScreen extends Component<
       workflowVersions: [],
       executions: [],
       governanceLifecycle: null,
+      governanceFeedback: "",
+      governanceControlPending: false,
       workflowLogsFilter: WorkflowLogsFilter.Errors,
       executionHistoryFilter: ExecutionHistoryFilter.All,
       executionAutoRefreshEnabled: true,
@@ -1197,8 +1206,9 @@ export class WorkflowsScreen extends Component<
           "Governance and prompt provenance",
         ]),
         createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
-          `State: ${lifecycle.state} · execution ${readLifecycleBudget(lifecycle.budgets, "execution")} · repairs ${readLifecycleBudget(lifecycle.budgets, "repair")}`,
+          `State: ${lifecycle.state} · ${selectGovernanceLifecycleControlState({ state: lifecycle.state, budgets: lifecycle.budgets, fingerprints: lifecycle.fingerprints, transitionCount: lifecycle.transitions.length, feedback: this.state.governanceFeedback, pending: this.state.governanceControlPending }).budgetSummary}`,
         ]),
+        this.renderGovernanceControls(lifecycle),
         ...lifecycle.promptExecutions.map((prompt) =>
           createElement(
             "div",
@@ -1271,6 +1281,110 @@ export class WorkflowsScreen extends Component<
         ),
       ],
     );
+  }
+
+  private renderGovernanceControls(
+    lifecycle: GovernanceLifecycleTrace,
+  ): HTMLElement {
+    const awaitingApproval = lifecycle.state === "awaiting-user-approval";
+    const controlState = selectGovernanceLifecycleControlState({
+      state: lifecycle.state,
+      budgets: lifecycle.budgets,
+      fingerprints: lifecycle.fingerprints,
+      transitionCount: lifecycle.transitions.length,
+      feedback: this.state.governanceFeedback,
+      pending: this.state.governanceControlPending,
+    });
+    const disabled = controlState.controlsDisabled;
+    return createElement("div", { className: "mt-3 space-y-2" }, [
+      createElement("input", {
+        className: InspectorInputClassName,
+        value: this.state.governanceFeedback,
+        placeholder: "Decision reason or rejection feedback",
+        disabled,
+        onInput: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            this.setState({ governanceFeedback: target.value });
+          }
+        },
+        "data-testid": WorkflowScreenSelector.GovernanceFeedback,
+      }),
+      createElement("div", { className: "flex flex-wrap gap-2" }, [
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled,
+          onClick: () => void this.handleGovernanceControl("approve"),
+          children: this.state.governanceControlPending ? "Saving…" : "Approve",
+          dataset: { testid: WorkflowScreenSelector.GovernanceApprove },
+        }),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled,
+          onClick: () => void this.handleGovernanceControl("continue"),
+          children: "Continue",
+          dataset: { testid: WorkflowScreenSelector.GovernanceContinue },
+        }),
+        createElement(Button, {
+          variant: "danger",
+          size: "sm",
+          disabled: controlState.rejectDisabled,
+          onClick: () => void this.handleGovernanceControl("reject"),
+          children: "Reject",
+          dataset: { testid: WorkflowScreenSelector.GovernanceReject },
+        }),
+      ]),
+      awaitingApproval
+        ? ""
+        : createElement("p", { className: "text-xs text-text-secondary" }, [
+            "Controls are disabled because this lifecycle is not awaiting approval.",
+          ]),
+      createElement("p", { className: "text-xs text-text-secondary" }, [
+        `Fingerprints: ${controlState.fingerprintSummary} · History: ${controlState.historyLabel}`,
+      ]),
+    ]);
+  }
+
+  private async handleGovernanceControl(
+    action: "approve" | "continue" | "reject",
+  ): Promise<void> {
+    const lifecycle = this.state.governanceLifecycle;
+    if (!lifecycle || lifecycle.state !== "awaiting-user-approval") return;
+    const reason = this.state.governanceFeedback.trim();
+    this.setState({ governanceControlPending: true, errorMessage: null });
+    try {
+      const next =
+        action === "approve"
+          ? await this.governanceLifecycleClient.approve({
+              lifecycleId: lifecycle.id,
+              reason,
+            })
+          : action === "continue"
+            ? await this.governanceLifecycleClient.continue({
+                lifecycleId: lifecycle.id,
+                reason,
+              })
+            : await this.governanceLifecycleClient.reject({
+                lifecycleId: lifecycle.id,
+                feedback: reason,
+              });
+      this.setState({
+        governanceLifecycle: next,
+        governanceControlPending: false,
+        governanceFeedback: "",
+        noticeMessage: `Lifecycle ${action} recorded.`,
+      });
+    } catch (error) {
+      this.setState({
+        governanceControlPending: false,
+        errorMessage: readErrorMessage(
+          error,
+          "Could not record lifecycle decision.",
+        ),
+      });
+    }
   }
 
   private renderSurface(): HTMLElement {
@@ -16487,14 +16601,6 @@ const edgeDeletePointOverlapsNode = (
 
 const hoveredPortUsesActiveArrow = (hoveredPort: HoveredPort | null): boolean =>
   hoveredPort?.side === "input";
-
-const readLifecycleBudget = (
-  budgets: Readonly<Record<string, unknown>>,
-  key: string,
-): string => {
-  const value = budgets[key];
-  return typeof value === "number" ? value.toString() : "0";
-};
 
 const createLiveExecutionState = (
   workflow: WorkflowDefinitionRecord,

@@ -675,11 +675,13 @@ const handleRequest = async (
     return;
   }
 
-  const hasIdeSession = readSessionUser(req, ideAuth) !== undefined;
+  const hasIdeSession =
+    readSessionUser(req, ideAuth) !== undefined &&
+    isTrustedIdeSessionRequest(req);
   const acceptsIdeSession =
     hasIdeSession &&
     (isEditableAssetRoute(path) ||
-      path === RoutePath.GovernanceLifecyclesGet ||
+      isIdeGovernanceLifecycleRoute(path) ||
       isIdeWorkflowExecutionRoute(path));
   if (
     (!isAuthorized(req, config.authToken) && !acceptsIdeSession) ||
@@ -799,6 +801,7 @@ const handleRequest = async (
       req,
       res,
       governanceLifecycle,
+      ideAuth,
       GovernanceTransitionKind.Approve,
     );
     return;
@@ -812,6 +815,7 @@ const handleRequest = async (
       req,
       res,
       governanceLifecycle,
+      ideAuth,
       GovernanceTransitionKind.Continue,
     );
     return;
@@ -825,6 +829,7 @@ const handleRequest = async (
       req,
       res,
       governanceLifecycle,
+      ideAuth,
       GovernanceTransitionKind.RejectWithFeedback,
     );
     return;
@@ -1871,7 +1876,9 @@ const handleGovernanceLifecycleBegin = async (
       ...parsed.value,
       now: new Date().toISOString(),
     });
-    respondJson(res, HttpStatus.Ok, { lifecycle });
+    respondJson(res, HttpStatus.Ok, {
+      lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
+    });
   } catch (error: unknown) {
     respondError(res, mapGovernanceError(error));
   }
@@ -1881,6 +1888,7 @@ const handleGovernanceLifecycleControl = async (
   req: IncomingMessage,
   res: ServerResponse,
   governanceLifecycle: GovernanceLifecycleService,
+  ideAuth: IdeAuthService,
   kind: GovernanceTransitionKind,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
@@ -1897,10 +1905,12 @@ const handleGovernanceLifecycleControl = async (
     const lifecycle = await governanceLifecycle.transition({
       ...parsed.value,
       kind,
-      actorId: readAuthenticatedActorId(req),
+      actorId: readAuthenticatedActorId(req, ideAuth),
       now: new Date().toISOString(),
     });
-    respondJson(res, HttpStatus.Ok, { lifecycle });
+    respondJson(res, HttpStatus.Ok, {
+      lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
+    });
   } catch (error: unknown) {
     respondError(res, mapGovernanceError(error));
   }
@@ -4190,6 +4200,14 @@ const isColocatedWebUiRequest = (req: IncomingMessage): boolean => {
   }
 };
 
+const isTrustedIdeSessionRequest = (req: IncomingMessage): boolean => {
+  const origin = readCorsOrigin(req);
+  return (
+    (origin !== undefined && isAllowedCorsOrigin(origin)) ||
+    isColocatedWebUiRequest(req)
+  );
+};
+
 const isExternalWorkflowRoute = (path: string): boolean =>
   path === RoutePath.ExternalWorkflowRead ||
   path === RoutePath.ExternalWorkflowInvoke;
@@ -4201,6 +4219,12 @@ const isGovernanceLifecycleRoute = (path: string): boolean =>
   path === RoutePath.GovernanceLifecyclesContinue ||
   path === RoutePath.GovernanceLifecyclesReject ||
   path === RoutePath.GovernanceLifecyclesResume;
+
+const isIdeGovernanceLifecycleRoute = (path: string): boolean =>
+  path === RoutePath.GovernanceLifecyclesGet ||
+  path === RoutePath.GovernanceLifecyclesApprove ||
+  path === RoutePath.GovernanceLifecyclesContinue ||
+  path === RoutePath.GovernanceLifecyclesReject;
 
 const isEditableAssetRoute = (path: string): boolean =>
   path === RoutePath.EditableAssetsList ||
@@ -4371,10 +4395,13 @@ const readBearerToken = (req: IncomingMessage): string | undefined => {
   return typeof header === "string" ? extractBearerToken(header) : undefined;
 };
 
-const readAuthenticatedActorId = (req: IncomingMessage): string =>
+const readAuthenticatedActorId = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+): string =>
   readBearerToken(req)
     ? "authenticated-bearer-client"
-    : "authenticated-colocated-web-ui";
+    : (readSessionUser(req, ideAuth)?.id ?? "authenticated-colocated-web-ui");
 
 const classifyExternalWorkflowFailure = (
   error: unknown,

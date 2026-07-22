@@ -1,6 +1,9 @@
 import { readBackendOrigin } from "./backend-origin.js";
 
 const LifecycleGetPath = "/governance/lifecycles/get";
+const LifecycleApprovePath = "/governance/lifecycles/approve";
+const LifecycleContinuePath = "/governance/lifecycles/continue";
+const LifecycleRejectPath = "/governance/lifecycles/reject";
 const RedactedBindingValue = "[REDACTED]";
 const SensitiveBindingKeyFragments = [
   "secret",
@@ -86,6 +89,7 @@ export type GovernanceLifecycleTrace = {
   id: string;
   state: string;
   budgets: Readonly<Record<string, unknown>>;
+  fingerprints: Readonly<{ scope: string; evidence: string }>;
   transitions: ReadonlyArray<unknown>;
   promptExecutions: ReadonlyArray<PromptExecutionTrace>;
   agentExecutions: ReadonlyArray<AgentExecutionTrace>;
@@ -109,6 +113,24 @@ export const createGovernanceLifecycleClient = () => ({
     requestJson({
       path: LifecycleGetPath,
       body: { lifecycleId },
+      parse: parseGovernanceLifecycleResponse,
+    }),
+  approve: (input: { lifecycleId: string; reason: string }) =>
+    requestJson({
+      path: LifecycleApprovePath,
+      body: input,
+      parse: parseGovernanceLifecycleResponse,
+    }),
+  continue: (input: { lifecycleId: string; reason: string }) =>
+    requestJson({
+      path: LifecycleContinuePath,
+      body: input,
+      parse: parseGovernanceLifecycleResponse,
+    }),
+  reject: (input: { lifecycleId: string; feedback: string }) =>
+    requestJson({
+      path: LifecycleRejectPath,
+      body: input,
       parse: parseGovernanceLifecycleResponse,
     }),
 });
@@ -190,6 +212,7 @@ export const parseGovernanceLifecycleResponse = (
     id: readString(lifecycle["id"], "id"),
     state: readString(lifecycle["state"], "state"),
     budgets: readRecord(lifecycle["budgets"], "budgets"),
+    fingerprints: readLifecycleFingerprints(lifecycle["fingerprints"]),
     transitions: readArray(lifecycle["transitions"], "transitions"),
     promptExecutions,
     agentExecutions,
@@ -235,6 +258,18 @@ const readOptionalPositiveInteger = (value: unknown): number | null =>
   value === undefined || value === null
     ? null
     : readPositiveInteger(value, "optional");
+
+const readLifecycleFingerprints = (
+  value: unknown,
+): Readonly<{ scope: string; evidence: string }> => {
+  if (value === undefined)
+    return { scope: "unavailable", evidence: "unavailable" };
+  const fingerprints = readRecord(value, "fingerprints");
+  return {
+    scope: readString(fingerprints["scope"], "scope"),
+    evidence: readString(fingerprints["evidence"], "evidence"),
+  };
+};
 
 const isSensitivePromptBindingKey = (key: string): boolean => {
   const normalizedKey = key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

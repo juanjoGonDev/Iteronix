@@ -82,9 +82,9 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [x] Make `AwaitingUserApproval` a blocking terminal checkpoint for autonomous execution. Expose only explicit user controls: **Approve**, **Continue**, and **Reject with feedback**.
 - [x] Define **Continue** as a user-authorized, single next bounded pass with a new transition record; define **Reject with feedback** as a revision request linked to the feedback; define **Approve** as an immutable approval of the recorded fingerprints.
 - [x] Prevent any rerun after approval unless a changed scope or changed evidence produces a new fingerprint and a new user-authorized lifecycle.
-- [ ] Surface lifecycle state, remaining budgets, fingerprints, decision history, and disabled/available controls in the UI and external API.
+- [x] Surface lifecycle state, remaining budgets, fingerprints, decision history, and disabled/available controls in the UI and external API.
   - [x] Expose authenticated typed server endpoints to read lifecycle state and perform audited Approve, Continue, and Reject-with-feedback controls.
-  - [ ] Surface the lifecycle state and available controls in the UI.
+  - [x] Surface the lifecycle state and available controls in the UI.
 
 **Acceptance / verification**
 

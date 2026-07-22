@@ -886,3 +886,35 @@ const readValueType = (value: unknown): string => {
 
   return typeof value;
 };
+export const selectGovernanceLifecycleControlState = (input: {
+  state: string;
+  budgets: Readonly<Record<string, unknown>>;
+  fingerprints: Readonly<{ scope: string; evidence: string }>;
+  transitionCount: number;
+  feedback: string;
+  pending: boolean;
+}): {
+  controlsDisabled: boolean;
+  rejectDisabled: boolean;
+  budgetSummary: string;
+  fingerprintSummary: string;
+  historyLabel: string;
+} => {
+  const controlsDisabled =
+    input.state !== "awaiting-user-approval" || input.pending;
+  return {
+    controlsDisabled,
+    rejectDisabled: controlsDisabled || input.feedback.trim().length === 0,
+    budgetSummary: `execution ${readLifecycleBudgetValue(input.budgets, "execution")} · repair ${readLifecycleBudgetValue(input.budgets, "repair")} · review ${readLifecycleBudgetValue(input.budgets, "review")}`,
+    fingerprintSummary: `${input.fingerprints.scope} · ${input.fingerprints.evidence}`,
+    historyLabel: `${input.transitionCount} decision${input.transitionCount === 1 ? "" : "s"}`,
+  };
+};
+
+const readLifecycleBudgetValue = (
+  budgets: Readonly<Record<string, unknown>>,
+  key: string,
+): string => {
+  const value = budgets[key];
+  return typeof value === "number" ? value.toString() : "0";
+};

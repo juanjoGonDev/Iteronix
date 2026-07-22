@@ -5199,3 +5199,12 @@
 - Commands: Focused server runtime suite passed (9/9); focused UI lifecycle-client suite passed (5/5).
 - Issues/Risks: Full quality gates and native review remain required before delivery.
 - Next: Run all gates and review the bounded acceptance-only change.
+
+### 2026-07-22 (Europe/Madrid) — Phase 2 governed lifecycle IDE controls
+
+- Summary: Completed the bounded UI/API acceptance slice for persisted lifecycle inspection and explicit user decisions.
+- Decisions: IDE sessions may read and control only lifecycle GET/Approve/Continue/Reject from a trusted or colocated origin; all control responses use the browser-safe lifecycle projection and external bearer access remains unchanged.
+- Changes: Added credentialed lifecycle client controls, inline inspector state/budget/fingerprint/history evidence, explicit feedback-required rejection, pending/error/disabled behavior, and server/UI regressions for session authorization, forged origin rejection, and secret redaction.
+- Commands: RED/GREEN focused UI-state and lifecycle-client tests; `pnpm format:check`, `pnpm typecheck`, and focused Vitest suites (46 tests) passed.
+- Issues/Risks: Playwright infrastructure remains unavailable; UI-state coverage is deterministic component-state coverage rather than browser E2E.
+- Next: Run full quality gates and native review before delivery.

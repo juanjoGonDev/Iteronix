@@ -28,6 +28,7 @@ import {
   shouldOpenNodeModalFromPointerDetail,
   shouldOpenNodeModalFromPointerSequence,
   selectWorkflowDebugExecution,
+  selectGovernanceLifecycleControlState,
 } from "./workflows-debug-state.js";
 import {
   addWorkflowNode,
@@ -37,6 +38,37 @@ import {
 } from "./workflows-editor-state.js";
 
 describe("workflows debug state", () => {
+  it("derives lifecycle approval controls and audit evidence for the inspector", () => {
+    expect(
+      selectGovernanceLifecycleControlState({
+        state: "awaiting-user-approval",
+        budgets: { execution: 1, repair: 0, review: 2 },
+        fingerprints: {
+          scope: "scope-fingerprint",
+          evidence: "evidence-fingerprint",
+        },
+        transitionCount: 5,
+        feedback: "",
+        pending: false,
+      }),
+    ).toEqual({
+      controlsDisabled: false,
+      rejectDisabled: true,
+      budgetSummary: "execution 1 · repair 0 · review 2",
+      fingerprintSummary: "scope-fingerprint · evidence-fingerprint",
+      historyLabel: "5 decisions",
+    });
+    expect(
+      selectGovernanceLifecycleControlState({
+        state: "approved",
+        budgets: {},
+        fingerprints: { scope: "scope", evidence: "evidence" },
+        transitionCount: 6,
+        feedback: "Needs revision",
+        pending: false,
+      }).controlsDisabled,
+    ).toBe(true);
+  });
   it("counts n8n-like items for arrays and single object outputs", () => {
     expect(readWorkflowDebugItemCount([{ id: 1 }, { id: 2 }])).toBe(2);
     expect(readWorkflowDebugItemLabel({ ok: true })).toBe("1 item");
