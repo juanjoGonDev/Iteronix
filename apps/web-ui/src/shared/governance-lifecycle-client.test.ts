@@ -127,3 +127,78 @@ describe("governance lifecycle MCP provenance", () => {
     });
   });
 });
+
+describe("reference asset acceptance provenance", () => {
+  it("keeps reference Skill, Plugin, MCP, and redacted RAG evidence available to the inspector", () => {
+    const lifecycle = parseGovernanceLifecycleResponse({
+      lifecycle: {
+        id: "lifecycle-reference-assets",
+        state: "awaiting-user-approval",
+        budgets: { execution: { remaining: 0 } },
+        transitions: [],
+        promptExecutions: [],
+        agentExecutions: [
+          {
+            agentId: "reference-agent",
+            skillId: "knowledge.query",
+            skillVersion: 1,
+            artifactFingerprint: "skill-fingerprint",
+            mcpAssetId: "mcp-knowledge",
+            mcpServerId: "reference-knowledge",
+            mcpToolVersion: "1.0.0",
+            responseFingerprint: "mcp-response-fingerprint",
+          },
+          {
+            agentId: "reference-agent",
+            skillId: "plugin-1",
+            skillVersion: 1,
+            pluginAssetId: "plugin-1",
+            pluginVersion: "1",
+            pluginFingerprint: "plugin-fingerprint",
+            pluginIsolation: "process",
+            pluginAuditAction: "invoked",
+          },
+        ],
+        retrievalExecutions: [
+          {
+            assetId: "memory-reference",
+            scope: "tenant-1:workflow-1",
+            workflowId: "workflow-1",
+            documentCount: 1,
+            provenanceFingerprint: "retrieval-fingerprint",
+            redacted: true,
+            timestamp: "2026-07-22T00:00:00.000Z",
+            content: "retrieved document content",
+          },
+        ],
+      },
+    });
+
+    expect(lifecycle).toMatchObject({
+      id: "lifecycle-reference-assets",
+      agentExecutions: [
+        {
+          skillId: "knowledge.query",
+          mcpAssetId: "mcp-knowledge",
+          mcpServerId: "reference-knowledge",
+          mcpToolVersion: "1.0.0",
+        },
+        {
+          pluginAssetId: "plugin-1",
+          pluginIsolation: "process",
+          pluginAuditAction: "invoked",
+        },
+      ],
+      retrievalExecutions: [
+        {
+          assetId: "memory-reference",
+          documentCount: 1,
+          redacted: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(lifecycle)).not.toContain(
+      "retrieved document content",
+    );
+  });
+});

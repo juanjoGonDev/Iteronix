@@ -5190,3 +5190,12 @@
 - Commands: Strict RED/GREEN focused tests, full quality gates, native review, hooks, commit, and push.
 - Issues/Risks: Phase 4 remains incomplete: memory/RAG, MCP, plugins, and reference assets are separate work units.
 - Next: Implement the next bounded Phase 4 runtime integration slice without expanding into generic asset UI.
+
+### 2026-07-22 (Europe/Madrid) — Phase 4 reference asset acceptance
+
+- Summary: Added an acceptance workflow that runs the pinned reference Skill and process-isolated reference Plugin together through governance.
+- Decisions: The Skill carries the pinned MCP connection and workflow-bounded Memory source; lifecycle evidence remains metadata-only for retrieval and is parsed by the IDE inspector without recovered content.
+- Changes: Added runtime integration coverage for Skill, Plugin, MCP, and RAG evidence plus UI lifecycle-client acceptance coverage.
+- Commands: Focused server runtime suite passed (9/9); focused UI lifecycle-client suite passed (5/5).
+- Issues/Risks: Full quality gates and native review remain required before delivery.
+- Next: Run all gates and review the bounded acceptance-only change.

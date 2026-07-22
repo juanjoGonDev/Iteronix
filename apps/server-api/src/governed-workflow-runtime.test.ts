@@ -29,6 +29,7 @@ import {
 } from "./governed-workflow-runtime";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 import {
+  createChildProcessReferencePluginHost,
   createProcessIsolatedPluginHost,
   createTrustedPluginRegistry,
 } from "./server-plugin-runtime";
@@ -273,6 +274,74 @@ describe("governed workflow runtime service", () => {
     });
   });
 
+  it("executes pinned reference Skill and Plugin nodes with MCP and redacted RAG provenance", async () => {
+    const persistence = createMemoryPersistence();
+    const fixture = createFixture(
+      persistence,
+      [assetMcpConnection, assetMemory, assetReferencePlugin],
+      true,
+      true,
+    );
+
+    const result = await fixture.service.runGovernedWorkflow({
+      definition: createReferenceAssetAcceptanceDefinition(),
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-reference-assets",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: [
+        "memory.read",
+        "rag.query",
+        "tool.invoke",
+        "mcp.invoke",
+      ],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: true,
+        retentionDays: 7,
+      },
+      now: "2026-07-22T00:00:00.000Z",
+    });
+
+    expect(result.execution.status).toBe("completed");
+    expect(result.lifecycle.state).toBe("awaiting-user-approval");
+    expect(result.lifecycle.agentExecutions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillId: assetSkill.id,
+          skillVersion: 1,
+          mcpAssetId: assetMcpConnection.id,
+          mcpServerId: assetMcpConnection.mcp!.serverId,
+          mcpToolVersion: assetMcpConnection.mcp!.toolVersion,
+        }),
+        expect.objectContaining({
+          pluginAssetId: assetReferencePlugin.id,
+          pluginVersion: "1",
+          pluginIsolation: "process",
+          pluginAuditAction: "invoked",
+        }),
+      ]),
+    );
+    expect(result.lifecycle.retrievalExecutions).toEqual([
+      expect.objectContaining({
+        assetId: assetMemory.id,
+        workflowId: "workflow-1",
+        documentCount: 1,
+        redacted: true,
+      }),
+    ]);
+    expect(JSON.stringify(result.lifecycle)).not.toContain(
+      "governed knowledge",
+    );
+    expect(JSON.stringify(fixture.persistence.read())).not.toContain(
+      "governed knowledge",
+    );
+  });
+
   it("transitions to failed lifecycle when skill input fails schema validation", async () => {
     const persistence = createMemoryPersistence();
     const fixture = createFixture(persistence);
@@ -442,6 +511,69 @@ const createDefinitionWithSkillNode = (): WorkflowDefinitionRecord => ({
   },
   tags: [],
 });
+
+const createReferenceAssetAcceptanceDefinition =
+  (): WorkflowDefinitionRecord => {
+    const definition = createDefinitionWithSkillNode();
+    const pluginNode = {
+      ...createNode("plugin-node", WorkflowNodeKind.AiAgent, ["in"], ["out"]),
+      config: {
+        pluginAsset: { assetId: assetReferencePlugin.id, version: "1" },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      },
+    };
+    return {
+      ...definition,
+      nodes: definition.nodes.flatMap((node) =>
+        node.id === "skill-node"
+          ? [
+              {
+                ...node,
+                config: {
+                  skillAsset: { assetId: assetSkill.id, version: 1 },
+                  memorySourceId: assetMemory.id,
+                  mcpConnection: {
+                    assetId: assetMcpConnection.id,
+                    serverId: assetMcpConnection.mcp!.serverId,
+                    toolVersion: assetMcpConnection.mcp!.toolVersion,
+                  },
+                  grantedPermissions: [
+                    "memory.read",
+                    "rag.query",
+                    "tool.invoke",
+                    "mcp.invoke",
+                  ],
+                },
+              },
+              pluginNode,
+            ]
+          : [node],
+      ),
+      edges: [
+        definition.edges[0]!,
+        {
+          id: "e-plugin",
+          sourceNodeId: "skill-node",
+          sourcePortId: "out",
+          targetNodeId: "plugin-node",
+          targetPortId: "in",
+          mapping: {
+            mode: "object",
+            entries: [
+              {
+                targetPath: "query",
+                source: { kind: "literal", value: "plugin query" },
+              },
+            ],
+          },
+        },
+        {
+          ...definition.edges[1]!,
+          sourceNodeId: "plugin-node",
+        },
+      ],
+    };
+  };
 
 const createDefinitionWithInvalidSkillInput = (): WorkflowDefinitionRecord => ({
   id: "workflow-1",
@@ -658,6 +790,17 @@ const outputSchema = {
   },
 };
 
+const referencePluginOutputSchema = {
+  id: "reference.plugin.output",
+  version: 1,
+  schema: {
+    type: "object" as const,
+    properties: { echo: { type: "object" as const } },
+    required: ["echo"],
+    additionalProperties: false,
+  },
+};
+
 const assetPlugin: EditableAssetRecord = {
   id: "plugin-1",
   kind: AssetKind.Plugin,
@@ -672,6 +815,28 @@ const assetPlugin: EditableAssetRecord = {
     source: "test",
     artifactFingerprint: "plugin-1",
     registeredAt: "2026-07-19T00:00:00.000Z",
+  },
+  plugin: {
+    runtime: PluginRuntimeKind.Server,
+    isolation: "process",
+    auditEvents: [],
+  },
+};
+
+const assetReferencePlugin: EditableAssetRecord = {
+  id: "reference.echo",
+  kind: AssetKind.Plugin,
+  name: "Reference Echo",
+  status: AssetStatus.Enabled,
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema,
+  outputSchema: referencePluginOutputSchema,
+  limits: { executions: 10, timeoutMs: 5000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "reference-echo-fingerprint",
+    registeredAt: "2026-07-22T00:00:00.000Z",
   },
   plugin: {
     runtime: PluginRuntimeKind.Server,
@@ -723,6 +888,30 @@ const assetMcpConnection: EditableAssetRecord = {
   },
 };
 
+const assetMemory: EditableAssetRecord = {
+  id: "memory-reference",
+  kind: AssetKind.MemorySource,
+  name: "Reference Memory",
+  status: AssetStatus.Enabled,
+  capabilities: ["rag"],
+  permissions: ["memory.read", "rag.query"],
+  inputSchema,
+  outputSchema,
+  limits: { executions: 10, timeoutMs: 5000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "memory-reference-fingerprint",
+    registeredAt: "2026-07-22T00:00:00.000Z",
+  },
+  memory: {
+    tenantId: "tenant-1",
+    workflowId: "workflow-1",
+    optInIndexing: true,
+    retentionDays: 7,
+    redactRetrievals: true,
+  },
+};
+
 const retrieval: MemoryRetrieval = {
   content: "governed knowledge",
   provenance: {
@@ -746,6 +935,7 @@ const createFixture = (
   persistence: GovernanceLifecyclePersistencePort,
   additionalAssets: ReadonlyArray<EditableAssetRecord> = [],
   includeLegacySkill: boolean = true,
+  useChildProcessPluginHost: boolean = false,
 ): Fixture => {
   const state: ApplicationState = {
     ...createDefaultApplicationState(),
@@ -760,10 +950,12 @@ const createFixture = (
 
   const lifecycleService = createGovernanceLifecycleService(persistence);
   const pluginRegistry = createTrustedPluginRegistry({
-    allowedPluginIds: [assetPlugin.id],
-    host: createProcessIsolatedPluginHost({
-      invoke: async (request) => ({ answers: [request.pluginId] }),
-    }),
+    allowedPluginIds: [assetPlugin.id, assetReferencePlugin.id],
+    host: useChildProcessPluginHost
+      ? createChildProcessReferencePluginHost()
+      : createProcessIsolatedPluginHost({
+          invoke: async (request) => ({ answers: [request.pluginId] }),
+        }),
   });
 
   const service = createGovernedWorkflowRuntimeService({
