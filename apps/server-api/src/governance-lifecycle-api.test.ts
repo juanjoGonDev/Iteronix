@@ -9,7 +9,10 @@ import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-
 import {
   AssetKind,
   AssetStatus,
+  appendPluginAuditEvent,
   type EditableAssetRecord,
+  upsertEditableAsset,
+  withServerOwnedPluginAudit,
 } from "./editable-assets";
 import { indexMemoryDocument } from "./memory-rag";
 import {
@@ -49,6 +52,91 @@ afterEach(async () => {
 });
 
 describe("governance lifecycle API", () => {
+  it("persists both concurrent direct-plugin audit events", async () => {
+    const testServer = createTestServer();
+    const plugin = createAuditedPlugin();
+    await testServer.persistence.updateEditableAssets({ records: [plugin] });
+
+    await Promise.all([
+      testServer.persistence.mutateEditableAssets((catalog) =>
+        appendPluginAuditEvent(catalog, {
+          assetId: plugin.id,
+          action: "executed",
+          actorId: "server-runtime",
+          at: "2026-07-27T15:00:00.000Z",
+        }),
+      ),
+      testServer.persistence.mutateEditableAssets((catalog) =>
+        appendPluginAuditEvent(catalog, {
+          assetId: plugin.id,
+          action: "failed",
+          actorId: "server-runtime",
+          at: "2026-07-27T15:00:01.000Z",
+        }),
+      ),
+    ]);
+
+    const events = testServer.persistence
+      .read()
+      .editableAssets.records.find((asset) => asset.id === plugin.id)
+      ?.plugin?.auditEvents;
+    expect(events).toEqual([
+      {
+        action: "executed",
+        actorId: "server-runtime",
+        at: "2026-07-27T15:00:00.000Z",
+      },
+      {
+        action: "failed",
+        actorId: "server-runtime",
+        at: "2026-07-27T15:00:01.000Z",
+      },
+    ]);
+  });
+
+  it("preserves a direct-plugin audit while an asset upsert is queued", async () => {
+    const testServer = createTestServer();
+    const plugin = createAuditedPlugin();
+    await testServer.persistence.updateEditableAssets({ records: [plugin] });
+
+    await Promise.all([
+      testServer.persistence.mutateEditableAssets((catalog) =>
+        appendPluginAuditEvent(catalog, {
+          assetId: plugin.id,
+          action: "executed",
+          actorId: "server-runtime",
+          at: "2026-07-27T15:01:00.000Z",
+        }),
+      ),
+      testServer.persistence.mutateEditableAssets((catalog) => {
+        const existing = catalog.records.find(
+          (asset) => asset.id === plugin.id,
+        );
+        const updated = withServerOwnedPluginAudit(
+          { ...plugin, name: "Updated Audit Plugin" },
+          existing,
+          {
+            action: "updated",
+            actorId: "ide-session",
+            at: "2026-07-27T15:01:01.000Z",
+          },
+        );
+        return upsertEditableAsset(catalog, updated);
+      }),
+    ]);
+
+    const stored = testServer.persistence
+      .read()
+      .editableAssets.records.find((asset) => asset.id === plugin.id);
+    expect(stored?.name).toBe("Updated Audit Plugin");
+    expect(stored?.plugin?.auditEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "executed" }),
+        expect.objectContaining({ action: "updated" }),
+      ]),
+    );
+  });
+
   it("allows an authenticated IDE session to control lifecycle only from a trusted origin and returns a redacted response", async () => {
     const testServer = createTestServer();
     servers.push(testServer.server);
@@ -819,6 +907,36 @@ const createMemoryMcpConnectionPort = (): ServerMcpConnectionPort =>
       }),
     },
   });
+
+const createAuditedPlugin = (): EditableAssetRecord => ({
+  id: "audit-plugin",
+  kind: AssetKind.Plugin,
+  name: "Audit Plugin",
+  status: AssetStatus.Enabled,
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema: {
+    id: "audit-plugin-input",
+    version: 1,
+    schema: { type: "object" },
+  },
+  outputSchema: {
+    id: "audit-plugin-output",
+    version: 1,
+    schema: { type: "object" },
+  },
+  limits: { executions: 1, timeoutMs: 1_000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "audit-plugin-fingerprint",
+    registeredAt: "2026-07-27T15:00:00.000Z",
+  },
+  plugin: {
+    runtime: PluginRuntimeKind.Server,
+    isolation: "process",
+    auditEvents: [],
+  },
+});
 
 const createMemoryDocument = () => ({
   id: "memory-document",

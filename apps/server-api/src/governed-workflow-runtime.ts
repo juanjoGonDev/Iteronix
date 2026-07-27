@@ -44,7 +44,10 @@ import {
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import type { GovernanceLifecycleService } from "./governance-lifecycle-service";
-import type { TrustedPluginRegistry } from "./server-plugin-runtime";
+import type {
+  TrustedPluginRegistry,
+  TrustedPluginRegistrySnapshot,
+} from "./server-plugin-runtime";
 
 export type GovernedWorkflowRuntimeService = {
   runGovernedWorkflow: (input: {
@@ -80,10 +83,6 @@ export const createGovernedWorkflowRuntimeService = (input: {
   now?: () => Date;
 }): GovernedWorkflowRuntimeService => {
   const now = input.now ?? (() => new Date());
-  const governedService = createGovernedAgentToolService(
-    input.persistence,
-    input.rag,
-  );
   const mcp = createLocalMcpConnectionPort({ invoke: input.invoke });
 
   const runGovernedWorkflow = async (workflowInput: {
@@ -103,12 +102,16 @@ export const createGovernedWorkflowRuntimeService = (input: {
     lifecycle: GovernanceLifecycle;
   }> => {
     const state = input.readApplicationState();
+    const governedService = createGovernedAgentToolService(
+      input.persistence,
+      input.rag,
+    );
     registerSkillsAndPlugins(
       governedService,
       state,
       input.agentId,
       mcp,
-      input.pluginRegistry,
+      input.pluginRegistry?.createSnapshot(state.editableAssets.records),
     );
 
     const resolved = resolveWorkflowPromptAssets(
@@ -222,7 +225,7 @@ export const registerSkillsAndPlugins = (
         input: JsonValue;
         provenance: ArtifactProvenance;
       }) => Promise<McpToolResult>),
-  pluginRegistry?: TrustedPluginRegistry,
+  pluginRegistry?: TrustedPluginRegistrySnapshot,
 ): void => {
   const connectionPort =
     typeof mcp === "function"
@@ -231,7 +234,6 @@ export const registerSkillsAndPlugins = (
   const plugins = state.editableAssets.records.filter(
     (asset) => asset.kind === AssetKind.Plugin && asset.plugin,
   );
-  pluginRegistry?.refresh(state.editableAssets.records);
   const skills = state.editableAssets.records.filter(
     (asset) =>
       asset.kind === AssetKind.Skill &&
@@ -274,16 +276,10 @@ export const registerSkillsAndPlugins = (
         },
       });
     }
+    registerStandaloneSkill(governedService, skill, agentId, connectionPort);
   }
 
   for (const plugin of plugins) {
-    registerLegacyPluginForSkills(
-      governedService,
-      plugin,
-      skills,
-      agentId,
-      connectionPort,
-    );
     registerDirectPlugin(governedService, plugin, agentId, pluginRegistry);
   }
 
@@ -332,60 +328,11 @@ export const registerSkillsAndPlugins = (
   }
 };
 
-const registerLegacyPluginForSkills = (
-  governedService: GovernedAgentToolService,
-  plugin: EditableAssetRecord,
-  skills: ReadonlyArray<EditableAssetRecord>,
-  agentId: string,
-  connectionPort: ServerMcpConnectionPort,
-): void => {
-  const tools = skills
-    .filter(
-      (
-        entry,
-      ): entry is typeof entry & {
-        skill: NonNullable<(typeof entry)["skill"]>;
-      } => entry.skill !== undefined,
-    )
-    .map((skill) => ({
-      id: skill.id,
-      inputSchema: skill.inputSchema,
-      outputSchema: skill.outputSchema,
-    }));
-  if (tools.length === 0 || !plugin.plugin) return;
-  governedService.registerPlugin({
-    manifest: {
-      id: plugin.id,
-      version: "1",
-      runtime: plugin.plugin.runtime,
-      isolation: plugin.plugin.isolation,
-      permissions: [...plugin.permissions],
-      tools,
-      audit: {
-        manifestFingerprint: plugin.provenance.artifactFingerprint,
-        publishedAt: plugin.provenance.registeredAt,
-      },
-    },
-    agentId,
-    invoke: (request) =>
-      connectionPort.invoke({
-        connection: request.connection ?? {
-          assetId: "legacy-mcp-connection",
-          serverId: plugin.id,
-          toolVersion: "1",
-        },
-        toolId: request.toolId,
-        input: request.input,
-        provenance: request.provenance,
-      }),
-  });
-};
-
 const registerDirectPlugin = (
   governedService: GovernedAgentToolService,
   plugin: EditableAssetRecord,
   agentId: string,
-  registry: TrustedPluginRegistry | undefined,
+  registry: TrustedPluginRegistrySnapshot | undefined,
 ): void => {
   if (!registry || plugin.status !== AssetStatus.Enabled || !plugin.plugin) {
     return;
@@ -425,6 +372,57 @@ const registerDirectPlugin = (
         responseFingerprint: plugin.provenance.artifactFingerprint,
       },
     }),
+  });
+};
+
+const PluginProvenancePrefix = "plugin:";
+const StandaloneSkillProviderPrefix = "skill:";
+const StandaloneSkillProviderServerId = "local-skill-provider";
+
+const registerStandaloneSkill = (
+  governedService: GovernedAgentToolService,
+  skill: EditableAssetRecord,
+  agentId: string,
+  connectionPort: ServerMcpConnectionPort,
+): void => {
+  if (
+    !skill.skill ||
+    skill.provenance.source.startsWith(PluginProvenancePrefix)
+  ) {
+    return;
+  }
+  const version = skill.skill.version.toString();
+  governedService.registerPlugin({
+    manifest: {
+      id: `${StandaloneSkillProviderPrefix}${skill.id}`,
+      version,
+      runtime: "server",
+      isolation: "process",
+      permissions: [...skill.permissions],
+      tools: [
+        {
+          id: skill.id,
+          inputSchema: skill.inputSchema,
+          outputSchema: skill.outputSchema,
+        },
+      ],
+      audit: {
+        manifestFingerprint: skill.provenance.artifactFingerprint,
+        publishedAt: skill.provenance.registeredAt,
+      },
+    },
+    agentId,
+    invoke: (request) =>
+      connectionPort.invoke({
+        connection: request.connection ?? {
+          assetId: skill.id,
+          serverId: StandaloneSkillProviderServerId,
+          toolVersion: version,
+        },
+        toolId: request.toolId,
+        input: request.input,
+        provenance: request.provenance,
+      }),
   });
 };
 

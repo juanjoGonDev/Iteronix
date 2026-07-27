@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   McpToolResultStatus,
   PluginRuntimeKind,
+  type ArtifactProvenance,
   type MemoryRetrieval,
+  type McpToolResult,
   type RagPort,
 } from "../../../packages/domain/src/agent-tool-contracts";
 import { type GovernanceLifecycle } from "../../../packages/domain/src/governance-lifecycle";
+import { type JsonValue } from "../../../packages/domain/src/governance-validation";
 import {
   WorkflowNodeKind,
   WorkflowRecordStatus,
@@ -87,7 +90,189 @@ describe("governed workflow runtime service", () => {
     });
   });
 
-  it("executes a governed AiAgent node through the governance lifecycle with skill provenance", async () => {
+  it.each(pluginLegacyPathCases)(
+    "does not execute a $name Plugin Asset through a Skill legacy path",
+    async ({ plugin, allowedPluginIds }) => {
+      const persistence = createMemoryPersistence();
+      const fixture = createFixture(persistence, [], true, false, {
+        pluginAsset: plugin,
+        skillAsset: {
+          ...assetSkill,
+          provenance: {
+            ...assetSkill.provenance,
+            source: `plugin:${plugin.id}`,
+          },
+        },
+        allowedPluginIds,
+      });
+
+      const result = await fixture.service.runGovernedWorkflow({
+        definition: createDefinitionWithSkillNode(),
+        assets: [],
+        lifecycleInput: {
+          id: `lifecycle-plugin-legacy-${plugin.status}`,
+          workflowId: "workflow-1",
+          fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+          limits: { execution: 1, repair: 1, review: 1 },
+        },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+        memoryScope: {
+          tenantId: "tenant-1",
+          workflowId: "workflow-1",
+          enabled: true,
+          retentionDays: 7,
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      });
+
+      expect(result.execution.status).toBe("failed");
+      expect(result.lifecycle.agentExecutions).toEqual([]);
+      expect(JSON.stringify(result.execution.nodeRuns)).toContain(
+        "No registered plugin provides skill knowledge.query.",
+      );
+      expect(fixture.connectionPortCalls()).toBe(0);
+    },
+  );
+
+  it.each(skillRegistryRefreshCases)(
+    "does not invoke a $name standalone Skill after refreshing the asset registry",
+    async ({ records }) => {
+      const persistence = createMemoryPersistence();
+      const fixture = createFixture(persistence);
+
+      const initial = await fixture.service.runGovernedWorkflow({
+        definition: createDefinitionWithSkillNode(),
+        assets: [],
+        lifecycleInput: {
+          id: "lifecycle-skill-refresh-initial",
+          workflowId: "workflow-1",
+          fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+          limits: { execution: 1, repair: 1, review: 1 },
+        },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+        memoryScope: {
+          tenantId: "tenant-1",
+          workflowId: "workflow-1",
+          enabled: true,
+          retentionDays: 7,
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      });
+
+      expect(initial.execution.status).toBe("completed");
+      fixture.replaceEditableAssets(records);
+
+      const refreshed = await fixture.service.runGovernedWorkflow({
+        definition: createDefinitionWithSkillNode(),
+        assets: [],
+        lifecycleInput: {
+          id: "lifecycle-skill-refresh-next",
+          workflowId: "workflow-1",
+          fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+          limits: { execution: 1, repair: 1, review: 1 },
+        },
+        grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+        memoryScope: {
+          tenantId: "tenant-1",
+          workflowId: "workflow-1",
+          enabled: true,
+          retentionDays: 7,
+        },
+        now: "2026-07-21T00:00:01.000Z",
+      });
+
+      expect(refreshed.execution.status).toBe("failed");
+      expect(refreshed.lifecycle.agentExecutions).toEqual([]);
+      expect(JSON.stringify(refreshed.execution.nodeRuns)).toContain(
+        "Skill knowledge.query was not registered.",
+      );
+      expect(fixture.connectionPortCalls()).toBe(1);
+    },
+  );
+
+  it("keeps concurrent governed runs bound to their own asset registration snapshots", async () => {
+    const persistence = createMemoryPersistence();
+    const firstSkill = {
+      ...assetSkill,
+      provenance: {
+        ...assetSkill.provenance,
+        artifactFingerprint: "skill-first-fingerprint",
+      },
+    };
+    const secondSkill = {
+      ...assetSkill,
+      provenance: {
+        ...assetSkill.provenance,
+        artifactFingerprint: "skill-second-fingerprint",
+      },
+    };
+    const fixture = createFixture(persistence, [], true, false, {
+      records: [firstSkill],
+      invoke: async (request) => ({
+        toolId: request.toolId,
+        status: McpToolResultStatus.Success,
+        output: { answers: [request.provenance.artifactFingerprint] },
+        provenance: {
+          serverId: "reference-knowledge",
+          toolVersion: "1.0.0",
+          responseFingerprint: "response-fingerprint",
+        },
+      }),
+    });
+    const definition = createDefinitionWithSkillNode();
+
+    const firstRun = fixture.service.runGovernedWorkflow({
+      definition,
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-concurrent-first",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: true,
+        retentionDays: 7,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    fixture.replaceEditableAssets([secondSkill]);
+    const secondRun = fixture.service.runGovernedWorkflow({
+      definition,
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-concurrent-second",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: ["memory.read", "rag.query", "tool.invoke"],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: true,
+        retentionDays: 7,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    const [first, second] = await Promise.all([firstRun, secondRun]);
+
+    expect(first.execution.status).toBe("completed");
+    expect(second.execution.status).toBe("completed");
+    expect(readSkillOutput(first)).toEqual({
+      answers: ["skill-first-fingerprint"],
+    });
+    expect(readSkillOutput(second)).toEqual({
+      answers: ["skill-second-fingerprint"],
+    });
+  });
+
+  it("executes a standalone Skill through the governance lifecycle", async () => {
     const persistence = createMemoryPersistence();
     const fixture = createFixture(persistence);
 
@@ -126,6 +311,7 @@ describe("governed workflow runtime service", () => {
       lifecycleId: "lifecycle-1",
       agentId: "test-agent",
       skillId: "knowledge.query",
+      pluginId: "skill:knowledge.query",
     });
   });
 
@@ -161,7 +347,7 @@ describe("governed workflow runtime service", () => {
     expect(agentExecution.outputFingerprint).toMatch(/^fnv1a-[0-9a-f]{8}$/u);
     expect(agentExecution.artifactFingerprint).toBe("skill-fingerprint");
     expect(agentExecution.responseFingerprint).toBe("response-fingerprint");
-    expect(agentExecution.pluginId).toBe("plugin-1");
+    expect(agentExecution.pluginId).toBe("skill:knowledge.query");
     expect(agentExecution.toolId).toBe("knowledge.query");
     expect(agentExecution.skillVersion).toBe(1);
   });
@@ -977,7 +1163,7 @@ const assetSkill: EditableAssetRecord = {
   outputSchema,
   limits: { executions: 10, timeoutMs: 5000 },
   provenance: {
-    source: "plugin:reference-knowledge",
+    source: "asset:knowledge.query",
     artifactFingerprint: "skill-fingerprint",
     registeredAt: "2026-07-19T00:00:00.000Z",
   },
@@ -1050,28 +1236,79 @@ const createRagPort = (): RagPort => ({
 type Fixture = {
   service: GovernedWorkflowRuntimeService;
   persistence: GovernanceLifecyclePersistencePort;
+  connectionPortCalls: () => number;
+  replaceEditableAssets: (records: ReadonlyArray<EditableAssetRecord>) => void;
 };
+
+type FixtureOptions = {
+  pluginAsset?: EditableAssetRecord;
+  skillAsset?: EditableAssetRecord;
+  records?: ReadonlyArray<EditableAssetRecord>;
+  allowedPluginIds?: ReadonlyArray<string>;
+  invoke?: (input: {
+    toolId: string;
+    input: JsonValue;
+    provenance: ArtifactProvenance;
+  }) => Promise<McpToolResult>;
+};
+
+const pluginLegacyPathCases: ReadonlyArray<{
+  name: string;
+  plugin: EditableAssetRecord;
+  allowedPluginIds: ReadonlyArray<string>;
+}> = [
+  {
+    name: "disabled",
+    plugin: { ...assetPlugin, status: AssetStatus.Disabled },
+    allowedPluginIds: [assetPlugin.id],
+  },
+  {
+    name: "non-allowlisted",
+    plugin: assetPlugin,
+    allowedPluginIds: [],
+  },
+];
+
+const skillRegistryRefreshCases: ReadonlyArray<{
+  name: string;
+  records: ReadonlyArray<EditableAssetRecord>;
+}> = [
+  {
+    name: "disabled",
+    records: [assetPlugin, { ...assetSkill, status: AssetStatus.Disabled }],
+  },
+  {
+    name: "deleted",
+    records: [assetPlugin],
+  },
+];
 
 const createFixture = (
   persistence: GovernanceLifecyclePersistencePort,
   additionalAssets: ReadonlyArray<EditableAssetRecord> = [],
   includeLegacySkill: boolean = true,
   useChildProcessPluginHost: boolean = false,
+  options: FixtureOptions = {},
 ): Fixture => {
-  const state: ApplicationState = {
+  let state: ApplicationState = {
     ...createDefaultApplicationState(),
     editableAssets: {
       records: [
-        assetPlugin,
-        ...(includeLegacySkill ? [assetSkill] : []),
-        ...additionalAssets,
+        ...(options.records ?? [
+          options.pluginAsset ?? assetPlugin,
+          ...(includeLegacySkill ? [options.skillAsset ?? assetSkill] : []),
+          ...additionalAssets,
+        ]),
       ],
     },
   };
 
   const lifecycleService = createGovernanceLifecycleService(persistence);
   const pluginRegistry = createTrustedPluginRegistry({
-    allowedPluginIds: [assetPlugin.id, assetReferencePlugin.id],
+    allowedPluginIds: options.allowedPluginIds ?? [
+      assetPlugin.id,
+      assetReferencePlugin.id,
+    ],
     host: useChildProcessPluginHost
       ? createChildProcessReferencePluginHost()
       : createProcessIsolatedPluginHost({
@@ -1079,27 +1316,48 @@ const createFixture = (
         }),
   });
 
+  let connectionPortCallCount = 0;
   const service = createGovernedWorkflowRuntimeService({
     readApplicationState: () => state,
     lifecycleService,
     persistence,
     rag: createRagPort(),
-    invoke: async (request) => ({
-      toolId: request.toolId,
-      status: McpToolResultStatus.Success,
-      output: { answers: ["governed result"] },
-      provenance: {
-        serverId: "reference-knowledge",
-        toolVersion: "1.0.0",
-        responseFingerprint: "response-fingerprint",
-      },
-    }),
+    invoke:
+      options.invoke ??
+      (async (request) => {
+        connectionPortCallCount += 1;
+        return {
+          toolId: request.toolId,
+          status: McpToolResultStatus.Success,
+          output: { answers: ["governed result"] },
+          provenance: {
+            serverId: "reference-knowledge",
+            toolVersion: "1.0.0",
+            responseFingerprint: "response-fingerprint",
+          },
+        };
+      }),
     agentId: "test-agent",
     pluginRegistry,
   });
 
-  return { service, persistence };
+  return {
+    service,
+    persistence,
+    connectionPortCalls: () => connectionPortCallCount,
+    replaceEditableAssets: (records) => {
+      state = { ...state, editableAssets: { records } };
+    },
+  };
 };
+
+const readSkillOutput = (
+  result: Awaited<
+    ReturnType<GovernedWorkflowRuntimeService["runGovernedWorkflow"]>
+  >,
+): unknown =>
+  result.execution.nodeRuns.find((node) => node.nodeId === "skill-node")
+    ?.outputSnapshot;
 
 const createMemoryPersistence = (): GovernanceLifecyclePersistencePort => {
   let state = {

@@ -117,6 +117,7 @@ import {
   upsertEditableAsset,
   withServerOwnedPluginAudit,
   type EditableAssetCatalog,
+  type EditableAssetRecord,
 } from "./editable-assets";
 import {
   indexMemoryDocument,
@@ -283,6 +284,9 @@ export type ApplicationPersistence = {
   updateEditableAssets: (
     editableAssets: EditableAssetCatalog,
   ) => Promise<ApplicationState>;
+  mutateEditableAssets: (
+    updater: (editableAssets: EditableAssetCatalog) => EditableAssetCatalog,
+  ) => Promise<ApplicationState>;
   updateMemoryDocuments: (
     memoryDocuments: MemoryDocumentCatalog,
   ) => Promise<ApplicationState>;
@@ -356,25 +360,6 @@ export const createApiServer = (input: {
     input.governanceLifecycle ??
     createGovernanceLifecycleService(input.applicationPersistence);
 
-  const governedService = createGovernedAgentToolService(
-    input.applicationPersistence,
-    createApplicationMemoryRagPort({ read: input.applicationPersistence.read }),
-    async (audit) => {
-      await input.applicationPersistence.updateEditableAssets(
-        appendPluginAuditEvent(
-          input.applicationPersistence.read().editableAssets,
-          {
-            assetId: audit.assetId,
-            action: audit.action,
-            actorId: "server-runtime",
-            at: audit.at,
-          },
-        ),
-      );
-    },
-  );
-
-  const initialAssets = input.applicationPersistence.read().editableAssets;
   const initialInvoke =
     input.mcpConnectionPort ??
     createConfiguredMcpConnectionPort({ servers: [] });
@@ -384,24 +369,35 @@ export const createApiServer = (input: {
       allowedPluginIds: [ReferencePluginId],
       host: createChildProcessReferencePluginHost(),
     });
-  registerSkillsAndPlugins(
-    governedService,
-    { ...input.applicationPersistence.read(), editableAssets: initialAssets },
-    "server-agent",
-    initialInvoke,
-    pluginRegistry,
-  );
-  const refreshGovernedAssetRegistry = (): void =>
+  const createGovernedServiceSnapshot = (): GovernedAgentToolService => {
+    const governedService = createGovernedAgentToolService(
+      input.applicationPersistence,
+      createApplicationMemoryRagPort({
+        read: input.applicationPersistence.read,
+      }),
+      async (audit) => {
+        await input.applicationPersistence.mutateEditableAssets((assets) =>
+          appendPluginAuditEvent(assets, {
+            assetId: audit.assetId,
+            action: audit.action,
+            actorId: "server-runtime",
+            at: audit.at,
+          }),
+        );
+      },
+    );
+    const state = input.applicationPersistence.read();
     registerSkillsAndPlugins(
       governedService,
-      input.applicationPersistence.read(),
+      state,
       "server-agent",
       initialInvoke,
-      pluginRegistry,
+      pluginRegistry.createSnapshot(state.editableAssets.records),
     );
+    return governedService;
+  };
 
   return createServer((req, res) => {
-    refreshGovernedAssetRegistry();
     void handleRequest(
       req,
       res,
@@ -414,7 +410,7 @@ export const createApiServer = (input: {
       input.workflowCatalog,
       input.passwordResetDelivery,
       input.webUiRoot,
-      governedService,
+      createGovernedServiceSnapshot,
       pluginRegistry,
     ).catch((error: unknown) => {
       console.error(
@@ -546,6 +542,13 @@ export const createApplicationPersistence = (input: {
   ): Promise<ApplicationState> =>
     enqueueSave(() => saveState(buildState({ editableAssets })));
 
+  const mutateEditableAssets = async (
+    updater: (editableAssets: EditableAssetCatalog) => EditableAssetCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() =>
+      saveState(buildState({ editableAssets: updater(state.editableAssets) })),
+    );
+
   const updateMemoryDocuments = async (
     memoryDocuments: MemoryDocumentCatalog,
   ): Promise<ApplicationState> =>
@@ -576,6 +579,7 @@ export const createApplicationPersistence = (input: {
     updateExternalApiKeys,
     updateGovernanceLifecycles,
     updateEditableAssets,
+    mutateEditableAssets,
     updateMemoryDocuments,
     updateIdeAuth,
     mutateGovernanceLifecycles,
@@ -593,7 +597,7 @@ const handleRequest = async (
   workflowCatalog: WorkflowCatalogStore,
   passwordResetDelivery: PasswordResetDelivery | undefined,
   webUiRoot: string | undefined,
-  governedService: GovernedAgentToolService,
+  createGovernedServiceSnapshot: () => GovernedAgentToolService,
   pluginRegistry: TrustedPluginRegistry,
 ): Promise<void> => {
   if (!req.url || !req.method) {
@@ -650,7 +654,7 @@ const handleRequest = async (
       workflowRuntime,
       applicationPersistence,
       governanceLifecycle,
-      governedService,
+      governedService: createGovernedServiceSnapshot,
     });
     return;
   }
@@ -827,7 +831,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       applicationPersistence,
-      governedService,
+      createGovernedServiceSnapshot,
     );
     return;
   }
@@ -1230,7 +1234,7 @@ const handleRequest = async (
       workflowRuntime,
       applicationPersistence,
       governanceLifecycle,
-      governedService,
+      createGovernedServiceSnapshot,
     );
     return;
   }
@@ -1266,7 +1270,7 @@ const handleRequest = async (
       activeWorkflowExecutions,
       applicationPersistence,
       governanceLifecycle,
-      governedService,
+      createGovernedServiceSnapshot,
     );
     return;
   }
@@ -1512,20 +1516,20 @@ const handleEditableAssetUpsert = async (
     });
     return;
   }
-  const existing = applicationPersistence
-    .read()
-    .editableAssets.records.find((candidate) => candidate.id === asset.id);
-  const serverOwnedAsset = withServerOwnedPluginAudit(asset, existing, {
-    action: existing ? "updated" : "registered",
-    actorId: "ide-session",
-    at: new Date().toISOString(),
-  });
-  let assets: EditableAssetCatalog;
+  let serverOwnedAsset: EditableAssetRecord | undefined;
   try {
-    assets = upsertEditableAsset(
-      applicationPersistence.read().editableAssets,
-      serverOwnedAsset,
-    );
+    await applicationPersistence.mutateEditableAssets((catalog) => {
+      const existing = catalog.records.find(
+        (candidate) => candidate.id === asset.id,
+      );
+      const nextAsset = withServerOwnedPluginAudit(asset, existing, {
+        action: existing ? "updated" : "registered",
+        actorId: "ide-session",
+        at: new Date().toISOString(),
+      });
+      serverOwnedAsset = nextAsset;
+      return upsertEditableAsset(catalog, nextAsset);
+    });
   } catch {
     respondError(res, {
       status: HttpStatus.BadRequest,
@@ -1533,7 +1537,6 @@ const handleEditableAssetUpsert = async (
     });
     return;
   }
-  await applicationPersistence.updateEditableAssets(assets);
   respondJson(res, HttpStatus.Ok, { asset: serverOwnedAsset });
 };
 
@@ -1555,15 +1558,6 @@ const handleEditableAssetDelete = async (
     });
     return;
   }
-  const current = applicationPersistence.read().editableAssets;
-  const asset = current.records.find((candidate) => candidate.id === assetId);
-  if (!asset) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
   const usage = summarizePromptAssetUsage({
     assetId,
     definitions: applicationPersistence.read().workflows.definitions,
@@ -1578,15 +1572,42 @@ const handleEditableAssetDelete = async (
       });
       return;
     }
-    await applicationPersistence.updateEditableAssets(
-      upsertEditableAsset(current, { ...asset, status: AssetStatus.Disabled }),
-    );
+    let tombstoned = false;
+    await applicationPersistence.mutateEditableAssets((catalog) => {
+      const asset = catalog.records.find(
+        (candidate) => candidate.id === assetId,
+      );
+      if (!asset) return catalog;
+      tombstoned = true;
+      return upsertEditableAsset(catalog, {
+        ...asset,
+        status: AssetStatus.Disabled,
+      });
+    });
+    if (!tombstoned) {
+      respondError(res, {
+        status: HttpStatus.NotFound,
+        message: ErrorMessage.NotFound,
+      });
+      return;
+    }
     respondJson(res, HttpStatus.Ok, { assetId, tombstoned: true });
     return;
   }
-  await applicationPersistence.updateEditableAssets(
-    removeEditableAsset(current, assetId),
-  );
+  let deleted = false;
+  await applicationPersistence.mutateEditableAssets((catalog) => {
+    const asset = catalog.records.find((candidate) => candidate.id === assetId);
+    if (!asset) return catalog;
+    deleted = true;
+    return removeEditableAsset(catalog, assetId);
+  });
+  if (!deleted) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
   respondJson(res, HttpStatus.Ok, { assetId });
 };
 
@@ -1904,7 +1925,7 @@ const handleGovernanceLifecycleResume = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   applicationPersistence: ApplicationPersistence,
-  governedService: GovernedAgentToolService,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
   const body = await readJsonBody(req);
   if (body.type === ResultType.Err) {
@@ -1949,7 +1970,7 @@ const handleGovernanceLifecycleResume = async (
             catalog: workflowCatalog,
             runWorkflow: workflowRuntime.runWorkflow,
             runGovernedNode: createRunGovernedNodeCallback({
-              governedService,
+              governedService: governedService(),
               lifecycleId: lifecycle.id,
               grantedPermissions: [],
               memoryScope,
@@ -3199,7 +3220,7 @@ const handleWorkflowExecutionRun = async (
   workflowRuntime: WorkflowRuntimeService,
   applicationPersistence: ApplicationPersistence,
   governanceLifecycle: GovernanceLifecycleService,
-  governedService: GovernedAgentToolService,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -3241,7 +3262,7 @@ const executeGovernedWorkflowExecution = async (
     runWorkflow: WorkflowRuntimeService["runWorkflow"];
     governanceLifecycle: GovernanceLifecycleService;
     applicationPersistence: ApplicationPersistence;
-    governedService: GovernedAgentToolService;
+    governedService: () => GovernedAgentToolService;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
   },
@@ -3289,7 +3310,7 @@ const executeGovernedWorkflowExecution = async (
         ...(dependencies.signal ? { signal: dependencies.signal } : {}),
         ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
         runGovernedNode: createRunGovernedNodeCallback({
-          governedService: dependencies.governedService,
+          governedService: dependencies.governedService(),
           lifecycleId: lifecycle.id,
           grantedPermissions: [],
           memoryScope,
@@ -3382,7 +3403,7 @@ const handleWorkflowExecutionStream = async (
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
   applicationPersistence: ApplicationPersistence,
   governanceLifecycle: GovernanceLifecycleService,
-  governedService: GovernedAgentToolService,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
@@ -4253,7 +4274,7 @@ const handleExternalWorkflowRequest = async (input: {
   workflowRuntime: WorkflowRuntimeService;
   applicationPersistence: ApplicationPersistence;
   governanceLifecycle: GovernanceLifecycleService;
-  governedService: GovernedAgentToolService;
+  governedService: () => GovernedAgentToolService;
 }): Promise<void> => {
   if (input.method !== HttpMethod.Post) {
     respondMethodNotAllowed(input.res);
@@ -4353,7 +4374,7 @@ const handleExternalWorkflowRequest = async (input: {
           catalog: input.workflowCatalog,
           runWorkflow: input.workflowRuntime.runWorkflow,
           runGovernedNode: createRunGovernedNodeCallback({
-            governedService: input.governedService,
+            governedService: input.governedService(),
             lifecycleId: lifecycle.id,
             grantedPermissions: [],
             memoryScope,

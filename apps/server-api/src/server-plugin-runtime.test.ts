@@ -101,6 +101,24 @@ describe("trusted server plugin registry", () => {
     expect(timeouts).toEqual([plugin.limits.timeoutMs]);
   });
 
+  it("keeps a plugin invocation snapshot independent from later registry refreshes", async () => {
+    const registry = createTrustedPluginRegistry({
+      allowedPluginIds: [plugin.id],
+      host: createProcessIsolatedPluginHost({
+        invoke: async (request) => ({
+          fingerprint: request.provenance.artifactFingerprint,
+        }),
+      }),
+    });
+    const snapshot = registry.createSnapshot([plugin]);
+
+    registry.refresh([{ ...plugin, status: "disabled" }]);
+
+    await expect(
+      snapshot.invoke({ assetId: plugin.id, version: "1", input: {} }),
+    ).resolves.toEqual({ fingerprint: "reference-plugin-v1" });
+  });
+
   it("rejects disabled, untrusted, and stale plugin pins before host invocation", async () => {
     const registry = createTrustedPluginRegistry({
       allowedPluginIds: [plugin.id],

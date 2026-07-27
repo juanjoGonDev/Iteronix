@@ -27,6 +27,16 @@ export type ProcessIsolatedPluginHost = {
 
 export type TrustedPluginRegistry = {
   refresh: (assets: ReadonlyArray<EditableAssetRecord>) => void;
+  createSnapshot: (
+    assets: ReadonlyArray<EditableAssetRecord>,
+  ) => TrustedPluginRegistrySnapshot;
+  isAllowed: (assetId: string) => boolean;
+  invoke: (
+    input: ServerPluginBinding & { input: JsonValue },
+  ) => Promise<JsonValue>;
+};
+
+export type TrustedPluginRegistrySnapshot = {
   isAllowed: (assetId: string) => boolean;
   invoke: (
     input: ServerPluginBinding & { input: JsonValue },
@@ -59,34 +69,63 @@ export const createTrustedPluginRegistry = (input: {
   let plugins = new Map<string, EditableAssetRecord>();
   return {
     refresh: (assets) => {
-      plugins = new Map(
-        assets
-          .filter(isRunnablePlugin)
-          .filter((asset) => allowlist.has(asset.id))
-          .map((asset) => [asset.id, asset]),
-      );
+      plugins = readRunnablePlugins(assets, allowlist);
     },
+    createSnapshot: (assets) =>
+      createTrustedPluginRegistrySnapshot(
+        input.host,
+        allowlist,
+        readRunnablePlugins(assets, allowlist),
+      ),
     isAllowed: (assetId) => allowlist.has(assetId),
-    invoke: async (request) => {
-      if (!allowlist.has(request.assetId)) {
-        throw new Error("Plugin is not allowlisted.");
-      }
-      const plugin = plugins.get(request.assetId);
-      if (!plugin) {
-        throw new Error("Plugin is unavailable.");
-      }
-      if (request.version !== pluginVersion()) {
-        throw new Error("Plugin pin does not match the persisted asset.");
-      }
-      return input.host.invoke({
-        pluginId: plugin.id,
-        version: request.version,
-        input: request.input,
-        provenance: plugin.provenance,
-        timeoutMs: plugin.limits.timeoutMs,
-      });
-    },
+    invoke: (request) =>
+      invokeTrustedPlugin(input.host, allowlist, plugins, request),
   };
+};
+
+const createTrustedPluginRegistrySnapshot = (
+  host: ProcessIsolatedPluginHost,
+  allowlist: ReadonlySet<string>,
+  plugins: ReadonlyMap<string, EditableAssetRecord>,
+): TrustedPluginRegistrySnapshot => ({
+  isAllowed: (assetId) => allowlist.has(assetId),
+  invoke: (request) => invokeTrustedPlugin(host, allowlist, plugins, request),
+});
+
+const readRunnablePlugins = (
+  assets: ReadonlyArray<EditableAssetRecord>,
+  allowlist: ReadonlySet<string>,
+): Map<string, EditableAssetRecord> =>
+  new Map(
+    assets
+      .filter(isRunnablePlugin)
+      .filter((asset) => allowlist.has(asset.id))
+      .map((asset) => [asset.id, asset]),
+  );
+
+const invokeTrustedPlugin = async (
+  host: ProcessIsolatedPluginHost,
+  allowlist: ReadonlySet<string>,
+  plugins: ReadonlyMap<string, EditableAssetRecord>,
+  request: ServerPluginBinding & { input: JsonValue },
+): Promise<JsonValue> => {
+  if (!allowlist.has(request.assetId)) {
+    throw new Error("Plugin is not allowlisted.");
+  }
+  const plugin = plugins.get(request.assetId);
+  if (!plugin) {
+    throw new Error("Plugin is unavailable.");
+  }
+  if (request.version !== pluginVersion()) {
+    throw new Error("Plugin pin does not match the persisted asset.");
+  }
+  return host.invoke({
+    pluginId: plugin.id,
+    version: request.version,
+    input: request.input,
+    provenance: plugin.provenance,
+    timeoutMs: plugin.limits.timeoutMs,
+  });
 };
 
 const pluginVersion = (): string => "1";
