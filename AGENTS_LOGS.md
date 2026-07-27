@@ -5217,3 +5217,12 @@
 - Commands: Strict RED/GREEN focused domain, workflow catalog/versioning, server runtime, and web client suites; full quality gates and native review are pending the delivery owner.
 - Issues/Risks: Phase 4 remains incomplete overall; the remaining roadmap work is external API/operations and product delivery phases, not Prompt Asset implementation.
 - Next: Run the complete quality gates, native bounded review, commit, and push this bounded Prompt Asset completion slice.
+
+### 2026-07-27 13:12 (Europe/Madrid) — Workflow browser validation CI recovery
+
+- Summary: Repaired the credentialed workflow browser validator and the grouped Assets Playwright journey after CI run 30257625741 failed.
+- Decisions: Validator assertions now wait for DOM readiness rather than internal stub mutation; its SSE stub flushes deterministic events so the required Executing state remains observable. The grouped Assets control remains a real expandable navigation group, and E2E waits for authenticated asset responses without weakening authorization checks.
+- Changes: Added credentialed exact-origin CORS and /assets/list stub handling, asset/guardrail interaction waits, durable SSE delivery, NavigationGroupItem DOM ownership, and authenticated E2E coverage for Assets expansion plus idempotent admin bootstrap handling. Updated the plan baseline to record Docker-backed Playwright coverage.
+- Commands: RED pnpm -C apps/web-ui validate:workflows; GREEN repeated validator runs; full format, lint, typecheck, Vitest, build, dependency checks; CI-parity Docker Playwright coverage passed across desktop/tablet/mobile.
+- Issues/Risks: None known; external GitHub CI verification remains required after push.
+- Next: Run fresh native review, stage/commit/push, then verify the GitHub CI run.

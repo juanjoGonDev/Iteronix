@@ -22,11 +22,11 @@ The following product surfaces are out of scope and MUST NOT be reintroduced as 
 
 ## Current verified baseline
 
-The repository currently implements a deliberately narrowed PostgreSQL-backed workflow application. Source structure and tests show a workflow catalog, single-workflow editor routes, provider settings, scoped/revocable external workflow API keys, workflow runtime/stream persistence, and server-hosted static UI delivery. The existing browser validators use **Puppeteer**; they are not Playwright coverage.
+The repository currently implements a deliberately narrowed PostgreSQL-backed workflow application. Source structure and tests show a workflow catalog, single-workflow editor routes, provider settings, scoped/revocable external workflow API keys, workflow runtime/stream persistence, and server-hosted static UI delivery. Existing **Puppeteer** validators remain baseline coverage, alongside Docker-backed Playwright coverage for authenticated workflow and grouped Assets navigation across desktop, tablet, and mobile viewports.
 
 The active OpenSpec change `fix-workflow-live-execution-refresh` records completed implementation and a passed historical verification report for live execution persistence, refresh behavior, double-click handling, and SSE disconnect tolerance. It is still unarchived. Existing uncommitted changes in `apps/web-ui/scripts/validate-workflows.ts` and `apps/web-ui/src/screens/Workflows.ts`, plus the user-owned `.atl/skill-registry.md`, were intentionally not inspected, changed, or validated by this planning task.
 
-Not yet verified or implemented by this plan: React Flow/n8n-grade graph semantics, nested/reusable workflows, fan-out/fan-in merging, schema validators/guardrails/auto-repair, finite governance lifecycle, skills/memory/RAG/MCP/evaluations/plugins, Playwright, Electron desktop delivery, and the full cross-platform product contract.
+Not yet verified or implemented by this plan: React Flow/n8n-grade graph semantics, nested/reusable workflows, fan-out/fan-in merging, schema validators/guardrails/auto-repair, finite governance lifecycle, skills/memory/RAG/MCP/evaluations/plugins, Electron desktop delivery, and the full cross-platform product contract.
 
 ## Delivery principles
 

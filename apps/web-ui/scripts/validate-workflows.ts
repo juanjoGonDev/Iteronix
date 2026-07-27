@@ -28,6 +28,7 @@ const ValidationConfig = {
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
+  StepExecutionDelayMs: 1000,
   ViewportWidth: 1600,
   ViewportHeight: 1080,
   MobileViewportWidth: 390,
@@ -53,6 +54,7 @@ const RequestPath = {
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
+  PromptAssetsList: "/assets/list",
   AssetsGet: "/workflows/assets/get",
   AssetsUpsert: "/workflows/assets/upsert",
   AssetsDelete: "/workflows/assets/delete",
@@ -64,6 +66,7 @@ const RequestPath = {
 } as const;
 
 const ResponseHeader = {
+  AllowCredentials: "Access-Control-Allow-Credentials",
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
@@ -703,6 +706,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!promptAsset) {
       throw new Error("Expected prompt asset after creating it.");
     }
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.AssetCardPrefix}${promptAsset.id}`,
+    );
     await clickByTestId(
       page,
       `${WorkflowSelector.AssetCardPrefix}${promptAsset.id}`,
@@ -1197,6 +1204,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!guardrailAsset) {
       throw new Error("Expected guardrail asset after creating it.");
     }
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.GuardrailAttachmentEditPrefix}${guardrailAsset.id}`,
+    );
     await clickByTestId(
       page,
       `${WorkflowSelector.GuardrailAttachmentEditPrefix}${guardrailAsset.id}`,
@@ -1626,6 +1637,10 @@ async function handleStubRequest(
     writeJson(response, 200, {
       assets: state.assets,
     });
+    return;
+  }
+  if (requestUrl.pathname === RequestPath.PromptAssetsList) {
+    writeJson(response, 200, { assets: [] });
     return;
   }
 
@@ -2079,6 +2094,7 @@ async function handleStreamNodeRequest(
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
+  response.flushHeaders();
 
   writeStreamEvent(response, "workflow_started", {
     workflowId: definition.id,
@@ -2128,7 +2144,7 @@ function writeStreamEvent(
 
 function waitForStubDelay(): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(resolve, 250);
+    setTimeout(resolve, ValidationConfig.StepExecutionDelayMs);
   });
 }
 
@@ -4030,7 +4046,8 @@ function writeJson(
 
 function createCorsHeaders(): Record<string, string> {
   return {
-    [ResponseHeader.AllowOrigin]: "*",
+    [ResponseHeader.AllowOrigin]: ValidationConfig.PreviewBaseUrl,
+    [ResponseHeader.AllowCredentials]: "true",
     [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };

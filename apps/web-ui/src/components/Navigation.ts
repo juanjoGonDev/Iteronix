@@ -344,10 +344,13 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
             navigation.map(
               (item: NavigationLink | NavigationGroup, index: number) => {
                 if (isNavigationGroup(item)) {
-                  return new NavigationGroupItem({
+                  const navigationGroupItem = new NavigationGroupItem({
                     group: item,
                     collapsed,
-                  }).render();
+                  });
+                  const rendered = navigationGroupItem.render();
+                  navigationGroupItem.element = rendered;
+                  return rendered;
                 }
                 const navItem = new NavigationItem({
                   key: `nav-${index}`,
