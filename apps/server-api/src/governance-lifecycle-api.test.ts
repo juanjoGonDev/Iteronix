@@ -13,7 +13,7 @@ import {
 } from "./editable-assets";
 import { indexMemoryDocument } from "./memory-rag";
 import {
-  createLocalMcpConnectionPort,
+  createConfiguredMcpConnectionPort,
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import {
@@ -797,17 +797,27 @@ const createTestServer = (
 };
 
 const createMemoryMcpConnectionPort = (): ServerMcpConnectionPort =>
-  createLocalMcpConnectionPort({
-    invoke: async (input) => ({
-      toolId: input.toolId,
-      status: "success",
-      output: { answers: ["memory query completed"] },
-      provenance: {
+  createConfiguredMcpConnectionPort({
+    servers: [
+      {
         serverId: "memory-query",
-        toolVersion: "1",
-        responseFingerprint: "memory-query-response",
+        endpoint: "https://mcp.example.test/memory-query",
+        token: "server-only-memory-token",
+        allowedToolIds: ["memory-query"],
       },
-    }),
+    ],
+    transport: {
+      post: async () => ({
+        toolId: "memory-query",
+        status: "success",
+        output: { answers: ["memory query completed"] },
+        provenance: {
+          serverId: "memory-query",
+          toolVersion: "1",
+          responseFingerprint: "memory-query-response",
+        },
+      }),
+    },
   });
 
 const createMemoryDocument = () => ({

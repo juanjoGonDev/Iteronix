@@ -88,6 +88,7 @@ export const EnvKey = {
   Host: "HOST",
   AuthToken: "AUTH_TOKEN",
   DatabaseUrl: "DATABASE_URL",
+  McpServers: "MCP_SERVERS",
   IdeUiOrigins: "IDE_UI_ORIGINS",
 } as const;
 

@@ -25,6 +25,7 @@ import {
 import { createGovernanceLifecycleService } from "./governance-lifecycle-service";
 import {
   createGovernedWorkflowRuntimeService,
+  resolveMcpConnection,
   type GovernedWorkflowRuntimeService,
 } from "./governed-workflow-runtime";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
@@ -225,6 +226,26 @@ describe("governed workflow runtime service", () => {
     });
   });
 
+  it("propagates the persisted MCP timeout through the resolved connection pin", () => {
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: { records: [assetMcpConnection] },
+    };
+
+    expect(
+      resolveMcpConnection(state, {
+        assetId: assetMcpConnection.id,
+        serverId: assetMcpConnection.mcp!.serverId,
+        toolVersion: assetMcpConnection.mcp!.toolVersion,
+      }),
+    ).toEqual({
+      assetId: assetMcpConnection.id,
+      serverId: assetMcpConnection.mcp!.serverId,
+      toolVersion: assetMcpConnection.mcp!.toolVersion,
+      timeoutMs: assetMcpConnection.limits.timeoutMs,
+    });
+  });
+
   it("executes a standalone MCP AiAgent without a Skill or Memory/RAG source", async () => {
     const persistence = createMemoryPersistence();
     const fixture = createFixture(persistence, [assetMcpConnection]);
@@ -271,6 +292,106 @@ describe("governed workflow runtime service", () => {
     expect(result.lifecycle.agentExecutions[0]).toMatchObject({
       skillId: "mcp-knowledge",
       mcpAssetId: "mcp-knowledge",
+    });
+  });
+
+  it("resolves a skillId-only MCP asset through its persisted pin", async () => {
+    const persistence = createMemoryPersistence();
+    const fixture = createFixture(persistence, [assetMcpConnection]);
+    const definition = createDefinitionWithSkillNode();
+    const withMcpSkillId = (
+      assetId: string,
+      grantedPermissions: ReadonlyArray<string>,
+    ) => ({
+      ...definition,
+      nodes: definition.nodes.map((node) =>
+        node.id === "skill-node"
+          ? {
+              ...node,
+              config: {
+                skillId: assetId,
+                grantedPermissions,
+              },
+            }
+          : node,
+      ),
+    });
+
+    const denied = await fixture.service.runGovernedWorkflow({
+      definition: withMcpSkillId(assetMcpConnection.id, []),
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-mcp-skill-denied",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: [],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: false,
+        retentionDays: 0,
+      },
+      now: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(denied.execution.status).toBe("failed");
+    expect(denied.lifecycle.agentExecutions).toEqual([]);
+
+    const capabilityDenied = createFixture(persistence, [
+      { ...assetMcpConnection, id: "mcp-without-capability", capabilities: [] },
+    ]);
+    const rejectedCapability =
+      await capabilityDenied.service.runGovernedWorkflow({
+        definition: withMcpSkillId("mcp-without-capability", ["mcp.invoke"]),
+        assets: [],
+        lifecycleInput: {
+          id: "lifecycle-mcp-skill-capability-denied",
+          workflowId: "workflow-1",
+          fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+          limits: { execution: 1, repair: 1, review: 1 },
+        },
+        grantedPermissions: ["mcp.invoke"],
+        memoryScope: {
+          tenantId: "tenant-1",
+          workflowId: "workflow-1",
+          enabled: false,
+          retentionDays: 0,
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      });
+
+    expect(rejectedCapability.execution.status).toBe("failed");
+    expect(rejectedCapability.lifecycle.agentExecutions).toEqual([]);
+    expect(JSON.stringify(rejectedCapability.execution.nodeRuns)).toContain(
+      "MCP connection asset is not authorized for invocation.",
+    );
+
+    const executed = await fixture.service.runGovernedWorkflow({
+      definition: withMcpSkillId(assetMcpConnection.id, ["mcp.invoke"]),
+      assets: [],
+      lifecycleInput: {
+        id: "lifecycle-mcp-skill-executed",
+        workflowId: "workflow-1",
+        fingerprints: { scope: "scope-fp", evidence: "evidence-fp" },
+        limits: { execution: 1, repair: 1, review: 1 },
+      },
+      grantedPermissions: ["mcp.invoke"],
+      memoryScope: {
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        enabled: false,
+        retentionDays: 0,
+      },
+      now: "2026-07-21T00:00:01.000Z",
+    });
+
+    expect(executed.execution.status).toBe("completed");
+    expect(executed.lifecycle.agentExecutions[0]).toMatchObject({
+      mcpAssetId: assetMcpConnection.id,
+      mcpServerId: assetMcpConnection.mcp!.serverId,
+      mcpToolVersion: assetMcpConnection.mcp!.toolVersion,
     });
   });
 
@@ -963,8 +1084,8 @@ const createFixture = (
     lifecycleService,
     persistence,
     rag: createRagPort(),
-    invoke: async () => ({
-      toolId: "knowledge.query",
+    invoke: async (request) => ({
+      toolId: request.toolId,
       status: McpToolResultStatus.Success,
       output: { answers: ["governed result"] },
       provenance: {

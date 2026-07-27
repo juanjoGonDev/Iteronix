@@ -40,6 +40,7 @@ import {
 } from "./workflow-runtime";
 import {
   createLocalMcpConnectionPort,
+  type McpConnectionBinding,
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import type { GovernanceLifecycleService } from "./governance-lifecycle-service";
@@ -151,6 +152,8 @@ export const createGovernedWorkflowRuntimeService = (input: {
             memoryScope,
             resolveMcpConnection: (connection) =>
               resolveMcpConnection(state, connection),
+            resolveMcpConnectionForSkill: (assetId) =>
+              resolveMcpConnectionForSkill(state, assetId),
             now,
           }),
           runProviderNode: async (request) =>
@@ -439,7 +442,11 @@ export const createRunGovernedNodeCallback = (input: {
     assetId: string;
     serverId: string;
     toolVersion: string;
+    timeoutMs: number;
   };
+  resolveMcpConnectionForSkill?: (
+    assetId: string,
+  ) => McpConnectionBinding | undefined;
   now: () => Date;
 }): ((
   request: GovernedNodeExecutionRequest,
@@ -464,6 +471,13 @@ export const createRunGovernedNodeCallback = (input: {
     if (!skillId && !node.config.mcpConnection) {
       throw new Error(`Governed node ${node.id} is missing a skillId.`);
     }
+    const mcpConnection = node.config.mcpConnection
+      ? input.resolveMcpConnection
+        ? input.resolveMcpConnection(node.config.mcpConnection)
+        : node.config.mcpConnection
+      : skillId
+        ? input.resolveMcpConnectionForSkill?.(skillId)
+        : undefined;
     const sourceId = node.config.memorySourceId;
     const memoryScope = sourceId
       ? (input.resolveMemoryScope?.(sourceId) ?? {
@@ -482,12 +496,10 @@ export const createRunGovernedNodeCallback = (input: {
         input.grantedPermissions) as unknown as Parameters<
         GovernedAgentToolService["invoke"]
       >[0]["grantedPermissions"],
-      ...(skillId || sourceId ? { memoryScope } : {}),
-      ...(node.config.mcpConnection
+      ...(sourceId || (skillId && !mcpConnection) ? { memoryScope } : {}),
+      ...(mcpConnection
         ? {
-            mcpConnection: input.resolveMcpConnection
-              ? input.resolveMcpConnection(node.config.mcpConnection)
-              : node.config.mcpConnection,
+            mcpConnection,
           }
         : {}),
       now: input.now().toISOString(),
@@ -508,7 +520,12 @@ const toWorkflowProviderRunResult = (
 export const resolveMcpConnection = (
   state: ApplicationState,
   connection: { assetId: string; serverId: string; toolVersion: string },
-): { assetId: string; serverId: string; toolVersion: string } => {
+): {
+  assetId: string;
+  serverId: string;
+  toolVersion: string;
+  timeoutMs: number;
+} => {
   const asset = state.editableAssets.records.find(
     (candidate) => candidate.id === connection.assetId,
   );
@@ -532,7 +549,27 @@ export const resolveMcpConnection = (
   ) {
     throw new Error("MCP connection pin does not match the persisted asset.");
   }
-  return { ...connection };
+  return { ...connection, timeoutMs: asset.limits.timeoutMs };
+};
+
+export const resolveMcpConnectionForSkill = (
+  state: ApplicationState,
+  assetId: string,
+): McpConnectionBinding | undefined => {
+  const asset = state.editableAssets.records.find(
+    (candidate) => candidate.id === assetId,
+  );
+  if (!asset || asset.kind !== AssetKind.McpTool) {
+    return undefined;
+  }
+  if (!asset.mcp) {
+    throw new Error("MCP connection asset is unavailable.");
+  }
+  return resolveMcpConnection(state, {
+    assetId: asset.id,
+    serverId: asset.mcp.serverId,
+    toolVersion: asset.mcp.toolVersion,
+  });
 };
 
 const createLifecycle = async (

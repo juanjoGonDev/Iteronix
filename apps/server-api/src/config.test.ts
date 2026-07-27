@@ -29,4 +29,57 @@ describe("server configuration", () => {
       }),
     ).toThrow("DATABASE_URL must be a valid PostgreSQL URL");
   });
+
+  it("keeps MCP server registrations in server-only startup configuration", () => {
+    expect(
+      loadConfig({
+        ...requiredEnvironment,
+        MCP_SERVERS: JSON.stringify([
+          {
+            serverId: "reference-knowledge",
+            endpoint: "https://mcp.example.test/invoke",
+            token: "server-only-token",
+            allowedToolIds: ["knowledge.query"],
+          },
+        ]),
+      }).mcpServers,
+    ).toEqual([
+      {
+        serverId: "reference-knowledge",
+        endpoint: "https://mcp.example.test/invoke",
+        token: "server-only-token",
+        allowedToolIds: ["knowledge.query"],
+      },
+    ]);
+  });
+
+  it("rejects remote HTTP MCP endpoints but permits explicit loopback HTTP", () => {
+    expect(() =>
+      loadConfig({
+        ...requiredEnvironment,
+        MCP_SERVERS: JSON.stringify([
+          {
+            serverId: "remote-http",
+            endpoint: "http://mcp.example.test/invoke",
+            token: "server-only-token",
+            allowedToolIds: ["knowledge.query"],
+          },
+        ]),
+      }),
+    ).toThrow("MCP_SERVERS entries are invalid");
+
+    expect(
+      loadConfig({
+        ...requiredEnvironment,
+        MCP_SERVERS: JSON.stringify([
+          {
+            serverId: "loopback-http",
+            endpoint: "http://127.0.0.1:4010/invoke",
+            token: "server-only-token",
+            allowedToolIds: ["knowledge.query"],
+          },
+        ]),
+      }).mcpServers,
+    ).toHaveLength(1);
+  });
 });

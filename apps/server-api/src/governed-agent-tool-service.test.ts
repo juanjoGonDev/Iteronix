@@ -246,11 +246,12 @@ describe("governed agent tool service", () => {
       persistence,
       createRagPort(),
     );
+    let responseToolId = skill.id;
     service.registerPlugin({
       manifest,
       agentId: "reference-agent",
       invoke: async () => ({
-        toolId: skill.id,
+        toolId: responseToolId,
         status: McpToolResultStatus.Success,
         output: { answers: ["connection"] },
         provenance: {
@@ -298,6 +299,28 @@ describe("governed agent tool service", () => {
         now: "2026-07-21T00:00:00.000Z",
       }),
     ).rejects.toThrow("MCP response provenance does not match");
+
+    responseToolId = "forged.tool";
+    await expect(
+      service.invoke({
+        lifecycleId: lifecycle.id,
+        skillId: skill.id,
+        input: { query: "connection" },
+        grantedPermissions: [
+          "memory.read",
+          "rag.query",
+          "tool.invoke",
+          "mcp.invoke",
+        ],
+        memoryScope: scope,
+        mcpConnection: {
+          assetId: "mcp-1",
+          serverId: "reference-knowledge",
+          toolVersion: "1.0.0",
+        },
+        now: "2026-07-21T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("MCP response tool does not match the requested tool");
     expect(persistence.read().governanceLifecycles[0]?.agentExecutions).toEqual(
       [],
     );

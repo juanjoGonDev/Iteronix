@@ -169,9 +169,10 @@ import {
   createRunGovernedNodeCallback,
   registerSkillsAndPlugins,
   resolveMcpConnection,
+  resolveMcpConnectionForSkill,
 } from "./governed-workflow-runtime";
 import {
-  createLocalMcpConnectionPort,
+  createConfiguredMcpConnectionPort,
   type ServerMcpConnectionPort,
 } from "./mcp-connection-port";
 import {
@@ -179,14 +180,7 @@ import {
   createTrustedPluginRegistry,
   type TrustedPluginRegistry,
 } from "./server-plugin-runtime";
-import {
-  createMemoryScope,
-  type ArtifactProvenance,
-  type McpToolResult,
-} from "../../../packages/domain/src/agent-tool-contracts";
-import { McpToolResultStatus } from "../../../packages/domain/src/agent-tool-contracts";
-
-import type { JsonValue } from "../../../packages/domain/src/governance-validation";
+import { createMemoryScope } from "../../../packages/domain/src/agent-tool-contracts";
 import { tryServeStaticUi } from "./static-ui";
 
 const UiSafeRedactedBindingKey = "[redacted]";
@@ -201,25 +195,6 @@ const SensitivePromptBindingKeyFragments = [
   "token",
 ] as const;
 const ReferencePluginId = "reference.echo";
-const createNoopPluginInvoke =
-  () =>
-  async (input: {
-    toolId: string;
-    input: JsonValue;
-    provenance: ArtifactProvenance;
-  }): Promise<McpToolResult> => ({
-    toolId: input.toolId,
-    status: McpToolResultStatus.Failure,
-    output: {
-      error: "MCP/plugin invocation is not available in this server context.",
-    },
-    provenance: {
-      serverId: "none",
-      toolVersion: "0.0.0",
-      responseFingerprint: "noop-fingerprint",
-    },
-  });
-
 const AuthRoutePaths = new Set<string>([
   RoutePath.AuthBootstrapAdmin,
   RoutePath.AuthRegister,
@@ -346,6 +321,9 @@ export const startServer = async (): Promise<void> => {
   const governanceLifecycle = createGovernanceLifecycleService(
     applicationPersistence,
   );
+  const mcpConnectionPort = createConfiguredMcpConnectionPort({
+    servers: config.mcpServers ?? [],
+  });
   const server = createApiServer({
     config,
     providerStore,
@@ -353,6 +331,7 @@ export const startServer = async (): Promise<void> => {
     applicationPersistence,
     governanceLifecycle,
     workflowCatalog,
+    mcpConnectionPort,
     webUiRoot: readWebUiRoot(),
   });
 
@@ -398,7 +377,7 @@ export const createApiServer = (input: {
   const initialAssets = input.applicationPersistence.read().editableAssets;
   const initialInvoke =
     input.mcpConnectionPort ??
-    createLocalMcpConnectionPort({ invoke: createNoopPluginInvoke() });
+    createConfiguredMcpConnectionPort({ servers: [] });
   const pluginRegistry =
     input.pluginRegistry ??
     createTrustedPluginRegistry({
@@ -1982,6 +1961,11 @@ const handleGovernanceLifecycleResume = async (
                 ),
               resolveMcpConnection: (connection) =>
                 resolveMcpConnection(applicationPersistence.read(), connection),
+              resolveMcpConnectionForSkill: (assetId) =>
+                resolveMcpConnectionForSkill(
+                  applicationPersistence.read(),
+                  assetId,
+                ),
               now: () => new Date(),
             }),
           },
@@ -3320,6 +3304,11 @@ const executeGovernedWorkflowExecution = async (
               dependencies.applicationPersistence.read(),
               connection,
             ),
+          resolveMcpConnectionForSkill: (assetId) =>
+            resolveMcpConnectionForSkill(
+              dependencies.applicationPersistence.read(),
+              assetId,
+            ),
           now: () => new Date(),
         }),
       });
@@ -4378,6 +4367,11 @@ const handleExternalWorkflowRequest = async (input: {
               resolveMcpConnection(
                 input.applicationPersistence.read(),
                 connection,
+              ),
+            resolveMcpConnectionForSkill: (assetId) =>
+              resolveMcpConnectionForSkill(
+                input.applicationPersistence.read(),
+                assetId,
               ),
             now: () => new Date(),
           }),

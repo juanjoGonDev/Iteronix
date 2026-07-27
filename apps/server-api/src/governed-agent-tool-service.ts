@@ -103,6 +103,7 @@ export const createGovernedAgentToolService = (
       if (!validated.valid || validated.output === undefined) {
         throw new Error("MCP output failed schema validation.");
       }
+      assertMcpResponseToolId(skill.id, response.toolId);
       assertMcpConnectionResponse(input.mcpConnection, response);
       await persistExecution(persistence, lifecycle.id, {
         id: `${lifecycle.id}:agent:${(lifecycle.agentExecutions.length + 1).toString()}`,
@@ -387,6 +388,15 @@ const assertMcpConnectionResponse = (
     throw new Error(
       "MCP response provenance does not match the pinned connection.",
     );
+  }
+};
+
+const assertMcpResponseToolId = (
+  requestedToolId: string,
+  responseToolId: string,
+): void => {
+  if (requestedToolId !== responseToolId) {
+    throw new Error("MCP response tool does not match the requested tool.");
   }
 };
 
