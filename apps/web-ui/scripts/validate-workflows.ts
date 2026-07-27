@@ -939,6 +939,7 @@ async function validateWorkflowsScreen(): Promise<void> {
         intervalMs: ValidationConfig.UiPollingIntervalMs,
       },
     );
+    await waitForWorkflowVersionCount(page, 1);
     await setTextAreaValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionImportText,
@@ -3006,6 +3007,30 @@ async function waitForExecutionCardCount(
     },
   );
 }
+
+async function waitForWorkflowVersionCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).filter((entry) => entry instanceof HTMLElement).length,
+        WorkflowSelector.WorkflowVersionDetailsPrefix,
+      );
+      return count === expectedCount;
+    },
+    `workflow version count ${expectedCount.toString()}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function waitForNodeCardText(page: Page, text: string): Promise<void> {
   await waitForCondition(
     async () => {
