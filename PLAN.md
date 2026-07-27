@@ -125,7 +125,7 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 - [x] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.
 - [x] Add memory and RAG runtime integration with tenant/workflow boundaries, retrieval provenance, retention rules, and opt-in indexing.
 - [x] Add MCP client/server runtime integration behind permission and capability controls; validate all untrusted tool results at the boundary.
-- [ ] Create server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
+- [x] Create server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
 - [x] Provide one end-to-end reference plugin and one reusable skill that execute together through the governance lifecycle, with MCP and redacted RAG provenance visible to the IDE inspector.
 
 **Acceptance / verification**

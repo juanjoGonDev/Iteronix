@@ -5253,3 +5253,12 @@
 - Commands: Strict RED/GREEN tests, full quality gates, four-lens native review, hooks, and GitHub CI run 30267283347 passed.
 - Issues/Risks: No live third-party MCP interoperability fixture; the controlled JSON HTTP contract remains server-side and fail-closed.
 - Next: Implement the remaining Phase 4 item: server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
+
+### 2026-07-27 15:40 (Europe/Madrid) — Phase 4 server plugin runtime lifecycle
+
+- Summary: Completed the remaining Phase 4 server-side plugin runtime loading, lifecycle, isolation, and audit-event item; GitHub CI run 30271023298 is green.
+- Decisions: Plugin Assets execute only through version-pinned, allowlisted, enabled server/process-isolation snapshots. Plugin-provenanced Skills cannot fall back to the standalone Skill MCP provider. Each workflow/request gets immutable registration snapshots, and editable-asset audit/upsert/delete mutations are serialized against the latest persisted catalog.
+- Changes: Removed legacy Plugin Asset-to-Skill dispatch; added direct snapshot runtime binding, standalone Skill separation, lifecycle refresh/concurrency regressions, and atomic audit event preservation across concurrent plugin executions and asset edits. Marked the Phase 4 plugin runtime roadmap item complete.
+- Commands: Strict RED/GREEN focused tests; full format/lint/typecheck/Vitest/build/dependency gates; Docker CI-parity Playwright (desktop/tablet/mobile); four-lens native review; hooks; GitHub CI run 30271023298 all passed.
+- Issues/Risks: None known. The existing non-blocking pnpm.onlyBuiltDependencies configuration warning remains.
+- Next: Begin the next ready roadmap item after the completed Phase 4 baseline.
