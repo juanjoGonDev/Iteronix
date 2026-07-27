@@ -109,6 +109,7 @@ import {
   type ApplicationStateStore,
 } from "./application-state";
 import {
+  AssetKind,
   AssetStatus,
   appendPluginAuditEvent,
   parseEditableAssetCatalog,
@@ -1973,6 +1974,12 @@ const handleGovernanceLifecycleResume = async (
               lifecycleId: lifecycle.id,
               grantedPermissions: [],
               memoryScope,
+              resolveMemoryScope: (sourceId) =>
+                resolvePersistedMemoryScope(
+                  applicationPersistence,
+                  workflow.id,
+                  sourceId,
+                ),
               resolveMcpConnection: (connection) =>
                 resolveMcpConnection(applicationPersistence.read(), connection),
               now: () => new Date(),
@@ -3302,6 +3309,12 @@ const executeGovernedWorkflowExecution = async (
           lifecycleId: lifecycle.id,
           grantedPermissions: [],
           memoryScope,
+          resolveMemoryScope: (sourceId) =>
+            resolvePersistedMemoryScope(
+              dependencies.applicationPersistence,
+              workflow.id,
+              sourceId,
+            ),
           resolveMcpConnection: (connection) =>
             resolveMcpConnection(
               dependencies.applicationPersistence.read(),
@@ -4355,6 +4368,12 @@ const handleExternalWorkflowRequest = async (input: {
             lifecycleId: lifecycle.id,
             grantedPermissions: [],
             memoryScope,
+            resolveMemoryScope: (sourceId) =>
+              resolvePersistedMemoryScope(
+                input.applicationPersistence,
+                workflow.id,
+                sourceId,
+              ),
             resolveMcpConnection: (connection) =>
               resolveMcpConnection(
                 input.applicationPersistence.read(),
@@ -4388,6 +4407,35 @@ const handleExternalWorkflowRequest = async (input: {
   respondJson(input.res, HttpStatus.Ok, {
     execution,
     lifecycleId: lifecycle.id,
+  });
+};
+
+const resolvePersistedMemoryScope = (
+  applicationPersistence: ApplicationPersistence,
+  workflowId: string,
+  sourceId: string,
+) => {
+  const source = applicationPersistence
+    .read()
+    .editableAssets.records.find((asset) => asset.id === sourceId);
+  if (
+    !source ||
+    source.kind !== AssetKind.MemorySource ||
+    source.status !== AssetStatus.Enabled ||
+    !source.memory ||
+    !source.memory.optInIndexing
+  ) {
+    throw new Error("Memory source is unavailable.");
+  }
+  if (source.memory.workflowId !== workflowId) {
+    throw new Error("Memory source workflow does not match the workflow.");
+  }
+  return createMemoryScope({
+    tenantId: source.memory.tenantId,
+    workflowId: source.memory.workflowId,
+    sourceId: source.id,
+    enabled: true,
+    retentionDays: source.memory.retentionDays,
   });
 };
 

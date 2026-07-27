@@ -7,6 +7,16 @@ import {
 } from "../../../packages/domain/src/governance-lifecycle";
 import type { GovernanceLifecyclePersistencePort } from "./governance-lifecycle-persistence-port";
 import {
+  AssetKind,
+  AssetStatus,
+  type EditableAssetRecord,
+} from "./editable-assets";
+import { indexMemoryDocument } from "./memory-rag";
+import {
+  createLocalMcpConnectionPort,
+  type ServerMcpConnectionPort,
+} from "./mcp-connection-port";
+import {
   McpToolResultStatus,
   PluginRuntimeKind,
   type ArtifactProvenance,
@@ -88,6 +98,83 @@ describe("governance lifecycle API", () => {
       { cookie: login.cookie, origin: "https://forged.example" },
     );
     expect(forged.status).toBe(401);
+  });
+
+  it("executes an IDE governed AiAgent with the persisted memory scope and redacted retrieval provenance", async () => {
+    const testServer = createTestServer(createMemoryMcpConnectionPort());
+    await testServer.persistence.updateEditableAssets({
+      records: [createMemorySource(), createMemoryMcpTool()],
+    });
+    await testServer.persistence.updateMemoryDocuments(
+      indexMemoryDocument(
+        testServer.persistence.read().memoryDocuments,
+        createMemoryDocument(),
+      ),
+    );
+    testServer.workflowCatalog.upsertWorkflow(createMemoryWorkflow());
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const run = await request(url, "/workflows/executions/run", {
+      workflowId: "workflow-memory",
+    });
+
+    expect(run.status).toBe(200);
+    expect(readExecutionStatus(run.body)).toBe("completed");
+    const lifecycleId = readExecutionLifecycleId(run.body);
+    expect(lifecycleId).toBeDefined();
+    if (!lifecycleId) throw new Error("Expected lifecycle ID.");
+    const lifecycle = await request(url, "/governance/lifecycles/get", {
+      lifecycleId,
+    });
+    const serialized = JSON.stringify(lifecycle.body.lifecycle);
+
+    expect(lifecycle.status).toBe(200);
+    expect(lifecycle.body.lifecycle["retrievalExecutions"]).toEqual([
+      expect.objectContaining({
+        assetId: "memory-source",
+        scope: "tenant-memory:workflow-memory",
+        workflowId: "workflow-memory",
+        documentCount: 1,
+        redacted: true,
+      }),
+    ]);
+    expect(serialized).not.toContain("private retained memory");
+  });
+
+  it("rejects an enabled non-opt-in MemorySource before retrieval", async () => {
+    const testServer = createTestServer(createMemoryMcpConnectionPort());
+    await testServer.persistence.updateEditableAssets({
+      records: [createNonOptInMemorySource(), createMemoryMcpTool()],
+    });
+    await testServer.persistence.updateMemoryDocuments(
+      indexMemoryDocument(
+        testServer.persistence.read().memoryDocuments,
+        createMemoryDocument(),
+      ),
+    );
+    testServer.workflowCatalog.upsertWorkflow(createMemoryWorkflow());
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const run = await request(url, "/workflows/executions/run", {
+      workflowId: "workflow-memory",
+    });
+
+    expect(run.status).toBe(200);
+    expect(readExecutionStatus(run.body)).toBe("failed");
+    expect(JSON.stringify(run.body)).toContain("Memory source is unavailable.");
+    const lifecycleId = readExecutionLifecycleId(run.body);
+    expect(lifecycleId).toBeDefined();
+    if (!lifecycleId) throw new Error("Expected lifecycle ID.");
+    const lifecycle = await request(url, "/governance/lifecycles/get", {
+      lifecycleId,
+    });
+    const serialized = JSON.stringify(lifecycle.body.lifecycle);
+
+    expect(lifecycle.status).toBe(200);
+    expect(lifecycle.body.lifecycle["retrievalExecutions"]).toEqual([]);
+    expect(serialized).not.toContain("private retained memory");
   });
 
   it("links an IDE workflow run to its persisted governed prompt trace", async () => {
@@ -672,7 +759,9 @@ describe("governed skill auditable error paths", () => {
   });
 });
 
-const createTestServer = (): {
+const createTestServer = (
+  mcpConnectionPort?: ServerMcpConnectionPort,
+): {
   server: Server;
   persistence: ReturnType<typeof createApplicationPersistence>;
   workflowCatalog: ReturnType<typeof createWorkflowCatalogStore>;
@@ -702,9 +791,199 @@ const createTestServer = (): {
       }),
       applicationPersistence: persistence,
       workflowCatalog,
+      ...(mcpConnectionPort ? { mcpConnectionPort } : {}),
     }),
   };
 };
+
+const createMemoryMcpConnectionPort = (): ServerMcpConnectionPort =>
+  createLocalMcpConnectionPort({
+    invoke: async (input) => ({
+      toolId: input.toolId,
+      status: "success",
+      output: { answers: ["memory query completed"] },
+      provenance: {
+        serverId: "memory-query",
+        toolVersion: "1",
+        responseFingerprint: "memory-query-response",
+      },
+    }),
+  });
+
+const createMemoryDocument = () => ({
+  id: "memory-document",
+  sourceId: "memory-source",
+  tenantId: "tenant-memory",
+  workflowId: "workflow-memory",
+  content: "private retained memory",
+  createdAt: "2026-07-25T00:00:00.000Z",
+  provenance: {
+    source: "memory-upload",
+    artifactFingerprint: "memory-document-fingerprint",
+    registeredAt: "2026-07-25T00:00:00.000Z",
+  },
+});
+
+const createNonOptInMemorySource = (): EditableAssetRecord => ({
+  ...createMemorySource(),
+  memory: {
+    tenantId: "tenant-memory",
+    workflowId: "workflow-memory",
+    optInIndexing: false,
+    retentionDays: 7,
+    redactRetrievals: true,
+  },
+});
+
+const createMemorySource = (): EditableAssetRecord => ({
+  id: "memory-source",
+  kind: AssetKind.MemorySource,
+  name: "Memory Source",
+  status: AssetStatus.Enabled,
+  capabilities: ["rag"],
+  permissions: ["memory.read", "rag.query"],
+  inputSchema: schema("memory-source-input"),
+  outputSchema: schema("memory-source-output"),
+  limits: { executions: 1, timeoutMs: 1_000 },
+  provenance: {
+    source: "memory-test",
+    artifactFingerprint: "memory-source-fingerprint",
+    registeredAt: "2026-07-25T00:00:00.000Z",
+  },
+  memory: {
+    tenantId: "tenant-memory",
+    workflowId: "workflow-memory",
+    optInIndexing: true,
+    retentionDays: 7,
+    redactRetrievals: true,
+  },
+});
+
+const createMemoryMcpTool = (): EditableAssetRecord => ({
+  id: "memory-query",
+  kind: AssetKind.McpTool,
+  name: "Memory Query",
+  status: AssetStatus.Enabled,
+  capabilities: ["mcp"],
+  permissions: ["memory.read", "rag.query", "mcp.invoke"],
+  inputSchema: schema("memory-query-input"),
+  outputSchema: schema("memory-query-output"),
+  limits: { executions: 1, timeoutMs: 1_000 },
+  provenance: {
+    source: "memory-test",
+    artifactFingerprint: "memory-query-fingerprint",
+    registeredAt: "2026-07-25T00:00:00.000Z",
+  },
+  mcp: { serverId: "memory-query", toolVersion: "1", auditEvents: [] },
+});
+
+const createMemoryWorkflow = () => ({
+  ...createWorkflow(),
+  id: "workflow-memory",
+  name: "Memory governed run",
+  status: WorkflowRecordStatus.Published,
+  version: 1,
+  createdAt: "2026-07-25T00:00:00.000Z",
+  updatedAt: "2026-07-25T00:00:00.000Z",
+  nodes: [
+    createWorkflowNode("trigger", WorkflowNodeKind.TriggerManual, [], ["out"]),
+    {
+      ...createWorkflowNode(
+        "memory-agent",
+        WorkflowNodeKind.AiAgent,
+        ["in"],
+        ["out"],
+      ),
+      config: {
+        memorySourceId: "memory-source",
+        mcpConnection: {
+          assetId: "memory-query",
+          serverId: "memory-query",
+          toolVersion: "1",
+        },
+        grantedPermissions: ["memory.read", "rag.query", "mcp.invoke"],
+      },
+    },
+    createWorkflowNode(
+      "terminal",
+      WorkflowNodeKind.TerminalResponse,
+      ["in"],
+      [],
+    ),
+  ],
+  edges: [
+    {
+      id: "trigger-memory-agent",
+      sourceNodeId: "trigger",
+      sourcePortId: "out",
+      targetNodeId: "memory-agent",
+      targetPortId: "in",
+      mapping: {
+        mode: "object" as const,
+        entries: [
+          {
+            targetPath: "query",
+            source: { kind: "literal" as const, value: "retained memory" },
+          },
+        ],
+      },
+    },
+    {
+      id: "memory-agent-terminal",
+      sourceNodeId: "memory-agent",
+      sourcePortId: "out",
+      targetNodeId: "terminal",
+      targetPortId: "in",
+      mapping: { mode: "passthrough" as const, entries: [] },
+    },
+  ],
+});
+
+const createWorkflowNode = (
+  id: string,
+  kind: WorkflowNodeKind,
+  inputPortIds: ReadonlyArray<string>,
+  outputPortIds: ReadonlyArray<string>,
+) => ({
+  id,
+  kind,
+  label: id,
+  position: { x: 0, y: 0 },
+  width: 320,
+  collapsed: false,
+  config: {},
+  inputPorts: inputPortIds.map((portId) => ({
+    id: portId,
+    name: portId,
+    acceptsMany: true,
+  })),
+  outputPorts: outputPortIds.map((portId) => ({
+    id: portId,
+    name: portId,
+    acceptsMany: true,
+  })),
+  attachedGuardrails: [],
+});
+
+const schema = (id: string) => ({
+  id,
+  version: 1,
+  schema: { type: "object" as const },
+});
+
+const readExecutionStatus = (value: unknown): string | undefined =>
+  isRecord(value) &&
+  isRecord(value["execution"]) &&
+  typeof value["execution"]["status"] === "string"
+    ? value["execution"]["status"]
+    : undefined;
+
+const readExecutionLifecycleId = (value: unknown): string | undefined =>
+  isRecord(value) &&
+  isRecord(value["execution"]) &&
+  typeof value["execution"]["lifecycleId"] === "string"
+    ? value["execution"]["lifecycleId"]
+    : undefined;
 
 const createWorkflow = () => ({
   id: "workflow-governed-run",
