@@ -5244,3 +5244,12 @@
 - Commands: Strict RED/GREEN focused API tests, full quality gates, native reliability review, hooks, and GitHub CI run 30264347063 passed.
 - Issues/Risks: None known.
 - Next: Implement the next Phase 4 item: MCP client/server runtime integration behind capability and permission controls.
+
+### 2026-07-27 14:49 (Europe/Madrid) — Phase 4 MCP production transport
+
+- Summary: Completed the bounded MCP client/server runtime integration and verified it in GitHub CI.
+- Decisions: MCP endpoints, tokens, and server/tool allowlists are server-only MCP_SERVERS configuration. Calls reject remote HTTP, redirects, unknown servers/tools, missing MCP asset capability/permission, stale pins, forged result identity/provenance, and timeouts before persistence.
+- Changes: Added configured HTTP transport with persisted timeout propagation across explicit and skillId MCP bindings, strict untrusted-result parsing, and real API/runtime regressions. Marked the Phase 4 MCP roadmap item complete.
+- Commands: Strict RED/GREEN tests, full quality gates, four-lens native review, hooks, and GitHub CI run 30267283347 passed.
+- Issues/Risks: No live third-party MCP interoperability fixture; the controlled JSON HTTP contract remains server-side and fail-closed.
+- Next: Implement the remaining Phase 4 item: server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
