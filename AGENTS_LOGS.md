@@ -5226,3 +5226,12 @@
 - Commands: RED pnpm -C apps/web-ui validate:workflows; GREEN repeated validator runs; full format, lint, typecheck, Vitest, build, dependency checks; CI-parity Docker Playwright coverage passed across desktop/tablet/mobile.
 - Issues/Risks: None known; external GitHub CI verification remains required after push.
 - Next: Run fresh native review, stage/commit/push, then verify the GitHub CI run.
+
+### 2026-07-27 13:43 (Europe/Madrid) — Workflow browser validation CI verified
+
+- Summary: Completed the browser-validator CI recovery with GitHub CI green.
+- Decisions: Retention cleanup validation waits for the rendered version-card count after the API stub assertion, proving the UI catalog reload completed before import input is written.
+- Changes: `apps/web-ui/scripts/validate-workflows.ts` now waits for one rendered retained version before importing; `PLAN.md` records the verified CI baseline.
+- Commands: Repeated workflow validator, full format/lint/typecheck/Vitest/build/dependency gates, Docker CI-parity Playwright (desktop/tablet/mobile), native reliability review, hooks, and GitHub CI run `30262692814` all passed.
+- Issues/Risks: None known.
+- Next: Continue the next bounded roadmap item from the verified baseline.
