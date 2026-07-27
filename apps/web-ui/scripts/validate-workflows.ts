@@ -1354,6 +1354,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       ValidationText.StepOutputNeedle,
     );
     await waitForMissingPageText(page, ValidationText.WorkflowSavedNotice);
+    await waitForPageText(page, "Execute step");
     await clickButtonByText(page, "Execute step");
     await waitForTestId(page, WorkflowSelector.NodeStepRunMenuTest);
     if (page.url() !== inspectorUrl) {
