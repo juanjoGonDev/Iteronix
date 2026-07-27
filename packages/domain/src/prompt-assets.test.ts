@@ -32,6 +32,50 @@ describe("pinned prompt references", () => {
     ]);
   });
 
+  it("rejects bindings that do not satisfy a typed variable schema", () => {
+    expect(
+      validatePinnedPromptReference(
+        { assetId: "greeting", version: 1, bindings: { count: "two" } },
+        [
+          {
+            name: "count",
+            required: true,
+            schema: {
+              id: "prompt-count",
+              version: 1,
+              schema: { type: "number" },
+            },
+          },
+        ],
+      ),
+    ).toEqual([{ code: "prompt.binding-schema-invalid", variable: "count" }]);
+  });
+
+  it("rejects template tokens absent from the typed variable schema", () => {
+    expect(() =>
+      resolvePinnedPrompt({
+        reference: {
+          assetId: "greeting",
+          version: 1,
+          bindings: { name: "Ada" },
+        },
+        assets: [
+          {
+            id: "greeting",
+            status: "enabled",
+            versions: [
+              {
+                version: 1,
+                template: "Hello {{name}} {{undeclared}}",
+                variables: [{ name: "name", required: true }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Prompt template contains undeclared variables.");
+  });
+
   it("resolves an immutable version with deterministic rendering and provenance", () => {
     expect(
       resolvePinnedPrompt({

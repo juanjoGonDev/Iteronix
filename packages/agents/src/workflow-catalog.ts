@@ -8,6 +8,7 @@ import {
   type WorkflowDefinitionRecord,
   type WorkflowDefinitionVersionRecord,
   type WorkflowExecutionRecord,
+  type WorkflowNodeRecord,
 } from "../../shared/src/workflows";
 import {
   compareWorkflowVersions,
@@ -132,13 +133,19 @@ export const createWorkflowCatalogStore = (
   >();
   const assetsById = new Map<string, WorkflowAssetRecord>();
   const executionsById = new Map<string, WorkflowExecutionRecord>();
-  let assetUsages = createAssetUsages(seed.definitions ?? [], now);
+  const initialDefinitions = (seed.definitions ?? []).map(
+    normalizeWorkflowDefinition,
+  );
+  const initialDefinitionVersions = (seed.definitionVersions ?? []).map(
+    normalizeWorkflowDefinitionVersion,
+  );
+  let assetUsages = createAssetUsages(initialDefinitions, now);
 
-  for (const definition of seed.definitions ?? []) {
+  for (const definition of initialDefinitions) {
     definitionsById.set(definition.id, definition);
   }
 
-  for (const definitionVersion of seed.definitionVersions ?? []) {
+  for (const definitionVersion of initialDefinitionVersions) {
     definitionVersionsById.set(definitionVersion.id, definitionVersion);
   }
 
@@ -420,12 +427,16 @@ export const createWorkflowCatalogStore = (
 
   const restore = (snapshot: WorkflowCatalogState): void => {
     definitionsById.clear();
-    for (const definition of snapshot.definitions) {
+    for (const definition of snapshot.definitions.map(
+      normalizeWorkflowDefinition,
+    )) {
       definitionsById.set(definition.id, definition);
     }
 
     definitionVersionsById.clear();
-    for (const version of snapshot.definitionVersions ?? []) {
+    for (const version of (snapshot.definitionVersions ?? []).map(
+      normalizeWorkflowDefinitionVersion,
+    )) {
       definitionVersionsById.set(version.id, version);
     }
 
@@ -439,7 +450,7 @@ export const createWorkflowCatalogStore = (
       executionsById.set(execution.id, execution);
     }
 
-    assetUsages = snapshot.assetUsages;
+    assetUsages = createAssetUsages(Array.from(definitionsById.values()), now);
   };
 
   return {
@@ -486,7 +497,7 @@ const createWorkflowRecord = (
     updatedAt: timestamp,
     trigger: input.trigger,
     viewport: input.viewport,
-    nodes: input.nodes,
+    nodes: input.nodes.map(normalizeWorkflowNode),
     edges: input.edges,
     executionPolicy: input.executionPolicy,
     ...(input.runtimeSettingsOverride
@@ -495,6 +506,31 @@ const createWorkflowRecord = (
     defaultContextPolicy: input.defaultContextPolicy,
     tags: input.tags,
   };
+};
+
+const normalizeWorkflowDefinition = (
+  workflow: WorkflowDefinitionRecord,
+): WorkflowDefinitionRecord => ({
+  ...workflow,
+  nodes: workflow.nodes.map(normalizeWorkflowNode),
+});
+
+const normalizeWorkflowDefinitionVersion = (
+  version: WorkflowDefinitionVersionRecord,
+): WorkflowDefinitionVersionRecord => ({
+  ...version,
+  snapshot: normalizeWorkflowDefinition(version.snapshot),
+});
+
+const normalizeWorkflowNode = (
+  node: WorkflowNodeRecord,
+): WorkflowNodeRecord => {
+  if (!node.config.promptAsset) {
+    return node;
+  }
+
+  const { prompt: _prompt, ...config } = node.config;
+  return { ...node, config };
 };
 
 const createImportedWorkflowInput = (

@@ -546,7 +546,14 @@ const readWorkflowVersionExportSnapshot = (
     throw new Error("Workflow version export snapshot must be an object");
   }
 
-  return value as WorkflowDefinitionRecord;
+  const snapshot = value as WorkflowDefinitionRecord;
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map((node) => ({
+      ...node,
+      config: removeDuplicatePinnedPromptText(node.config),
+    })),
+  };
 };
 
 const prepareWorkflowVersionExportNode = (
@@ -565,9 +572,20 @@ const prepareWorkflowVersionExportNodeConfig = (
     ? config
     : removeWorkflowVersionPinnedOutput(config);
 
+  const normalizedPrompt = removeDuplicatePinnedPromptText(withoutPinned);
   return options.redactSecrets
-    ? redactWorkflowVersionSecrets(withoutPinned)
-    : withoutPinned;
+    ? redactWorkflowVersionSecrets(normalizedPrompt)
+    : normalizedPrompt;
+};
+
+const removeDuplicatePinnedPromptText = (
+  config: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (!isWorkflowVersionPlainRecord(config["promptAsset"])) {
+    return config;
+  }
+  const { prompt: _prompt, ...pinnedConfig } = config;
+  return pinnedConfig;
 };
 
 const removeWorkflowVersionPinnedOutput = (

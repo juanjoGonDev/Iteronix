@@ -25,26 +25,47 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -C apps/web-ui exec puppeteer browsers install chrome
+      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:settings
       - run: pnpm -C apps/web-ui validate:workflows
-      - name: Validate colocated Docker workflow UI
+      - name: Validate Docker workflow UI and browser acceptance coverage
         env:
           POSTGRES_DB: iteronix_ci
           POSTGRES_USER: iteronix_ci
           POSTGRES_PASSWORD: iteronix_ci_password
           AUTH_TOKEN: iteronix_ci_internal_token
-          ITERONIX_HTTP_PORT: 4002
+          ITERONIX_HTTP_PORT: 4001
+          ITERONIX_E2E_BASE_URL: http://127.0.0.1:4000
+          ITERONIX_E2E_API_URL: http://127.0.0.1:4001
+          ITERONIX_E2E_AUTH_TOKEN: iteronix_ci_internal_token
         run: |
+          set -euo pipefail
           docker compose up --build --detach --wait
-          curl --fail --silent --show-error http://localhost:4002/workflows/workflow-ci | grep '<script type="module" src="/dist/index.js"></script>'
-          docker compose down --volumes
+          pnpm -C apps/web-ui run test-serve > /tmp/iteronix-web-ui.log 2>&1 &
+          web_ui_pid=$!
+          cleanup() {
+            kill "$web_ui_pid" || true
+            docker compose down --volumes
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:4000/workflows; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:4001/workflows/workflow-ci | grep '<script type="module" src="/dist/index.js"></script>'
+          pnpm test:e2e:coverage
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: web-ui-browser-validation-screenshots
-          path: apps/web-ui/screenshots/
+          path: |
+            apps/web-ui/screenshots/
+            playwright-report/
+            test-results/
           if-no-files-found: ignore

@@ -13,15 +13,25 @@ export type PromptAssetSummary = {
   status: "disabled" | "enabled" | "error";
   activeVersion: number;
   template: string;
-  variables: ReadonlyArray<string>;
+  variables: ReadonlyArray<PromptAssetVariable>;
   versions: ReadonlyArray<PromptAssetVersionSummary>;
   asset: Record<string, unknown>;
 };
 
-type PromptAssetVersionSummary = {
+export type PromptAssetVariable = {
+  name: string;
+  required: boolean;
+  schema: {
+    id: string;
+    version: number;
+    schema: { type: "array" | "boolean" | "number" | "object" | "string" };
+  };
+};
+
+export type PromptAssetVersionSummary = {
   version: number;
   template: string;
-  variables: ReadonlyArray<string>;
+  variables: ReadonlyArray<PromptAssetVariable>;
 };
 
 export type PromptAssetsClient = {
@@ -83,6 +93,7 @@ export const createPromptAssetRecord = (input: {
   id: string;
   name: string;
   template: string;
+  variables?: ReadonlyArray<PromptAssetVariable>;
   now: string;
 }): Record<string, unknown> => {
   const provenance = {
@@ -111,7 +122,7 @@ export const createPromptAssetRecord = (input: {
         {
           version: 1,
           template: input.template,
-          variables: [],
+          variables: input.variables ?? [],
           provenance,
           createdAt: input.now,
         },
@@ -124,6 +135,7 @@ export const appendPromptAssetVersion = (input: {
   asset: PromptAssetSummary;
   name: string;
   template: string;
+  variables?: ReadonlyArray<PromptAssetVariable>;
   now: string;
 }): Record<string, unknown> => {
   const prompt = readRecord(input.asset.asset["prompt"], "promptAsset.prompt");
@@ -151,6 +163,7 @@ export const appendPromptAssetVersion = (input: {
           ...active,
           version,
           template: input.template,
+          variables: input.variables ?? active["variables"],
           createdAt: input.now,
           provenance: {
             ...readRecord(
@@ -164,6 +177,65 @@ export const appendPromptAssetVersion = (input: {
     },
   };
 };
+
+export const selectPromptAssetVersion = (
+  asset: PromptAssetSummary | undefined,
+  version: number | null,
+): PromptAssetVersionSummary | undefined => {
+  if (!asset) return undefined;
+  return asset.versions.find(
+    (candidate) => candidate.version === (version ?? asset.activeVersion),
+  );
+};
+
+export const parsePromptVariableDefinitions = (
+  value: string,
+): ReadonlyArray<PromptAssetVariable> =>
+  value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => parsePromptVariableDefinition(line));
+
+export const formatPromptVariableDefinitions = (
+  variables: ReadonlyArray<PromptAssetVariable>,
+): string =>
+  variables
+    .map(
+      (variable) =>
+        `${variable.name}:${variable.schema.schema.type}:${variable.required ? "required" : "optional"}`,
+    )
+    .join("\n");
+
+const parsePromptVariableDefinition = (value: string): PromptAssetVariable => {
+  const [name, type, requirement] = value.split(":").map((part) => part.trim());
+  if (!name || !isPromptVariableType(type)) {
+    throw new Error(
+      "Variables must use name:type:required or name:type:optional.",
+    );
+  }
+  if (requirement !== "required" && requirement !== "optional") {
+    throw new Error("Variables must declare required or optional.");
+  }
+  return {
+    name,
+    required: requirement === "required",
+    schema: {
+      id: `prompt-variable-${name}`,
+      version: 1,
+      schema: { type },
+    },
+  };
+};
+
+const isPromptVariableType = (
+  value: string | undefined,
+): value is PromptAssetVariable["schema"]["schema"]["type"] =>
+  value === "array" ||
+  value === "boolean" ||
+  value === "number" ||
+  value === "object" ||
+  value === "string";
 
 export const parsePromptAssetsResponse = (
   value: unknown,
@@ -272,17 +344,63 @@ const parsePromptAssetSummary = (
   ];
 };
 
-const readPromptVariables = (value: unknown): ReadonlyArray<string> => {
+const readPromptVariables = (
+  value: unknown,
+): ReadonlyArray<PromptAssetVariable> => {
   if (value === undefined) {
     return [];
   }
-  return readArray(value, "promptAsset.version.variables").map((variable) => {
-    if (typeof variable === "string" && variable.trim().length > 0) {
-      return variable;
-    }
-    const record = readRecord(variable, "promptAsset.version.variable");
-    return readRequiredString(record["name"], "variable.name");
-  });
+  return readArray(value, "promptAsset.version.variables").map(
+    readPromptVariable,
+  );
+};
+
+const readPromptVariable = (value: unknown): PromptAssetVariable => {
+  if (typeof value === "string") {
+    return createLegacyPromptVariable(value);
+  }
+  return readTypedPromptVariable(value);
+};
+
+const createLegacyPromptVariable = (value: string): PromptAssetVariable => {
+  const name = readRequiredString(value, "variable.name");
+  return {
+    name,
+    required: true,
+    schema: {
+      id: `prompt-variable-${name}`,
+      version: 1,
+      schema: { type: "string" },
+    },
+  };
+};
+
+const readTypedPromptVariable = (value: unknown): PromptAssetVariable => {
+  const record = readRecord(value, "promptAsset.version.variable");
+  const name = readRequiredString(record["name"], "variable.name");
+  const required = record["required"];
+  const schema = readRecord(record["schema"], "variable.schema");
+  const schemaType = readRecord(schema["schema"], "variable.schema.schema")[
+    "type"
+  ];
+  if (
+    typeof required !== "boolean" ||
+    typeof schema["id"] !== "string" ||
+    !isPositiveInteger(schema["version"]) ||
+    typeof schemaType !== "string" ||
+    !isPromptVariableType(schemaType)
+  ) {
+    throw new Error("Invalid promptAsset.version.variable");
+  }
+  return {
+    name,
+    required,
+    schema: {
+      id: schema["id"],
+      version: schema["version"],
+      schema: { type: schemaType },
+    },
+  };
 };
 
 const parsePromptAssetResponse = (value: unknown): PromptAssetSummary => {

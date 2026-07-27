@@ -5208,3 +5208,12 @@
 - Commands: RED/GREEN focused UI-state and lifecycle-client tests; `pnpm format:check`, `pnpm typecheck`, and focused Vitest suites (46 tests) passed.
 - Issues/Risks: Playwright infrastructure remains unavailable; UI-state coverage is deterministic component-state coverage rather than browser E2E.
 - Next: Run full quality gates and native review before delivery.
+
+### 2026-07-22 (Europe/Madrid) — Phase 4 Prompt Assets completion
+
+- Summary: Completed Prompt Assets as reusable, immutable-versioned workflow assets across the domain, runtime, persistence compatibility adapters, and URL-addressable IDE editor.
+- Decisions: Prompt variable definitions are typed schemas carried from the selected immutable version into deterministic runtime validation. Nodes with `promptAsset` never retain duplicated workflow-owned prompt text; legacy prompt-only workflows remain readable through the Phase 0 adapters.
+- Changes: Added typed binding validation, immutable-version editor restoration and serialization, catalog/reload normalization, and import/export normalization for pinned prompt nodes; added regression coverage for schema rejection, selected-version reload, persistence, and legacy compatibility.
+- Commands: Strict RED/GREEN focused domain, workflow catalog/versioning, server runtime, and web client suites; full quality gates and native review are pending the delivery owner.
+- Issues/Risks: Phase 4 remains incomplete overall; the remaining roadmap work is external API/operations and product delivery phases, not Prompt Asset implementation.
+- Next: Run the complete quality gates, native bounded review, commit, and push this bounded Prompt Asset completion slice.

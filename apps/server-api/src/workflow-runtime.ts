@@ -287,6 +287,7 @@ export const resolveWorkflowPromptAssets = (
           variables: version.variables.map((variable) => ({
             name: variable.name,
             required: variable.required,
+            schema: variable.schema,
           })),
         })) ?? [],
     }));

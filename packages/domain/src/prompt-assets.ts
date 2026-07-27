@@ -1,6 +1,12 @@
+import {
+  validateVersionedJsonSchema,
+  type VersionedJsonSchema,
+} from "./governance-validation";
+
 export type PromptVariableSchema = {
   name: string;
   required: boolean;
+  schema?: VersionedJsonSchema;
 };
 
 export type PinnedPromptReference = {
@@ -13,6 +19,7 @@ export type PromptBindingIssue = {
   code:
     | "prompt.binding-required-missing"
     | "prompt.binding-undeclared"
+    | "prompt.binding-schema-invalid"
     | "prompt.version-unpinned";
   variable?: string;
 };
@@ -66,7 +73,19 @@ export const validatePinnedPromptReference = (
       code: "prompt.binding-undeclared" as const,
       variable,
     }));
-  return [...missing, ...undeclared];
+  const malformed = variables.flatMap((variable) => {
+    const binding = reference.bindings[variable.name];
+    if (binding === undefined || !variable.schema) return [];
+    return validateVersionedJsonSchema(variable.schema, binding).valid
+      ? []
+      : [
+          {
+            code: "prompt.binding-schema-invalid" as const,
+            variable: variable.name,
+          },
+        ];
+  });
+  return [...missing, ...undeclared, ...malformed];
 };
 
 export const resolvePinnedPrompt = (input: {
@@ -90,6 +109,9 @@ export const resolvePinnedPrompt = (input: {
       `Prompt asset ${asset.id} version ${input.reference.version.toString()} was not found.`,
     );
   }
+  if (hasUndeclaredTemplateTokens(version)) {
+    throw new Error("Prompt template contains undeclared variables.");
+  }
   if (
     validatePinnedPromptReference(input.reference, version.variables).length
   ) {
@@ -107,6 +129,18 @@ export const resolvePinnedPrompt = (input: {
     },
   };
 };
+
+const hasUndeclaredTemplateTokens = (version: PromptAssetVersion): boolean => {
+  const declared = new Set(version.variables.map((variable) => variable.name));
+  return extractTemplateTokens(version.template).some(
+    (token) => !declared.has(token),
+  );
+};
+
+const extractTemplateTokens = (template: string): ReadonlyArray<string> =>
+  [...template.matchAll(/\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/gu)].flatMap(
+    (match) => (typeof match[1] === "string" ? [match[1]] : []),
+  );
 
 const renderTemplate = (
   template: string,

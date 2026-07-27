@@ -15,6 +15,7 @@ export const requestJson = async <TResult>(input: {
 }): Promise<TResult> => {
   const response = await fetch(`${readBackendOrigin()}${input.path}`, {
     method: input.method ?? "POST",
+    credentials: "include",
     headers: createHeaders(input.body !== undefined),
     ...(input.body ? { body: JSON.stringify(input.body) } : {}),
   });

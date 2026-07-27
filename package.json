@@ -13,6 +13,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:coverage": "pnpm test:e2e",
     "build": "tsc -p tsconfig.build.json && pnpm -C apps/web-ui run build",
     "start": "pnpm -C apps/server-api start",
     "preview:web": "pnpm -C apps/web-ui preview",
@@ -26,6 +28,7 @@
     "postinstall": "node --import tsx scripts/install-hooks.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "@types/node": "25.0.3",
     "@types/pg": "^8.18.0",
     "@typescript-eslint/eslint-plugin": "8.51.0",

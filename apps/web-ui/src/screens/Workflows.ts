@@ -77,8 +77,10 @@ import {
 } from "./workflows-url-state.js";
 import {
   createPromptNodeConfig,
+  readPromptNodeBindings,
   readPromptNodeConfig,
   renderPromptNodePreview,
+  type JsonValue,
 } from "./prompt-node-config-state.js";
 import {
   buildWorkflowDebugInputSources,
@@ -9244,12 +9246,13 @@ export class WorkflowsScreen extends Component<
     const version = asset?.versions.find(
       (entry) => entry.version === reference?.version,
     );
-    const variables = version?.variables ?? [];
+    const promptVariables = version?.variables ?? [];
+    const variables = promptVariables.map((variable) => variable.name);
     const bindings = reference?.bindings ?? {};
     const preview = version
       ? renderPromptNodePreview({
           template: version.template,
-          variables,
+          variables: promptVariables,
           bindings,
         })
       : null;
@@ -9366,7 +9369,7 @@ export class WorkflowsScreen extends Component<
                   "data-testid":
                     WorkflowScreenSelector.PromptAssetBindingsInput,
                   onInput: (event: Event) => {
-                    const parsed = readPromptBindings(
+                    const parsed = readPromptNodeBindings(
                       (event.target as HTMLTextAreaElement).value,
                     );
                     if (parsed) {
@@ -9415,7 +9418,7 @@ export class WorkflowsScreen extends Component<
     nodeId: string,
     assetId: string,
     version: number,
-    bindings: Readonly<Record<string, string>>,
+    bindings: Readonly<Record<string, JsonValue>>,
   ): void {
     this.patchNode(nodeId, (current) => ({
       ...current,
@@ -18175,25 +18178,6 @@ const readWorkflowFitViewport = (
     y: Number((viewportHeight / 2 - centerY * zoom).toFixed(2)),
     zoom: Number(zoom.toFixed(2)),
   };
-};
-
-const readPromptBindings = (
-  value: string,
-): Readonly<Record<string, string>> | null => {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      Object.values(parsed).some((binding) => typeof binding !== "string")
-    ) {
-      return null;
-    }
-    return parsed as Record<string, string>;
-  } catch {
-    return null;
-  }
 };
 
 const toSlugValue = (value: string): string =>

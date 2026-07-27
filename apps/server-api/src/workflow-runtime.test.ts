@@ -69,6 +69,54 @@ describe("workflow runtime provider adapters", () => {
     });
   });
 
+  it("rejects a persisted binding that violates the pinned variable schema", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: 7 },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: { records: [createPromptAsset()] },
+    };
+
+    expect(() => resolveWorkflowPromptAssets(definition, state)).toThrow(
+      "Prompt bindings are invalid.",
+    );
+  });
+
+  it("rejects persisted templates with tokens outside their declared schema", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: {
+        records: [createPromptAsset("Hello {{name}} {{undeclared}}")],
+      },
+    };
+
+    expect(() => resolveWorkflowPromptAssets(definition, state)).toThrow(
+      "Prompt template contains undeclared variables.",
+    );
+  });
+
   it("rejects the legacy Codex profile before attempting a CLI invocation in fresh state", async () => {
     const node = createProviderNode();
     const runtime = createWorkflowRuntimeService({
@@ -249,7 +297,9 @@ const createWorkflowDefinition = (
   tags: [],
 });
 
-const createPromptAsset = (): EditableAssetRecord => ({
+const createPromptAsset = (
+  template = "Hello {{name}}",
+): EditableAssetRecord => ({
   id: "prompt-1",
   kind: AssetKind.Prompt,
   name: "Greeting",
@@ -269,9 +319,17 @@ const createPromptAsset = (): EditableAssetRecord => ({
     versions: [
       {
         version: 1,
-        template: "Hello {{name}}",
+        template,
         variables: [
-          { name: "name", required: true, schema: createSchema("name") },
+          {
+            name: "name",
+            required: true,
+            schema: {
+              id: "name",
+              version: 1,
+              schema: { type: "string" },
+            },
+          },
         ],
         provenance: {
           source: "test",

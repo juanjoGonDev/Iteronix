@@ -523,6 +523,10 @@ const readPromptVersion = (value: unknown): PromptAssetVersion | undefined => {
   const provenance = readProvenance(value["provenance"]);
   if (!provenance || !Array.isArray(value["variables"])) return undefined;
   const variables = value["variables"].flatMap((candidate) => {
+    if (typeof candidate === "string") {
+      const variable = createLegacyPromptVariable(candidate);
+      return variable ? [variable] : [];
+    }
     if (
       !isRecord(candidate) ||
       !isNonEmptyString(candidate["name"]) ||
@@ -544,6 +548,20 @@ const readPromptVersion = (value: unknown): PromptAssetVersion | undefined => {
       }
     : undefined;
 };
+const createLegacyPromptVariable = (
+  name: string,
+): PromptVariableDefinition | undefined =>
+  isNonEmptyString(name)
+    ? {
+        name,
+        required: true,
+        schema: {
+          id: `prompt-variable-${name}`,
+          version: 1,
+          schema: { type: "string" },
+        },
+      }
+    : undefined;
 const readAuditEvents = (value: unknown): ReadonlyArray<AssetAuditEvent> =>
   Array.isArray(value)
     ? value.flatMap((event) =>

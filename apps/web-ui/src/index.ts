@@ -4,7 +4,11 @@ import {
   type ComponentProps,
 } from "./shared/Component.js";
 import { MainLayout, Header } from "./components/Layout.js";
-import { Sidebar } from "./components/Navigation.js";
+import {
+  Sidebar,
+  type NavigationGroup,
+  type NavigationLink,
+} from "./components/Navigation.js";
 import {
   APP_VERSION,
   COMPACT_VIEWPORT_MAX_WIDTH,
@@ -152,13 +156,9 @@ export class App extends Component<AppProps, AppState> {
     router.start();
   }
 
-  private buildNavigationItems(): Array<{
-    icon: string;
-    label: string;
-    href: string;
-    active: boolean;
-    onClick: (event: Event) => void;
-  }> {
+  private buildNavigationItems(): ReadonlyArray<
+    NavigationLink | NavigationGroup
+  > {
     return [
       this.createNavigationItem(
         ScreenId.WorkflowCatalog,
@@ -166,36 +166,7 @@ export class App extends Component<AppProps, AppState> {
         ScreenLabel[ScreenId.WorkflowCatalog],
         ROUTES.WORKFLOWS,
       ),
-      this.createNavigationItem(
-        ScreenId.PromptAssets,
-        "chat",
-        ScreenLabel[ScreenId.PromptAssets],
-        ROUTES.PROMPT_ASSETS,
-      ),
-      this.createNavigationItem(
-        ScreenId.SkillAssets,
-        "extension",
-        ScreenLabel[ScreenId.SkillAssets],
-        ROUTES.SKILL_ASSETS,
-      ),
-      this.createNavigationItem(
-        ScreenId.MemoryAssets,
-        "database",
-        ScreenLabel[ScreenId.MemoryAssets],
-        ROUTES.MEMORY_ASSETS,
-      ),
-      this.createNavigationItem(
-        ScreenId.McpAssets,
-        "extension",
-        ScreenLabel[ScreenId.McpAssets],
-        ROUTES.MCP_ASSETS,
-      ),
-      this.createNavigationItem(
-        ScreenId.PluginAssets,
-        "extension",
-        ScreenLabel[ScreenId.PluginAssets],
-        ROUTES.PLUGIN_ASSETS,
-      ),
+      this.createAssetsNavigationGroup(),
       this.createNavigationItem(
         ScreenId.Settings,
         "settings",
@@ -210,13 +181,7 @@ export class App extends Component<AppProps, AppState> {
     icon: string,
     label: string,
     href: string,
-  ): {
-    icon: string;
-    label: string;
-    href: string;
-    active: boolean;
-    onClick: (event: Event) => void;
-  } {
+  ): NavigationLink {
     return {
       icon,
       label,
@@ -229,6 +194,26 @@ export class App extends Component<AppProps, AppState> {
         event.preventDefault();
         router.navigate(href);
       },
+    };
+  }
+
+  private createAssetsNavigationGroup(): NavigationGroup {
+    const assetScreens: ReadonlyArray<readonly [ScreenId, string, string]> = [
+      [ScreenId.PromptAssets, "chat", ROUTES.PROMPT_ASSETS],
+      [ScreenId.SkillAssets, "extension", ROUTES.SKILL_ASSETS],
+      [ScreenId.MemoryAssets, "database", ROUTES.MEMORY_ASSETS],
+      [ScreenId.McpAssets, "hub", ROUTES.MCP_ASSETS],
+      [ScreenId.PluginAssets, "deployed_code", ROUTES.PLUGIN_ASSETS],
+    ];
+    const items = assetScreens.map(([screen, icon, href]) =>
+      this.createNavigationItem(screen, icon, ScreenLabel[screen], href),
+    );
+
+    return {
+      icon: "inventory_2",
+      label: "Assets",
+      active: items.some((item) => item.active === true),
+      items,
     };
   }
 

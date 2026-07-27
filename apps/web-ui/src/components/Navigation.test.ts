@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  readNavigationGroupItemsClassName,
+  readNavigationGroupToggleClassName,
   readSidebarNavigationClassName,
   readSidebarRootClassName,
 } from "./Navigation.js";
@@ -20,5 +22,14 @@ describe("Sidebar layout classes", () => {
       "min-h-0 flex-1 overflow-y-auto",
     );
     expect(readSidebarNavigationClassName(true)).toContain("py-4 px-1");
+  });
+
+  it("keeps expandable navigation groups accessible and visually nested", () => {
+    expect(readNavigationGroupToggleClassName(false)).toContain(
+      "text-text-secondary",
+    );
+    expect(readNavigationGroupToggleClassName(true)).toContain("text-white");
+    expect(readNavigationGroupItemsClassName(false)).toContain("pl-4");
+    expect(readNavigationGroupItemsClassName(true)).toContain("items-center");
   });
 });

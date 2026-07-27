@@ -681,6 +681,7 @@ const handleRequest = async (
   const acceptsIdeSession =
     hasIdeSession &&
     (isEditableAssetRoute(path) ||
+      isWorkflowOnlyRoute(path) ||
       isIdeGovernanceLifecycleRoute(path) ||
       isIdeWorkflowExecutionRoute(path));
   if (

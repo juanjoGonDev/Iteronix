@@ -54,6 +54,50 @@ describe("IDE authentication API", () => {
     expect(assets.allowCredentials).toBe("true");
   });
 
+  it("allows a trusted IDE session to load workflow canvas definitions while preserving bearer access and rejecting a forged origin", async () => {
+    const server = createTestServer();
+    servers.push(server);
+    const url = await listen(server);
+    await post(
+      url,
+      "/auth/bootstrap-admin",
+      { email: "admin@example.com", password: "CorrectHorseBatteryStaple1" },
+      { authorization: `Bearer ${AuthToken}` },
+    );
+    await post(url, "/auth/register", {
+      email: "member@example.com",
+      password: "CorrectHorseBatteryStaple1",
+    });
+    const login = await post(url, "/auth/login", {
+      email: "member@example.com",
+      password: "CorrectHorseBatteryStaple1",
+    });
+
+    const trustedCanvas = await post(
+      url,
+      "/workflows/definitions/list",
+      {},
+      { cookie: login.cookie, origin: "http://127.0.0.1:4000" },
+    );
+    const forgedCanvas = await post(
+      url,
+      "/workflows/definitions/list",
+      {},
+      { cookie: login.cookie, origin: "https://forged.example" },
+    );
+    const externalBearerCanvas = await post(
+      url,
+      "/workflows/definitions/list",
+      {},
+      { authorization: `Bearer ${AuthToken}` },
+    );
+
+    expect(trustedCanvas.status).toBe(200);
+    expect(trustedCanvas.body["definitions"]).toEqual([]);
+    expect(forgedCanvas.status).toBe(401);
+    expect(externalBearerCanvas.status).toBe(200);
+  });
+
   it("does not retain a failed auth mutation in a later request", async () => {
     const server = createTestServer(createFailingMemoryStore());
     servers.push(server);

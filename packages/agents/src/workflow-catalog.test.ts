@@ -57,6 +57,57 @@ describe("workflow catalog store", () => {
     expect(store.listWorkflows()).toEqual([workflow]);
   });
 
+  it("normalizes duplicate prompt text during workflow upsert and persistence reload", () => {
+    const duplicatePromptNode = createWorkflowNode({
+      id: "node-pinned-prompt",
+      label: "Pinned prompt",
+      config: {
+        prompt: "Legacy duplicate",
+        promptAsset: {
+          assetId: "prompt-asset",
+          version: 2,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const legacyPromptNode = createWorkflowNode({
+      id: "node-legacy-prompt",
+      label: "Legacy prompt",
+      config: { prompt: "Keep this legacy prompt" },
+    });
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const workflow = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "Prompt persistence",
+        nodes: [duplicatePromptNode, legacyPromptNode],
+      }),
+    );
+    const reloadedStore = createWorkflowCatalogStore({
+      definitions: [
+        {
+          ...workflow,
+          nodes: [duplicatePromptNode, legacyPromptNode],
+        },
+      ],
+      now: () => new Date(BaseTime),
+    });
+
+    expect(workflow.nodes[0]?.config.prompt).toBeUndefined();
+    expect(workflow.nodes[1]?.config.prompt).toBe("Keep this legacy prompt");
+    expect(
+      store.snapshot().definitions[0]?.nodes[0]?.config.prompt,
+    ).toBeUndefined();
+    expect(
+      reloadedStore.snapshot().definitions[0]?.nodes[0]?.config.prompt,
+    ).toBeUndefined();
+    expect(
+      reloadedStore.snapshot().definitions[0]?.nodes[1]?.config.prompt,
+    ).toBe("Keep this legacy prompt");
+  });
+
   it("derives asset usage records from workflow definitions", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
@@ -538,6 +589,7 @@ const createWorkflowInput = (input: {
 const createWorkflowNode = (input: {
   id: string;
   label: string;
+  config?: WorkflowDefinitionUpsertInput["nodes"][number]["config"];
 }): WorkflowDefinitionUpsertInput["nodes"][number] => ({
   id: input.id,
   kind: WorkflowNodeKind.AiAgent,
@@ -548,7 +600,7 @@ const createWorkflowNode = (input: {
   },
   width: 220,
   collapsed: false,
-  config: {},
+  config: input.config ?? {},
   inputPorts: [],
   outputPorts: [],
   attachedGuardrails: [],

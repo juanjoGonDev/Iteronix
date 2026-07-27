@@ -266,6 +266,39 @@ describe("workflow versioning", () => {
     expect(migrated.snapshot.name).toBe("Legacy");
   });
 
+  it("strips duplicate workflow-owned prompt text from pinned prompt imports and exports", () => {
+    const workflow = createWorkflow({
+      name: "Pinned prompt",
+      nodes: [
+        createNode("node-a", "A", {
+          prompt: "legacy duplicate",
+          promptAsset: {
+            assetId: "prompt-a",
+            version: 2,
+            bindings: { name: "Ada" },
+          },
+        }),
+      ],
+    });
+    const exported = exportWorkflowVersionSnapshot({
+      workflowId: workflow.id,
+      id: "version-prompt",
+      version: 1,
+      createdAt: workflow.updatedAt,
+      snapshot: workflow,
+      tags: [],
+    });
+    const imported = migrateWorkflowVersionExport(exported);
+
+    expect(exported.snapshot.nodes[0]?.config.prompt).toBeUndefined();
+    expect(imported.snapshot.nodes[0]?.config.prompt).toBeUndefined();
+    expect(imported.snapshot.nodes[0]?.config.promptAsset).toEqual({
+      assetId: "prompt-a",
+      version: 2,
+      bindings: { name: "Ada" },
+    });
+  });
+
   it("previews import risks before creating a workflow", () => {
     const workflow = createWorkflow({
       name: "Imported",

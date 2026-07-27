@@ -9,6 +9,9 @@ import {
   appendPromptAssetVersion,
   createPromptAssetRecord,
   createPromptAssetsClient,
+  formatPromptVariableDefinitions,
+  parsePromptVariableDefinitions,
+  selectPromptAssetVersion,
   type PromptAssetSummary,
   type PromptAssetUsageSummary,
 } from "../shared/prompt-assets-client.js";
@@ -27,6 +30,7 @@ const PromptAssetsSelector = {
   Editor: "prompt-assets-editor",
   EditorName: "prompt-assets-editor-name",
   EditorTemplate: "prompt-assets-editor-template",
+  EditorVariables: "prompt-assets-editor-variables",
   EditorSave: "prompt-assets-editor-save",
   DeletePrefix: "prompt-assets-delete-",
   UsagePrefix: "prompt-assets-usage-",
@@ -43,7 +47,31 @@ type PromptAssetsState = {
   url: PromptAssetsUrlState;
   draftName: string;
   draftTemplate: string;
+  draftVariables: string;
   usageByPromptId: Readonly<Record<string, PromptAssetUsageSummary>>;
+};
+
+export type PromptAssetsEditorDraft = {
+  draftName: string;
+  draftTemplate: string;
+  draftVariables: string;
+};
+
+export const selectPromptAssetsNavigationState = (input: {
+  prompts: ReadonlyArray<PromptAssetSummary>;
+  url: PromptAssetsUrlState;
+}): PromptAssetsEditorDraft => {
+  const selected = input.url.promptId
+    ? input.prompts.find((prompt) => prompt.id === input.url.promptId)
+    : undefined;
+  const selectedVersion = selectPromptAssetVersion(selected, input.url.version);
+  return {
+    draftName: selected?.name ?? "",
+    draftTemplate: selectedVersion?.template ?? "",
+    draftVariables: formatPromptVariableDefinitions(
+      selectedVersion?.variables ?? [],
+    ),
+  };
 };
 
 export class PromptAssetsScreen extends Component<
@@ -61,6 +89,7 @@ export class PromptAssetsScreen extends Component<
       url,
       draftName: "",
       draftTemplate: "",
+      draftVariables: "",
       usageByPromptId: {},
     });
   }
@@ -438,6 +467,20 @@ export class PromptAssetsScreen extends Component<
               "label",
               { className: "mt-4 block text-sm text-text-secondary" },
               [
+                "Variables (name:type:required or name:type:optional, one per line)",
+                createElement("textarea", {
+                  value: this.state.draftVariables,
+                  className:
+                    "mt-1 min-h-24 w-full border border-border-dark bg-[#0f151c] px-3 py-2 font-mono text-sm text-white outline-none focus:border-primary",
+                  "data-testid": PromptAssetsSelector.EditorVariables,
+                  onInput: (event: Event) => this.updateDraftVariables(event),
+                }),
+              ],
+            ),
+            createElement(
+              "label",
+              { className: "mt-4 block text-sm text-text-secondary" },
+              [
                 "Template",
                 createElement("textarea", {
                   value: this.state.draftTemplate,
@@ -490,10 +533,22 @@ export class PromptAssetsScreen extends Component<
             [prompt.id, await this.client.usage(prompt.id)] as const,
         ),
       );
+      const selected = this.state.url.promptId
+        ? prompts.find((prompt) => prompt.id === this.state.url.promptId)
+        : undefined;
+      const selectedVersion = selectPromptAssetVersion(
+        selected,
+        this.state.url.version,
+      );
       this.setState({
         prompts,
         loading: false,
         usageByPromptId: Object.fromEntries(usageEntries),
+        draftName: selected?.name ?? this.state.draftName,
+        draftTemplate: selectedVersion?.template ?? this.state.draftTemplate,
+        draftVariables: selectedVersion
+          ? formatPromptVariableDefinitions(selectedVersion.variables)
+          : this.state.draftVariables,
       });
     } catch (error) {
       this.setState({ loading: false, errorMessage: readErrorMessage(error) });
@@ -503,19 +558,23 @@ export class PromptAssetsScreen extends Component<
   private openEditor(url: PromptAssetsUrlState): void {
     const nextUrl = applyPromptAssetsUrlPatch(window.location.href, url);
     window.history.pushState({}, "", nextUrl);
-    const selected = url.promptId
-      ? this.state.prompts.find((prompt) => prompt.id === url.promptId)
-      : undefined;
+    const draft = selectPromptAssetsNavigationState({
+      prompts: this.state.prompts,
+      url,
+    });
     this.setState({
       url,
-      draftName: selected?.name ?? "",
-      draftTemplate: selected?.template ?? "",
+      ...draft,
     });
   }
 
   private readonly handleBrowserNavigation = (): void => {
     const url = readPromptAssetsUrlState(window.location.href);
-    this.setState({ url });
+    const draft = selectPromptAssetsNavigationState({
+      prompts: this.state.prompts,
+      url,
+    });
+    this.setState({ url, ...draft });
     if (url.mode === PromptAssetsUrlMode.Delete && url.promptId) {
       void this.loadPromptUsage(url.promptId);
     }
@@ -542,6 +601,12 @@ export class PromptAssetsScreen extends Component<
     }
   }
 
+  private updateDraftVariables(event: Event): void {
+    if (event.target instanceof HTMLTextAreaElement) {
+      this.setState({ draftVariables: event.target.value });
+    }
+  }
+
   private async savePrompt(): Promise<void> {
     const name = this.state.draftName.trim();
     const template = this.state.draftTemplate.trim();
@@ -553,13 +618,23 @@ export class PromptAssetsScreen extends Component<
       : undefined;
     const now = new Date().toISOString();
     try {
+      const variables = parsePromptVariableDefinitions(
+        this.state.draftVariables,
+      );
       const asset = await this.client.upsert(
         selected
-          ? appendPromptAssetVersion({ asset: selected, name, template, now })
+          ? appendPromptAssetVersion({
+              asset: selected,
+              name,
+              template,
+              variables,
+              now,
+            })
           : createPromptAssetRecord({
               id: crypto.randomUUID(),
               name,
               template,
+              variables,
               now,
             }),
       );

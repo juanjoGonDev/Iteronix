@@ -114,10 +114,12 @@ Not yet verified or implemented by this plan: React Flow/n8n-grade graph semanti
 ### Phase 4 — Agents, skills, memory, RAG, MCP, and plugins
 
 - [x] Work unit 1: persist editable asset records and authenticated CRUD APIs for agents, tools/MCP, skills, memory/RAG sources, and server-side plugins, with safe JSONB compatibility defaults.
-- [ ] Implement Prompts as first-class reusable Assets: immutable version history, typed variable schemas, provenance, and independently governed lifecycle state. Workflow nodes MUST reference a version-pinned prompt asset with explicit variable bindings; they MUST NOT own duplicated prompt text.
+- [x] Implement Prompts as first-class reusable Assets: immutable version history, typed variable schemas, provenance, and independently governed lifecycle state. Workflow nodes MUST reference a version-pinned prompt asset with explicit variable bindings; they MUST NOT own duplicated prompt text.
   - [x] Add persisted usage discovery for version-pinned prompt references, direct workflow/node links, and impact-confirmed deletion that recomputes persisted usage server-side.
   - [x] Resolve pinned prompt versions deterministically at runtime, reject invalid bindings, and persist rendered prompt provenance in governed external workflow runs.
   - [x] Link IDE workflow runs to persisted governance lifecycles and expose governed prompt provenance in the reloadable execution inspector.
+  - [x] Complete the URL-selected catalog/editor with immutable-version restoration and typed variable-schema editing.
+  - [x] Normalize duplicated workflow-owned prompt text from pinned nodes on catalog persistence and versioned import/export while retaining legacy prompt-only workflows through the Phase 0 compatibility adapters.
 - [x] Integrate the persisted assets with governed workflow execution: `buildGovernedService` + `runGovernedWorkflow` with skill registration, plugin tool ID resolution, permission validation, schema validation, provenance tracking, and fallback to provider path for ungoverned nodes (tested: 5 integration tests covering happy path, provenance fingerprints, schema failure, non-governed routing, permission rejection).
 - [x] Wire governed workflow runtime into real server API routes and connect approval checkpoints.
 - [x] Implement skills as versioned, permissioned reusable execution assets with explicit inputs, outputs, and provenance.

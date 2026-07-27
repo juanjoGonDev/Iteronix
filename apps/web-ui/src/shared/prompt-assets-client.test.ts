@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  parsePromptVariableDefinitions,
+  formatPromptVariableDefinitions,
+  selectPromptAssetVersion,
   createPromptAssetRecord,
   parsePromptAssetUsageResponse,
   parsePromptAssetsResponse,
@@ -51,6 +54,55 @@ describe("prompt assets client", () => {
       },
     ]);
   });
+
+  it("normalizes legacy Phase 0 string variables into required string schemas", () => {
+    expect(
+      parsePromptAssetsResponse({
+        assets: [
+          {
+            id: "prompt-legacy",
+            kind: "prompt",
+            name: "Legacy reply",
+            status: "enabled",
+            prompt: {
+              activeVersion: 1,
+              versions: [
+                {
+                  version: 1,
+                  template: "Hello {{customer}} in {{locale}}",
+                  variables: ["customer", "locale"],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toMatchObject([
+      {
+        id: "prompt-legacy",
+        variables: [
+          {
+            name: "customer",
+            required: true,
+            schema: {
+              id: "prompt-variable-customer",
+              version: 1,
+              schema: { type: "string" },
+            },
+          },
+          {
+            name: "locale",
+            required: true,
+            schema: {
+              id: "prompt-variable-locale",
+              version: 1,
+              schema: { type: "string" },
+            },
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("prompt asset usage response", () => {
@@ -97,5 +149,60 @@ describe("prompt asset payloads", () => {
         versions: [{ version: 1, template: "Hello {{customer}}" }],
       },
     });
+  });
+
+  it("preserves the selected immutable version on reload and serializes typed variables", () => {
+    const asset = parsePromptAssetsResponse({
+      assets: [
+        {
+          id: "prompt-1",
+          kind: "prompt",
+          name: "Support reply",
+          status: "enabled",
+          prompt: {
+            activeVersion: 2,
+            versions: [
+              { version: 1, template: "Old", variables: [] },
+              {
+                version: 2,
+                template: "Hello {{count}}",
+                variables: [
+                  {
+                    name: "count",
+                    required: true,
+                    schema: {
+                      id: "prompt-variable-count",
+                      version: 1,
+                      schema: { type: "number" },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    })[0];
+
+    expect(selectPromptAssetVersion(asset, 1)).toMatchObject({
+      version: 1,
+      template: "Old",
+    });
+    expect(parsePromptVariableDefinitions("count:number:required")).toEqual([
+      {
+        name: "count",
+        required: true,
+        schema: {
+          id: "prompt-variable-count",
+          version: 1,
+          schema: { type: "number" },
+        },
+      },
+    ]);
+    expect(
+      formatPromptVariableDefinitions(
+        parsePromptVariableDefinitions("count:number:required"),
+      ),
+    ).toBe("count:number:required");
   });
 });

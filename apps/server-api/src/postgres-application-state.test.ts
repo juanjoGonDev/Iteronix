@@ -75,6 +75,66 @@ describe("PostgreSQL application state store", () => {
     ).toEqual([]);
   });
 
+  it("normalizes legacy prompt variable names while reloading PostgreSQL JSONB", async () => {
+    const state = createDefaultApplicationState();
+    const legacyPrompt = {
+      ...createEditableAsset(),
+      id: "legacy-prompt",
+      kind: AssetKind.Prompt,
+      prompt: {
+        activeVersion: 1,
+        versions: [
+          {
+            version: 1,
+            template: "Hello {{name}}",
+            variables: ["name"],
+            provenance: {
+              source: "legacy",
+              artifactFingerprint: "legacy-prompt-1",
+              registeredAt: "2026-07-18T00:00:00.000Z",
+            },
+            createdAt: "2026-07-18T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const store = createPostgresApplicationStateStore(
+      createClient([
+        {
+          value: { ...state, editableAssets: { records: [legacyPrompt] } },
+          revision: 5,
+        },
+      ]),
+    );
+
+    await expect(store.load()).resolves.toMatchObject({
+      editableAssets: {
+        records: [
+          {
+            id: "legacy-prompt",
+            prompt: {
+              versions: [
+                {
+                  variables: [
+                    {
+                      name: "name",
+                      required: true,
+                      schema: {
+                        id: "prompt-variable-name",
+                        version: 1,
+                        schema: { type: "string" },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+  });
+
   it("reads the legacy PostgreSQL key until the application state is next saved", async () => {
     const legacyState = createDefaultApplicationState();
     const calls: QueryCall[] = [];
