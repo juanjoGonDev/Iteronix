@@ -5235,3 +5235,12 @@
 - Commands: Repeated workflow validator, full format/lint/typecheck/Vitest/build/dependency gates, Docker CI-parity Playwright (desktop/tablet/mobile), native reliability review, hooks, and GitHub CI run `30262692814` all passed.
 - Issues/Risks: None known.
 - Next: Continue the next bounded roadmap item from the verified baseline.
+
+### 2026-07-27 14:07 (Europe/Madrid) — Phase 4 Memory/RAG runtime wiring
+
+- Summary: Completed the bounded Memory/RAG runtime wiring slice and verified it in GitHub CI.
+- Decisions: Governed runs resolve the selected persisted MemorySource at execution time; only enabled, opt-in, workflow-matching sources can supply tenant, workflow, source, and retention scope.
+- Changes: Added the shared resolver to IDE, resume, and external callbacks plus real API regressions for seven-day retained retrieval provenance and non-opt-in rejection. Marked the Phase 4 Memory/RAG roadmap item complete.
+- Commands: Strict RED/GREEN focused API tests, full quality gates, native reliability review, hooks, and GitHub CI run 30264347063 passed.
+- Issues/Risks: None known.
+- Next: Implement the next Phase 4 item: MCP client/server runtime integration behind capability and permission controls.
