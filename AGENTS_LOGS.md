@@ -5262,3 +5262,12 @@
 - Commands: Strict RED/GREEN focused tests; full format/lint/typecheck/Vitest/build/dependency gates; Docker CI-parity Playwright (desktop/tablet/mobile); four-lens native review; hooks; GitHub CI run 30271023298 all passed.
 - Issues/Risks: None known. The existing non-blocking pnpm.onlyBuiltDependencies configuration warning remains.
 - Next: Begin the next ready roadmap item after the completed Phase 4 baseline.
+
+### 2026-07-28 (Europe/Madrid) — Live execution refresh SDD closure
+
+- Summary: Resolved the bounded native-review and verification-evidence blocker for `fix-workflow-live-execution-refresh`; the OpenSpec change is now archived.
+- Decisions: The verification report begins with the strict `gentle-ai.verify-result/v1` fenced YAML envelope and must be rebound to native review authority after any revision. The dispatcher is authoritative for phase routing.
+- Changes: Added the canonical `workflows-execution-debug` specification, archived the completed change with its verification and archive reports, and updated the plan baseline.
+- Commands: `gentle-ai review validate --gate post-apply`, `gentle-ai sdd-status`, and `gentle-ai sdd-continue` passed; the dispatcher now reports no active changes and `next_recommended: sdd-new`.
+- Issues/Risks: None known.
+- Next: Begin SDD discovery/proposal for the selected Phase 5 item: secret-backed external workflow credentials with rotation, revocation, scopes, rate limits, and audit events.
