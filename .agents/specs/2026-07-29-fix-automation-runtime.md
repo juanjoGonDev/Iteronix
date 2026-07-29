@@ -20,7 +20,7 @@ Audit the merged repository automation after real Dependabot executions, correct
 - Pass explicit repository context to `gh` commands.
 - Synchronize label metadata only outside dry-run mode and tolerate the specific concurrent `422 already_exists` race.
 - Block privileged jobs in forks and retain exact-head approval, branch-update and revalidation protections.
-- Require repository settings **Allow auto-merge** and **Allow GitHub Actions to create and approve pull requests**.
+- Keep **Allow auto-merge** enabled. The repository setting **Allow GitHub Actions to create and approve pull requests** is not required here because GitHub Actions never submits a review; the owner PAT does.
 
 ## Acceptance criteria
 
