@@ -17,29 +17,34 @@ on:
         type: boolean
 
 permissions: read-all
+
 concurrency:
   group: cache-maintenance
   cancel-in-progress: false
 
 jobs:
   cleanup:
+    name: 🧹 Delete stale Actions caches
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: write
       contents: read
     steps:
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+      - name: Inspect and delete stale caches
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           STALE_DAYS: ${{ inputs.stale_days || '7' }}
           DRY_RUN: ${{ inputs.dry_run || false }}
         with:
           script: |
-            const staleDays = Number.parseInt(process.env.STALE_DAYS, 10);
-            if (!Number.isInteger(staleDays) || staleDays < 1 || staleDays > 90) {
+            const staleDaysInput = process.env.STALE_DAYS ?? '';
+            if (!/^(?:[1-9]|[1-8]\d|90)$/.test(staleDaysInput)) {
               core.setFailed('stale_days must be an integer between 1 and 90');
               return;
             }
+
+            const staleDays = Number(staleDaysInput);
             const dryRun = process.env.DRY_RUN === 'true';
             const cutoff = Date.now() - staleDays * 86400000;
             const { owner, repo } = context.repo;
@@ -48,14 +53,18 @@ jobs:
               { owner, repo, per_page: 100 },
               (response) => response.data.actions_caches ?? [],
             );
-            const stale = caches.filter((cache) => {
+            const staleCaches = caches.filter((cache) => {
               const lastAccessedAt = Date.parse(cache.last_accessed_at);
               return Number.isFinite(lastAccessedAt) && lastAccessedAt <= cutoff;
             });
+
             let deleted = 0;
-            for (const cache of stale) {
-              core.info(`${dryRun ? 'Would delete' : 'Deleting'} ${cache.id} (${cache.key})`);
+            for (const cache of staleCaches) {
+              core.info(
+                `${dryRun ? 'Would delete' : 'Deleting'} ${cache.id} (${cache.key})`,
+              );
               if (dryRun) continue;
+
               try {
                 await github.request(
                   'DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}',
@@ -67,11 +76,18 @@ jobs:
                 throw error;
               }
             }
-            await core.summary.addHeading('Actions cache maintenance').addTable([
-              [{ data: 'Metric', header: true }, { data: 'Value', header: true }],
-              ['Inspected', String(caches.length)],
-              ['Matched', String(stale.length)],
-              ['Deleted', String(deleted)],
-              ['Dry run', String(dryRun)],
-              ['Threshold', `${staleDays} days`],
-            ]).write();
+
+            await core.summary
+              .addHeading('Actions cache maintenance')
+              .addTable([
+                [
+                  { data: 'Metric', header: true },
+                  { data: 'Value', header: true },
+                ],
+                ['Repository caches inspected', String(caches.length)],
+                ['Caches older than threshold', String(staleCaches.length)],
+                ['Caches deleted', String(deleted)],
+                ['Dry run', String(dryRun)],
+                ['Threshold', `${staleDays} days`],
+              ])
+              .write();
