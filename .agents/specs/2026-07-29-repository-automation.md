@@ -8,33 +8,39 @@ Audit the active workflows against `fastypest`, correct Dependabot branch handli
 
 - Default branch: `master`.
 - Stack: pnpm monorepo, Node.js, and TypeScript.
-- Existing workflows: CI and project bootstrap.
-- Existing Dependabot targets `main`, while CI and the repository default use `master`.
-- Existing workflows contain mutable Action tags; that broader pinning migration remains separate.
+- Existing workflows cover CI and project bootstrap.
+- Existing Dependabot targeted `main`, while CI and the repository default use `master`.
+- Dependabot-triggered `pull_request_target` workflows receive a read-only token and no secrets, so privileged Dependabot automation must not depend on repository secrets.
 
 ## Decision
 
 - Remove the hard-coded target branch and group weekly npm and GitHub Actions updates after a seven-day cooldown.
+- Use `pull_request` plus the repository-scoped `GITHUB_TOKEN` for Dependabot approval, labels, and auto-merge; no PR code is checked out.
+- Require a current write-permission maintainer approval for production majors, bound to the current head SHA.
+- Use the scheduled default-branch workflow and `GITHUB_TOKEN` for required-QA branch updates and auto-merge.
 - Add cache-key-independent cleanup through the repository cache API with manual dry-run by default.
-- Auto-approve patch/minor updates and development-only majors without checking out PR code. Production majors require a current approval from a reviewer with write permission.
-- Resolve the default branch dynamically, pin introduced Actions by immutable SHA, and use read-only defaults.
 - Do not add release automation because the monorepo has no current versioned GitHub artifact contract.
 
 ## Acceptance
 
 - [x] Dependabot correctly follows `master`.
-- [x] No privileged workflow executes pull-request-controlled code.
+- [x] No privileged workflow checks out pull-request-controlled code.
 - [x] External or stale approvals cannot unlock production majors.
 - [x] Cache cleanup is global and empty-safe.
+- [x] No new repository secret or variable is required.
 - [x] Existing CI/bootstrap behavior is preserved.
 
 ## Validation
 
 The proposed YAML parsed successfully. Existing package scripts, default branch, and workflows were inspected. Pull-request CI remains the runtime gate.
 
+## Repository settings
+
+Enable repository auto-merge and `Allow GitHub Actions to create and approve pull requests`. Required status checks must remain enforced on `master`.
+
 ## Risks and rollback
 
-Auto-merge, branch protection, and an appropriately scoped token are required for writes. Existing mutable Action tags remain separate debt. Revert this PR to roll back.
+The workflows cannot approve or queue pull requests if the repository settings above are disabled. Existing mutable Action tags remain separate debt. Revert this PR to roll back.
 
 ## Delivery
 
