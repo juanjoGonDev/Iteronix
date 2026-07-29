@@ -17,6 +17,7 @@ jobs:
   dependabot:
     name: Validate and queue eligible updates
     if: >-
+      github.event.repository.fork == false &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.ref == github.event.repository.default_branch
@@ -61,11 +62,22 @@ jobs:
           echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
           echo "requires_manual_qa=$requires_manual_qa" >> "$GITHUB_OUTPUT"
 
-      - name: Approve eligible update
+      - name: Approve eligible update as repository owner
         if: steps.policy.outputs.eligible == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=Missing Dependabot secret::Configure PAT_FINE as a Dependabot repository secret. It must be a fine-grained token for this repository with Pull requests read/write permission."
+            exit 1
+          fi
+
+          authenticated_login=$(gh api user --jq .login)
+          if [ "$authenticated_login" != "$GITHUB_REPOSITORY_OWNER" ]; then
+            echo "::error title=Invalid Dependabot approval actor::PAT_FINE authenticates as $authenticated_login, but this repository requires $GITHUB_REPOSITORY_OWNER."
+            exit 1
+          fi
+
           gh pr review "$PR_URL" \
             --approve \
             --body "Approved automatically: patch/minor update, or a development-only major update."
@@ -86,7 +98,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create "requires-manual-qa" \
-            --color "B60205" \
-            --description "Requires explicit maintainer approval before auto-merge" \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "E99695" \
+            --description "Needs manual quality assurance testing before merging" \
             --force
           gh pr edit "$PR_URL" --add-label "requires-manual-qa"
