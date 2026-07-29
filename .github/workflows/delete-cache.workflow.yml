@@ -25,11 +25,11 @@ concurrency:
 jobs:
   cleanup:
     name: 🧹 Delete stale Actions caches
+    if: github.event.repository.fork == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: write
-      contents: read
     steps:
       - name: Inspect and delete stale caches
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -37,6 +37,7 @@ jobs:
           STALE_DAYS: ${{ inputs.stale_days || '7' }}
           DRY_RUN: ${{ inputs.dry_run || false }}
         with:
+          github-token: ${{ github.token }}
           script: |
             const staleDaysInput = process.env.STALE_DAYS ?? '';
             if (!/^(?:[1-9]|[1-8]\d|90)$/.test(staleDaysInput)) {
