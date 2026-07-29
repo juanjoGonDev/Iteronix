@@ -30,7 +30,7 @@
     "@typescript-eslint/eslint-plugin": "8.51.0",
     "@typescript-eslint/parser": "8.51.0",
     "concurrently": "^9.2.1",
-    "dependency-cruiser": "17.4.3",
+    "dependency-cruiser": "18.1.0",
     "eslint": "9.39.2",
     "knip": "6.13.0",
     "lefthook": "2.1.8",
