@@ -1,0 +1,65 @@
+name: 🤖 Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: read-all
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dependabot:
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      AUTOMATION_TOKEN: ${{ secrets.REPOSITORY_AUTOMATION_TOKEN || secrets.PAT_FINE }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
+      - id: policy
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+        run: |
+          eligible=false
+          manual=false
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor) eligible=true ;;
+            version-update:semver-major)
+              if [ "$DEPENDENCY_TYPE" = "direct:development" ]; then eligible=true; fi
+              if [ "$DEPENDENCY_TYPE" = "direct:production" ]; then manual=true; fi
+              ;;
+          esac
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "manual=$manual" >> "$GITHUB_OUTPUT"
+      - name: Explain missing token
+        if: env.AUTOMATION_TOKEN == ''
+        run: echo "::notice title=Repository automation token missing::Configure REPOSITORY_AUTOMATION_TOKEN or PAT_FINE with Contents, Issues and Pull requests write access."
+      - name: Approve and queue eligible update
+        if: env.AUTOMATION_TOKEN != '' && steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ env.AUTOMATION_TOKEN }}
+        run: |
+          gh pr review "$PR_URL" --approve --body "Approved automatically by the repository dependency policy."
+          gh pr merge "$PR_URL" --auto --squash --match-head-commit "$HEAD_SHA"
+      - name: Mark production major for manual QA
+        if: env.AUTOMATION_TOKEN != '' && steps.policy.outputs.manual == 'true'
+        env:
+          GH_TOKEN: ${{ env.AUTOMATION_TOKEN }}
+        run: |
+          gh label create "requires-manual-qa" --color "B60205" --description "Requires explicit maintainer approval before auto-merge" --force
+          gh pr edit "$PR_URL" --add-label "requires-manual-qa"
