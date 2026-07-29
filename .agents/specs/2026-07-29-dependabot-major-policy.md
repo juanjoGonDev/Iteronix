@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Ready for review.
 
 ## Request
 
@@ -10,7 +10,7 @@ Prevent every semantic-version major Dependabot update from being approved or qu
 
 ## Evidence
 
-The current workflow marks development-only major updates as eligible. Dependency type is not a sufficient proxy for migration risk.
+The previous workflow marked development-only major updates as eligible. Dependency type is not a sufficient proxy for migration risk.
 
 ## Decision
 
@@ -26,11 +26,13 @@ Classify only patch and minor updates as eligible. Classify every major update a
 
 ## Validation
 
-Pending workflow syntax review, pull-request checks and runtime evidence from the next Dependabot event.
+- CI run `30471358714`: success.
+- The Dependabot job is skipped as expected because this corrective PR is owner-authored.
 
 ## Delivery
 
 Branch: `agent/fix-dependabot-major-policy`.
+Pull request: `#22`.
 
 ## Rollback
 
