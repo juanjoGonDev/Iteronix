@@ -2,46 +2,46 @@
 
 ## Request
 
-Audit the merged repository automation after real Dependabot executions, correct common failures and preserve the required actor separation used by `fastypest`.
+Audit the merged repository automation after real Dependabot executions, correct common failures, create the required labels and preserve the actor separation used by `fastypest`.
 
 ## Evidence
 
 - Dependabot run `30449377010` in the reference rollout failed while creating `requires-manual-qa` because `gh label create` had no repository context and the job intentionally performs no checkout.
-- The original workflow approved Dependabot pull requests with `github-actions[bot]`; the repository contract requires the repository owner token to approve Dependabot and the repository-scoped `GITHUB_TOKEN` to enable auto-merge.
-- Review feedback identified missing fork guards and an unnecessary `contents: read` permission in cache maintenance.
-- `fastypest` uses `requires-manual-qa` with color `E99695` and the description `Needs manual quality assurance testing before merging`.
+- The merged workflow approved Dependabot pull requests with `github-actions[bot]`; the required contract is repository-owner approval followed by GitHub Actions auto-merge.
+- Automated review identified missing fork guards, an unused cache permission, missing approval-actor verification, dry-run label mutation and a concurrent label-creation race.
+- `fastypest` uses `requires-manual-qa` with color `E99695` and description `Needs manual quality assurance testing before merging`.
 
 ## Decision
 
 - Keep `pull_request` as the Dependabot event and never check out dependency pull-request code.
-- Require `PAT_FINE` as a **Dependabot repository secret** for eligible dependency approvals. The token must be fine-grained, repository-scoped and grant Pull requests read/write.
-- Validate the credential inside the shell step because GitHub Actions does not allow direct secret references in `if:` conditions.
-- Continue using `github.token` for labels and enabling squash auto-merge.
-- Pass `--repo "$GITHUB_REPOSITORY"` to repository-level `gh` commands.
-- Create or normalize the manual-QA label from the scheduled/manual QA workflow.
-- Block privileged jobs in forked repositories and remove unused cache permissions.
-- Retain exact-head approval validation for manually reviewed production majors.
+- Require `PAT_FINE` as a Dependabot repository secret with Pull requests read/write for this repository.
+- Resolve the authenticated PAT login with `gh api user` and fail unless it equals `GITHUB_REPOSITORY_OWNER` (`juanjoGonDev`).
+- Use `github.token` only for repository labels and squash auto-merge.
+- Pass explicit repository context to `gh` commands.
+- Synchronize label metadata only outside dry-run mode and tolerate the specific concurrent `422 already_exists` race.
+- Block privileged jobs in forks and retain exact-head approval, branch-update and revalidation protections.
+- Require repository settings **Allow auto-merge** and **Allow GitHub Actions to create and approve pull requests**.
 
 ## Acceptance criteria
 
-- Eligible Dependabot updates are approved by `juanjoGonDev`, not by a bot.
-- Auto-merge remains performed by GitHub Actions and stays bound to the expected head SHA.
-- Production majors receive a correctly configured `requires-manual-qa` label without requiring a checkout.
-- Required-QA approvals apply only to the current head and only from non-bot maintainers with write permission.
+- Eligible Dependabot updates are approved by `juanjoGonDev`, never by a bot or another PAT owner.
+- GitHub Actions enables squash auto-merge for the expected head SHA after required checks.
+- Production majors receive `requires-manual-qa` and require a current non-bot write maintainer approval.
+- Manual dry runs make no repository mutation.
+- Concurrent label creation cannot abort QA processing.
 - Cache cleanup cannot run in forks and has only `actions: write`.
-- Missing `PAT_FINE` fails with a precise configuration error instead of silently weakening review policy.
+- Missing or incorrectly owned `PAT_FINE` fails with precise guidance.
 
 ## Validation
 
-- Workflow YAML parsed with a non-coercing loader.
-- Actions remain pinned by immutable SHA.
-- Pull-request CI validates repository-owned formatting, workflow contracts and application checks.
-- Full actor-identity validation requires the configured Dependabot secret and a subsequent Dependabot event.
+- Workflow YAML is parsed by repository CI and introduced Actions remain pinned by immutable SHA.
+- Pull-request CI is authoritative for formatting, workflow contracts and repository checks.
+- Runtime identity validation requires the configured Dependabot secret and a subsequent Dependabot event after merge.
 
 ## Rollback
 
-Revert the corrective pull request. Existing dependency pull requests and caches are not mutated by the branch itself.
+Revert the corrective pull request. Existing dependency pull requests, labels and caches are not destructively changed by this branch.
 
 ## Delivery status
 
-Implementation complete on `agent/fix-automation-runtime`; pull request and CI validation pending.
+Implemented on `agent/fix-automation-runtime` and delivered through a normal corrective pull request. No merge, release or deployment is included.
