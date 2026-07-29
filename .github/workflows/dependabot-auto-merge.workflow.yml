@@ -72,6 +72,12 @@ jobs:
             exit 1
           fi
 
+          authenticated_login=$(gh api user --jq .login)
+          if [ "$authenticated_login" != "$GITHUB_REPOSITORY_OWNER" ]; then
+            echo "::error title=Invalid Dependabot approval actor::PAT_FINE authenticates as $authenticated_login, but this repository requires $GITHUB_REPOSITORY_OWNER."
+            exit 1
+          fi
+
           gh pr review "$PR_URL" \
             --approve \
             --body "Approved automatically: patch/minor update, or a development-only major update."
