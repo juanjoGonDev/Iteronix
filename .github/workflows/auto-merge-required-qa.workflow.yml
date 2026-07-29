@@ -30,9 +30,12 @@ jobs:
     steps:
       - name: Synchronize manual QA label
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          DRY_RUN: ${{ inputs.dry_run || false }}
         with:
           github-token: ${{ github.token }}
           script: |
+            const dryRun = process.env.DRY_RUN === 'true';
             const { owner, repo } = context.repo;
             const label = {
               name: 'requires-manual-qa',
@@ -40,8 +43,13 @@ jobs:
               description: 'Needs manual quality assurance testing before merging',
             };
 
-            try {
-              await github.rest.issues.updateLabel({
+            if (dryRun) {
+              core.info(`Would synchronize label ${label.name}.`);
+              return;
+            }
+
+            const updateLabel = () =>
+              github.rest.issues.updateLabel({
                 owner,
                 repo,
                 name: label.name,
@@ -49,12 +57,27 @@ jobs:
                 color: label.color,
                 description: label.description,
               });
+
+            try {
+              await updateLabel();
             } catch (error) {
               if (error.status !== 404) {
                 throw error;
               }
 
-              await github.rest.issues.createLabel({ owner, repo, ...label });
+              try {
+                await github.rest.issues.createLabel({ owner, repo, ...label });
+              } catch (createError) {
+                const duplicate =
+                  createError.status === 422 &&
+                  createError.response?.data?.errors?.some(
+                    (entry) => entry.code === 'already_exists',
+                  );
+                if (!duplicate) {
+                  throw createError;
+                }
+                await updateLabel();
+              }
             }
 
       - name: Validate current approvals and enable auto-merge
