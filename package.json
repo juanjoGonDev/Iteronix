@@ -29,7 +29,7 @@
     "@types/pg": "^8.18.0",
     "@typescript-eslint/eslint-plugin": "8.51.0",
     "@typescript-eslint/parser": "8.51.0",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.3",
     "dependency-cruiser": "17.4.3",
     "eslint": "9.39.2",
     "knip": "6.13.0",
