@@ -1,0 +1,132 @@
+name: 🤖 Dependabot auto-merge
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions: read-all
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dependabot:
+    name: Validate and queue eligible updates
+    if: >-
+      github.event.repository.fork == false &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Read Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Classify update policy
+        id: policy
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+
+          classify_update() {
+            case "$1" in
+              version-update:semver-patch|version-update:semver-minor)
+                printf '%s\n' eligible
+                ;;
+              version-update:semver-major)
+                printf '%s\n' manual
+                ;;
+              *)
+                printf '%s\n' ignored
+                ;;
+            esac
+          }
+
+          assert_decision() {
+            input=$1
+            expected=$2
+            actual=$(classify_update "$input")
+            if [ "$actual" != "$expected" ]; then
+              echo "::error title=Dependabot policy contract failed::$input resolved to $actual instead of $expected."
+              exit 1
+            fi
+          }
+
+          assert_decision version-update:semver-patch eligible
+          assert_decision version-update:semver-minor eligible
+          assert_decision version-update:semver-major manual
+          assert_decision unknown ignored
+
+          eligible=false
+          requires_manual_qa=false
+          decision=$(classify_update "$UPDATE_TYPE")
+
+          case "$decision" in
+            eligible)
+              eligible=true
+              ;;
+            manual)
+              requires_manual_qa=true
+              ;;
+          esac
+
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "requires_manual_qa=$requires_manual_qa" >> "$GITHUB_OUTPUT"
+
+      - name: Approve eligible update as repository owner
+        if: steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=Missing Dependabot secret::Configure PAT_FINE as a Dependabot repository secret. It must be a fine-grained token for this repository with Pull requests read/write permission."
+            exit 1
+          fi
+
+          authenticated_login=$(gh api user --jq .login)
+          if [ "$authenticated_login" != "$GITHUB_REPOSITORY_OWNER" ]; then
+            echo "::error title=Invalid Dependabot approval actor::PAT_FINE authenticates as $authenticated_login, but this repository requires $GITHUB_REPOSITORY_OWNER."
+            exit 1
+          fi
+
+          gh pr review "$PR_URL" \
+            --approve \
+            --body "Approved automatically: patch or minor update."
+
+      - name: Enable squash auto-merge
+        if: steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge "$PR_URL" \
+            --auto \
+            --squash \
+            --match-head-commit "$HEAD_SHA"
+
+      - name: Mark major update for manual QA
+        if: steps.policy.outputs.requires_manual_qa == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "requires-manual-qa" \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "E99695" \
+            --description "Needs manual quality assurance testing before merging" \
+            --force
+          gh pr edit "$PR_URL" --add-label "requires-manual-qa"
