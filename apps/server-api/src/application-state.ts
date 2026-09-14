@@ -6,7 +6,10 @@ import type { WorkflowCatalogState } from "../../../packages/shared/src/workflow
 import type { ProviderSelection, ProviderSettingsRecord } from "./providers";
 import {
   ExternalApiKeyScopeKind,
+  ExternalWorkflowOperation,
+  ExternalWorkflowRateLimit,
   type ExternalApiKeyRecord,
+  type ExternalWorkflowOperation as ExternalWorkflowOperationValue,
 } from "../../../packages/domain/src/external-api-keys";
 import {
   parseGovernanceLifecycles,
@@ -86,6 +89,41 @@ export type ApplicationStateStore = {
 const DefaultProfileId = "default";
 const DefaultMaxLoops = 50;
 const LegacyWorkflowAssetScope = "workspace";
+const ApplicationStateKey = "application";
+const BeginSql = "BEGIN";
+const CommitSql = "COMMIT";
+const RollbackSql = "ROLLBACK";
+const LockLegacyApplicationStateSql = `
+  SELECT value FROM app_state WHERE key = $1 FOR UPDATE
+`;
+const ImportLegacyCredentialSql = `
+  INSERT INTO external_workflow_credentials (
+    id, name, scope_kind, workflow_ids, operations, created_at, rate_limit_per_minute, revoked_at
+  ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::timestamptz, $7, $8::timestamptz)
+  ON CONFLICT (id) DO NOTHING
+`;
+const ImportLegacyVerifierSql = `
+  INSERT INTO external_workflow_credential_verifiers (credential_id, verifier)
+  VALUES ($1, $2)
+  ON CONFLICT (credential_id) DO NOTHING
+`;
+const AppendLegacyCutoverAuditSql = `
+  INSERT INTO external_workflow_credential_audits (
+    credential_id, event_kind, operation, workflow_id, result, actor_kind, actor_id, occurred_at
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz)
+`;
+const ClearLegacyExternalApiKeysSql = `
+  UPDATE app_state
+  SET value = $2::jsonb, revision = revision + 1, updated_at = NOW()
+  WHERE key = $1
+`;
+const LegacyCredentialOperations = [
+  ExternalWorkflowOperation.WorkflowRead,
+  ExternalWorkflowOperation.WorkflowInvoke,
+] as const;
+const LegacyCredentialRateLimit = ExternalWorkflowRateLimit.DefaultPerMinute;
+const LegacyCutoverActorKind = "system";
+const LegacyCutoverActorId = "legacy-cutover";
 
 export const createDefaultApplicationState = (): ApplicationState => {
   const now = new Date().toISOString();
@@ -104,6 +142,87 @@ export const createDefaultApplicationState = (): ApplicationState => {
     createdAt: now,
     updatedAt: now,
   };
+};
+
+export type LegacyExternalApiKeyCutoverClient = {
+  query: (
+    text: string,
+    values?: ReadonlyArray<unknown>,
+  ) => Promise<{ rows: ReadonlyArray<{ value?: unknown }> }>;
+  connect?: () => Promise<LegacyExternalApiKeyCutoverTransactionClient>;
+};
+
+type LegacyExternalApiKeyCutoverTransactionClient = {
+  query: LegacyExternalApiKeyCutoverClient["query"];
+  release: () => void;
+};
+
+export const cutOverLegacyExternalApiKeys = async (input: {
+  client: LegacyExternalApiKeyCutoverClient;
+  now: string;
+}): Promise<ApplicationState> => {
+  const client = input.client.connect
+    ? await input.client.connect()
+    : input.client;
+  try {
+    await client.query(BeginSql);
+    const locked = await client.query(LockLegacyApplicationStateSql, [
+      ApplicationStateKey,
+    ]);
+    const state = parseApplicationState(locked.rows[0]?.value);
+    if (state.externalApiKeys.length === 0) {
+      await client.query(CommitSql);
+      return state;
+    }
+
+    for (const key of state.externalApiKeys) {
+      const workflowIds =
+        key.scope.kind === ExternalApiKeyScopeKind.AllWorkflows
+          ? []
+          : key.scope.workflowIds;
+      await client.query(ImportLegacyCredentialSql, [
+        key.id,
+        key.name,
+        key.scope.kind,
+        JSON.stringify(workflowIds),
+        JSON.stringify(key.operations ?? LegacyCredentialOperations),
+        key.createdAt,
+        key.rateLimitPerMinute ?? LegacyCredentialRateLimit,
+        key.revokedAt ?? null,
+      ]);
+      await client.query(ImportLegacyVerifierSql, [key.id, key.secretHash]);
+      await client.query(AppendLegacyCutoverAuditSql, [
+        key.id,
+        "migrate",
+        null,
+        null,
+        "authorized",
+        LegacyCutoverActorKind,
+        LegacyCutoverActorId,
+        input.now,
+      ]);
+    }
+
+    const cutOverState = {
+      ...state,
+      externalApiKeys: [],
+      revision: state.revision + 1,
+      updatedAt: input.now,
+    };
+    await client.query(ClearLegacyExternalApiKeysSql, [
+      ApplicationStateKey,
+      JSON.stringify(cutOverState),
+    ]);
+    await client.query(CommitSql);
+    return cutOverState;
+  } catch (error) {
+    await client.query(RollbackSql);
+    throw error;
+  } finally {
+    if ("release" in client && typeof client.release === "function") {
+      client.release();
+    }
+  }
 };
 
 export const parseApplicationState = (value: unknown): ApplicationState => {
@@ -206,6 +325,12 @@ const readExternalApiKeys = (
       return [];
     }
 
+    const operations = readExternalWorkflowOperations(entry["operations"]);
+    const expiresAt = readString(entry, "expiresAt");
+    const rateLimitPerMinute = readRateLimitPerMinute(
+      entry["rateLimitPerMinute"],
+    );
+    const generation = readNonNegativeInteger(entry, "generation");
     const lastUsedAt = readString(entry, "lastUsedAt");
     const revokedAt = readString(entry, "revokedAt");
     const key: ExternalApiKeyRecord = {
@@ -214,12 +339,43 @@ const readExternalApiKeys = (
       scope,
       secretHash,
       createdAt,
+      ...(operations ? { operations } : {}),
+      ...(expiresAt ? { expiresAt } : {}),
+      ...(rateLimitPerMinute ? { rateLimitPerMinute } : {}),
+      ...(generation !== undefined ? { generation } : {}),
       ...(lastUsedAt ? { lastUsedAt } : {}),
       ...(revokedAt ? { revokedAt } : {}),
     };
     return [key];
   });
 };
+
+const readExternalWorkflowOperations = (
+  value: unknown,
+): ExternalApiKeyRecord["operations"] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const operations = value.filter(
+    (entry): entry is ExternalWorkflowOperationValue =>
+      typeof entry === "string" &&
+      [
+        "workflow.read",
+        "workflow.invoke",
+        "workflow.trigger",
+        "run.status",
+        "run.approve",
+        "run.trace",
+      ].includes(entry),
+  );
+  return operations.length > 0 ? operations : undefined;
+};
+
+const readRateLimitPerMinute = (value: unknown): number | undefined =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 1 &&
+  value <= 600
+    ? value
+    : undefined;
 
 const readApplicationEnvelope = (
   value: unknown,

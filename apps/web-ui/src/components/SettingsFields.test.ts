@@ -3,6 +3,8 @@ import {
   readSettingsToggleKnobClassName,
   readSettingsToggleTrackClassName,
   SettingsNumberField,
+  SettingsCheckboxGroup,
+  SettingsDateTimeField,
   SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
@@ -69,6 +71,53 @@ describe("SettingsFields", () => {
     expect(recorded).toContain("attr:data-testid=settings-sound-enabled");
     expect(recorded).toContain("attr:role=switch");
     expect(recorded).toContain("attr:aria-checked=true");
+  });
+
+  it("renders a native date-time control instead of asking users for a protocol timestamp", () => {
+    const recorded = renderWithFakeDocument(() => {
+      new SettingsDateTimeField({
+        label: "Expires on",
+        value: "2026-08-28T09:30",
+        disabled: false,
+        testId: "settings-external-credential-expiry",
+        onChange: () => undefined,
+      }).render();
+    });
+
+    expect(recorded).toContain("attr:type=datetime-local");
+    expect(recorded).toContain(
+      "attr:data-testid=settings-external-credential-expiry",
+    );
+    expect(recorded).toContain("listener:change");
+  });
+
+  it("renders permission choices as labelled native checkboxes with descriptions", () => {
+    const recorded = renderWithFakeDocument(() => {
+      new SettingsCheckboxGroup({
+        label: "Allowed operations",
+        description: "Choose only the actions this credential needs.",
+        testId: "settings-external-credential-operations",
+        values: ["workflow.read"],
+        options: [
+          {
+            value: "workflow.read",
+            label: "Read workflows",
+            description: "Inspect workflow definitions and metadata.",
+          },
+        ],
+        onChange: () => undefined,
+      }).render();
+    });
+
+    expect(recorded).toContain("attr:role=group");
+    expect(recorded).toContain("attr:type=checkbox");
+    expect(recorded).toContain(
+      "attr:data-testid=settings-external-credential-operations-workflow-read",
+    );
+    expect(recorded).toContain(
+      "text:Inspect workflow definitions and metadata.",
+    );
+    expect(recorded).toContain("listener:change");
   });
 
   it("renders reusable toggles with switch-specific design states", () => {

@@ -3,6 +3,28 @@ export const ExternalApiKeyScopeKind = {
   SelectedWorkflows: "selected_workflows",
 } as const;
 
+export const ExternalWorkflowOperation = {
+  WorkflowRead: "workflow.read",
+  WorkflowInvoke: "workflow.invoke",
+  WorkflowTrigger: "workflow.trigger",
+  RunStatus: "run.status",
+  RunApprove: "run.approve",
+  RunTrace: "run.trace",
+} as const;
+
+export type ExternalWorkflowOperation =
+  (typeof ExternalWorkflowOperation)[keyof typeof ExternalWorkflowOperation];
+
+export const ExternalWorkflowRateLimit = {
+  DefaultPerMinute: 60,
+  MinimumPerMinute: 1,
+  MaximumPerMinute: 600,
+  isValid: (value: number): boolean =>
+    Number.isInteger(value) &&
+    value >= ExternalWorkflowRateLimit.MinimumPerMinute &&
+    value <= ExternalWorkflowRateLimit.MaximumPerMinute,
+} as const;
+
 export type ExternalApiKeyScope =
   | { kind: typeof ExternalApiKeyScopeKind.AllWorkflows }
   | {
@@ -16,25 +38,42 @@ export type ExternalApiKeyRecord = {
   scope: ExternalApiKeyScope;
   secretHash: string;
   createdAt: string;
+  operations?: ReadonlyArray<ExternalWorkflowOperation>;
+  expiresAt?: string;
+  rateLimitPerMinute?: number;
+  generation?: number;
   lastUsedAt?: string;
   revokedAt?: string;
 };
 
 export type ExternalApiKeyView = Omit<ExternalApiKeyRecord, "secretHash">;
 
+export const isExternalWorkflowCredentialValid = (
+  key: ExternalApiKeyRecord,
+  now: string,
+): boolean =>
+  !key.revokedAt &&
+  (!key.expiresAt ||
+    new Date(key.expiresAt).getTime() > new Date(now).getTime());
+
+export const isExternalWorkflowCredentialAuthorized = (
+  key: ExternalApiKeyRecord,
+  operation: string,
+  workflowId: string,
+  now: string = new Date().toISOString(),
+): boolean =>
+  isExternalWorkflowOperation(operation) &&
+  isExternalWorkflowCredentialValid(key, now) &&
+  (key.operations ?? defaultExternalWorkflowOperations()).includes(operation) &&
+  isWorkflowAllowedForExternalApiKey(key, workflowId);
+
 export const isWorkflowAllowedForExternalApiKey = (
   key: ExternalApiKeyRecord,
   workflowId: string,
-): boolean => {
-  if (key.revokedAt) {
-    return false;
-  }
-
-  return (
-    key.scope.kind === ExternalApiKeyScopeKind.AllWorkflows ||
-    key.scope.workflowIds.includes(workflowId)
-  );
-};
+): boolean =>
+  !key.revokedAt &&
+  (key.scope.kind === ExternalApiKeyScopeKind.AllWorkflows ||
+    key.scope.workflowIds.includes(workflowId));
 
 export const toExternalApiKeyView = (
   key: ExternalApiKeyRecord,
@@ -92,3 +131,16 @@ export const revokeExternalApiKeysForWorkflow = (input: {
 
   return { keys, revoked };
 };
+
+const isExternalWorkflowOperation = (
+  value: string,
+): value is ExternalWorkflowOperation =>
+  Object.values(ExternalWorkflowOperation).includes(
+    value as ExternalWorkflowOperation,
+  );
+
+const defaultExternalWorkflowOperations =
+  (): ReadonlyArray<ExternalWorkflowOperation> => [
+    ExternalWorkflowOperation.WorkflowRead,
+    ExternalWorkflowOperation.WorkflowInvoke,
+  ];

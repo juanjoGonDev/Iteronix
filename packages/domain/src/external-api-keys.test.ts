@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   ExternalApiKeyScopeKind,
+  ExternalWorkflowOperation,
+  ExternalWorkflowRateLimit,
+  isExternalWorkflowCredentialAuthorized,
+  isExternalWorkflowCredentialValid,
   isExternalApiKeyNameAvailable,
   isWorkflowAllowedForExternalApiKey,
   readWorkflowExternalApiKeyDependencies,
@@ -80,5 +84,75 @@ describe("external workflow API key policy", () => {
     expect(
       isExternalApiKeyNameAvailable([key], " DEPLOYMENTS ", "another-key"),
     ).toBe(false);
+  });
+});
+
+describe("external workflow credential policy", () => {
+  const credential: ExternalApiKeyRecord = {
+    ...createKey({
+      kind: ExternalApiKeyScopeKind.SelectedWorkflows,
+      workflowIds: ["workflow-allowed"],
+    }),
+    operations: [
+      ExternalWorkflowOperation.WorkflowRead,
+      ExternalWorkflowOperation.WorkflowInvoke,
+    ],
+    rateLimitPerMinute: ExternalWorkflowRateLimit.DefaultPerMinute,
+  };
+
+  it("authorizes only declared operations and selected workflows", () => {
+    expect(
+      isExternalWorkflowCredentialAuthorized(
+        credential,
+        ExternalWorkflowOperation.WorkflowRead,
+        "workflow-allowed",
+      ),
+    ).toBe(true);
+    expect(
+      isExternalWorkflowCredentialAuthorized(
+        credential,
+        ExternalWorkflowOperation.WorkflowInvoke,
+        "workflow-allowed",
+      ),
+    ).toBe(true);
+    expect(
+      isExternalWorkflowCredentialAuthorized(
+        credential,
+        ExternalWorkflowOperation.RunTrace,
+        "workflow-allowed",
+      ),
+    ).toBe(false);
+    expect(
+      isExternalWorkflowCredentialAuthorized(
+        credential,
+        "future.operation",
+        "workflow-allowed",
+      ),
+    ).toBe(false);
+    expect(
+      isExternalWorkflowCredentialAuthorized(
+        credential,
+        ExternalWorkflowOperation.WorkflowRead,
+        "workflow-other",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects expired and revoked credentials and validates the configured rate limit", () => {
+    const now = "2026-07-28T12:00:00.000Z";
+    expect(
+      isExternalWorkflowCredentialValid(
+        { ...credential, expiresAt: "2026-07-28T11:59:59.000Z" },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isExternalWorkflowCredentialValid({ ...credential, revokedAt: now }, now),
+    ).toBe(false);
+    expect(isExternalWorkflowCredentialValid(credential, now)).toBe(true);
+    expect(ExternalWorkflowRateLimit.isValid(1)).toBe(true);
+    expect(ExternalWorkflowRateLimit.isValid(600)).toBe(true);
+    expect(ExternalWorkflowRateLimit.isValid(0)).toBe(false);
+    expect(ExternalWorkflowRateLimit.isValid(601)).toBe(false);
   });
 });

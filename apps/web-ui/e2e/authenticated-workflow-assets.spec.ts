@@ -16,14 +16,12 @@ const NavigationSelector = {
 const ExistingAdministratorStatus = 400;
 const ExistingAdministratorMessage = "Administrator already exists";
 
-test.beforeEach(async ({ context }) => {
-  const sessionToken = await createIdeSession();
-  await setIdeSessionCookie(context, sessionToken);
-});
-
 test("loads an authenticated workflow canvas and asset catalog without unauthorized requests", async ({
   page,
+  context,
 }) => {
+  const sessionToken = await createIdeSession();
+  await setIdeSessionCookie(context, sessionToken);
   const workflowResponses = observeSuccessfulApiResponses(page, "/workflows/");
   await page.goto("/workflows");
   await expect(page.getByTestId("workflows-catalog-root")).toBeVisible();
@@ -49,16 +47,52 @@ test("loads an authenticated workflow canvas and asset catalog without unauthori
   await expect.poll(() => assetResponses.successful.length).toBeGreaterThan(0);
 });
 
-const createIdeSession = async (): Promise<string> => {
-  const bootstrap = await postJson("/auth/bootstrap-admin", Administrator, {
-    Authorization: `Bearer ${AuthToken}`,
-  });
-  if (!bootstrap.ok && !(await isExistingAdministratorResponse(bootstrap))) {
-    throw new Error(
-      `Could not bootstrap E2E administrator: ${bootstrap.status}`,
-    );
-  }
+test("restores an unauthenticated Assets deep link after secure login", async ({
+  page,
+}) => {
+  await bootstrapIdeAdministrator();
+  const assetResponses = observeSuccessfulApiResponses(page, "/assets/");
 
+  await page.goto("/assets/prompts");
+  await expect(page.getByTestId("auth-login-root")).toBeVisible();
+  await page.getByTestId("auth-login-email").fill(Administrator.email);
+  await page.getByTestId("auth-login-password").fill(Administrator.password);
+  await page.getByTestId("auth-login-submit").click();
+
+  await expect(page).toHaveURL(/\/assets\/prompts$/);
+  await expect(page.getByTestId("prompt-assets-root")).toBeVisible();
+  await expect(page.getByTestId("header-user-menu")).toContainText(
+    Administrator.email,
+  );
+  expect(assetResponses.unauthorized).toEqual([]);
+  await expect.poll(() => assetResponses.successful.length).toBeGreaterThan(0);
+});
+
+test("keeps every grouped Asset route available to an authenticated session", async ({
+  page,
+  context,
+}) => {
+  const sessionToken = await createIdeSession();
+  await setIdeSessionCookie(context, sessionToken);
+  const assetRoutes = [
+    { href: "/assets/prompts", root: "prompt-assets-root" },
+    { href: "/assets/skills", root: "skill-assets-root" },
+    { href: "/assets/memory", root: "memory-assets-root" },
+    { href: "/assets/mcp", root: "mcp-assets-root" },
+    { href: "/assets/plugins", root: "plugin-assets-root" },
+  ] as const;
+
+  await page.goto("/assets/prompts");
+  await expect(page.getByTestId("prompt-assets-root")).toBeVisible();
+  for (const assetRoute of assetRoutes) {
+    await page.locator(`a[href="${assetRoute.href}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`${assetRoute.href}$`));
+    await expect(page.getByTestId(assetRoute.root)).toBeVisible();
+  }
+});
+
+const createIdeSession = async (): Promise<string> => {
+  await bootstrapIdeAdministrator();
   const login = await postJson("/auth/login", Administrator);
   if (!login.ok) {
     throw new Error(`Could not create E2E session: ${login.status}`);
@@ -69,6 +103,17 @@ const createIdeSession = async (): Promise<string> => {
     throw new Error("E2E login response did not set an IDE session cookie.");
   }
   return token;
+};
+
+const bootstrapIdeAdministrator = async (): Promise<void> => {
+  const bootstrap = await postJson("/auth/bootstrap-admin", Administrator, {
+    Authorization: `Bearer ${AuthToken}`,
+  });
+  if (!bootstrap.ok && !(await isExistingAdministratorResponse(bootstrap))) {
+    throw new Error(
+      `Could not bootstrap E2E administrator: ${bootstrap.status}`,
+    );
+  }
 };
 
 const isExistingAdministratorResponse = async (

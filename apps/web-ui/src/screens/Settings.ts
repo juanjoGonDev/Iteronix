@@ -9,6 +9,8 @@ import {
   type PageTabItem,
 } from "../components/PageScaffold.js";
 import {
+  SettingsCheckboxGroup,
+  SettingsDateTimeField,
   SettingsNumberField,
   SettingsSelectField,
   SettingsTextField,
@@ -30,6 +32,8 @@ import {
 import {
   createSettingsClient,
   type ExternalApiKeyRecord,
+  type ExternalWorkflowCredentialAudit,
+  type ExternalWorkflowOperation,
   type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
 import { createWorkflowClient } from "../shared/workflow-client.js";
@@ -48,9 +52,19 @@ import {
   type SettingsUrlTab,
 } from "./settings-url-state.js";
 import {
+  IdeUserRole,
+  type IdeUserRole as IdeUserRoleValue,
+} from "../shared/ide-auth-client.js";
+import {
   ExternalApiKeyScopeSelection,
-  readExternalApiKeyScope,
+  ExternalWorkflowCredentialDefaultOperations,
+  ExternalWorkflowCredentialDefaultRateLimit,
+  ExternalWorkflowCredentialOperations,
+  dismissExternalWorkflowCredentialSecret,
+  readExternalWorkflowCredentialCreateInput,
+  showExternalWorkflowCredentialSecret,
   type ExternalApiKeyScopeSelection as ExternalApiKeyScopeSelectionValue,
+  type ExternalWorkflowCredentialSecret,
 } from "./settings-api-access-state.js";
 
 type SettingsTab = SettingsUrlTab;
@@ -70,9 +84,13 @@ interface SettingsScreenState {
   apiKeyName: string;
   apiKeyScope: ExternalApiKeyScopeSelectionValue;
   apiKeyWorkflowIds: ReadonlyArray<string>;
+  apiKeyOperations: ReadonlyArray<ExternalWorkflowOperation>;
+  apiKeyNeverExpires: boolean;
+  apiKeyExpiresAt: string;
+  apiKeyRateLimitPerMinute: number;
   availableWorkflows: ReadonlyArray<{ id: string; name: string }>;
-  editingExternalApiKeyId: string | null;
-  newExternalApiKey: string | null;
+  externalCredentialAudits: ReadonlyArray<ExternalWorkflowCredentialAudit>;
+  newExternalApiKey: ExternalWorkflowCredentialSecret | null;
   isManagingExternalApiKeys: boolean;
 }
 
@@ -109,6 +127,48 @@ const TestWebhookPayload = {
   event: "iteronix.settings.test",
   source: "settings-screen",
 } as const;
+
+const CredentialExpiryDefaultOffsetDays = 30;
+
+const AuthenticatedUserRoleProp = "authenticatedUserRole";
+
+const ExternalWorkflowCredentialOperationOptions: ReadonlyArray<{
+  value: ExternalWorkflowOperation;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "workflow.read",
+    label: "Read workflows",
+    description: "Inspect workflow definitions and metadata.",
+  },
+  {
+    value: "workflow.invoke",
+    label: "Invoke workflows",
+    description: "Start an approved workflow from an external system.",
+  },
+  {
+    value: "workflow.trigger",
+    label: "Trigger workflows",
+    description: "Submit an event to a workflow trigger.",
+  },
+  {
+    value: "run.status",
+    label: "Read run status",
+    description:
+      "Check whether a workflow run is pending, complete, or failed.",
+  },
+  {
+    value: "run.approve",
+    label: "Approve runs",
+    description: "Approve a workflow run waiting for a governed action.",
+  },
+  {
+    value: "run.trace",
+    label: "Read run traces",
+    description: "Inspect trace details for workflow runs.",
+  },
+];
 
 export class SettingsScreen extends Component<
   ComponentProps,
@@ -148,8 +208,12 @@ export class SettingsScreen extends Component<
       apiKeyName: "",
       apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
       apiKeyWorkflowIds: [],
+      apiKeyOperations: ExternalWorkflowCredentialDefaultOperations,
+      apiKeyNeverExpires: true,
+      apiKeyExpiresAt: "",
+      apiKeyRateLimitPerMinute: ExternalWorkflowCredentialDefaultRateLimit,
       availableWorkflows: [],
-      editingExternalApiKeyId: null,
+      externalCredentialAudits: [],
       newExternalApiKey: null,
       isManagingExternalApiKeys: false,
     });
@@ -802,6 +866,14 @@ export class SettingsScreen extends Component<
   }
 
   private renderApiTab(): HTMLElement {
+    if (
+      !canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      return this.renderExternalApiAccessUnavailable();
+    }
+
     return createElement(
       "section",
       {
@@ -816,7 +888,7 @@ export class SettingsScreen extends Component<
             ["External API access"],
           ),
           createElement("p", { className: "text-sm text-text-secondary" }, [
-            "Create or update workflow-only API keys for external automation. Each secret is shown once and is never persisted in plaintext.",
+            "Create, rotate, or revoke workflow credentials for external automation. Each secret is shown once and is never persisted in plaintext.",
           ]),
         ]),
         createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
@@ -855,7 +927,25 @@ export class SettingsScreen extends Component<
               });
             },
           }),
+          createElement(SettingsNumberField, {
+            label: "Requests per minute",
+            value: this.state.apiKeyRateLimitPerMinute,
+            testId: "settings-external-credential-rate-limit",
+            onChange: (value: string) => {
+              const rateLimitPerMinute = Number(value);
+              this.setState({
+                apiKeyRateLimitPerMinute:
+                  Number.isInteger(rateLimitPerMinute) &&
+                  rateLimitPerMinute >= 1 &&
+                  rateLimitPerMinute <= 600
+                    ? rateLimitPerMinute
+                    : ExternalWorkflowCredentialDefaultRateLimit,
+              });
+            },
+          }),
+          this.renderCredentialExpirySelector(),
         ]),
+        this.renderCredentialOperationSelector(),
         this.state.apiKeyScope ===
         ExternalApiKeyScopeSelection.SelectedWorkflows
           ? this.renderWorkflowScopeSelector()
@@ -866,27 +956,17 @@ export class SettingsScreen extends Component<
           disabled:
             this.state.isManagingExternalApiKeys ||
             this.state.apiKeyName.trim().length === 0 ||
+            this.state.apiKeyOperations.length === 0 ||
+            (!this.state.apiKeyNeverExpires &&
+              this.state.apiKeyExpiresAt.length === 0) ||
             (this.state.apiKeyScope ===
               ExternalApiKeyScopeSelection.SelectedWorkflows &&
               this.state.apiKeyWorkflowIds.length === 0),
           onClick: () => void this.handleSubmitExternalApiKey(),
           children: this.state.isManagingExternalApiKeys
-            ? this.state.editingExternalApiKeyId
-              ? "Saving"
-              : "Creating"
-            : this.state.editingExternalApiKeyId
-              ? "Save changes"
-              : "Create API key",
+            ? "Creating"
+            : "Create credential",
         }),
-        this.state.editingExternalApiKeyId
-          ? createElement(Button, {
-              variant: "ghost",
-              size: "sm",
-              disabled: this.state.isManagingExternalApiKeys,
-              onClick: () => this.handleCancelExternalApiKeyEdit(),
-              children: "Cancel edit",
-            })
-          : "",
         this.state.newExternalApiKey
           ? createElement(
               "div",
@@ -906,16 +986,28 @@ export class SettingsScreen extends Component<
                     className: "mt-2 block break-all text-xs text-amber-100",
                     "data-testid": "settings-new-external-api-key",
                   },
-                  [this.state.newExternalApiKey],
+                  [this.state.newExternalApiKey.plaintextCredential],
                 ),
                 createElement(Button, {
                   variant: "secondary",
                   size: "sm",
                   onClick: () =>
                     void navigator.clipboard.writeText(
-                      this.state.newExternalApiKey ?? "",
+                      this.state.newExternalApiKey?.plaintextCredential ?? "",
                     ),
                   children: "Copy key",
+                }),
+                createElement(Button, {
+                  variant: "ghost",
+                  size: "sm",
+                  onClick: () =>
+                    this.setState({
+                      newExternalApiKey:
+                        dismissExternalWorkflowCredentialSecret(
+                          this.state.newExternalApiKey,
+                        ),
+                    }),
+                  children: "Dismiss secret",
                 }),
               ],
             )
@@ -942,7 +1034,7 @@ export class SettingsScreen extends Component<
                     "p",
                     { className: "text-xs text-text-secondary" },
                     [
-                      `${key.scope.kind === "all_workflows" ? "All workflows" : `${key.scope.workflowIds.length.toString()} selected workflow(s)`} · last used ${key.lastUsedAt ?? "never"}${key.revokedAt ? " · revoked" : ""}`,
+                      `${key.scope.kind === "all_workflows" ? "All workflows" : `${key.scope.workflowIds.length.toString()} selected workflow(s)`} · ${key.operations.join(", ")} · ${key.expiresAt ? `expires ${key.expiresAt}` : "never expires"} · ${key.rateLimitPerMinute.toString()} rpm · last used ${key.lastUsedAt ?? "never"}${key.revokedAt ? " · revoked" : ""}`,
                     ],
                   ),
                 ]),
@@ -953,8 +1045,8 @@ export class SettingsScreen extends Component<
                     disabled:
                       Boolean(key.revokedAt) ||
                       this.state.isManagingExternalApiKeys,
-                    onClick: () => this.handleEditExternalApiKey(key),
-                    children: "Edit",
+                    onClick: () => void this.handleRotateExternalApiKey(key.id),
+                    children: "Rotate",
                   }),
                   createElement(Button, {
                     variant: "danger",
@@ -970,6 +1062,27 @@ export class SettingsScreen extends Component<
             ),
           ),
         ),
+        this.renderCredentialAudits(),
+      ],
+    );
+  }
+
+  private renderExternalApiAccessUnavailable(): HTMLElement {
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+        role: "status",
+        "data-testid": "settings-external-api-access-unavailable",
+      },
+      [
+        createElement("h2", { className: "text-lg font-semibold text-white" }, [
+          "External API access",
+        ]),
+        createElement("p", { className: "text-sm text-text-secondary" }, [
+          "Credential management is available to administrators. Ask an administrator to create, rotate, or revoke external workflow credentials.",
+        ]),
       ],
     );
   }
@@ -1026,31 +1139,137 @@ export class SettingsScreen extends Component<
     ]);
   }
 
-  private async handleSubmitExternalApiKey(): Promise<void> {
-    if (this.state.editingExternalApiKeyId) {
-      await this.handleUpdateExternalApiKey(this.state.editingExternalApiKeyId);
-      return;
-    }
+  private renderCredentialOperationSelector(): HTMLElement {
+    return createElement(SettingsCheckboxGroup, {
+      label: "Allowed operations",
+      description: "Choose only the actions this credential needs.",
+      values: this.state.apiKeyOperations,
+      options: ExternalWorkflowCredentialOperationOptions,
+      testId: "settings-external-credential-operations",
+      onChange: (value: string, checked: boolean) => {
+        const operation = ExternalWorkflowCredentialOperations.find(
+          (candidate) => candidate === value,
+        );
+        if (!operation) {
+          return;
+        }
 
+        this.setState({
+          apiKeyOperations: checked
+            ? Array.from(new Set([...this.state.apiKeyOperations, operation]))
+            : this.state.apiKeyOperations.filter(
+                (candidate) => candidate !== operation,
+              ),
+        });
+      },
+    });
+  }
+
+  private renderCredentialExpirySelector(): HTMLElement {
+    return createElement("fieldset", { className: "flex flex-col gap-3" }, [
+      createElement(
+        "legend",
+        { className: "text-[13px] font-medium text-slate-100" },
+        ["Credential expiry"],
+      ),
+      createElement(
+        "label",
+        {
+          className:
+            "flex min-h-11 items-center gap-3 rounded-lg border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/70",
+        },
+        [
+          createElement("input", {
+            type: "checkbox",
+            checked: this.state.apiKeyNeverExpires,
+            "data-testid": "settings-external-credential-never-expires",
+            className:
+              "h-4 w-4 shrink-0 accent-primary focus-visible:outline-none",
+            onChange: (event: Event) => {
+              const target = event.target;
+              if (!(target instanceof HTMLInputElement)) {
+                return;
+              }
+
+              this.setState({
+                apiKeyNeverExpires: target.checked,
+                apiKeyExpiresAt: target.checked
+                  ? ""
+                  : this.state.apiKeyExpiresAt ||
+                    createDefaultCredentialExpiryDateTime(),
+              });
+            },
+          }),
+          "Never expires",
+        ],
+      ),
+      createElement(SettingsDateTimeField, {
+        label: "Date and time",
+        value: this.state.apiKeyExpiresAt,
+        disabled: this.state.apiKeyNeverExpires,
+        testId: "settings-external-credential-expiry",
+        onChange: (apiKeyExpiresAt: string) =>
+          this.setState({ apiKeyExpiresAt, apiKeyNeverExpires: false }),
+      }),
+      createElement("p", { className: "text-xs text-text-secondary" }, [
+        "Use the local date and time picker. The service records the exact expiry in UTC.",
+      ]),
+    ]);
+  }
+
+  private renderCredentialAudits(): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-2" }, [
+      createElement("h3", { className: "text-sm font-semibold text-white" }, [
+        "Credential audit history",
+      ]),
+      ...this.state.externalCredentialAudits.map((audit) =>
+        createElement(
+          "p",
+          {
+            key: `${audit.credentialId}-${audit.occurredAt}-${audit.eventKind}`,
+            className: "text-xs text-text-secondary",
+          },
+          [
+            `${audit.occurredAt} · ${audit.eventKind} · ${audit.result} · ${audit.actorKind}:${audit.actorId}${audit.operation ? ` · ${audit.operation}` : ""}`,
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  private async handleSubmitExternalApiKey(): Promise<void> {
     await this.handleCreateExternalApiKey();
   }
 
   private async handleCreateExternalApiKey(): Promise<void> {
     this.setState({ isManagingExternalApiKeys: true });
     try {
-      const created = await this.settingsClient.createExternalApiKey({
-        name: this.state.apiKeyName,
-        scope: readExternalApiKeyScope(
-          this.state.apiKeyScope,
-          this.state.apiKeyWorkflowIds,
-        ),
-      });
+      const created =
+        await this.settingsClient.createExternalWorkflowCredential(
+          readExternalWorkflowCredentialCreateInput({
+            name: this.state.apiKeyName,
+            scope: this.state.apiKeyScope,
+            workflowIds: this.state.apiKeyWorkflowIds,
+            operations: this.state.apiKeyOperations,
+            expiresAt: this.state.apiKeyNeverExpires
+              ? ""
+              : this.state.apiKeyExpiresAt,
+            rateLimitPerMinute: this.state.apiKeyRateLimitPerMinute,
+          }),
+        );
       this.setState({
-        externalApiKeys: [...this.state.externalApiKeys, created.key],
+        externalApiKeys: [...this.state.externalApiKeys, created.credential],
         apiKeyName: "",
         apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
         apiKeyWorkflowIds: [],
-        newExternalApiKey: created.plaintextKey,
+        apiKeyOperations: ExternalWorkflowCredentialDefaultOperations,
+        apiKeyNeverExpires: true,
+        apiKeyExpiresAt: "",
+        apiKeyRateLimitPerMinute: ExternalWorkflowCredentialDefaultRateLimit,
+        newExternalApiKey: showExternalWorkflowCredentialSecret({
+          credentialId: created.credential.id,
+          plaintextCredential: created.plaintextCredential,
+        }),
         isManagingExternalApiKeys: false,
       });
     } catch (error) {
@@ -1059,81 +1278,60 @@ export class SettingsScreen extends Component<
       });
       this.pushToast(
         "error",
-        toErrorMessage(error, "Could not create external API key."),
+        toErrorMessage(error, "Could not create external workflow credential."),
       );
     }
   }
 
-  private async handleUpdateExternalApiKey(keyId: string): Promise<void> {
+  private async handleRotateExternalApiKey(
+    credentialId: string,
+  ): Promise<void> {
     this.setState({ isManagingExternalApiKeys: true });
     try {
-      const updated = await this.settingsClient.updateExternalApiKey({
-        keyId,
-        name: this.state.apiKeyName,
-        scope: readExternalApiKeyScope(
-          this.state.apiKeyScope,
-          this.state.apiKeyWorkflowIds,
-        ),
-      });
+      const rotated =
+        await this.settingsClient.rotateExternalWorkflowCredential({
+          credentialId,
+        });
       this.setState({
-        externalApiKeys: this.state.externalApiKeys.map((key) =>
-          key.id === updated.id ? updated : key,
-        ),
-        apiKeyName: "",
-        apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
-        apiKeyWorkflowIds: [],
-        editingExternalApiKeyId: null,
+        newExternalApiKey: showExternalWorkflowCredentialSecret({
+          credentialId,
+          plaintextCredential: rotated.plaintextCredential,
+        }),
         isManagingExternalApiKeys: false,
       });
+      if (
+        canManageExternalWorkflowCredentials(
+          readSettingsScreenUserRole(this.props),
+        )
+      ) {
+        await this.refreshExternalApiKeyContext();
+      }
     } catch (error) {
       this.setState({ isManagingExternalApiKeys: false });
       this.pushToast(
         "error",
-        toErrorMessage(error, "Could not update external API key."),
+        toErrorMessage(error, "Could not rotate external workflow credential."),
       );
     }
-  }
-
-  private handleEditExternalApiKey(key: ExternalApiKeyRecord): void {
-    this.setState({
-      apiKeyName: key.name,
-      apiKeyScope:
-        key.scope.kind === "selected_workflows"
-          ? ExternalApiKeyScopeSelection.SelectedWorkflows
-          : ExternalApiKeyScopeSelection.AllWorkflows,
-      apiKeyWorkflowIds:
-        key.scope.kind === "selected_workflows" ? key.scope.workflowIds : [],
-      editingExternalApiKeyId: key.id,
-      newExternalApiKey: null,
-    });
-  }
-
-  private handleCancelExternalApiKeyEdit(): void {
-    this.setState({
-      apiKeyName: "",
-      apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
-      apiKeyWorkflowIds: [],
-      editingExternalApiKeyId: null,
-    });
   }
 
   private async handleRevokeExternalApiKey(keyId: string): Promise<void> {
     this.setState({ isManagingExternalApiKeys: true });
     try {
-      const revoked = await this.settingsClient.revokeExternalApiKey({ keyId });
+      await this.settingsClient.revokeExternalWorkflowCredential({
+        credentialId: keyId,
+      });
       this.setState({
-        externalApiKeys: this.state.externalApiKeys.map((key) =>
-          key.id === keyId ? revoked : key,
-        ),
         isManagingExternalApiKeys: false,
       });
+      await this.refreshExternalApiKeyContext();
     } catch (error) {
       this.setState({
         isManagingExternalApiKeys: false,
       });
       this.pushToast(
         "error",
-        toErrorMessage(error, "Could not revoke external API key."),
+        toErrorMessage(error, "Could not revoke external workflow credential."),
       );
     }
   }
@@ -1209,16 +1407,27 @@ export class SettingsScreen extends Component<
   }
 
   private async refreshExternalApiKeyContext(): Promise<void> {
+    if (
+      !canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      return;
+    }
+
     try {
-      const [externalApiKeys, availableWorkflows] = await Promise.all([
-        this.settingsClient.listExternalApiKeys(),
-        this.workflowClient.listDefinitions(),
-      ]);
+      const [externalApiKeys, availableWorkflows, externalCredentialAudits] =
+        await Promise.all([
+          this.settingsClient.listExternalWorkflowCredentials(),
+          this.workflowClient.listDefinitions(),
+          this.settingsClient.listExternalWorkflowCredentialAudits(),
+        ]);
       const availableWorkflowIds = new Set(
         availableWorkflows.map((workflow) => workflow.id),
       );
       this.setState({
         externalApiKeys,
+        externalCredentialAudits,
         availableWorkflows: availableWorkflows.map((workflow) => ({
           id: workflow.id,
           name: workflow.name,
@@ -1232,7 +1441,7 @@ export class SettingsScreen extends Component<
         "error",
         toErrorMessage(
           error,
-          "Could not refresh workflows for API key access.",
+          "Could not refresh workflows for credential access.",
         ),
       );
     }
@@ -1479,7 +1688,13 @@ export class SettingsScreen extends Component<
   };
 
   private readonly handleWorkflowCatalogChanged = (): void => {
-    void this.refreshExternalApiKeyContext();
+    if (
+      canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      void this.refreshExternalApiKeyContext();
+    }
   };
 
   private writeSettingsUrlState(
@@ -1512,6 +1727,36 @@ export class SettingsScreen extends Component<
     );
   }
 }
+
+const createDefaultCredentialExpiryDateTime = (): string => {
+  const value = new Date();
+  value.setDate(value.getDate() + CredentialExpiryDefaultOffsetDays);
+  return (
+    [
+      value.getFullYear().toString(),
+      (value.getMonth() + 1).toString().padStart(2, "0"),
+      value.getDate().toString().padStart(2, "0"),
+    ].join("-") +
+    "T" +
+    [
+      value.getHours().toString().padStart(2, "0"),
+      value.getMinutes().toString().padStart(2, "0"),
+    ].join(":")
+  );
+};
+
+export const canManageExternalWorkflowCredentials = (
+  role: IdeUserRoleValue,
+): boolean => role === IdeUserRole.Admin;
+
+const readSettingsScreenUserRole = (
+  props: ComponentProps,
+): IdeUserRoleValue => {
+  const role = props[AuthenticatedUserRoleProp];
+  return role === IdeUserRole.Admin || role === IdeUserRole.Member
+    ? role
+    : IdeUserRole.Member;
+};
 
 const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
   createElement(

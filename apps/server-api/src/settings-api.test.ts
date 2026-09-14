@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ErrorMessage, HttpStatus } from "./constants";
 import { ResultType } from "./result";
-import { parseSettingsUpdateRequest } from "./server";
+import {
+  externalWorkflowOperationForRoute,
+  parseSettingsUpdateRequest,
+  redactExternalCredentialResponse,
+} from "./server";
 import { createDefaultApplicationState } from "./application-state";
+import {
+  ExternalApiKeyScopeKind,
+  ExternalWorkflowOperation,
+} from "../../../packages/domain/src/external-api-keys";
 
 describe("settings API contract", () => {
   it("accepts typed settings updates", () => {
@@ -81,5 +89,39 @@ describe("settings API contract", () => {
     const profile = result.value.providerProfiles[0];
     expect(profile?.["apiKey"]).toBeUndefined();
     expect(profile?.["apiKeyEnvVar"]).toBe("WORKFLOW_PROVIDER_KEY");
+  });
+
+  it("maps only declared external routes to credential operations", () => {
+    expect(externalWorkflowOperationForRoute("/external/workflows/read")).toBe(
+      ExternalWorkflowOperation.WorkflowRead,
+    );
+    expect(
+      externalWorkflowOperationForRoute("/external/workflows/invoke"),
+    ).toBe(ExternalWorkflowOperation.WorkflowInvoke);
+    expect(
+      externalWorkflowOperationForRoute("/external/workflows/future"),
+    ).toBeUndefined();
+  });
+
+  it("redacts credential verifier material from management responses", () => {
+    const response = redactExternalCredentialResponse({
+      id: "credential-1",
+      name: "Deployments",
+      secretHash: "server-only-verifier",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      operations: [ExternalWorkflowOperation.WorkflowRead],
+      createdAt: "2026-07-28T00:00:00.000Z",
+      rateLimitPerMinute: 60,
+    });
+
+    expect(response).toEqual({
+      id: "credential-1",
+      name: "Deployments",
+      scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+      operations: [ExternalWorkflowOperation.WorkflowRead],
+      createdAt: "2026-07-28T00:00:00.000Z",
+      rateLimitPerMinute: 60,
+    });
+    expect(JSON.stringify(response)).not.toContain("server-only-verifier");
   });
 });

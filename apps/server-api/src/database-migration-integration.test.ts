@@ -8,18 +8,44 @@ import {
 import { readDatabaseMigrationCatalog } from "./database-migration-catalog";
 import { applyDatabaseMigrations } from "./database-migrations";
 import { createPostgresApplicationStateStore } from "./postgres-application-state";
+import { createPostgresExternalWorkflowCredentialRepository } from "./postgres-external-workflow-credentials";
 import { loadTestDatabaseConfig } from "./test-database";
+import { ExternalWorkflowOperation } from "../../../packages/domain/src/external-api-keys";
 
 const testDatabaseUrl = process.env["TEST_DATABASE_URL"];
 const databaseUrl = process.env["DATABASE_URL"];
 const pools: Pool[] = [];
+const CredentialId = "credential-transaction-boundary";
+const CredentialName = "Transaction boundary credential";
+const CredentialSecret = "itx_wf_transaction_boundary";
+const WorkflowId = "workflow-transaction-boundary";
+const CredentialCreatedAt = "2026-07-28T12:00:00.000Z";
+const RateLimitPerMinute = 1;
+const CredentialMigrationId = "002_external_workflow_credentials";
+const CredentialAuditActorMigrationId =
+  "003_external_workflow_credential_audit_actors";
+const LegacyAuditCredentialId = "credential-legacy-audit";
+const LegacyAuditEventKind = "authorize";
+const LegacyAuditResult = "authorized";
+const PoolQueryMustNotRunMessage =
+  "repository transactions must use a checked-out client";
+const InsertLegacyAuditSql = `
+  INSERT INTO external_workflow_credential_audits (
+    credential_id, event_kind, result
+  ) VALUES ($1, $2, $3)
+`;
+const SelectLegacyAuditActorSql = `
+  SELECT actor_kind, actor_id
+  FROM external_workflow_credential_audits
+  WHERE credential_id = $1
+`;
 
 describe.skipIf(!testDatabaseUrl)("database migration integration", () => {
   afterEach(async () => {
     await Promise.all(pools.splice(0).map((pool) => pool.end()));
   });
 
-  it("migrates a clean isolated schema and restores an application state backup", async () => {
+  it("migrates a clean isolated schema and restores an application state backup at a new revision", async () => {
     const config = loadTestDatabaseConfig({
       DATABASE_URL: databaseUrl,
       TEST_DATABASE_URL: testDatabaseUrl,
@@ -43,11 +69,134 @@ describe.skipIf(!testDatabaseUrl)("database migration integration", () => {
     const restoredPool = createSchemaPool(config.connectionString, schema);
     await applyDatabaseMigrations(restoredPool, readDatabaseMigrationCatalog());
     const restoredStore = createPostgresApplicationStateStore(restoredPool);
-    await restoredStore.save(parseApplicationState(JSON.parse(backup)));
+    const restored = await restoredStore.save(
+      parseApplicationState(JSON.parse(backup)),
+    );
 
-    await expect(restoredStore.load()).resolves.toEqual(saved);
+    expect(restored).toEqual({ ...saved, revision: saved.revision + 1 });
+    await expect(restoredStore.load()).resolves.toEqual(restored);
     await administrator.query(`DROP SCHEMA ${schema} CASCADE`);
   });
+
+  it("upgrades legacy credential audit rows with deterministic actor attribution", async () => {
+    const config = loadTestDatabaseConfig({
+      DATABASE_URL: databaseUrl,
+      TEST_DATABASE_URL: testDatabaseUrl,
+    });
+    const schema = `iteronix_audit_${randomUUID().replaceAll("-", "_")}`;
+    const administrator = trackPool(
+      new Pool({ connectionString: config.connectionString }),
+    );
+    const credentialPool = createSchemaPool(config.connectionString, schema);
+    const catalog = readDatabaseMigrationCatalog();
+    const legacyCatalog = catalog.filter(
+      (migration) => migration.id !== CredentialAuditActorMigrationId,
+    );
+
+    await administrator.query(`CREATE SCHEMA ${schema}`);
+
+    try {
+      expect(legacyCatalog.map((migration) => migration.id)).toContain(
+        CredentialMigrationId,
+      );
+      await applyDatabaseMigrations(credentialPool, legacyCatalog);
+      await credentialPool.query(InsertLegacyAuditSql, [
+        LegacyAuditCredentialId,
+        LegacyAuditEventKind,
+        LegacyAuditResult,
+      ]);
+
+      await applyDatabaseMigrations(credentialPool, catalog);
+
+      const auditActors = await credentialPool.query(
+        SelectLegacyAuditActorSql,
+        [LegacyAuditCredentialId],
+      );
+
+      expect(auditActors.rows).toEqual([
+        {
+          actor_kind: "system",
+          actor_id: "server-runtime",
+        },
+      ]);
+    } finally {
+      await administrator.query(`DROP SCHEMA ${schema} CASCADE`);
+    }
+  });
+
+  it("uses checked-out PostgreSQL connections to enforce one shared credential rate limit", async () => {
+    const config = loadTestDatabaseConfig({
+      DATABASE_URL: databaseUrl,
+      TEST_DATABASE_URL: testDatabaseUrl,
+    });
+    const schema = `iteronix_credential_${randomUUID().replaceAll("-", "_")}`;
+    const administrator = trackPool(
+      new Pool({ connectionString: config.connectionString }),
+    );
+    const credentialPool = createSchemaPool(config.connectionString, schema);
+    await administrator.query(`CREATE SCHEMA ${schema}`);
+
+    try {
+      await applyDatabaseMigrations(
+        credentialPool,
+        readDatabaseMigrationCatalog(),
+      );
+      const firstRepository =
+        createPostgresExternalWorkflowCredentialRepository(
+          createTransactionOnlyPool(credentialPool),
+        );
+      const secondRepository =
+        createPostgresExternalWorkflowCredentialRepository(
+          createTransactionOnlyPool(credentialPool),
+        );
+      const readRepository =
+        createPostgresExternalWorkflowCredentialRepository(credentialPool);
+      await expect(
+        firstRepository.create({
+          credential: {
+            id: CredentialId,
+            name: CredentialName,
+            scope: { kind: "all_workflows" },
+            operations: [ExternalWorkflowOperation.WorkflowInvoke],
+            createdAt: CredentialCreatedAt,
+            rateLimitPerMinute: RateLimitPerMinute,
+          },
+          plaintext: CredentialSecret,
+        }),
+      ).resolves.toBe("created");
+
+      const results = await Promise.all([
+        firstRepository.consumeAuthorized({
+          credentialId: CredentialId,
+          plaintext: CredentialSecret,
+          operation: ExternalWorkflowOperation.WorkflowInvoke,
+          workflowId: WorkflowId,
+          now: CredentialCreatedAt,
+        }),
+        secondRepository.consumeAuthorized({
+          credentialId: CredentialId,
+          plaintext: CredentialSecret,
+          operation: ExternalWorkflowOperation.WorkflowInvoke,
+          workflowId: WorkflowId,
+          now: CredentialCreatedAt,
+        }),
+      ]);
+
+      expect(results.sort()).toEqual(["authorized", "throttled"]);
+      await expect(
+        readRepository.listAudits({ credentialId: CredentialId }),
+      ).resolves.toHaveLength(3);
+    } finally {
+      await administrator.query(`DROP SCHEMA ${schema} CASCADE`);
+    }
+  });
+});
+
+const createTransactionOnlyPool = (pool: Pool) => ({
+  connect: () => pool.connect(),
+  query: async (): Promise<never> => {
+    throw new Error(PoolQueryMustNotRunMessage);
+  },
 });
 
 const createSchemaPool = (connectionString: string, schema: string): Pool =>

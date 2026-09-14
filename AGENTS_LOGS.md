@@ -3097,7 +3097,7 @@
   - Use CSS group-hover and ocus-within instead of persisted hover state so the toolbar disappears naturally when leaving the node or toolbar area.
   - Keep the run action disabled for unsupported, dirty, or unsaved nodes; no dead UI is introduced for nodes that cannot run a provider smoke test.
 - Changes:
-  - Updated pps/web-ui/src/screens/Workflows.ts with a compact node hover toolbar, reusable toolbar button renderer, node-specific delete handling, and provider-test eligibility checks.
+  - Updated apps/web-ui/src/screens/Workflows.ts with a compact node hover toolbar, reusable toolbar button renderer, node-specific delete handling, and provider-test eligibility checks.
 - Commands:
   - pnpm lint PASS
   - pnpm typecheck PASS
@@ -3115,7 +3115,7 @@
 - Decisions:
   - Keep CSS-driven hover behavior, but wrap the toolbar in a transparent hover bridge that extends from the node to the toolbar.
 - Changes:
-  - Updated pps/web-ui/src/screens/Workflows.ts so the toolbar hit area spans the vertical gap between the node and the controls while preserving pointer event isolation for canvas dragging.
+  - Updated apps/web-ui/src/screens/Workflows.ts so the toolbar hit area spans the vertical gap between the node and the controls while preserving pointer event isolation for canvas dragging.
 - Commands:
   - pnpm lint PASS
   - pnpm typecheck PASS
@@ -3757,7 +3757,7 @@
   - Validate pinned test output persistence through the node modal and workflow definition API as the stable smoke path for the current UI.
   - Require same-node pinned output replacement to confirm when the next output differs, so historical/manual outputs do not silently unpin.
 - Changes
-  - Refreshed pps/web-ui/scripts/validate-workflows.ts for modal output editing, pin persistence after reload, and current history selection smoke coverage.
+  - Refreshed apps/web-ui/scripts/validate-workflows.ts for modal output editing, pin persistence after reload, and current history selection smoke coverage.
   - Added
     extOutputSnapshot comparison to pinned output action state and regression coverage in workflows-debug-state.test.ts.
 - Commands
@@ -4082,9 +4082,9 @@
   - Kept persisted version snapshots in the workflow catalog as the source of truth; browser validation exercises the restore flow while unit/API coverage exercises clone.
 - Changes
   - packages/agents/src/workflow-catalog.ts clones workflow definitions from version snapshots.
-  - pps/server-api/src/workflows.ts and pps/server-api/src/server.ts expose the clone-version API route.
-  - pps/web-ui/src/screens/Workflows.ts adds per-version Details, Restore, Clone and Download actions plus the details/diff modal.
-  - pps/web-ui/scripts/validate-workflows.ts covers version actions visibility, details modal rendering and restore flow in browser validation.
+  - apps/server-api/src/workflows.ts and apps/server-api/src/server.ts expose the clone-version API route.
+  - apps/web-ui/src/screens/Workflows.ts adds per-version Details, Restore, Clone and Download actions plus the details/diff modal.
+  - apps/web-ui/scripts/validate-workflows.ts covers version actions visibility, details modal rendering and restore flow in browser validation.
 - Commands
   - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-catalog.test.ts PASS.
   - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts PASS.
@@ -4173,9 +4173,9 @@
   - Route import and preview-import parsing through migrateWorkflowVersionExport so legacy single-version exports without explicit schema metadata can still be accepted safely.
 - Changes
   - packages/agents/src/workflow-versioning.ts now exports timeline bundles and migrates legacy single-version exports.
-  - packages/agents/src/workflow-catalog.ts, pps/server-api/src/workflows.ts, pps/server-api/src/server.ts, and client contracts expose timeline export.
-  - pps/web-ui/src/screens/Workflows.ts adds a compact Download timeline action in the version history panel.
-  - pps/web-ui/scripts/validate-workflows.ts validates the timeline download request in the browser workflow stub.
+  - packages/agents/src/workflow-catalog.ts, apps/server-api/src/workflows.ts, apps/server-api/src/server.ts, and client contracts expose timeline export.
+  - apps/web-ui/src/screens/Workflows.ts adds a compact Download timeline action in the version history panel.
+  - apps/web-ui/scripts/validate-workflows.ts validates the timeline download request in the browser workflow stub.
 - Commands
   - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts failed first, then PASS.
   - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts failed first, then PASS.
@@ -5271,3 +5271,57 @@
 - Commands: `gentle-ai review validate --gate post-apply`, `gentle-ai sdd-status`, and `gentle-ai sdd-continue` passed; the dispatcher now reports no active changes and `next_recommended: sdd-new`.
 - Issues/Risks: None known.
 - Next: Begin SDD discovery/proposal for the selected Phase 5 item: secret-backed external workflow credentials with rotation, revocation, scopes, rate limits, and audit events.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 secret-backed credential proposal
+
+- Summary: Completed SDD discovery and proposal for administrator-managed, secret-backed external workflow credentials.
+- Decisions: Credentials combine explicit operation scopes; expiry is configurable including never-expire; regeneration invalidates the prior secret immediately; durable shared limits default to 60 requests/minute and remain configurable from 1 to 600; redacted immutable credential audits are administrator-only for 365 days.
+- Changes: Created `openspec/changes/secret-backed-external-workflow-credentials/proposal.md` and persisted the proposal in Engram.
+- Commands: `gentle-ai sdd-status` reports proposal complete and `next_recommended: spec`; Prettier validation passed.
+- Issues/Risks: Existing bearer key compatibility, atomic audit/rate-limit persistence, and future endpoint scope registration require explicit specification.
+- Next: Create the delta specifications for `external-workflow-credentials`.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential specification
+
+- Summary: Completed the SDD specification for `external-workflow-credentials`.
+- Decisions: The new capability requires server-only verifier storage, administrator-only lifecycle and audit access, combinable explicit operation scopes, immediate rotation invalidation, durable replica-shared limiting, and legacy bearer-key migration.
+- Changes: Added six requirements and twelve testable scenarios for lifecycle, authorization, expiry/rotation, rate limits, audit retention, and migration in the active OpenSpec change.
+- Commands: `gentle-ai sdd-status` reports specifications complete and `next_recommended: design`; Prettier validation passed after enforcing the 650-word artifact budget.
+- Issues/Risks: Future endpoints remain unauthorized until their explicit operation scopes are published; design must preserve atomic audit and rate-limit mutation semantics.
+- Next: Create the technical design for the secret-backed external credential change.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential design
+
+- Summary: Completed the technical design for secret-backed external workflow credentials.
+- Decisions: A server-only secret-store port retains local scrypt compatibility; PostgreSQL transactions and row locks own credential lifecycle, redacted audit, and shared rate limits; read/invoke remain the only published external operations.
+- Changes: Added design decisions, flow, real file plan, contracts, RED-first tests, migration/rollback, and N/A threat-matrix rationale in the active change.
+- Commands: `gentle-ai sdd-status` reports design complete and `next_recommended: tasks`; Prettier passed with the design constrained to 797 words.
+- Issues/Risks: The process-local application-state save queue cannot guard credential mutations across replicas; implementation must use the designed repository transaction boundary.
+- Next: Break the design into implementation tasks with a review workload forecast.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential task plan
+
+- Summary: Completed the 15-task TDD implementation plan and review workload forecast for secret-backed external workflow credentials.
+- Decisions: The estimated 950–1,300 line scope is split into foundation, server enforcement, and Settings work units; `ask-on-risk` requires a chain strategy before implementation.
+- Changes: Added concrete RED/GREEN/REFACTOR tasks, focused tests, runtime harnesses, and rollback boundaries in `tasks.md`.
+- Commands: `gentle-ai sdd-status` reports apply ready; task artifact is 469 words and Prettier passes.
+- Issues/Risks: High review-budget risk; do not start apply until the user selects stacked-to-main, feature-branch-chain, or a size exception.
+- Next: Obtain the chained-PR delivery decision, then apply the selected first work unit.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 single-PR delivery exception
+
+- Summary: Accepted the user's instruction to deliver the entire secret-backed credential change in one PR on the current branch.
+- Decisions: `exception-ok` / `size-exception` replaces chained delivery; the 950–1,300 line high-risk forecast and three internal rollbackable work units remain explicit.
+- Changes: Updated the review workload forecast and required apply guard lines in `tasks.md`.
+- Commands: `gentle-ai sdd-continue` now reports apply ready; Prettier validation passed.
+- Issues/Risks: The PR exceeds the normal 400-line review budget by explicit user-approved exception.
+- Next: Start the approved single-PR apply phase with Task 1.1 RED tests.
+
+### 2026-07-28 16:00 (Europe/Madrid) — IDE auth wire-format repair
+
+- Summary: Repaired the typed web IDE-session parser to match the existing server admin wire value.
+- Decisions: The UI canonical role is "admin" (with "member" unchanged); it stays strict and continues to drop bearer fields from the redacted view.
+- Changes: Updated apps/web-ui/src/shared/ide-auth-client.ts and added RED/GREEN regressions in apps/web-ui/src/shared/ide-auth-client.test.ts.
+- Commands: RED focused Vitest failed; GREEN pnpm vitest run apps/web-ui/src/shared/ide-auth-client.test.ts, pnpm typecheck, web build, and desktop Playwright 3/3 passed.
+- Issues/Risks: Full-repository lint/test/build gates remain owned by the parent verification task.
+- Next: Include this narrow fix in the parent final verification.

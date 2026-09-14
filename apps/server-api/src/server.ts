@@ -102,6 +102,7 @@ import {
   type WorkflowUsageTotalsRecord,
 } from "../../../packages/shared/src/workflows";
 import {
+  cutOverLegacyExternalApiKeys,
   createApplicationStateFromStores,
   parseApplicationState,
   type ApplicationSettingsSnapshot,
@@ -140,19 +141,25 @@ import {
 import { readDatabaseMigrationCatalog } from "./database-migration-catalog";
 import { verifyDatabaseMigrations } from "./database-migrations";
 import {
+  createPostgresExternalWorkflowCredentialRepository,
+  createPostgresExternalWorkflowCredentialSecretStore,
+  type ExternalWorkflowCredentialAuditActor,
+  type ExternalWorkflowCredentialMetadata,
+  type ExternalWorkflowCredentialSecretStore,
+  type PostgresExternalWorkflowCredentialRepository,
+} from "./postgres-external-workflow-credentials";
+import {
   ExternalApiKeyScopeKind,
+  ExternalWorkflowRateLimit,
   isExternalApiKeyNameAvailable,
-  isWorkflowAllowedForExternalApiKey,
+  ExternalWorkflowOperation,
   readWorkflowExternalApiKeyDependencies,
   revokeExternalApiKeysForWorkflow,
   toExternalApiKeyView,
   type ExternalApiKeyRecord,
   type ExternalApiKeyScope,
 } from "../../../packages/domain/src/external-api-keys";
-import {
-  createExternalApiKey,
-  findVerifiedExternalApiKey,
-} from "./external-api-keys";
+import { createExternalApiKey } from "./external-api-keys";
 import {
   GovernanceTransitionKind,
   type GovernanceLifecycle,
@@ -206,6 +213,20 @@ const AuthRoutePaths = new Set<string>([
   RoutePath.AuthPasswordResetConfirm,
   RoutePath.AuthAdminRegistration,
   RoutePath.AuthAdminUserEnabled,
+]);
+const CredentialManagementRoutePaths = new Set<string>([
+  RoutePath.ExternalCredentialsList,
+  RoutePath.ExternalCredentialsCreate,
+  RoutePath.ExternalCredentialsRotate,
+  RoutePath.ExternalCredentialsRevoke,
+  RoutePath.ExternalCredentialsAudits,
+]);
+const ExternalWorkflowRouteOperations = new Map<
+  string,
+  ExternalWorkflowOperation
+>([
+  [RoutePath.ExternalWorkflowRead, ExternalWorkflowOperation.WorkflowRead],
+  [RoutePath.ExternalWorkflowInvoke, ExternalWorkflowOperation.WorkflowInvoke],
 ]);
 
 const WorkflowOnlyRoutePaths = new Set<string>([
@@ -263,6 +284,10 @@ const WorkflowOnlyRoutePaths = new Set<string>([
 
 export const isWorkflowOnlyRoute = (path: string): boolean =>
   WorkflowOnlyRoutePaths.has(path);
+const isCredentialManagementRoute = (path: string): boolean =>
+  CredentialManagementRoutePaths.has(path);
+const isInternalApiRoute = (path: string): boolean =>
+  isWorkflowOnlyRoute(path) || isCredentialManagementRoute(path);
 type ActiveWorkflowExecutionRegistry = {
   register: (executionId: string, controller: AbortController) => void;
   cancel: (executionId: string) => void;
@@ -328,6 +353,10 @@ export const startServer = async (): Promise<void> => {
   const mcpConnectionPort = createConfiguredMcpConnectionPort({
     servers: config.mcpServers ?? [],
   });
+  const credentialRepository =
+    createPostgresExternalWorkflowCredentialRepository(postgresPool);
+  const credentialSecretStore =
+    createPostgresExternalWorkflowCredentialSecretStore(postgresPool);
   const server = createApiServer({
     config,
     providerStore,
@@ -336,6 +365,8 @@ export const startServer = async (): Promise<void> => {
     governanceLifecycle,
     workflowCatalog,
     mcpConnectionPort,
+    credentialRepository,
+    credentialSecretStore,
     webUiRoot: readWebUiRoot(),
   });
 
@@ -353,6 +384,8 @@ export const createApiServer = (input: {
   passwordResetDelivery?: PasswordResetDelivery;
   mcpConnectionPort?: ServerMcpConnectionPort;
   pluginRegistry?: TrustedPluginRegistry;
+  credentialRepository?: PostgresExternalWorkflowCredentialRepository;
+  credentialSecretStore?: ExternalWorkflowCredentialSecretStore;
   webUiRoot?: string;
 }) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
@@ -412,6 +445,8 @@ export const createApiServer = (input: {
       input.webUiRoot,
       createGovernedServiceSnapshot,
       pluginRegistry,
+      input.credentialRepository,
+      input.credentialSecretStore,
     ).catch((error: unknown) => {
       console.error(
         "server.unhandled",
@@ -444,7 +479,10 @@ const loadInitialApplicationState = async (
       );
     }
     await applicationStateStore.initialize();
-    return await applicationStateStore.load();
+    return await cutOverLegacyExternalApiKeys({
+      client: postgresPool,
+      now: new Date().toISOString(),
+    });
   } catch (error) {
     await postgresPool.end();
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -599,6 +637,10 @@ const handleRequest = async (
   webUiRoot: string | undefined,
   createGovernedServiceSnapshot: () => GovernedAgentToolService,
   pluginRegistry: TrustedPluginRegistry,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  credentialSecretStore: ExternalWorkflowCredentialSecretStore | undefined,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -624,7 +666,7 @@ const handleRequest = async (
 
   if (
     webUiRoot &&
-    !isWorkflowOnlyRoute(path) &&
+    !isInternalApiRoute(path) &&
     !isExternalWorkflowRoute(path) &&
     tryServeStaticUi(req, res, webUiRoot)
   ) {
@@ -655,6 +697,8 @@ const handleRequest = async (
       applicationPersistence,
       governanceLifecycle,
       governedService: createGovernedServiceSnapshot,
+      ...(credentialRepository ? { credentialRepository } : {}),
+      ...(credentialSecretStore ? { credentialSecretStore } : {}),
     });
     return;
   }
@@ -667,7 +711,8 @@ const handleRequest = async (
     (isEditableAssetRoute(path) ||
       isWorkflowOnlyRoute(path) ||
       isIdeGovernanceLifecycleRoute(path) ||
-      isIdeWorkflowExecutionRoute(path));
+      isIdeWorkflowExecutionRoute(path) ||
+      isCredentialManagementRoute(path));
   if (
     (!isAuthorized(req, config.authToken) && !acceptsIdeSession) ||
     (requiresStrictBearerAuthentication(path) &&
@@ -677,8 +722,18 @@ const handleRequest = async (
     respondUnauthorized(res);
     return;
   }
+  if (
+    isCredentialManagementRoute(path) &&
+    !isCredentialAdministrator(req, ideAuth, config.authToken)
+  ) {
+    respondError(res, {
+      status: HttpStatus.Forbidden,
+      message: ErrorMessage.Unauthorized,
+    });
+    return;
+  }
 
-  if (!isWorkflowOnlyRoute(path)) {
+  if (!isInternalApiRoute(path)) {
     respondError(res, {
       status: HttpStatus.NotFound,
       message: ErrorMessage.NotFound,
@@ -833,6 +888,106 @@ const handleRequest = async (
       applicationPersistence,
       createGovernedServiceSnapshot,
     );
+    return;
+  }
+  if (path === RoutePath.ExternalCredentialsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    if (!credentialRepository) {
+      respondError(res, {
+        status: HttpStatus.InternalServerError,
+        message: ErrorMessage.CredentialStorageUnavailable,
+      });
+      return;
+    }
+    respondJson(res, HttpStatus.Ok, {
+      credentials: (await credentialRepository.list()).map(
+        redactExternalCredentialResponse,
+      ),
+    });
+    return;
+  }
+  if (path === RoutePath.ExternalCredentialsCreate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleExternalCredentialCreate(
+      req,
+      res,
+      workflowCatalog,
+      credentialRepository,
+      credentialSecretStore,
+      ideAuth,
+    );
+    return;
+  }
+  if (path === RoutePath.ExternalCredentialsRotate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleExternalCredentialRotate(
+      req,
+      res,
+      credentialRepository,
+      ideAuth,
+    );
+    return;
+  }
+  if (path === RoutePath.ExternalCredentialsRevoke) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleExternalCredentialRevoke(
+      req,
+      res,
+      credentialRepository,
+      ideAuth,
+    );
+    return;
+  }
+  if (path === RoutePath.ExternalCredentialsAudits) {
+    if (method !== HttpMethod.Get && method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    if (!credentialRepository) {
+      respondError(res, {
+        status: HttpStatus.InternalServerError,
+        message: ErrorMessage.CredentialStorageUnavailable,
+      });
+      return;
+    }
+    let credentialId: string | false | undefined;
+    if (method === HttpMethod.Post) {
+      const body = await readJsonBody(req);
+      if (body.type === ResultType.Err) {
+        respondError(res, body.error);
+        return;
+      }
+      credentialId = readOptionalCredentialId(body.value);
+      if (credentialId === false) {
+        respondInvalidBody(res);
+        return;
+      }
+    }
+    await credentialRepository.purgeAudits({ now: new Date().toISOString() });
+    respondJson(res, HttpStatus.Ok, {
+      audits: await credentialRepository.listAudits({
+        ...(credentialId ? { credentialId } : {}),
+      }),
+    });
+    return;
+  }
+  if (isRetiredLegacyExternalApiKeyRoute(path)) {
+    respondError(res, {
+      status: HttpStatus.Gone,
+      message: ErrorMessage.LegacyApiKeyRoutesRetired,
+    });
     return;
   }
   if (path === RoutePath.ExternalApiKeysList) {
@@ -1106,6 +1261,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       applicationPersistence,
+      credentialRepository,
     );
     return;
   }
@@ -2715,6 +2871,9 @@ const handleWorkflowDefinitionDelete = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   applicationPersistence: ApplicationPersistence,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2736,16 +2895,169 @@ const handleWorkflowDefinitionDelete = async (
     return;
   }
 
+  const revokedAt = new Date().toISOString();
   const keyUpdate = revokeExternalApiKeysForWorkflow({
     keys: applicationPersistence.read().externalApiKeys,
     workflowId: parsed.value.workflowId,
-    revokedAt: new Date().toISOString(),
+    revokedAt,
   });
+  if (credentialRepository) {
+    await credentialRepository.revokeForWorkflow({
+      workflowId: parsed.value.workflowId,
+      now: revokedAt,
+    });
+  }
   await applicationPersistence.updateExternalApiKeys(keyUpdate.keys);
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
     revokedKeys: keyUpdate.revoked,
   });
+};
+
+const handleExternalCredentialCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  credentialSecretStore: ExternalWorkflowCredentialSecretStore | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const parsed = parseExternalCredentialCreateRequest(body.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+  if (
+    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
+    parsed.value.scope.workflowIds.some(
+      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
+    )
+  ) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  if (!credentialRepository || !credentialSecretStore) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  if (
+    !(await credentialRepository.isNameAvailable({ name: parsed.value.name }))
+  ) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+  const created = createExternalApiKey({ ...parsed.value, now: new Date() });
+  const creation = await credentialRepository.create({
+    credential: toExternalApiKeyView(created.key),
+    plaintext: created.plaintext,
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (creation === "duplicate") {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, {
+    credential: redactExternalCredentialResponse(created.key),
+    plaintextCredential: created.plaintext,
+  });
+};
+
+const handleExternalCredentialRotate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const credentialId = readCredentialId(body.value);
+  if (credentialId.type === ResultType.Err) {
+    respondError(res, credentialId.error);
+    return;
+  }
+  const plaintext = createExternalApiKey({
+    name: "rotation",
+    scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+    id: credentialId.value,
+    now: new Date(),
+  }).plaintext;
+  if (!credentialRepository) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  const now = new Date().toISOString();
+  const rotated = await credentialRepository.rotate({
+    credentialId: credentialId.value,
+    plaintext,
+    now,
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (!rotated) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { plaintextCredential: plaintext });
+};
+
+const handleExternalCredentialRevoke = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const credentialId = readCredentialId(body.value);
+  if (credentialId.type === ResultType.Err) {
+    respondError(res, credentialId.error);
+    return;
+  }
+  if (!credentialRepository) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  const revoked = await credentialRepository.revoke({
+    credentialId: credentialId.value,
+    now: new Date().toISOString(),
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (!revoked) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { credentialId: credentialId.value });
 };
 
 const handleExternalApiKeyCreate = async (
@@ -4207,34 +4519,44 @@ const isAuthRoute = (path: string): boolean => AuthRoutePaths.has(path);
 
 const isAuthorized = (req: IncomingMessage, authToken: string): boolean => {
   const token = readBearerToken(req);
-  return token === authToken || isColocatedWebUiRequest(req);
-};
-
-const isColocatedWebUiRequest = (req: IncomingMessage): boolean => {
-  const origin = readCorsOrigin(req);
-  const host = req.headers.host;
-  if (!origin || !host) {
-    return false;
-  }
-  try {
-    const originUrl = new URL(origin);
-    return originUrl.host === host || originUrl.port === "4000";
-  } catch {
-    return false;
-  }
+  return token === authToken;
 };
 
 const isTrustedIdeSessionRequest = (req: IncomingMessage): boolean => {
   const origin = readCorsOrigin(req);
-  return (
-    (origin !== undefined && isAllowedCorsOrigin(origin)) ||
-    isColocatedWebUiRequest(req)
-  );
+  return origin !== undefined && isAllowedCorsOrigin(origin);
 };
 
+export const externalWorkflowOperationForRoute = (
+  path: string,
+): ExternalWorkflowOperation | undefined =>
+  ExternalWorkflowRouteOperations.get(path);
+
+export const redactExternalCredentialResponse = (
+  credential: ExternalApiKeyRecord | ExternalWorkflowCredentialMetadata,
+): ExternalWorkflowCredentialMetadata => ({
+  id: credential.id,
+  name: credential.name,
+  scope:
+    credential.scope.kind === ExternalApiKeyScopeKind.AllWorkflows
+      ? { kind: ExternalApiKeyScopeKind.AllWorkflows }
+      : {
+          kind: ExternalApiKeyScopeKind.SelectedWorkflows,
+          workflowIds: [...credential.scope.workflowIds],
+        },
+  createdAt: credential.createdAt,
+  ...(credential.operations ? { operations: [...credential.operations] } : {}),
+  ...(credential.expiresAt ? { expiresAt: credential.expiresAt } : {}),
+  ...(credential.rateLimitPerMinute
+    ? { rateLimitPerMinute: credential.rateLimitPerMinute }
+    : {}),
+  ...(credential.generation ? { generation: credential.generation } : {}),
+  ...(credential.lastUsedAt ? { lastUsedAt: credential.lastUsedAt } : {}),
+  ...(credential.revokedAt ? { revokedAt: credential.revokedAt } : {}),
+});
+
 const isExternalWorkflowRoute = (path: string): boolean =>
-  path === RoutePath.ExternalWorkflowRead ||
-  path === RoutePath.ExternalWorkflowInvoke;
+  externalWorkflowOperationForRoute(path) !== undefined;
 
 const isGovernanceLifecycleRoute = (path: string): boolean =>
   path === RoutePath.GovernanceLifecyclesGet ||
@@ -4275,6 +4597,8 @@ const handleExternalWorkflowRequest = async (input: {
   applicationPersistence: ApplicationPersistence;
   governanceLifecycle: GovernanceLifecycleService;
   governedService: () => GovernedAgentToolService;
+  credentialRepository?: PostgresExternalWorkflowCredentialRepository;
+  credentialSecretStore?: ExternalWorkflowCredentialSecretStore;
 }): Promise<void> => {
   if (input.method !== HttpMethod.Post) {
     respondMethodNotAllowed(input.res);
@@ -4286,15 +4610,6 @@ const handleExternalWorkflowRequest = async (input: {
     respondUnauthorized(input.res);
     return;
   }
-  const key = findVerifiedExternalApiKey(
-    input.applicationPersistence.read().externalApiKeys,
-    plaintextKey,
-  );
-  if (!key) {
-    respondUnauthorized(input.res);
-    return;
-  }
-
   const bodyResult = await readJsonBody(input.req);
   if (bodyResult.type === ResultType.Err) {
     respondError(input.res, bodyResult.error);
@@ -4305,11 +4620,41 @@ const handleExternalWorkflowRequest = async (input: {
     respondError(input.res, workflowId.error);
     return;
   }
-  if (!isWorkflowAllowedForExternalApiKey(key, workflowId.value)) {
+  const operation = externalWorkflowOperationForRoute(input.path);
+  if (!operation) {
     respondError(input.res, {
-      status: HttpStatus.Forbidden,
-      message: ErrorMessage.WorkflowApiKeyOutOfScope,
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
     });
+    return;
+  }
+  if (!input.credentialRepository || !input.credentialSecretStore) {
+    respondError(input.res, {
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.CredentialStorageUnavailable,
+    });
+    return;
+  }
+  const verified = await input.credentialSecretStore.verify(plaintextKey);
+  const now = new Date().toISOString();
+  if (!verified) {
+    await input.credentialRepository.recordAuthenticationFailure({
+      operation,
+      workflowId: workflowId.value,
+      now,
+    });
+    respondUnauthorized(input.res);
+    return;
+  }
+  const consumption = await input.credentialRepository.consumeAuthorized({
+    credentialId: verified.credentialId,
+    plaintext: plaintextKey,
+    operation,
+    workflowId: workflowId.value,
+    now,
+  });
+  if (consumption !== "authorized") {
+    respondExternalCredentialConsumptionError(input.res, consumption);
     return;
   }
 
@@ -4322,17 +4667,7 @@ const handleExternalWorkflowRequest = async (input: {
     return;
   }
 
-  await input.applicationPersistence.updateExternalApiKeys(
-    input.applicationPersistence
-      .read()
-      .externalApiKeys.map((entry) =>
-        entry.id === key.id
-          ? { ...entry, lastUsedAt: new Date().toISOString() }
-          : entry,
-      ),
-  );
-
-  if (input.path === RoutePath.ExternalWorkflowRead) {
+  if (operation === ExternalWorkflowOperation.WorkflowRead) {
     respondJson(input.res, HttpStatus.Ok, { definition: workflow });
     return;
   }
@@ -4467,6 +4802,14 @@ const readAuthenticatedActorId = (
     ? "authenticated-bearer-client"
     : (readSessionUser(req, ideAuth)?.id ?? "authenticated-colocated-web-ui");
 
+const readCredentialLifecycleActor = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+): ExternalWorkflowCredentialAuditActor => ({
+  kind: "administrator",
+  id: readSessionUser(req, ideAuth)?.id ?? "static-bearer-administrator",
+});
+
 const classifyExternalWorkflowFailure = (
   error: unknown,
 ): {
@@ -4511,6 +4854,94 @@ const parseExternalApiKeyCreateRequest = (
   return scope.type === ResultType.Err
     ? scope
     : ok({ name, scope: scope.value });
+};
+
+const isRetiredLegacyExternalApiKeyRoute = (path: string): boolean =>
+  path === RoutePath.ExternalApiKeysList ||
+  path === RoutePath.ExternalApiKeysCreate ||
+  path === RoutePath.ExternalApiKeysUpdate ||
+  path === RoutePath.ExternalApiKeysRevoke ||
+  path === RoutePath.ExternalApiKeysWorkflowDependencies;
+
+const isCredentialAdministrator = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+  authToken: string,
+): boolean =>
+  readBearerToken(req) === authToken ||
+  readSessionUser(req, ideAuth)?.role === IdeUserRole.Admin;
+
+const parseExternalCredentialCreateRequest = (
+  value: unknown,
+): Result<
+  {
+    name: string;
+    scope: ExternalApiKeyScope;
+    operations: ReadonlyArray<ExternalWorkflowOperation>;
+    expiresAt?: string;
+    rateLimitPerMinute: number;
+  },
+  ApiError
+> => {
+  const base = parseExternalApiKeyCreateRequest(value);
+  if (base.type === ResultType.Err) {
+    return err(base.error);
+  }
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  const operations = readExternalCredentialOperations(value["operations"]);
+  const rateLimitPerMinute = value["rateLimitPerMinute"];
+  const expiresAt = readCredentialExpiresAt(value["expiresAt"]);
+  if (
+    !operations ||
+    typeof rateLimitPerMinute !== "number" ||
+    !ExternalWorkflowRateLimit.isValid(rateLimitPerMinute) ||
+    expiresAt === false
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return ok({
+    ...base.value,
+    operations,
+    rateLimitPerMinute,
+    ...(expiresAt ? { expiresAt } : {}),
+  });
+};
+
+const readExternalCredentialOperations = (
+  value: unknown,
+): ReadonlyArray<ExternalWorkflowOperation> | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const operations = value.filter(
+    (operation): operation is ExternalWorkflowOperation =>
+      typeof operation === "string" &&
+      Object.values(ExternalWorkflowOperation).includes(
+        operation as ExternalWorkflowOperation,
+      ),
+  );
+  return operations.length === value.length && operations.length > 0
+    ? [...new Set(operations)]
+    : undefined;
+};
+
+const readCredentialExpiresAt = (
+  value: unknown,
+): string | false | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return typeof value === "string" && !Number.isNaN(Date.parse(value))
+    ? new Date(value).toISOString()
+    : false;
 };
 
 const parseExternalApiKeyUpdateRequest = (
@@ -4563,17 +4994,19 @@ const parseExternalApiKeyScope = (
 };
 
 const readExternalApiKeyId = (value: unknown): Result<string, ApiError> => {
-  if (
-    !isRecord(value) ||
-    typeof value["keyId"] !== "string" ||
-    !value["keyId"].trim()
-  ) {
+  const keyId =
+    isRecord(value) && typeof value["credentialId"] === "string"
+      ? value["credentialId"]
+      : isRecord(value)
+        ? value["keyId"]
+        : undefined;
+  if (typeof keyId !== "string" || !keyId.trim()) {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.MissingApiKeyId,
     });
   }
-  return ok(value["keyId"].trim());
+  return ok(keyId.trim());
 };
 
 const readWorkflowId = (value: unknown): Result<string, ApiError> => {
@@ -4597,6 +5030,26 @@ const extractBearerToken = (header: string): string | undefined => {
 
   const token = header.slice(BearerPrefix.length).trim();
   return token.length > 0 ? token : undefined;
+};
+
+const readOptionalCredentialId = (
+  value: unknown,
+): string | false | undefined => {
+  if (!isRecord(value) || value["credentialId"] === undefined) {
+    return undefined;
+  }
+  return typeof value["credentialId"] === "string" &&
+    value["credentialId"].trim()
+    ? value["credentialId"].trim()
+    : false;
+};
+
+const readCredentialId = (value: unknown): Result<string, ApiError> => {
+  const credentialId = readOptionalCredentialId(value);
+  if (typeof credentialId === "string") {
+    return ok(credentialId);
+  }
+  return readExternalApiKeyId(value);
 };
 
 const CorsHeaderName = {
@@ -4680,6 +5133,33 @@ const respondUnauthorized = (res: ServerResponse): void => {
   respondError(res, {
     status: HttpStatus.Unauthorized,
     message: ErrorMessage.Unauthorized,
+  });
+};
+
+const respondExternalCredentialConsumptionError = (
+  res: ServerResponse,
+  result: "unauthorized" | "forbidden" | "throttled",
+): void => {
+  if (result === "unauthorized") {
+    respondUnauthorized(res);
+    return;
+  }
+  respondError(res, {
+    status:
+      result === "throttled"
+        ? HttpStatus.TooManyRequests
+        : HttpStatus.Forbidden,
+    message:
+      result === "throttled"
+        ? ErrorMessage.CredentialRateLimitExceeded
+        : ErrorMessage.WorkflowApiKeyOutOfScope,
+  });
+};
+
+const respondCredentialStorageUnavailable = (res: ServerResponse): void => {
+  respondError(res, {
+    status: HttpStatus.InternalServerError,
+    message: ErrorMessage.CredentialStorageUnavailable,
   });
 };
 

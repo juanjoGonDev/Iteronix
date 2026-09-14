@@ -34,6 +34,8 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
+  AuthLogin: "/auth/login",
+  AuthMe: "/auth/me",
   SettingsGet: "/settings/get",
   SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
@@ -42,6 +44,7 @@ const RequestPath = {
 } as const;
 
 const ResponseHeader = {
+  AllowCredentials: "Access-Control-Allow-Credentials",
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
@@ -78,6 +81,7 @@ type ProviderSettingsRequestRecord = {
 };
 
 type StubServerState = {
+  authenticatedSessionProbeCount: number;
   providerSettingsRequests: ProviderSettingsRequestRecord[];
   webhookPayloadCount: number;
   applicationSettings: Record<string, unknown>;
@@ -142,6 +146,7 @@ async function validateSettingsScreen(): Promise<void> {
       ValidationText.ScreenTitle,
       ValidationText.ProviderHeading,
     ]);
+    assertAuthenticatedSessionProbe(stubServer.state);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -428,6 +433,7 @@ async function startSettingsStubServer(): Promise<{
   close: () => Promise<void>;
 }> {
   const state: StubServerState = {
+    authenticatedSessionProbeCount: 0,
     providerSettingsRequests: [],
     webhookPayloadCount: 0,
     applicationSettings: createDefaultApplicationSettings(),
@@ -476,6 +482,20 @@ async function handleStubRequest(
   if (request.method === "OPTIONS") {
     response.writeHead(204, createCorsHeaders());
     response.end();
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    (requestUrl.pathname === RequestPath.AuthMe ||
+      requestUrl.pathname === RequestPath.AuthLogin)
+  ) {
+    if (requestUrl.pathname === RequestPath.AuthMe) {
+      state.authenticatedSessionProbeCount += 1;
+    }
+    writeJson(response, 200, {
+      user: createValidationAdminUser(),
+    });
     return;
   }
 
@@ -594,12 +614,29 @@ function createDefaultApplicationSettings(): Record<string, unknown> {
   };
 }
 
+function createValidationAdminUser(): Record<string, unknown> {
+  return {
+    id: "settings-validation-admin",
+    email: "admin@iteronix.test",
+    role: "admin",
+    enabled: true,
+  };
+}
+
 function assertNoRuntimeProviderSyncRequests(
   requests: ReadonlyArray<ProviderSettingsRequestRecord>,
 ): void {
   if (requests.length > 0) {
     throw new Error(
       `Expected the snapshot-only Anthropic profile to skip runtime sync, received ${requests.length} request(s).`,
+    );
+  }
+}
+
+function assertAuthenticatedSessionProbe(state: StubServerState): void {
+  if (state.authenticatedSessionProbeCount !== 1) {
+    throw new Error(
+      `Expected one credentialed authenticated-session probe, received ${state.authenticatedSessionProbeCount}.`,
     );
   }
 }
@@ -1045,7 +1082,8 @@ function writeJson(
 
 function createCorsHeaders(): Record<string, string> {
   return {
-    [ResponseHeader.AllowOrigin]: "*",
+    [ResponseHeader.AllowOrigin]: ValidationConfig.PreviewBaseUrl,
+    [ResponseHeader.AllowCredentials]: "true",
     [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };

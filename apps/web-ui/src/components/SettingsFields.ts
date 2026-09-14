@@ -28,6 +28,14 @@ interface SettingsNumberFieldProps extends ComponentProps {
   onChange: (value: string) => void;
 }
 
+interface SettingsDateTimeFieldProps extends ComponentProps {
+  label: string;
+  value: string;
+  disabled: boolean;
+  testId: string;
+  onChange: (value: string) => void;
+}
+
 interface SettingsSelectFieldOption {
   value: string;
   label: string;
@@ -55,6 +63,21 @@ interface SettingsToggleFieldProps extends ComponentProps {
   checked: boolean;
   testId: string;
   onChange: (checked: boolean) => void;
+}
+
+interface SettingsCheckboxGroupOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface SettingsCheckboxGroupProps extends ComponentProps {
+  label: string;
+  description: string;
+  values: ReadonlyArray<string>;
+  options: ReadonlyArray<SettingsCheckboxGroupOption>;
+  testId: string;
+  onChange: (value: string, checked: boolean) => void;
 }
 
 class SettingsField extends Component<SettingsFieldProps> {
@@ -120,6 +143,29 @@ export class SettingsNumberField extends Component<SettingsNumberFieldProps> {
         disabled,
         "data-testid": testId,
         className: `${readSettingsInputClassName()} disabled:opacity-50`,
+        onChange: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            onChange(target.value);
+          }
+        },
+      }),
+    });
+  }
+}
+
+export class SettingsDateTimeField extends Component<SettingsDateTimeFieldProps> {
+  override render(): HTMLElement {
+    const { label, value, disabled, testId, onChange } = this.props;
+
+    return createElement(SettingsField, {
+      label,
+      children: createElement("input", {
+        type: "datetime-local",
+        value,
+        disabled,
+        "data-testid": testId,
+        className: `${readSettingsInputClassName()} disabled:cursor-not-allowed disabled:opacity-50`,
         onChange: (event: Event) => {
           const target = event.target;
           if (target instanceof HTMLInputElement) {
@@ -244,6 +290,73 @@ export class SettingsToggleField extends Component<SettingsToggleFieldProps> {
   }
 }
 
+export class SettingsCheckboxGroup extends Component<SettingsCheckboxGroupProps> {
+  override render(): HTMLElement {
+    const { label, description, values, options, testId, onChange } =
+      this.props;
+    const selectedValues = new Set(values);
+    const descriptionId = `${testId}-description`;
+
+    return createElement("fieldset", { className: "flex flex-col gap-3" }, [
+      createElement(
+        "legend",
+        { className: "text-[13px] font-medium text-slate-100" },
+        [label],
+      ),
+      createElement(
+        "p",
+        { id: descriptionId, className: "text-xs text-text-secondary" },
+        [description],
+      ),
+      createElement(
+        "div",
+        {
+          role: "group",
+          "aria-describedby": descriptionId,
+          className: "grid gap-2 sm:grid-cols-2 xl:grid-cols-3",
+        },
+        options.map((option) =>
+          createElement(
+            "label",
+            {
+              className:
+                "flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border border-[#2b3644] bg-[#1a2129] px-3 py-3 transition-colors hover:border-[#4a5c70] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/70",
+            },
+            [
+              createElement("input", {
+                type: "checkbox",
+                value: option.value,
+                checked: selectedValues.has(option.value),
+                "data-testid": `${testId}-${readCheckboxTestIdSuffix(option.value)}`,
+                className:
+                  "mt-0.5 h-4 w-4 shrink-0 accent-primary focus-visible:outline-none",
+                onChange: (event: Event) => {
+                  const target = event.target;
+                  if (target instanceof HTMLInputElement) {
+                    onChange(option.value, target.checked);
+                  }
+                },
+              }),
+              createElement("span", { className: "flex flex-col gap-1" }, [
+                createElement(
+                  "span",
+                  { className: "text-sm font-medium text-white" },
+                  [option.label],
+                ),
+                createElement(
+                  "span",
+                  { className: "text-xs leading-5 text-text-secondary" },
+                  [option.description],
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    ]);
+  }
+}
+
 const readSettingsInputClassName = (): string =>
   "min-h-11 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
@@ -261,6 +374,9 @@ export const readSettingsToggleKnobClassName = (checked: boolean): string =>
     "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
     checked ? "translate-x-5" : "translate-x-0.5",
   );
+
+const readCheckboxTestIdSuffix = (value: string): string =>
+  value.replaceAll(".", "-");
 
 const joinClasses = (...values: ReadonlyArray<string>): string =>
   values

@@ -9,10 +9,11 @@ const EndpointPath = {
   SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
-  ExternalApiKeysList: "/settings/api-keys/list",
-  ExternalApiKeysCreate: "/settings/api-keys/create",
-  ExternalApiKeysUpdate: "/settings/api-keys/update",
-  ExternalApiKeysRevoke: "/settings/api-keys/revoke",
+  ExternalWorkflowCredentialsList: "/settings/credentials/list",
+  ExternalWorkflowCredentialsCreate: "/settings/credentials/create",
+  ExternalWorkflowCredentialsRotate: "/settings/credentials/rotate",
+  ExternalWorkflowCredentialsRevoke: "/settings/credentials/revoke",
+  ExternalWorkflowCredentialsAudits: "/settings/credentials/audits",
 } as const;
 
 export type RuntimeProviderRecord = {
@@ -27,13 +28,39 @@ export type ExternalApiKeyScope =
   | { kind: "all_workflows" }
   | { kind: "selected_workflows"; workflowIds: ReadonlyArray<string> };
 
+export const ExternalWorkflowOperations = [
+  "workflow.read",
+  "workflow.invoke",
+  "workflow.trigger",
+  "run.status",
+  "run.approve",
+  "run.trace",
+] as const;
+
+export type ExternalWorkflowOperation =
+  (typeof ExternalWorkflowOperations)[number];
+
 export type ExternalApiKeyRecord = {
   id: string;
   name: string;
   scope: ExternalApiKeyScope;
+  operations: ReadonlyArray<ExternalWorkflowOperation>;
+  rateLimitPerMinute: number;
   createdAt: string;
+  expiresAt?: string;
   lastUsedAt?: string;
   revokedAt?: string;
+};
+
+export type ExternalWorkflowCredentialAudit = {
+  credentialId: string;
+  eventKind: string;
+  actorKind: "administrator" | "credential" | "anonymous" | "system";
+  actorId: string;
+  operation?: ExternalWorkflowOperation;
+  workflowId?: string;
+  result: string;
+  occurredAt: string;
 };
 
 type RuntimeProviderSelectionRecord = {
@@ -65,19 +92,28 @@ export type SettingsClient = {
     providerId: string;
     config: Record<string, unknown>;
   }) => Promise<RuntimeProviderSettingsRecord>;
-  listExternalApiKeys: () => Promise<ReadonlyArray<ExternalApiKeyRecord>>;
-  createExternalApiKey: (input: {
+  listExternalWorkflowCredentials: () => Promise<
+    ReadonlyArray<ExternalApiKeyRecord>
+  >;
+  createExternalWorkflowCredential: (input: {
     name: string;
     scope: ExternalApiKeyScope;
-  }) => Promise<{ key: ExternalApiKeyRecord; plaintextKey: string }>;
-  updateExternalApiKey: (input: {
-    keyId: string;
-    name: string;
-    scope: ExternalApiKeyScope;
-  }) => Promise<ExternalApiKeyRecord>;
-  revokeExternalApiKey: (input: {
-    keyId: string;
-  }) => Promise<ExternalApiKeyRecord>;
+    operations: ReadonlyArray<ExternalWorkflowOperation>;
+    expiresAt?: string;
+    rateLimitPerMinute: number;
+  }) => Promise<{
+    credential: ExternalApiKeyRecord;
+    plaintextCredential: string;
+  }>;
+  rotateExternalWorkflowCredential: (input: {
+    credentialId: string;
+  }) => Promise<{ plaintextCredential: string }>;
+  revokeExternalWorkflowCredential: (input: {
+    credentialId: string;
+  }) => Promise<{ credentialId: string }>;
+  listExternalWorkflowCredentialAudits: (input?: {
+    credentialId?: string;
+  }) => Promise<ReadonlyArray<ExternalWorkflowCredentialAudit>>;
 };
 
 export const createSettingsClient = (): SettingsClient => ({
@@ -111,53 +147,103 @@ export const createSettingsClient = (): SettingsClient => ({
       },
       parse: parseProviderSettingsResponse,
     }),
-  listExternalApiKeys: () =>
+  listExternalWorkflowCredentials: () =>
     requestJson({
-      path: EndpointPath.ExternalApiKeysList,
+      path: EndpointPath.ExternalWorkflowCredentialsList,
       body: {},
-      parse: (value) => readExternalApiKeysResponse(value, "keys"),
+      parse: (value) => readExternalApiKeysResponse(value, "credentials"),
     }),
-  createExternalApiKey: (input) =>
+  createExternalWorkflowCredential: (input) =>
     requestJson({
-      path: EndpointPath.ExternalApiKeysCreate,
+      path: EndpointPath.ExternalWorkflowCredentialsCreate,
       body: input,
-      parse: parseExternalApiKeyCreationResponse,
+      parse: parseExternalWorkflowCredentialCreationResponse,
     }),
-  updateExternalApiKey: (input) =>
+  rotateExternalWorkflowCredential: (input) =>
     requestJson({
-      path: EndpointPath.ExternalApiKeysUpdate,
+      path: EndpointPath.ExternalWorkflowCredentialsRotate,
       body: input,
+      parse: parseExternalWorkflowCredentialRotationResponse,
+    }),
+  revokeExternalWorkflowCredential: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalWorkflowCredentialsRevoke,
+      body: input,
+      parse: parseExternalWorkflowCredentialRevocationResponse,
+    }),
+  listExternalWorkflowCredentialAudits: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalWorkflowCredentialsAudits,
+      body: {
+        ...(input?.credentialId ? { credentialId: input.credentialId } : {}),
+      },
       parse: (value) =>
-        parseExternalApiKey(
-          readRequiredRecord(value, "externalApiKeyUpdateResponse", "key"),
-        ),
-    }),
-  revokeExternalApiKey: (input) =>
-    requestJson({
-      path: EndpointPath.ExternalApiKeysRevoke,
-      body: input,
-      parse: (value) =>
-        parseExternalApiKey(
-          readRequiredRecord(value, "externalApiKeyRevokeResponse", "key"),
+        readRequiredArray(
+          ensureRecord(value, "externalWorkflowCredentialAuditsResponse"),
+          "externalWorkflowCredentialAuditsResponse",
+          "audits",
+        ).map((audit) =>
+          parseExternalWorkflowCredentialAudit(
+            ensureRecord(audit, "externalWorkflowCredentialAudit"),
+          ),
         ),
     }),
 });
 
-const parseExternalApiKeyCreationResponse = (
+export const parseExternalWorkflowCredentialCreationResponse = (
   value: unknown,
 ): {
-  key: ExternalApiKeyRecord;
-  plaintextKey: string;
+  credential: ExternalApiKeyRecord;
+  plaintextCredential: string;
 } => {
-  const record = ensureRecord(value, "externalApiKeyCreationResponse");
+  const record = ensureRecord(
+    value,
+    "externalWorkflowCredentialCreationResponse",
+  );
   return {
-    key: parseExternalApiKey(
-      readRequiredRecord(record, "externalApiKeyCreationResponse", "key"),
+    credential: parseExternalApiKey(
+      readRequiredRecord(
+        record,
+        "externalWorkflowCredentialCreationResponse",
+        "credential",
+      ),
     ),
-    plaintextKey: readRequiredString(
+    plaintextCredential: readRequiredString(
       record,
-      "externalApiKeyCreationResponse",
-      "plaintextKey",
+      "externalWorkflowCredentialCreationResponse",
+      "plaintextCredential",
+    ),
+  };
+};
+
+const parseExternalWorkflowCredentialRotationResponse = (
+  value: unknown,
+): { plaintextCredential: string } => {
+  const record = ensureRecord(
+    value,
+    "externalWorkflowCredentialRotationResponse",
+  );
+  return {
+    plaintextCredential: readRequiredString(
+      record,
+      "externalWorkflowCredentialRotationResponse",
+      "plaintextCredential",
+    ),
+  };
+};
+
+const parseExternalWorkflowCredentialRevocationResponse = (
+  value: unknown,
+): { credentialId: string } => {
+  const record = ensureRecord(
+    value,
+    "externalWorkflowCredentialRevocationResponse",
+  );
+  return {
+    credentialId: readRequiredString(
+      record,
+      "externalWorkflowCredentialRevocationResponse",
+      "credentialId",
     ),
   };
 };
@@ -172,7 +258,7 @@ const readExternalApiKeysResponse = (
     key,
   ).map((entry) => parseExternalApiKey(ensureRecord(entry, "externalApiKey")));
 
-const parseExternalApiKey = (
+export const parseExternalApiKey = (
   value: Record<string, unknown>,
 ): ExternalApiKeyRecord => {
   const scope = readRequiredRecord(value, "externalApiKey", "scope");
@@ -180,6 +266,8 @@ const parseExternalApiKey = (
   return {
     id: readRequiredString(value, "externalApiKey", "id"),
     name: readRequiredString(value, "externalApiKey", "name"),
+    operations: readExternalWorkflowOperations(value["operations"]),
+    rateLimitPerMinute: readRateLimitPerMinute(value["rateLimitPerMinute"]),
     scope:
       kind === "all_workflows"
         ? { kind }
@@ -197,6 +285,9 @@ const parseExternalApiKey = (
             }),
           },
     createdAt: readRequiredString(value, "externalApiKey", "createdAt"),
+    ...(typeof value["expiresAt"] === "string"
+      ? { expiresAt: value["expiresAt"] }
+      : {}),
     ...(typeof value["lastUsedAt"] === "string"
       ? { lastUsedAt: value["lastUsedAt"] }
       : {}),
@@ -205,6 +296,87 @@ const parseExternalApiKey = (
       : {}),
   };
 };
+
+export const parseExternalWorkflowCredentialAudit = (
+  value: Record<string, unknown>,
+): ExternalWorkflowCredentialAudit => ({
+  credentialId: readRequiredString(
+    value,
+    "externalWorkflowCredentialAudit",
+    "credentialId",
+  ),
+  eventKind: readRequiredString(
+    value,
+    "externalWorkflowCredentialAudit",
+    "eventKind",
+  ),
+  actorKind: readExternalWorkflowCredentialAuditActorKind(value["actorKind"]),
+  actorId: readRequiredString(
+    value,
+    "externalWorkflowCredentialAudit",
+    "actorId",
+  ),
+  result: readRequiredString(
+    value,
+    "externalWorkflowCredentialAudit",
+    "result",
+  ),
+  occurredAt: readRequiredString(
+    value,
+    "externalWorkflowCredentialAudit",
+    "occurredAt",
+  ),
+  ...readOptionalExternalWorkflowOperation(value["operation"]),
+  ...(typeof value["workflowId"] === "string"
+    ? { workflowId: value["workflowId"] }
+    : {}),
+});
+
+const readExternalWorkflowCredentialAuditActorKind = (
+  value: unknown,
+): ExternalWorkflowCredentialAudit["actorKind"] => {
+  if (
+    value === "administrator" ||
+    value === "credential" ||
+    value === "anonymous" ||
+    value === "system"
+  ) {
+    return value;
+  }
+  throw new Error("externalWorkflowCredentialAudit.actorKind must be valid.");
+};
+
+const readExternalWorkflowOperations = (
+  value: unknown,
+): ReadonlyArray<ExternalWorkflowOperation> => {
+  if (!Array.isArray(value)) return ["workflow.read", "workflow.invoke"];
+  const operations = value.filter(
+    (entry): entry is ExternalWorkflowOperation =>
+      typeof entry === "string" &&
+      ExternalWorkflowOperations.some((operation) => operation === entry),
+  );
+  return operations.length > 0
+    ? operations
+    : ["workflow.read", "workflow.invoke"];
+};
+
+const readOptionalExternalWorkflowOperation = (
+  value: unknown,
+): Partial<Pick<ExternalWorkflowCredentialAudit, "operation">> => {
+  const operation =
+    typeof value === "string"
+      ? ExternalWorkflowOperations.find((candidate) => candidate === value)
+      : undefined;
+  return operation ? { operation } : {};
+};
+
+const readRateLimitPerMinute = (value: unknown): number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 1 &&
+  value <= 600
+    ? value
+    : 60;
 
 export const parseSettingsResponse = (value: unknown): SettingsSnapshot =>
   parseSettingsSnapshot(

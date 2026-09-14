@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseExternalApiKey,
+  parseExternalWorkflowCredentialAudit,
+  parseExternalWorkflowCredentialCreationResponse,
   parseSettingsResponse,
   parseProviderListResponse,
   parseProviderSettingsResponse,
@@ -69,5 +72,80 @@ describe("settings client codecs", () => {
 
     expect(parsed.providerId).toBe("codex-cli");
     expect(parsed.config["command"]).toBe("codex");
+  });
+
+  it("parses redacted credential scope, operations, expiry, and rate limit", () => {
+    expect(
+      parseExternalApiKey({
+        id: "credential-1",
+        name: "Deploy",
+        scope: { kind: "all_workflows" },
+        createdAt: "2026-07-28T00:00:00.000Z",
+        operations: ["workflow.read", "workflow.invoke"],
+        expiresAt: "2026-08-28T00:00:00.000Z",
+        rateLimitPerMinute: 60,
+      }),
+    ).toMatchObject({
+      operations: ["workflow.read", "workflow.invoke"],
+      rateLimitPerMinute: 60,
+    });
+  });
+
+  it("parses the one-time creation response separately from redacted credential metadata", () => {
+    const created = parseExternalWorkflowCredentialCreationResponse({
+      credential: {
+        id: "credential-1",
+        name: "Deploy",
+        scope: { kind: "selected_workflows", workflowIds: ["workflow-1"] },
+        operations: ["workflow.invoke"],
+        rateLimitPerMinute: 25,
+        createdAt: "2026-07-28T00:00:00.000Z",
+      },
+      plaintextCredential: "itx_wf_once_only",
+    });
+
+    expect(created.credential).not.toHaveProperty("plaintextCredential");
+    expect(created.credential).not.toHaveProperty("secretHash");
+    expect(created.plaintextCredential).toBe("itx_wf_once_only");
+  });
+
+  it("parses redacted credential audits without accepting plaintext or verifier fields", () => {
+    const audit = parseExternalWorkflowCredentialAudit({
+      credentialId: "credential-1",
+      eventKind: "revoke",
+      actorKind: "administrator",
+      actorId: "admin-1",
+      operation: "workflow.invoke",
+      workflowId: "workflow-1",
+      result: "authorized",
+      occurredAt: "2026-07-28T00:00:00.000Z",
+      plaintextCredential: "must-not-be-read",
+      verifier: "must-not-be-read",
+    });
+
+    expect(audit).toEqual({
+      credentialId: "credential-1",
+      eventKind: "revoke",
+      actorKind: "administrator",
+      actorId: "admin-1",
+      operation: "workflow.invoke",
+      workflowId: "workflow-1",
+      result: "authorized",
+      occurredAt: "2026-07-28T00:00:00.000Z",
+    });
+  });
+
+  it("preserves an audit with no operation as redacted metadata", () => {
+    const audit = parseExternalWorkflowCredentialAudit({
+      credentialId: "credential-1",
+      eventKind: "revoke",
+      actorKind: "system",
+      actorId: "legacy-cutover",
+      result: "authorized",
+      occurredAt: "2026-07-28T00:00:00.000Z",
+    });
+
+    expect(audit).not.toHaveProperty("operation");
+    expect(audit).not.toHaveProperty("workflowId");
   });
 });

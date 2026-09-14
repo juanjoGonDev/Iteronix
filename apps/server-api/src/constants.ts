@@ -66,6 +66,11 @@ export const RoutePath = {
   ExternalApiKeysRevoke: "/settings/api-keys/revoke",
   ExternalApiKeysWorkflowDependencies:
     "/settings/api-keys/workflow-dependencies",
+  ExternalCredentialsList: "/settings/credentials/list",
+  ExternalCredentialsCreate: "/settings/credentials/create",
+  ExternalCredentialsRotate: "/settings/credentials/rotate",
+  ExternalCredentialsRevoke: "/settings/credentials/revoke",
+  ExternalCredentialsAudits: "/settings/credentials/audits",
   ExternalWorkflowRead: "/external/workflows/read",
   ExternalWorkflowInvoke: "/external/workflows/invoke",
 } as const;
@@ -123,6 +128,10 @@ export const ErrorMessage = {
   DuplicateApiKeyName: "An API key with this name already exists",
   InvalidApiKeyScope: "Invalid API key scope",
   WorkflowApiKeyOutOfScope: "API key is not allowed to access this workflow",
+  CredentialRateLimitExceeded: "Credential rate limit exceeded",
+  CredentialStorageUnavailable: "Credential storage is unavailable",
+  LegacyApiKeyRoutesRetired:
+    "Legacy API key routes are retired; use /settings/credentials",
 } as const;
 
 export const MimeType = {
@@ -158,6 +167,8 @@ export const HttpStatus = {
   Forbidden: 403,
   NotFound: 404,
   Conflict: 409,
+  Gone: 410,
+  TooManyRequests: 429,
   MethodNotAllowed: 405,
   InternalServerError: 500,
 } as const;

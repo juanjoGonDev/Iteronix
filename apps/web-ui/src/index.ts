@@ -24,6 +24,13 @@ import { SkillAssetsScreen } from "./screens/SkillAssets.js";
 import { MemoryAssetsScreen } from "./screens/MemoryAssets.js";
 import { McpAssetsScreen } from "./screens/McpAssets.js";
 import { PluginAssetsScreen } from "./screens/PluginAssets.js";
+import {
+  getIdeSession,
+  IdeUserRole,
+  loginIdeSession,
+  type IdeSessionUser,
+} from "./shared/ide-auth-client.js";
+import { sanitizeIdeAuthReturnUrl } from "./shared/ide-auth-return-url.js";
 
 const ScreenId = {
   WorkflowCatalog: "workflow-catalog",
@@ -39,6 +46,15 @@ const ScreenId = {
 type ScreenId = (typeof ScreenId)[keyof typeof ScreenId];
 
 const RootRoute = "/";
+
+const AuthenticationStatus = {
+  Resolving: "resolving",
+  Required: "required",
+  Authenticated: "authenticated",
+} as const;
+
+type AuthenticationStatus =
+  (typeof AuthenticationStatus)[keyof typeof AuthenticationStatus];
 
 const ScreenLabel: Record<ScreenId, string> = {
   "workflow-catalog": "Workflows",
@@ -56,6 +72,10 @@ interface AppState {
   workflowId: string | null;
   sidebarCollapsed: boolean;
   isCompactViewport: boolean;
+  authenticationStatus: AuthenticationStatus;
+  authenticatedUser: IdeSessionUser | null;
+  authenticationError: string | null;
+  returnUrl: string;
 }
 
 interface AppProps extends ComponentProps {
@@ -75,6 +95,10 @@ export class App extends Component<AppProps, AppState> {
       workflowId: null,
       sidebarCollapsed: readIsCompactViewport(),
       isCompactViewport: readIsCompactViewport(),
+      authenticationStatus: AuthenticationStatus.Resolving,
+      authenticatedUser: null,
+      authenticationError: null,
+      returnUrl: readIdeAuthReturnUrl(),
     });
 
     sanitizeBrowserUrlState();
@@ -94,6 +118,13 @@ export class App extends Component<AppProps, AppState> {
   }
 
   override render(): HTMLElement {
+    if (
+      this.state.authenticationStatus !== AuthenticationStatus.Authenticated ||
+      !this.state.authenticatedUser
+    ) {
+      return this.renderAuthenticationGate();
+    }
+
     return createElement(MainLayout, {
       sidebar: createElement(Sidebar, {
         brand: {
@@ -115,7 +146,12 @@ export class App extends Component<AppProps, AppState> {
 
   override onMount(): void {
     window.addEventListener("resize", this.handleViewportResize);
-    this.mountActiveScreenInstance();
+    void this.resolveIdeSession();
+    if (
+      this.state.authenticationStatus === AuthenticationStatus.Authenticated
+    ) {
+      this.mountActiveScreenInstance();
+    }
   }
 
   override onUnmount(): void {
@@ -232,8 +268,10 @@ export class App extends Component<AppProps, AppState> {
           ],
       actions,
       user: {
-        name: "John Doe",
-        email: "john@example.com",
+        name: this.state.authenticatedUser?.email ?? "",
+        ...(this.state.authenticatedUser
+          ? { email: this.state.authenticatedUser.email }
+          : {}),
         avatar: null,
       },
       className: this.state.isCompactViewport ? "px-3" : "",
@@ -245,6 +283,163 @@ export class App extends Component<AppProps, AppState> {
       className: "h-full w-full",
       "data-testid": ScreenHostTestId,
     });
+  }
+
+  private renderAuthenticationGate(): HTMLElement {
+    if (this.state.authenticationStatus === AuthenticationStatus.Resolving) {
+      return createElement(
+        "main",
+        {
+          className:
+            "min-h-full bg-background-dark px-6 py-10 text-white sm:px-8",
+          "aria-busy": "true",
+          "data-testid": "auth-session-resolving",
+        },
+        [
+          createElement(
+            "div",
+            {
+              className:
+                "mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center",
+            },
+            [
+              createElement("p", { className: "text-sm text-text-secondary" }, [
+                "Checking your secure session…",
+              ]),
+            ],
+          ),
+        ],
+      );
+    }
+
+    const form = createElement(
+      "form",
+      {
+        className: "grid gap-5",
+        onSubmit: this.handleLoginSubmit,
+        "aria-describedby": this.state.authenticationError
+          ? "auth-login-error"
+          : undefined,
+      },
+      [
+        createElement("div", { className: "grid gap-2" }, [
+          createElement(
+            "label",
+            {
+              className: "text-sm font-medium text-white",
+              for: "auth-login-email",
+            },
+            ["Email address"],
+          ),
+          createElement("input", {
+            id: "auth-login-email",
+            name: "email",
+            type: "email",
+            autocomplete: "username",
+            required: true,
+            className:
+              "w-full rounded-lg border border-border-dark bg-surface-dark px-3 py-2.5 text-white outline-none transition-colors placeholder:text-text-secondary focus:border-primary focus:ring-2 focus:ring-primary/30",
+            "data-testid": "auth-login-email",
+          }),
+        ]),
+        createElement("div", { className: "grid gap-2" }, [
+          createElement(
+            "label",
+            {
+              className: "text-sm font-medium text-white",
+              for: "auth-login-password",
+            },
+            ["Password"],
+          ),
+          createElement("input", {
+            id: "auth-login-password",
+            name: "password",
+            type: "password",
+            autocomplete: "current-password",
+            required: true,
+            className:
+              "w-full rounded-lg border border-border-dark bg-surface-dark px-3 py-2.5 text-white outline-none transition-colors placeholder:text-text-secondary focus:border-primary focus:ring-2 focus:ring-primary/30",
+            "data-testid": "auth-login-password",
+          }),
+        ]),
+        this.state.authenticationError
+          ? createElement(
+              "p",
+              {
+                id: "auth-login-error",
+                className:
+                  "rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100",
+                role: "alert",
+                "data-testid": "auth-login-error",
+              },
+              [this.state.authenticationError],
+            )
+          : null,
+        createElement(
+          "button",
+          {
+            type: "submit",
+            className:
+              "inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary/50",
+            "data-testid": "auth-login-submit",
+          },
+          ["Sign in"],
+        ),
+      ],
+    );
+
+    return createElement(
+      "main",
+      {
+        className:
+          "min-h-full bg-background-dark px-6 py-10 text-white sm:px-8",
+        "data-testid": "auth-login-root",
+      },
+      [
+        createElement(
+          "section",
+          {
+            className:
+              "mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center",
+            "aria-labelledby": "auth-login-title",
+          },
+          [
+            createElement("div", { className: "w-full" }, [
+              createElement(
+                "div",
+                {
+                  className: "mb-6 border-b border-border-dark pb-5 text-left",
+                },
+                [
+                  createElement(
+                    "p",
+                    { className: "mb-2 text-sm font-medium text-primary" },
+                    ["Iteronix"],
+                  ),
+                  createElement(
+                    "h1",
+                    {
+                      id: "auth-login-title",
+                      className:
+                        "text-2xl font-semibold tracking-tight text-white",
+                    },
+                    ["Sign in to continue"],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "mt-2 text-sm leading-6 text-text-secondary" },
+                    [
+                      "Use your administrator or member account to access this workspace.",
+                    ],
+                  ),
+                ],
+              ),
+              form,
+            ]),
+          ],
+        ),
+      ],
+    );
   }
 
   private updateScreen(
@@ -270,6 +465,74 @@ export class App extends Component<AppProps, AppState> {
       sidebarCollapsed: isCompactViewport ? true : this.state.sidebarCollapsed,
     });
   };
+
+  private readonly handleLoginSubmit = (event: Event): void => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const email = form.elements.namedItem("email");
+    const password = form.elements.namedItem("password");
+    if (
+      !(email instanceof HTMLInputElement) ||
+      !(password instanceof HTMLInputElement)
+    ) {
+      return;
+    }
+    void this.login({ email: email.value, password: password.value });
+  };
+
+  private async resolveIdeSession(): Promise<void> {
+    try {
+      const user = await getIdeSession();
+      this.setState({
+        authenticationStatus: user
+          ? AuthenticationStatus.Authenticated
+          : AuthenticationStatus.Required,
+        authenticatedUser: user,
+        authenticationError: null,
+      });
+    } catch {
+      this.setState({
+        authenticationStatus: AuthenticationStatus.Required,
+        authenticatedUser: null,
+        authenticationError:
+          "We could not verify your session. Check the server connection and try again.",
+      });
+    }
+  }
+
+  private async login(input: {
+    email: string;
+    password: string;
+  }): Promise<void> {
+    try {
+      const user = await loginIdeSession(input);
+      this.setState({
+        authenticationStatus: AuthenticationStatus.Authenticated,
+        authenticatedUser: user,
+        authenticationError: null,
+      });
+      requestAnimationFrame(() => this.restoreReturnUrl());
+    } catch (error) {
+      this.setState({
+        authenticationError:
+          error instanceof Error ? error.message : "We could not sign you in.",
+      });
+    }
+  }
+
+  private restoreReturnUrl(): void {
+    const returnUrl = this.state.returnUrl;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentUrl === returnUrl) {
+      this.mountActiveScreenInstance();
+      return;
+    }
+    window.history.replaceState({}, "", returnUrl);
+    router.navigate(window.location.pathname);
+  }
 
   private mountActiveScreenInstance(): void {
     const screenHost = this.element?.querySelector(
@@ -316,7 +579,10 @@ export class App extends Component<AppProps, AppState> {
     }
 
     if (screen === ScreenId.Settings) {
-      return new SettingsScreen({});
+      return new SettingsScreen({
+        authenticatedUserRole:
+          this.state.authenticatedUser?.role ?? IdeUserRole.Member,
+      });
     }
 
     if (screen === ScreenId.PromptAssets) {
@@ -339,11 +605,14 @@ export class App extends Component<AppProps, AppState> {
       return new PluginAssetsScreen({});
     }
 
-    return new SettingsScreen({});
+    return new SettingsScreen({
+      authenticatedUserRole:
+        this.state.authenticatedUser?.role ?? IdeUserRole.Member,
+    });
   }
 
   private readActiveScreenKey(): string {
-    return `${this.state.currentScreen}:${this.state.workflowId ?? ""}`;
+    return `${this.state.currentScreen}:${this.state.workflowId ?? ""}:${this.state.authenticatedUser?.role ?? ""}`;
   }
 }
 
@@ -389,6 +658,14 @@ const buildHeaderActions = (): {
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" &&
   window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
+
+const readIdeAuthReturnUrl = (): string =>
+  typeof window === "undefined"
+    ? ROUTES.WORKFLOWS
+    : sanitizeIdeAuthReturnUrl(
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        window.location.origin,
+      );
 
 document.addEventListener("DOMContentLoaded", () => {
   const loadingScreen = document.getElementById("loading-screen");
