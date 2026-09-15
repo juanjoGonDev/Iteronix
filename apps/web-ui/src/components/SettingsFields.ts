@@ -65,19 +65,21 @@ interface SettingsToggleFieldProps extends ComponentProps {
   onChange: (checked: boolean) => void;
 }
 
-interface SettingsCheckboxGroupOption {
-  value: string;
+interface SettingsCheckboxGroupOption<TValue extends string> {
+  value: TValue;
   label: string;
   description: string;
 }
 
-interface SettingsCheckboxGroupProps extends ComponentProps {
+export interface SettingsCheckboxGroupProps<
+  TValue extends string,
+> extends ComponentProps {
   label: string;
   description: string;
-  values: ReadonlyArray<string>;
-  options: ReadonlyArray<SettingsCheckboxGroupOption>;
+  values: ReadonlyArray<TValue>;
+  options: ReadonlyArray<SettingsCheckboxGroupOption<TValue>>;
   testId: string;
-  onChange: (value: string, checked: boolean) => void;
+  onChange: (value: TValue, checked: boolean) => void;
 }
 
 class SettingsField extends Component<SettingsFieldProps> {
@@ -290,7 +292,9 @@ export class SettingsToggleField extends Component<SettingsToggleFieldProps> {
   }
 }
 
-export class SettingsCheckboxGroup extends Component<SettingsCheckboxGroupProps> {
+export class SettingsCheckboxGroup<
+  TValue extends string = string,
+> extends Component<SettingsCheckboxGroupProps<TValue>> {
   override render(): HTMLElement {
     const { label, description, values, options, testId, onChange } =
       this.props;

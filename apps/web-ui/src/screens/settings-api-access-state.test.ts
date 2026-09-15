@@ -69,6 +69,22 @@ describe("external API key scope selector", () => {
     expect(input.expiresAt).toBe(new Date(pickerValue).toISOString());
   });
 
+  it("omits the expiry for never-expiring credentials and forwards unparsable dates untouched", () => {
+    const neverExpires = readExternalWorkflowCredentialCreateInput({
+      ...createExternalWorkflowCredentialDraft(),
+      name: "Never expires",
+      expiresAt: "   ",
+    });
+    expect(neverExpires).not.toHaveProperty("expiresAt");
+
+    const unparsable = readExternalWorkflowCredentialCreateInput({
+      ...createExternalWorkflowCredentialDraft(),
+      name: "Loose expiry",
+      expiresAt: "not-a-date",
+    });
+    expect(unparsable.expiresAt).toBe("not-a-date");
+  });
+
   it("keeps a newly issued plaintext credential in volatile display state only until dismissed", () => {
     const secret = showExternalWorkflowCredentialSecret({
       credentialId: "credential-1",
