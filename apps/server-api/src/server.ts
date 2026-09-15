@@ -478,10 +478,14 @@ const loadInitialApplicationState = async (
       );
     }
     await applicationStateStore.initialize();
-    return await cutOverLegacyExternalApiKeys({
+    await cutOverLegacyExternalApiKeys({
       client: postgresPool,
       now: new Date().toISOString(),
     });
+    // The cutover persists the migrated state inside its own transaction, so the
+    // canonical state is read back from the store: downstream subsystems never
+    // consume the credential-bearing migration result.
+    return await applicationStateStore.load();
   } catch (error) {
     await postgresPool.end();
     const message = error instanceof Error ? error.message : "Unknown error";
