@@ -10,7 +10,6 @@ import {
   BearerPrefix,
   BearerScheme,
   DefaultServerConfig,
-  EnvKey,
   ErrorMessage,
   HeaderName,
   HttpMethod,
@@ -4109,7 +4108,6 @@ const ensureConfiguredAdministrator = async (input: {
   ) {
     console.warn("server.administrator_password_insecure", {
       email: credentials.email,
-      hint: `Set ${EnvKey.AdminPassword} to a password of at least ${MinimumPasswordLength.toString()} characters`,
     });
   }
 };
