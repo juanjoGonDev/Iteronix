@@ -36,6 +36,7 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
+  AuthMe: "/auth/me",
   SettingsGet: "/settings/get",
   SettingsUpdate: "/settings/update",
   DefinitionsList: "/workflows/definitions/list",
@@ -1513,6 +1514,16 @@ async function handleStubRequest(
     return;
   }
 
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.AuthMe
+  ) {
+    writeJson(response, 200, {
+      user: createValidationAdminUser(),
+    });
+    return;
+  }
+
   if (requestUrl.pathname === RequestPath.ExecutionsStreamNode) {
     await handleStreamNodeRequest(requestUrl, response, state);
     return;
@@ -2164,6 +2175,15 @@ function upsertStubExecution(
   return executions.map((entry, index) =>
     index === existingIndex ? execution : entry,
   );
+}
+
+function createValidationAdminUser(): Record<string, unknown> {
+  return {
+    id: "workflows-validation-admin",
+    email: "admin@iteronix.test",
+    role: "admin",
+    enabled: true,
+  };
 }
 
 function createDefaultApplicationSettings(): Record<string, unknown> {
