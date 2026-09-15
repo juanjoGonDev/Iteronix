@@ -1610,12 +1610,22 @@ const normalizeTargetPath = (value?: string): ReadonlyArray<string> => {
     .filter((segment) => segment.length > 0);
 };
 
+const UnsafePathSegments: ReadonlyArray<string> = [
+  "__proto__",
+  "constructor",
+  "prototype",
+];
+
 const readPathValue = (
   value: unknown,
   path: ReadonlyArray<string>,
 ): unknown => {
   let current = value;
   for (const segment of path) {
+    if (UnsafePathSegments.includes(segment)) {
+      return undefined;
+    }
+
     if (Array.isArray(current)) {
       const index = Number.parseInt(segment, 10);
       if (!Number.isInteger(index) || index < 0 || index >= current.length) {
@@ -1647,6 +1657,10 @@ const writePathValue = (
 
   let current: Record<string, unknown> = target;
   for (const segment of path.slice(0, -1)) {
+    if (UnsafePathSegments.includes(segment)) {
+      return;
+    }
+
     const nested = current[segment];
     if (isRecord(nested)) {
       current = nested;
@@ -1658,7 +1672,12 @@ const writePathValue = (
     current = next;
   }
 
-  current[path[path.length - 1] ?? "value"] = value;
+  const lastSegment = path[path.length - 1] ?? "value";
+  if (UnsafePathSegments.includes(lastSegment)) {
+    return;
+  }
+
+  current[lastSegment] = value;
 };
 
 const readExecutionStages = (

@@ -493,6 +493,30 @@ describe("workflow runtime", () => {
     expect(providerPrompts.at(-1)).toContain('"total": 1');
   });
 
+  it("ignores prototype-polluting segments in edge mapping target paths", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => ({
+        outputText:
+          request.node.id === "node-provider-source"
+            ? '{"items":[{"name":"First item"}],"meta":{"total":1}}'
+            : '{"result":"Done"}',
+      }),
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createUnsafeTargetPathWorkflowDefinitionRecord(),
+      assets: [],
+    });
+
+    const unpolluted: Record<string, unknown> = {};
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(unpolluted["polluted"]).toBeUndefined();
+    expect(Object.getOwnPropertyNames(Object.prototype)).not.toContain(
+      "polluted",
+    );
+  });
+
   it("maps last-node and accumulated outputs through dynamic paths", async () => {
     const providerPrompts: string[] = [];
     const runtime = createWorkflowRuntime({
@@ -811,6 +835,49 @@ const createJsonContractWorkflowDefinitionRecord =
       }),
     ],
     edges: [],
+  });
+
+const createUnsafeTargetPathWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-source",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return items.",
+        outputContract: createItemsOutputContract(),
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-2", "gpt-2"),
+        prompt: "Use unsafe paths.",
+        outputContract: createResultOutputContract(),
+      }),
+    ],
+    edges: [
+      {
+        ...createEdgeRecord(
+          "edge-provider-unsafe",
+          "node-provider-source",
+          "node-provider-target",
+        ),
+        mapping: {
+          mode: "object" as const,
+          entries: [
+            {
+              targetPath: "$.__proto__.polluted",
+              source: {
+                kind: "node_output" as const,
+                nodeId: "node-provider-source",
+                path: "$.items[0].name",
+              },
+            },
+          ],
+        },
+      },
+    ],
   });
 
 const createNestedJsonMappingWorkflowDefinitionRecord =
