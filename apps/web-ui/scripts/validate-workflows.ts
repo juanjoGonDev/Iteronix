@@ -36,6 +36,7 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
+  AuthMe: "/auth/me",
   SettingsGet: "/settings/get",
   SettingsUpdate: "/settings/update",
   DefinitionsList: "/workflows/definitions/list",
@@ -261,6 +262,7 @@ type StubWorkflowAssetRecord = {
   tags: ReadonlyArray<string>;
   outputContract?: Record<string, unknown>;
   guardrail?: Record<string, unknown>;
+  prompt?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
@@ -1431,7 +1433,11 @@ async function validateConnectionRecovery(
   });
   await page.setRequestInterception(true);
   page.on("request", (request) => {
-    if (request.url().startsWith(ValidationConfig.StubApiBaseUrl)) {
+    const requestUrl = request.url();
+    const isWorkflowRequest =
+      requestUrl.startsWith(ValidationConfig.StubApiBaseUrl) &&
+      !requestUrl.endsWith("/auth/me");
+    if (isWorkflowRequest) {
       void request.abort();
       return;
     }
@@ -1510,6 +1516,16 @@ async function handleStubRequest(
   if (request.method === "OPTIONS") {
     response.writeHead(204, createCorsHeaders());
     response.end();
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.AuthMe
+  ) {
+    writeJson(response, 200, {
+      user: createValidationAdminUser(),
+    });
     return;
   }
 
@@ -2166,6 +2182,15 @@ function upsertStubExecution(
   );
 }
 
+function createValidationAdminUser(): Record<string, unknown> {
+  return {
+    id: "workflows-validation-admin",
+    email: "admin@iteronix.test",
+    role: "admin",
+    enabled: true,
+  };
+}
+
 function createDefaultApplicationSettings(): Record<string, unknown> {
   return {
     profileId: "default",
@@ -2309,6 +2334,7 @@ function createAssetRecord(input: {
   const createdAt = input.existing?.createdAt ?? input.updatedAt;
   const version = input.existing ? input.existing.version + 1 : 1;
   const scope = readAssetScopeValue(input.assetInput, "scope");
+  const body = readStringValue(input.assetInput, "body");
   const outputContract = readOptionalRecord(input.assetInput, "outputContract");
   const guardrail = readOptionalRecord(input.assetInput, "guardrail");
   const archivedAt = readOptionalString(input.assetInput, "archivedAt");
@@ -2320,12 +2346,26 @@ function createAssetRecord(input: {
     name: readRequiredString(input.assetInput, "name"),
     slug: readRequiredString(input.assetInput, "slug"),
     description: readStringValue(input.assetInput, "description"),
-    body: readStringValue(input.assetInput, "body"),
+    body,
     language: readStringValue(input.assetInput, "language"),
     version,
     tags: readStringArray(input.assetInput, "tags"),
     ...(outputContract ? { outputContract } : {}),
     ...(guardrail ? { guardrail } : {}),
+    ...(input.assetInput["kind"] === "prompt"
+      ? {
+          prompt: {
+            activeVersion: 1,
+            versions: [
+              {
+                version: 1,
+                template: body,
+                variables: [],
+              },
+            ],
+          },
+        }
+      : {}),
     createdAt,
     updatedAt: input.updatedAt,
     ...(archivedAt ? { archivedAt } : {}),
