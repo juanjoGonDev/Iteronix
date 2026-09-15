@@ -2373,6 +2373,13 @@ const readRangeIssues = (
   return [];
 };
 
+const readJsonCodeLiteral = (value: unknown): string =>
+  JSON.stringify(value).replace(
+    /[<>&'\u2028\u2029]/gu,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+
 const buildJsonSchemaZodExpression = (schema: JsonSchemaNodeRecord): string => {
   const baseExpression = buildJsonSchemaZodExpressionCore(schema);
   return schema.nullable ? `${baseExpression}.nullable()` : baseExpression;
@@ -2412,13 +2419,13 @@ const buildJsonSchemaZodExpressionCore = (
       stringExpression = `${stringExpression}.max(${schema.maxLength.toString()})`;
     }
     if (schema.pattern) {
-      stringExpression = `${stringExpression}.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`;
+      stringExpression = `${stringExpression}.regex(new RegExp(${readJsonCodeLiteral(schema.pattern)}, "u"))`;
     }
     if (schema.format) {
       stringExpression = `${stringExpression}${readJsonSchemaStringFormatZodSuffix(schema.format)}`;
     }
     if (schema.enum && schema.enum.length > 0) {
-      stringExpression = `${stringExpression}.refine((value) => ${JSON.stringify(schema.enum)}.includes(value))`;
+      stringExpression = `${stringExpression}.refine((value) => ${readJsonCodeLiteral(schema.enum)}.includes(value))`;
     }
     return stringExpression;
   }
@@ -2467,7 +2474,7 @@ const readJsonSchemaStringFormatZodSuffix = (
     return ".regex(/^(?:\\d{8}|[XYZ]\\d{7})[A-Z]$/iu)";
   }
 
-  return `.refine((value) => ${readJsonSchemaStringFormatPredicate(format)}, { message: ${JSON.stringify(format)} })`;
+  return `.refine((value) => ${readJsonSchemaStringFormatPredicate(format)}, { message: ${readJsonCodeLiteral(format)} })`;
 };
 
 const readJsonSchemaStringFormatPredicate = (
