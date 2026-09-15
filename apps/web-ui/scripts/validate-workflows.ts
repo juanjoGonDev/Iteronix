@@ -494,7 +494,19 @@ const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const screenshotDirectory = join(appRoot, "screenshots");
 const buildOutputPath = join(appRoot, "dist", "index.js");
 
-await validateWorkflowsScreen();
+try {
+  await validateWorkflowsScreen();
+} catch (error) {
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  const annotation = message
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+  console.log(
+    `::error file=apps/web-ui/scripts/validate-workflows.ts,line=1::${annotation}`,
+  );
+  throw error;
+}
 
 async function validateWorkflowsScreen(): Promise<void> {
   await assertBrowserValidationBuildOutput(buildOutputPath);
