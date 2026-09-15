@@ -262,6 +262,7 @@ type StubWorkflowAssetRecord = {
   tags: ReadonlyArray<string>;
   outputContract?: Record<string, unknown>;
   guardrail?: Record<string, unknown>;
+  prompt?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
@@ -2329,6 +2330,7 @@ function createAssetRecord(input: {
   const createdAt = input.existing?.createdAt ?? input.updatedAt;
   const version = input.existing ? input.existing.version + 1 : 1;
   const scope = readAssetScopeValue(input.assetInput, "scope");
+  const body = readStringValue(input.assetInput, "body");
   const outputContract = readOptionalRecord(input.assetInput, "outputContract");
   const guardrail = readOptionalRecord(input.assetInput, "guardrail");
   const archivedAt = readOptionalString(input.assetInput, "archivedAt");
@@ -2340,12 +2342,26 @@ function createAssetRecord(input: {
     name: readRequiredString(input.assetInput, "name"),
     slug: readRequiredString(input.assetInput, "slug"),
     description: readStringValue(input.assetInput, "description"),
-    body: readStringValue(input.assetInput, "body"),
+    body,
     language: readStringValue(input.assetInput, "language"),
     version,
     tags: readStringArray(input.assetInput, "tags"),
     ...(outputContract ? { outputContract } : {}),
     ...(guardrail ? { guardrail } : {}),
+    ...(input.assetInput["kind"] === "prompt"
+      ? {
+          prompt: {
+            activeVersion: 1,
+            versions: [
+              {
+                version: 1,
+                template: body,
+                variables: [],
+              },
+            ],
+          },
+        }
+      : {}),
     createdAt,
     updatedAt: input.updatedAt,
     ...(archivedAt ? { archivedAt } : {}),
