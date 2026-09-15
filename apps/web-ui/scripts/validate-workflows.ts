@@ -1445,7 +1445,11 @@ async function validateConnectionRecovery(
   });
   await page.setRequestInterception(true);
   page.on("request", (request) => {
-    if (request.url().startsWith(ValidationConfig.StubApiBaseUrl)) {
+    const requestUrl = request.url();
+    const isWorkflowRequest =
+      requestUrl.startsWith(ValidationConfig.StubApiBaseUrl) &&
+      !requestUrl.endsWith("/auth/me");
+    if (isWorkflowRequest) {
       void request.abort();
       return;
     }
