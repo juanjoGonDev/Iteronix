@@ -57,6 +57,7 @@ import {
   executeWorkflowExecutionList,
   executeWorkflowExecutionCancel,
   executeWorkflowNodeExecutionRun,
+  executeWorkflowDefinitionRun,
   executeWorkflowExecutionRun,
   executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
@@ -151,9 +152,7 @@ import {
 import {
   ExternalApiKeyScopeKind,
   ExternalWorkflowRateLimit,
-  isExternalApiKeyNameAvailable,
   ExternalWorkflowOperation,
-  readWorkflowExternalApiKeyDependencies,
   revokeExternalApiKeysForWorkflow,
   toExternalApiKeyView,
   type ExternalApiKeyRecord,
@@ -686,12 +685,13 @@ const handleRequest = async (
     return;
   }
 
-  if (isExternalWorkflowRoute(path)) {
+  const externalOperation = externalWorkflowOperationForRoute(path);
+  if (externalOperation) {
     await handleExternalWorkflowRequest({
       req,
       res,
-      path,
       method,
+      operation: externalOperation,
       workflowCatalog,
       workflowRuntime,
       applicationPersistence,
@@ -988,68 +988,6 @@ const handleRequest = async (
       status: HttpStatus.Gone,
       message: ErrorMessage.LegacyApiKeyRoutesRetired,
     });
-    return;
-  }
-  if (path === RoutePath.ExternalApiKeysList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    respondJson(res, HttpStatus.Ok, {
-      keys: applicationPersistence
-        .read()
-        .externalApiKeys.map(toExternalApiKeyView),
-    });
-    return;
-  }
-
-  if (path === RoutePath.ExternalApiKeysCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleExternalApiKeyCreate(
-      req,
-      res,
-      workflowCatalog,
-      applicationPersistence,
-    );
-    return;
-  }
-  if (path === RoutePath.ExternalApiKeysUpdate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleExternalApiKeyUpdate(
-      req,
-      res,
-      workflowCatalog,
-      applicationPersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.ExternalApiKeysRevoke) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleExternalApiKeyRevoke(req, res, applicationPersistence);
-    return;
-  }
-
-  if (path === RoutePath.ExternalApiKeysWorkflowDependencies) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleExternalApiKeyDependencies(req, res, applicationPersistence);
     return;
   }
   if (path === RoutePath.ProvidersList) {
@@ -3060,190 +2998,6 @@ const handleExternalCredentialRevoke = async (
   respondJson(res, HttpStatus.Ok, { credentialId: credentialId.value });
 };
 
-const handleExternalApiKeyCreate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore,
-  applicationPersistence: ApplicationPersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseExternalApiKeyCreateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  if (
-    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
-    parsed.value.scope.workflowIds.some(
-      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
-    )
-  ) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
-
-  if (
-    !isExternalApiKeyNameAvailable(
-      applicationPersistence.read().externalApiKeys,
-      parsed.value.name,
-    )
-  ) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.DuplicateApiKeyName,
-    });
-    return;
-  }
-
-  const created = createExternalApiKey({ ...parsed.value, now: new Date() });
-  await applicationPersistence.updateExternalApiKeys([
-    ...applicationPersistence.read().externalApiKeys,
-    created.key,
-  ]);
-  respondJson(res, HttpStatus.Ok, {
-    key: toExternalApiKeyView(created.key),
-    plaintextKey: created.plaintext,
-  });
-};
-
-const handleExternalApiKeyUpdate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  workflowCatalog: WorkflowCatalogStore,
-  applicationPersistence: ApplicationPersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseExternalApiKeyUpdateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  if (
-    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
-    parsed.value.scope.workflowIds.some(
-      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
-    )
-  ) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
-
-  const keys = applicationPersistence.read().externalApiKeys;
-  const currentKey = keys.find((key) => key.id === parsed.value.keyId);
-  if (!currentKey) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
-
-  if (!isExternalApiKeyNameAvailable(keys, parsed.value.name, currentKey.id)) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.DuplicateApiKeyName,
-    });
-    return;
-  }
-
-  const updatedKey: ExternalApiKeyRecord = {
-    ...currentKey,
-    name: parsed.value.name,
-    scope: parsed.value.scope,
-  };
-  await applicationPersistence.updateExternalApiKeys(
-    keys.map((key) => (key.id === updatedKey.id ? updatedKey : key)),
-  );
-  respondJson(res, HttpStatus.Ok, { key: toExternalApiKeyView(updatedKey) });
-};
-
-const handleExternalApiKeyRevoke = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  applicationPersistence: ApplicationPersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const keyId = readExternalApiKeyId(bodyResult.value);
-  if (keyId.type === ResultType.Err) {
-    respondError(res, keyId.error);
-    return;
-  }
-
-  const revokedAt = new Date().toISOString();
-  let found = false;
-  const keys = applicationPersistence.read().externalApiKeys.map((key) => {
-    if (key.id !== keyId.value) {
-      return key;
-    }
-    found = true;
-    return key.revokedAt ? key : { ...key, revokedAt };
-  });
-  if (!found) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
-
-  await applicationPersistence.updateExternalApiKeys(keys);
-  const key = keys.find((entry) => entry.id === keyId.value);
-  if (!key) {
-    respondError(res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
-  respondJson(res, HttpStatus.Ok, { key: toExternalApiKeyView(key) });
-};
-
-const handleExternalApiKeyDependencies = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  applicationPersistence: ApplicationPersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-  const workflowId = readWorkflowId(bodyResult.value);
-  if (workflowId.type === ResultType.Err) {
-    respondError(res, workflowId.error);
-    return;
-  }
-  respondJson(res, HttpStatus.Ok, {
-    keys: readWorkflowExternalApiKeyDependencies(
-      applicationPersistence.read().externalApiKeys,
-      workflowId.value,
-    ),
-  });
-};
-
 const handleWorkflowAssetList = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -4590,8 +4344,8 @@ const requiresStrictBearerAuthentication = (path: string): boolean =>
 const handleExternalWorkflowRequest = async (input: {
   req: IncomingMessage;
   res: ServerResponse;
-  path: string;
   method: string;
+  operation: ExternalWorkflowOperation;
   workflowCatalog: WorkflowCatalogStore;
   workflowRuntime: WorkflowRuntimeService;
   applicationPersistence: ApplicationPersistence;
@@ -4620,14 +4374,7 @@ const handleExternalWorkflowRequest = async (input: {
     respondError(input.res, workflowId.error);
     return;
   }
-  const operation = externalWorkflowOperationForRoute(input.path);
-  if (!operation) {
-    respondError(input.res, {
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-    return;
-  }
+  const operation = input.operation;
   if (!input.credentialRepository || !input.credentialSecretStore) {
     respondError(input.res, {
       status: HttpStatus.InternalServerError,
@@ -4703,8 +4450,8 @@ const handleExternalWorkflowRequest = async (input: {
   await input.governanceLifecycle.executeBoundedPass({
     lifecycleId: lifecycle.id,
     execute: async () => {
-      const result = await executeWorkflowExecutionRun(
-        { workflowId: workflowId.value },
+      execution = await executeWorkflowDefinitionRun(
+        { definition: workflow },
         {
           catalog: input.workflowCatalog,
           runWorkflow: input.workflowRuntime.runWorkflow,
@@ -4733,13 +4480,9 @@ const handleExternalWorkflowRequest = async (input: {
           }),
         },
       );
-      if (result.type === ResultType.Err) {
-        throw new Error(result.error.message);
-      }
-      execution = result.value;
       await persistPromptExecutionProvenance({
         lifecycleId: lifecycle.id,
-        execution: result.value,
+        execution,
         governanceLifecycle: input.governanceLifecycle,
       });
     },
@@ -4835,14 +4578,8 @@ const classifyExternalWorkflowFailure = (
 };
 
 const parseExternalApiKeyCreateRequest = (
-  value: unknown,
+  value: Record<string, unknown>,
 ): Result<{ name: string; scope: ExternalApiKeyScope }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
   const name = typeof value["name"] === "string" ? value["name"].trim() : "";
   if (!name) {
     return err({
@@ -4883,15 +4620,15 @@ const parseExternalCredentialCreateRequest = (
   },
   ApiError
 > => {
-  const base = parseExternalApiKeyCreateRequest(value);
-  if (base.type === ResultType.Err) {
-    return err(base.error);
-  }
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody,
     });
+  }
+  const base = parseExternalApiKeyCreateRequest(value);
+  if (base.type === ResultType.Err) {
+    return err(base.error);
   }
   const operations = readExternalCredentialOperations(value["operations"]);
   const rateLimitPerMinute = value["rateLimitPerMinute"];
@@ -4942,22 +4679,6 @@ const readCredentialExpiresAt = (
   return typeof value === "string" && !Number.isNaN(Date.parse(value))
     ? new Date(value).toISOString()
     : false;
-};
-
-const parseExternalApiKeyUpdateRequest = (
-  value: unknown,
-): Result<
-  { keyId: string; name: string; scope: ExternalApiKeyScope },
-  ApiError
-> => {
-  const keyId = readExternalApiKeyId(value);
-  if (keyId.type === ResultType.Err) {
-    return keyId;
-  }
-  const creation = parseExternalApiKeyCreateRequest(value);
-  return creation.type === ResultType.Err
-    ? creation
-    : ok({ keyId: keyId.value, ...creation.value });
 };
 
 const parseExternalApiKeyScope = (

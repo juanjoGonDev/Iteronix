@@ -10,6 +10,7 @@ import {
 } from "../components/PageScaffold.js";
 import {
   SettingsCheckboxGroup,
+  type SettingsCheckboxGroupProps,
   SettingsDateTimeField,
   SettingsNumberField,
   SettingsSelectField,
@@ -59,7 +60,6 @@ import {
   ExternalApiKeyScopeSelection,
   ExternalWorkflowCredentialDefaultOperations,
   ExternalWorkflowCredentialDefaultRateLimit,
-  ExternalWorkflowCredentialOperations,
   dismissExternalWorkflowCredentialSecret,
   readExternalWorkflowCredentialCreateInput,
   showExternalWorkflowCredentialSecret,
@@ -183,15 +183,10 @@ export class SettingsScreen extends Component<
       typeof window === "undefined"
         ? null
         : readSettingsUrlStateFromLocation(window.location);
-    const urlSelectedProviderId =
-      urlState?.selectedProviderId &&
-      snapshot.providerProfiles.some(
-        (profile) => profile.id === urlState.selectedProviderId,
-      )
-        ? urlState.selectedProviderId
-        : null;
-    const selectedProviderId =
-      urlSelectedProviderId ?? snapshot.providerProfiles[0]?.id ?? null;
+    const selectedProviderId = resolveSettingsProviderSelection(
+      urlState?.selectedProviderId ?? null,
+      snapshot.providerProfiles,
+    );
 
     super(props, {
       activeTab: urlState?.activeTab ?? "provider",
@@ -220,6 +215,10 @@ export class SettingsScreen extends Component<
   }
 
   override onMount(): void {
+    if (typeof window === "undefined") {
+      void this.hydrateRuntimeContext();
+      return;
+    }
     window.addEventListener("popstate", this.handleSettingsUrlStateChange);
     window.addEventListener(
       "iteronix:workflows-changed",
@@ -229,6 +228,9 @@ export class SettingsScreen extends Component<
   }
 
   override onUnmount(): void {
+    if (typeof window === "undefined") {
+      return;
+    }
     window.removeEventListener("popstate", this.handleSettingsUrlStateChange);
     window.removeEventListener(
       "iteronix:workflows-changed",
@@ -968,50 +970,8 @@ export class SettingsScreen extends Component<
             : "Create credential",
         }),
         this.state.newExternalApiKey
-          ? createElement(
-              "div",
-              {
-                className:
-                  "rounded-lg border border-amber-500/50 bg-amber-500/10 p-4",
-              },
-              [
-                createElement(
-                  "p",
-                  { className: "text-sm font-semibold text-white" },
-                  ["Copy this key now. It cannot be shown again."],
-                ),
-                createElement(
-                  "code",
-                  {
-                    className: "mt-2 block break-all text-xs text-amber-100",
-                    "data-testid": "settings-new-external-api-key",
-                  },
-                  [this.state.newExternalApiKey.plaintextCredential],
-                ),
-                createElement(Button, {
-                  variant: "secondary",
-                  size: "sm",
-                  onClick: () =>
-                    void navigator.clipboard.writeText(
-                      this.state.newExternalApiKey?.plaintextCredential ?? "",
-                    ),
-                  children: "Copy key",
-                }),
-                createElement(Button, {
-                  variant: "ghost",
-                  size: "sm",
-                  onClick: () =>
-                    this.setState({
-                      newExternalApiKey:
-                        dismissExternalWorkflowCredentialSecret(
-                          this.state.newExternalApiKey,
-                        ),
-                    }),
-                  children: "Dismiss secret",
-                }),
-              ],
-            )
-          : "",
+          ? this.renderNewExternalApiKeyPanel(this.state.newExternalApiKey)
+          : null,
         createElement(
           "div",
           { className: "flex flex-col gap-2" },
@@ -1063,6 +1023,48 @@ export class SettingsScreen extends Component<
           ),
         ),
         this.renderCredentialAudits(),
+      ],
+    );
+  }
+
+  private renderNewExternalApiKeyPanel(
+    secret: ExternalWorkflowCredentialSecret,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className: "rounded-lg border border-amber-500/50 bg-amber-500/10 p-4",
+      },
+      [
+        createElement("p", { className: "text-sm font-semibold text-white" }, [
+          "Copy this key now. It cannot be shown again.",
+        ]),
+        createElement(
+          "code",
+          {
+            className: "mt-2 block break-all text-xs text-amber-100",
+            "data-testid": "settings-new-external-api-key",
+          },
+          [secret.plaintextCredential],
+        ),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          onClick: () =>
+            void navigator.clipboard.writeText(secret.plaintextCredential),
+          children: "Copy key",
+        }),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          onClick: () =>
+            this.setState({
+              newExternalApiKey: dismissExternalWorkflowCredentialSecret(
+                this.state.newExternalApiKey,
+              ),
+            }),
+          children: "Dismiss secret",
+        }),
       ],
     );
   }
@@ -1140,29 +1142,25 @@ export class SettingsScreen extends Component<
   }
 
   private renderCredentialOperationSelector(): HTMLElement {
-    return createElement(SettingsCheckboxGroup, {
-      label: "Allowed operations",
-      description: "Choose only the actions this credential needs.",
-      values: this.state.apiKeyOperations,
-      options: ExternalWorkflowCredentialOperationOptions,
-      testId: "settings-external-credential-operations",
-      onChange: (value: string, checked: boolean) => {
-        const operation = ExternalWorkflowCredentialOperations.find(
-          (candidate) => candidate === value,
-        );
-        if (!operation) {
-          return;
-        }
-
-        this.setState({
-          apiKeyOperations: checked
-            ? Array.from(new Set([...this.state.apiKeyOperations, operation]))
-            : this.state.apiKeyOperations.filter(
-                (candidate) => candidate !== operation,
-              ),
-        });
+    return createElement<SettingsCheckboxGroupProps<ExternalWorkflowOperation>>(
+      SettingsCheckboxGroup,
+      {
+        label: "Allowed operations",
+        description: "Choose only the actions this credential needs.",
+        values: this.state.apiKeyOperations,
+        options: ExternalWorkflowCredentialOperationOptions,
+        testId: "settings-external-credential-operations",
+        onChange: (operation: ExternalWorkflowOperation, checked: boolean) => {
+          this.setState({
+            apiKeyOperations: checked
+              ? Array.from(new Set([...this.state.apiKeyOperations, operation]))
+              : this.state.apiKeyOperations.filter(
+                  (candidate) => candidate !== operation,
+                ),
+          });
+        },
       },
-    });
+    );
   }
 
   private renderCredentialExpirySelector(): HTMLElement {

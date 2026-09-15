@@ -24,7 +24,7 @@ describe("legacy external credential cutover", () => {
       ],
     };
     const queries: ReadonlyArray<unknown>[] = [];
-    const client = {
+    const transaction = {
       query: async (text: string, values?: ReadonlyArray<unknown>) => {
         queries.push(values ?? [text]);
         if (text.includes("FOR UPDATE")) {
@@ -32,6 +32,11 @@ describe("legacy external credential cutover", () => {
         }
         return { rows: [] };
       },
+      release: () => undefined,
+    };
+    const client = {
+      query: transaction.query,
+      connect: async () => transaction,
     };
 
     await expect(
@@ -71,11 +76,16 @@ describe("legacy external credential cutover", () => {
   it("does not re-import after a completed cutover", async () => {
     const state = createDefaultApplicationState();
     const queries: string[] = [];
-    const client = {
+    const transaction = {
       query: async (text: string) => {
         queries.push(text);
         return { rows: text.includes("FOR UPDATE") ? [{ value: state }] : [] };
       },
+      release: () => undefined,
+    };
+    const client = {
+      query: transaction.query,
+      connect: async () => transaction,
     };
 
     await expect(
@@ -104,13 +114,18 @@ describe("legacy external credential cutover", () => {
       ],
     };
     const queries: Array<{ text: string; values: ReadonlyArray<unknown> }> = [];
-    const client = {
+    const transaction = {
       query: async (text: string, values?: ReadonlyArray<unknown>) => {
         queries.push({ text, values: values ?? [] });
         return {
           rows: text.includes("FOR UPDATE") ? [{ value: legacyState }] : [],
         };
       },
+      release: () => undefined,
+    };
+    const client = {
+      query: transaction.query,
+      connect: async () => transaction,
     };
 
     await cutOverLegacyExternalApiKeys({ client, now: Now });
@@ -162,11 +177,16 @@ it("makes a state loaded before cutover conflict instead of restoring legacy has
       }
       return { rows: [] };
     },
+    release: () => undefined,
+  };
+  const poolClient = {
+    query: client.query,
+    connect: async () => client,
   };
   const staleStore = createPostgresApplicationStateStore(client);
   const stale = await staleStore.load();
 
-  await cutOverLegacyExternalApiKeys({ client, now: Now });
+  await cutOverLegacyExternalApiKeys({ client: poolClient, now: Now });
 
   await expect(staleStore.save(stale)).rejects.toThrow(
     "Application state revision conflict",

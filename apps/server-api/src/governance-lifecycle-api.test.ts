@@ -944,7 +944,7 @@ const createMemoryDocument = () => ({
   tenantId: "tenant-memory",
   workflowId: "workflow-memory",
   content: "private retained memory",
-  createdAt: "2026-07-25T00:00:00.000Z",
+  createdAt: new Date().toISOString(),
   provenance: {
     source: "memory-upload",
     artifactFingerprint: "memory-document-fingerprint",

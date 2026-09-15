@@ -474,42 +474,35 @@ export const executeWorkflowExecutionCancel = (
   );
 };
 
-export const executeWorkflowExecutionRun = async (
-  input: {
-    workflowId: string;
+type WorkflowExecutionRunDependencies = {
+  catalog: WorkflowCatalogStore;
+  runWorkflow: (input: {
+    definition: WorkflowDefinitionRecord;
+    assets: ReadonlyArray<WorkflowAssetRecord>;
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
-  },
-  dependencies: {
-    catalog: WorkflowCatalogStore;
-    runWorkflow: (input: {
-      definition: WorkflowDefinitionRecord;
-      assets: ReadonlyArray<WorkflowAssetRecord>;
-      seedNodeOutputs?: Readonly<Record<string, unknown>>;
-      signal?: AbortSignal;
-      onEvent?: (event: WorkflowRuntimeEvent) => void;
-      runGovernedNode?: (
-        request: GovernedNodeExecutionRequest,
-      ) => Promise<WorkflowProviderRunResult>;
-    }) => Promise<WorkflowExecutionRecord>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
     runGovernedNode?: (
       request: GovernedNodeExecutionRequest,
     ) => Promise<WorkflowProviderRunResult>;
-  },
-): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
-  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
-  if (!workflow) {
-    return err({
-      status: HttpStatus.NotFound,
-      message: ErrorMessage.NotFound,
-    });
-  }
+  }) => Promise<WorkflowExecutionRecord>;
+  signal?: AbortSignal;
+  onEvent?: (event: WorkflowRuntimeEvent) => void;
+  runGovernedNode?: (
+    request: GovernedNodeExecutionRequest,
+  ) => Promise<WorkflowProviderRunResult>;
+};
 
-  const assets = dependencies.catalog.listAssets();
+export const executeWorkflowDefinitionRun = async (
+  input: {
+    definition: WorkflowDefinitionRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+  },
+  dependencies: WorkflowExecutionRunDependencies,
+): Promise<WorkflowExecutionRecord> => {
   const execution = await dependencies.runWorkflow({
-    definition: workflow,
-    assets,
+    definition: input.definition,
+    assets: dependencies.catalog.listAssets(),
     ...(input.seedNodeOutputs
       ? { seedNodeOutputs: input.seedNodeOutputs }
       : {}),
@@ -519,7 +512,35 @@ export const executeWorkflowExecutionRun = async (
       ? { runGovernedNode: dependencies.runGovernedNode }
       : {}),
   });
-  return ok(dependencies.catalog.upsertExecution(execution));
+  return dependencies.catalog.upsertExecution(execution);
+};
+
+export const executeWorkflowExecutionRun = async (
+  input: {
+    workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+  },
+  dependencies: WorkflowExecutionRunDependencies,
+): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(input.workflowId);
+  if (!workflow) {
+    return err({
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  }
+
+  return ok(
+    await executeWorkflowDefinitionRun(
+      {
+        definition: workflow,
+        ...(input.seedNodeOutputs
+          ? { seedNodeOutputs: input.seedNodeOutputs }
+          : {}),
+      },
+      dependencies,
+    ),
+  );
 };
 
 export const executeWorkflowNodeExecutionRun = async (
