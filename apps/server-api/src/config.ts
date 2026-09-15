@@ -1,24 +1,34 @@
 import { DefaultServerConfig, EnvKey, ErrorMessage } from "./constants";
 import type { McpServerConfiguration } from "./mcp-connection-port";
 
+export type ServerAdminCredentials = {
+  email: string;
+  password: string;
+};
+
 export type ServerConfig = {
   port: number;
   host: string;
-  authToken: string;
+  /**
+   * Optional shared bearer token. The browser UI never sends it: it authenticates
+   * with its IDE session cookie, so internal routes are usable without a token.
+   * When set, callers may still authenticate with `Authorization: Bearer <token>`.
+   */
+  authToken?: string;
   databaseUrl: string;
   mcpServers?: ReadonlyArray<McpServerConfiguration>;
+  /** Administrator account maintained from the environment at startup. */
+  admin?: ServerAdminCredentials;
+  /** Browser origins allowed to carry an IDE session for internal API routes. */
+  ideUiOrigins?: ReadonlyArray<string>;
 };
 
 export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   const port = parsePort(env[EnvKey.Port]);
   const host = env[EnvKey.Host] ?? DefaultServerConfig.Host;
-  const authToken = env[EnvKey.AuthToken];
+  const authToken = readOptionalValue(env[EnvKey.AuthToken]);
   const databaseUrl = env[EnvKey.DatabaseUrl];
   const mcpServers = parseMcpServers(env[EnvKey.McpServers]);
-
-  if (!authToken || authToken.trim().length === 0) {
-    throw new Error(ErrorMessage.AuthTokenMissing);
-  }
 
   if (!databaseUrl || databaseUrl.trim().length === 0) {
     throw new Error(ErrorMessage.DatabaseUrlMissing);
@@ -31,10 +41,62 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
   return {
     port,
     host,
-    authToken,
+    ...(authToken ? { authToken } : {}),
     databaseUrl,
     mcpServers,
+    admin: parseAdminCredentials(env),
+    ideUiOrigins: parseIdeUiOrigins(env, port),
   };
+};
+
+export const readAdminCredentials = (
+  config: ServerConfig,
+): ServerAdminCredentials =>
+  config.admin ?? {
+    email: DefaultServerConfig.AdminEmail,
+    password: DefaultServerConfig.AdminPassword,
+  };
+
+export const readIdeUiOrigins = (config: ServerConfig): ReadonlyArray<string> =>
+  config.ideUiOrigins ?? DefaultServerConfig.IdeUiOrigins;
+
+const parseAdminCredentials = (
+  env: NodeJS.ProcessEnv,
+): ServerAdminCredentials => ({
+  email:
+    readOptionalValue(env[EnvKey.AdminEmail]) ?? DefaultServerConfig.AdminEmail,
+  password:
+    readOptionalValue(env[EnvKey.AdminPassword]) ??
+    DefaultServerConfig.AdminPassword,
+});
+
+const parseIdeUiOrigins = (
+  env: NodeJS.ProcessEnv,
+  port: number,
+): ReadonlyArray<string> => {
+  const configured = (env[EnvKey.IdeUiOrigins] ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  return configured.length > 0
+    ? configured
+    : [
+        ...new Set([
+          ...DefaultServerConfig.IdeUiOrigins,
+          ...loopbackOrigins(port),
+        ]),
+      ];
+};
+
+const loopbackOrigins = (port: number): ReadonlyArray<string> => [
+  `http://localhost:${port.toString()}`,
+  `http://127.0.0.1:${port.toString()}`,
+];
+
+const readOptionalValue = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 };
 
 const parseMcpServers = (

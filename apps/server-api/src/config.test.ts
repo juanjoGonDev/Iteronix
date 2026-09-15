@@ -15,6 +15,56 @@ describe("server configuration", () => {
     ).toThrow("DATABASE_URL is required");
   });
 
+  it("starts without a bearer token so the browser session authenticates the UI", () => {
+    const config = loadConfig({
+      DATABASE_URL: requiredEnvironment.DATABASE_URL,
+    });
+
+    expect(config.authToken).toBeUndefined();
+  });
+
+  it("keeps the bearer token when one is configured for programmatic callers", () => {
+    expect(loadConfig(requiredEnvironment).authToken).toBe("test-token");
+  });
+
+  it("defaults the administrator account and allows overriding it through the environment", () => {
+    expect(
+      loadConfig({ DATABASE_URL: requiredEnvironment.DATABASE_URL }).admin,
+    ).toEqual({ email: "admin@admin", password: "admin" });
+
+    expect(
+      loadConfig({
+        ...requiredEnvironment,
+        ITERONIX_ADMIN_EMAIL: " owner@iteronix.test ",
+        ITERONIX_ADMIN_PASSWORD: "a-long-owner-password",
+      }).admin,
+    ).toEqual({
+      email: "owner@iteronix.test",
+      password: "a-long-owner-password",
+    });
+  });
+
+  it("trusts loopback UI origins by default and accepts an explicit origin list", () => {
+    expect(
+      loadConfig({
+        DATABASE_URL: requiredEnvironment.DATABASE_URL,
+        PORT: "8080",
+      }).ideUiOrigins,
+    ).toEqual([
+      "http://localhost:4000",
+      "http://127.0.0.1:4000",
+      "http://localhost:8080",
+      "http://127.0.0.1:8080",
+    ]);
+
+    expect(
+      loadConfig({
+        ...requiredEnvironment,
+        IDE_UI_ORIGINS: "https://iteronix.example.test, http://localhost:5173",
+      }).ideUiOrigins,
+    ).toEqual(["https://iteronix.example.test", "http://localhost:5173"]);
+  });
+
   it("exposes the PostgreSQL connection string", () => {
     expect(loadConfig(requiredEnvironment).databaseUrl).toBe(
       requiredEnvironment.DATABASE_URL,

@@ -13,7 +13,23 @@ The browser connects to its colocated backend automatically. Provider credential
 
 ## Run locally
 
-Set `DATABASE_URL` and start PostgreSQL with Docker Compose, then run `pnpm dev`. Configure a runnable provider in Settings before executing a workflow.
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open `http://localhost:4000` and sign in with the administrator account defined by
+`ITERONIX_ADMIN_EMAIL` / `ITERONIX_ADMIN_PASSWORD` (`admin@admin` / `admin` by default;
+change the password before exposing the app to any network).
+
+The browser talks to its colocated backend with the IDE session cookie, so no bearer token
+is required between the UI and the API. `AUTH_TOKEN` is optional and only needed by
+programmatic callers that authorize with `Authorization: Bearer <token>`. `IDE_UI_ORIGINS`
+lists the browser origins allowed to use a session; add your own host and port there when it
+differs from `http://localhost:4000`.
+
+To run without Docker, set `DATABASE_URL` in `.env` and start PostgreSQL plus `pnpm dev`.
+Configure a runnable provider in Settings before executing a workflow.
 
 ## Verification
 

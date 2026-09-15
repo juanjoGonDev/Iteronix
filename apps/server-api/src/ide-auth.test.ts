@@ -94,9 +94,73 @@ describe("IDE authentication", () => {
       }),
     ).rejects.toThrow("Invalid password reset token");
   });
+
+  it("creates the configured administrator without the interactive password policy", async () => {
+    const fixture = createFixture({ bootstrapAdmin: false });
+
+    const result = fixture.service.ensureAdministrator({
+      email: "admin@admin",
+      password: "admin",
+    });
+
+    expect(result.outcome).toBe("created");
+    expect(result.user.email).toBe("admin@admin");
+    const session = await fixture.service.login({
+      email: "admin@admin",
+      password: "admin",
+    });
+    expect(session.token).toBeTruthy();
+  });
+
+  it("adopts the configured administrator credentials when they change", async () => {
+    const fixture = createFixture();
+
+    const result = fixture.service.ensureAdministrator({
+      email: "owner@iteronix.test",
+      password: "a-long-owner-password",
+    });
+
+    expect(result.outcome).toBe("updated");
+    expect(result.user.email).toBe("owner@iteronix.test");
+    await expect(
+      fixture.service.login({
+        email: "owner@iteronix.test",
+        password: "a-long-owner-password",
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      fixture.service.login({
+        email: "admin@example.com",
+        password: "CorrectHorseBatteryStaple1",
+      }),
+    ).rejects.toThrow("Invalid credentials");
+  });
+
+  it("leaves a matching configured administrator untouched", () => {
+    const fixture = createFixture();
+
+    const result = fixture.service.ensureAdministrator({
+      email: "admin@example.com",
+      password: "CorrectHorseBatteryStaple1",
+    });
+
+    expect(result.outcome).toBe("kept");
+    expect(result.user.id).toBe(fixture.adminId);
+  });
+
+  it("still enforces the interactive password policy on registration", async () => {
+    const fixture = createFixture({ bootstrapAdmin: false });
+
+    await expect(
+      fixture.service.register({
+        email: "user@example.com",
+        password: "admin",
+      }),
+    ).rejects.toThrow("Password must be at least 12 characters");
+  });
 });
 
-const createFixture = () => {
+const createFixture = (input: { bootstrapAdmin?: boolean } = {}) => {
   let state: IdeAuthState | undefined;
   const resetTokens: string[] = [];
   const service = createIdeAuthService({
@@ -111,9 +175,12 @@ const createFixture = () => {
     })(),
     deliverPasswordReset: ({ token }) => resetTokens.push(token),
   });
-  const admin = service.bootstrapAdmin({
-    email: "admin@example.com",
-    password: "CorrectHorseBatteryStaple1",
-  });
-  return { service, adminId: admin.id, resetTokens };
+  const admin =
+    input.bootstrapAdmin === false
+      ? undefined
+      : service.bootstrapAdmin({
+          email: "admin@example.com",
+          password: "CorrectHorseBatteryStaple1",
+        });
+  return { service, adminId: admin?.id ?? "", resetTokens };
 };

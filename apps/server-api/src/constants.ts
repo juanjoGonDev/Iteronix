@@ -95,11 +95,16 @@ export const EnvKey = {
   DatabaseUrl: "DATABASE_URL",
   McpServers: "MCP_SERVERS",
   IdeUiOrigins: "IDE_UI_ORIGINS",
+  AdminEmail: "ITERONIX_ADMIN_EMAIL",
+  AdminPassword: "ITERONIX_ADMIN_PASSWORD",
 } as const;
 
 export const DefaultServerConfig = {
   Host: "0.0.0.0",
   Port: 4000,
+  AdminEmail: "admin@admin",
+  AdminPassword: "admin",
+  IdeUiOrigins: ["http://localhost:4000", "http://127.0.0.1:4000"],
 } as const;
 
 export const ErrorMessage = {
@@ -113,7 +118,8 @@ export const ErrorMessage = {
   MissingProviderConfig: "Missing provider config",
   ProviderNotFound: "Provider not found",
   NotFound: "Not found",
-  AuthTokenMissing: "AUTH_TOKEN is required",
+  BootstrapAdminDisabled:
+    "Administrator creation is managed by ITERONIX_ADMIN_EMAIL and ITERONIX_ADMIN_PASSWORD",
   DatabaseUrlMissing: "DATABASE_URL is required",
   DatabaseUrlInvalid: "DATABASE_URL must be a valid PostgreSQL URL",
   InvalidPort: "Invalid PORT value",
