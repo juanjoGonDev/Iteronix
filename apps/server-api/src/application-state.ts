@@ -149,7 +149,7 @@ export type LegacyExternalApiKeyCutoverClient = {
     text: string,
     values?: ReadonlyArray<unknown>,
   ) => Promise<{ rows: ReadonlyArray<{ value?: unknown }> }>;
-  connect?: () => Promise<LegacyExternalApiKeyCutoverTransactionClient>;
+  connect: () => Promise<LegacyExternalApiKeyCutoverTransactionClient>;
 };
 
 type LegacyExternalApiKeyCutoverTransactionClient = {
@@ -161,15 +161,17 @@ export const cutOverLegacyExternalApiKeys = async (input: {
   client: LegacyExternalApiKeyCutoverClient;
   now: string;
 }): Promise<ApplicationState> => {
-  const client = input.client.connect
-    ? await input.client.connect()
-    : input.client;
+  const client: LegacyExternalApiKeyCutoverTransactionClient =
+    await input.client.connect();
   try {
     await client.query(BeginSql);
     const locked = await client.query(LockLegacyApplicationStateSql, [
       ApplicationStateKey,
     ]);
-    const state = parseApplicationState(locked.rows[0]?.value);
+    const lockedRow = locked.rows.at(0);
+    const state = parseApplicationState(
+      lockedRow === undefined ? undefined : lockedRow.value,
+    );
     if (state.externalApiKeys.length === 0) {
       await client.query(CommitSql);
       return state;
@@ -219,9 +221,7 @@ export const cutOverLegacyExternalApiKeys = async (input: {
     await client.query(RollbackSql);
     throw error;
   } finally {
-    if ("release" in client && typeof client.release === "function") {
-      client.release();
-    }
+    client.release();
   }
 };
 
@@ -549,19 +549,14 @@ const migrateLegacyWorkflowAssetScopes = (value: unknown): unknown => {
 };
 
 const readJsonRecordArray = (value: unknown): ReadonlyArray<JsonRecord> =>
-  readRecordArray(value).flatMap((record) => {
-    const json = toJsonRecord(record);
-    return json ? [json] : [];
-  });
+  readRecordArray(value).map(toJsonRecord);
 
 const readRecordArray = (
   value: unknown,
 ): ReadonlyArray<Record<string, unknown>> =>
   Array.isArray(value) ? value.filter(isRecord) : [];
 
-const toJsonRecord = (
-  record: Record<string, unknown>,
-): JsonRecord | undefined => {
+const toJsonRecord = (record: Record<string, unknown>): JsonRecord => {
   const output: JsonRecord = {};
   for (const [key, value] of Object.entries(record)) {
     const jsonValue = toJsonValue(value);

@@ -75,6 +75,28 @@ describe("external workflow API key policy", () => {
     expect(revoked.keys[0]?.revokedAt).toBe("2026-07-15T11:00:00.000Z");
   });
 
+  it("keeps previously revoked and unrelated keys untouched for a deleted workflow", () => {
+    const alreadyRevoked: ExternalApiKeyRecord = {
+      ...createKey({
+        kind: ExternalApiKeyScopeKind.SelectedWorkflows,
+        workflowIds: ["workflow-1"],
+      }),
+      revokedAt: "2026-07-15T10:30:00.000Z",
+    };
+    const unrelated = createKey({
+      kind: ExternalApiKeyScopeKind.AllWorkflows,
+    });
+
+    const revoked = revokeExternalApiKeysForWorkflow({
+      keys: [alreadyRevoked, unrelated],
+      workflowId: "workflow-1",
+      revokedAt: "2026-07-15T11:00:00.000Z",
+    });
+
+    expect(revoked.revoked).toEqual([]);
+    expect(revoked.keys).toEqual([alreadyRevoked, unrelated]);
+  });
+
   it("accepts a key's own name but rejects another key's duplicate name", () => {
     const key = createKey({ kind: ExternalApiKeyScopeKind.AllWorkflows });
 

@@ -5,6 +5,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
+import { promisify } from "node:util";
 import {
   ExternalApiKeyScopeKind,
   type ExternalWorkflowOperation,
@@ -128,8 +129,9 @@ const readVerifier = (
   if (hashParts.length !== 3 || hashParts[0] !== HashPrefix) {
     return undefined;
   }
-  const salt = Buffer.from(hashParts[1] ?? "", "base64url");
-  const expected = Buffer.from(hashParts[2] ?? "", "base64url");
+  // The exact-length check above guarantees the salt and verifier segments.
+  const salt = Buffer.from(hashParts[1]!, "base64url");
+  const expected = Buffer.from(hashParts[2]!, "base64url");
   return salt.length === SaltBytes && expected.length === HashBytes
     ? { salt, expected }
     : undefined;
@@ -138,22 +140,21 @@ const readVerifier = (
 const deriveKey = (plaintext: string, salt: Buffer): Buffer =>
   scryptSync(plaintext, salt, HashBytes, { maxmem: ScryptMaxMemoryBytes });
 
-const deriveKeyAsync = (plaintext: string, salt: Buffer): Promise<Buffer> =>
-  new Promise((resolve, reject) => {
-    scrypt(
-      plaintext,
-      salt,
-      HashBytes,
-      { maxmem: ScryptMaxMemoryBytes },
-      (error, derived) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(derived);
-      },
-    );
-  });
+const scryptWithMaxMemory = (
+  plaintext: string,
+  salt: Buffer,
+  callback: (error: Error | null, derived: Buffer) => void,
+): void => {
+  scrypt(
+    plaintext,
+    salt,
+    HashBytes,
+    { maxmem: ScryptMaxMemoryBytes },
+    callback,
+  );
+};
+
+const deriveKeyAsync = promisify(scryptWithMaxMemory);
 
 const normalizeScope = (scope: ExternalApiKeyScope): ExternalApiKeyScope => {
   if (scope.kind === ExternalApiKeyScopeKind.AllWorkflows) {
