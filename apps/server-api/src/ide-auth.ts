@@ -41,8 +41,22 @@ type IdeAuthPersistence = {
   load: () => IdeAuthState | undefined;
   save: (state: IdeAuthState) => void;
 };
+/** Outcome of maintaining the environment-configured administrator account. */
+export type EnsureAdministratorOutcome = "created" | "updated" | "kept";
+
+export type EnsureAdministratorResult = {
+  user: IdeUser;
+  outcome: EnsureAdministratorOutcome;
+};
+
 export type IdeAuthService = {
   bootstrapAdmin: (input: Credentials) => IdeUser;
+  /**
+   * Creates or updates the administrator configured through the environment.
+   * This is a trusted startup path, so it does not enforce the interactive
+   * password policy; `ITERONIX_ADMIN_PASSWORD` owns this account instead.
+   */
+  ensureAdministrator: (input: Credentials) => EnsureAdministratorResult;
   register: (input: Credentials) => Promise<{ user: IdeUser }>;
   login: (input: Credentials) => Promise<IdeSessionGrant>;
   logout: (token: string) => void;
@@ -71,7 +85,7 @@ const PasswordDigest = "sha256";
 const PasswordSeparator = ":";
 const SessionDurationMilliseconds = 1000 * 60 * 60 * 24 * 7;
 const ResetDurationMilliseconds = 1000 * 60 * 30;
-const MinimumPasswordLength = 12;
+export const MinimumPasswordLength = 12;
 
 export const createDefaultIdeAuthState = (): IdeAuthState => ({
   registrationEnabled: true,
@@ -124,6 +138,52 @@ export const createIdeAuthService = (
       );
       persistMutation({ ...state, users: [...state.users, user] });
       return user;
+    },
+    ensureAdministrator: (credentials) => {
+      const email = normalizeEmail(credentials.email);
+      if (!email) throw new Error("Email is invalid");
+      const admins = state.users.filter(
+        (user) => user.role === IdeUserRole.Admin,
+      );
+      const admin = admins.at(0);
+      if (!admin) {
+        const created = createUser(
+          credentials,
+          IdeUserRole.Admin,
+          now(),
+          input.randomToken(),
+          { enforcePasswordPolicy: false },
+        );
+        persistMutation({ ...state, users: [...state.users, created] });
+        return { user: created, outcome: "created" };
+      }
+      // Several administrators make the configured account ambiguous: keep the
+      // existing accounts untouched rather than guessing which one to adopt.
+      if (admins.length > 1) {
+        return { user: admin, outcome: "kept" };
+      }
+      const keepsPassword = verifyPassword(
+        credentials.password,
+        admin.passwordHash,
+      );
+      if (admin.email === email && keepsPassword) {
+        return { user: admin, outcome: "kept" };
+      }
+      const updated: IdeUser = {
+        ...admin,
+        email,
+        passwordHash: keepsPassword
+          ? admin.passwordHash
+          : hashPassword(credentials.password, input.randomToken()),
+        updatedAt: now(),
+      };
+      persistMutation({
+        ...state,
+        users: state.users.map((user) =>
+          user.id === updated.id ? updated : user,
+        ),
+      });
+      return { user: updated, outcome: "updated" };
     },
     register: async (credentials) => {
       if (!state.registrationEnabled)
@@ -268,8 +328,11 @@ const createUser = (
   role: IdeUserRole,
   createdAt: string,
   salt: string,
+  options: { enforcePasswordPolicy?: boolean } = {},
 ): IdeUser => {
-  assertPassword(credentials.password);
+  if (options.enforcePasswordPolicy !== false) {
+    assertPassword(credentials.password);
+  }
   const email = normalizeEmail(credentials.email);
   if (!email) throw new Error("Email is invalid");
   return {

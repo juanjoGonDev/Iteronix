@@ -26,8 +26,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      AUTH_TOKEN: ${AUTH_TOKEN:?AUTH_TOKEN is required}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      ITERONIX_ADMIN_EMAIL: ${ITERONIX_ADMIN_EMAIL:-admin@admin}
+      ITERONIX_ADMIN_PASSWORD: ${ITERONIX_ADMIN_PASSWORD:-admin}
+      IDE_UI_ORIGINS: ${IDE_UI_ORIGINS:-http://localhost:${ITERONIX_HTTP_PORT:-4000},http://127.0.0.1:${ITERONIX_HTTP_PORT:-4000}}
+      # Optional: only needed by programmatic callers. The web UI signs in.
+      AUTH_TOKEN: ${AUTH_TOKEN:-}
     restart: unless-stopped
     ports:
       - "${ITERONIX_HTTP_PORT:-4000}:4000"

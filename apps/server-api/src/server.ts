@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 import {
   BearerPrefix,
   BearerScheme,
+  DefaultServerConfig,
   ErrorMessage,
   HeaderName,
   HttpMethod,
@@ -19,7 +20,12 @@ import {
   RoutePath,
   TextEncoding,
 } from "./constants";
-import { loadConfig, type ServerConfig } from "./config";
+import {
+  loadConfig,
+  readAdminCredentials,
+  readIdeUiOrigins,
+  type ServerConfig,
+} from "./config";
 import {
   createProviderStore,
   ProviderStoreErrorCode,
@@ -130,6 +136,7 @@ import {
 import { summarizePromptAssetUsage } from "./prompt-asset-usage";
 import {
   createIdeAuthService,
+  MinimumPasswordLength,
   IdeUserRole,
   type IdeAuthState,
   type IdeAuthService,
@@ -343,6 +350,7 @@ export const startServer = async (): Promise<void> => {
     providerStore,
     workflowCatalog,
   });
+  await ensureConfiguredAdministrator({ applicationPersistence, config });
   const workflowRuntime = createWorkflowRuntimeService({
     readApplicationState: () => applicationPersistence.read(),
   });
@@ -478,10 +486,14 @@ const loadInitialApplicationState = async (
       );
     }
     await applicationStateStore.initialize();
-    return await cutOverLegacyExternalApiKeys({
+    await cutOverLegacyExternalApiKeys({
       client: postgresPool,
       now: new Date().toISOString(),
     });
+    // The cutover persists the migrated state inside its own transaction, so the
+    // canonical state is read back from the store: downstream subsystems never
+    // consume the credential-bearing migration result.
+    return await applicationStateStore.load();
   } catch (error) {
     await postgresPool.end();
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -649,11 +661,12 @@ const handleRequest = async (
     return;
   }
 
-  if (handleCorsPreflight(req, res)) {
+  const allowedOrigins = readIdeUiOrigins(config);
+  if (handleCorsPreflight(req, res, allowedOrigins)) {
     return;
   }
 
-  applyCorsHeaders(req, res);
+  applyCorsHeaders(req, res, allowedOrigins);
 
   const url = new URL(req.url, `http://${config.host}`);
   const path = url.pathname;
@@ -705,19 +718,27 @@ const handleRequest = async (
 
   const hasIdeSession =
     readSessionUser(req, ideAuth) !== undefined &&
-    isTrustedIdeSessionRequest(req);
+    isTrustedIdeSessionRequest(req, readIdeUiOrigins(config));
+  // Without AUTH_TOKEN the browser session is the only credential, so a trusted
+  // session authorizes every internal route. With a token configured, the
+  // narrower IDE route groups are preserved.
   const acceptsIdeSession =
     hasIdeSession &&
-    (isEditableAssetRoute(path) ||
+    (config.authToken === undefined ||
+      isEditableAssetRoute(path) ||
       isWorkflowOnlyRoute(path) ||
       isIdeGovernanceLifecycleRoute(path) ||
       isIdeWorkflowExecutionRoute(path) ||
       isCredentialManagementRoute(path));
+  if (!isAuthorized(req, config.authToken) && !acceptsIdeSession) {
+    respondUnauthorized(res);
+    return;
+  }
   if (
-    (!isAuthorized(req, config.authToken) && !acceptsIdeSession) ||
-    (requiresStrictBearerAuthentication(path) &&
-      readBearerToken(req) !== config.authToken &&
-      !acceptsIdeSession)
+    config.authToken !== undefined &&
+    requiresStrictBearerAuthentication(path) &&
+    readBearerToken(req) !== config.authToken &&
+    !acceptsIdeSession
   ) {
     respondUnauthorized(res);
     return;
@@ -4061,6 +4082,36 @@ const createRequestIdeAuth = (
       : {}),
   });
 
+const ensureConfiguredAdministrator = async (input: {
+  applicationPersistence: ApplicationPersistence;
+  config: ServerConfig;
+}): Promise<void> => {
+  const credentials = readAdminCredentials(input.config);
+  const ideAuth = createRequestIdeAuth(input.applicationPersistence, undefined);
+  const { user, outcome } = ideAuth.ensureAdministrator(credentials);
+  if (outcome !== "kept") {
+    await input.applicationPersistence.updateIdeAuth(ideAuth.snapshot());
+    console.info("server.administrator_configured", {
+      outcome,
+      email: user.email,
+    });
+  } else if (user.email !== credentials.email) {
+    console.warn("server.administrator_env_ignored", {
+      configuredEmail: credentials.email,
+      activeEmail: user.email,
+    });
+  }
+
+  if (
+    credentials.password === DefaultServerConfig.AdminPassword ||
+    credentials.password.length < MinimumPasswordLength
+  ) {
+    console.warn("server.administrator_password_insecure", {
+      email: credentials.email,
+    });
+  }
+};
+
 const IdeAuthClientErrorMessages = new Set([
   "Administrator already exists",
   "Administrator access is required",
@@ -4095,7 +4146,14 @@ const handleIdeAuthRequest = async (input: {
   const sessionUser = readSessionUser(input.req, input.ideAuth);
   try {
     if (input.path === RoutePath.AuthBootstrapAdmin) {
-      if (readBearerToken(input.req) !== input.config.authToken) {
+      if (input.config.authToken === undefined) {
+        respondError(input.res, {
+          status: HttpStatus.Forbidden,
+          message: ErrorMessage.BootstrapAdminDisabled,
+        });
+        return;
+      }
+      if (!isAuthorized(input.req, input.config.authToken)) {
         respondUnauthorized(input.res);
         return;
       }
@@ -4271,14 +4329,17 @@ const respondInvalidBody = (res: ServerResponse): void =>
   });
 const isAuthRoute = (path: string): boolean => AuthRoutePaths.has(path);
 
-const isAuthorized = (req: IncomingMessage, authToken: string): boolean => {
-  const token = readBearerToken(req);
-  return token === authToken;
-};
+const isAuthorized = (
+  req: IncomingMessage,
+  authToken: string | undefined,
+): boolean => authToken !== undefined && readBearerToken(req) === authToken;
 
-const isTrustedIdeSessionRequest = (req: IncomingMessage): boolean => {
+const isTrustedIdeSessionRequest = (
+  req: IncomingMessage,
+  allowedOrigins: ReadonlyArray<string>,
+): boolean => {
   const origin = readCorsOrigin(req);
-  return origin !== undefined && isAllowedCorsOrigin(origin);
+  return origin !== undefined && isAllowedCorsOrigin(origin, allowedOrigins);
 };
 
 export const externalWorkflowOperationForRoute = (
@@ -4603,9 +4664,9 @@ const isRetiredLegacyExternalApiKeyRoute = (path: string): boolean =>
 const isCredentialAdministrator = (
   req: IncomingMessage,
   ideAuth: IdeAuthService,
-  authToken: string,
+  authToken: string | undefined,
 ): boolean =>
-  readBearerToken(req) === authToken ||
+  isAuthorized(req, authToken) ||
   readSessionUser(req, ideAuth)?.role === IdeUserRole.Admin;
 
 const parseExternalCredentialCreateRequest = (
@@ -4795,9 +4856,10 @@ const CorsHeaderValue = {
 const handleCorsPreflight = (
   req: IncomingMessage,
   res: ServerResponse,
+  allowedOrigins: ReadonlyArray<string>,
 ): boolean => {
   const origin = readCorsOrigin(req);
-  if (!origin || !isAllowedCorsOrigin(origin)) {
+  if (!origin || !isAllowedCorsOrigin(origin, allowedOrigins)) {
     return false;
   }
 
@@ -4805,15 +4867,19 @@ const handleCorsPreflight = (
     return false;
   }
 
-  applyCorsHeaders(req, res);
+  applyCorsHeaders(req, res, allowedOrigins);
   res.statusCode = HttpStatus.Ok;
   res.end();
   return true;
 };
 
-const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
+const applyCorsHeaders = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  allowedOrigins: ReadonlyArray<string>,
+): void => {
   const origin = readCorsOrigin(req);
-  if (!origin || !isAllowedCorsOrigin(origin)) {
+  if (!origin || !isAllowedCorsOrigin(origin, allowedOrigins)) {
     return;
   }
 
@@ -4842,12 +4908,10 @@ const readCorsOrigin = (req: IncomingMessage): string | undefined => {
   return typeof originHeader === "string" ? originHeader : undefined;
 };
 
-const DefaultIdeUiOrigins = [
-  "http://localhost:4000",
-  "http://127.0.0.1:4000",
-] as const;
-const isAllowedCorsOrigin = (origin: string): boolean =>
-  DefaultIdeUiOrigins.some((trustedOrigin) => trustedOrigin === origin);
+const isAllowedCorsOrigin = (
+  origin: string,
+  allowedOrigins: ReadonlyArray<string>,
+): boolean => allowedOrigins.some((trustedOrigin) => trustedOrigin === origin);
 
 const respondUnauthorized = (res: ServerResponse): void => {
   res.setHeader(HeaderName.WwwAuthenticate, BearerScheme);

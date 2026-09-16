@@ -1,20 +1,16 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 const ApiUrl = process.env["ITERONIX_E2E_API_URL"] ?? "http://127.0.0.1:4001";
-const AuthToken =
-  process.env["ITERONIX_E2E_AUTH_TOKEN"] ??
-  process.env["AUTH_TOKEN"] ??
-  "iteronix_e2e_token";
+// The server maintains this account from the environment at startup, so the suite
+// signs in with the same values instead of creating the first administrator.
 const Administrator = {
-  email: "e2e-admin@iteronix.test",
-  password: "CorrectHorseBatteryStaple1",
+  email: process.env["ITERONIX_ADMIN_EMAIL"] ?? "admin@admin",
+  password: process.env["ITERONIX_ADMIN_PASSWORD"] ?? "admin",
 } as const;
 const SessionCookieName = "iteronix_session";
 const NavigationSelector = {
   AssetsGroup: "navigation-group-assets",
 } as const;
-const ExistingAdministratorStatus = 400;
-const ExistingAdministratorMessage = "Administrator already exists";
 
 test("loads an authenticated workflow canvas and asset catalog without unauthorized requests", async ({
   page,
@@ -50,7 +46,6 @@ test("loads an authenticated workflow canvas and asset catalog without unauthori
 test("restores an unauthenticated Assets deep link after secure login", async ({
   page,
 }) => {
-  await bootstrapIdeAdministrator();
   const assetResponses = observeSuccessfulApiResponses(page, "/assets/");
 
   await page.goto("/assets/prompts");
@@ -92,7 +87,6 @@ test("keeps every grouped Asset route available to an authenticated session", as
 });
 
 const createIdeSession = async (): Promise<string> => {
-  await bootstrapIdeAdministrator();
   const login = await postJson("/auth/login", Administrator);
   if (!login.ok) {
     throw new Error(`Could not create E2E session: ${login.status}`);
@@ -103,26 +97,6 @@ const createIdeSession = async (): Promise<string> => {
     throw new Error("E2E login response did not set an IDE session cookie.");
   }
   return token;
-};
-
-const bootstrapIdeAdministrator = async (): Promise<void> => {
-  const bootstrap = await postJson("/auth/bootstrap-admin", Administrator, {
-    Authorization: `Bearer ${AuthToken}`,
-  });
-  if (!bootstrap.ok && !(await isExistingAdministratorResponse(bootstrap))) {
-    throw new Error(
-      `Could not bootstrap E2E administrator: ${bootstrap.status}`,
-    );
-  }
-};
-
-const isExistingAdministratorResponse = async (
-  response: Response,
-): Promise<boolean> => {
-  if (response.status !== ExistingAdministratorStatus) return false;
-  const body: unknown = await response.json().catch(() => null);
-  const error = isRecord(body) ? body["error"] : null;
-  return isRecord(error) && error["message"] === ExistingAdministratorMessage;
 };
 
 const postJson = (
@@ -147,9 +121,6 @@ const readCookieValue = (
     ? decodeURIComponent(value.slice(prefix.length))
     : undefined;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 const setIdeSessionCookie = async (
   context: BrowserContext,

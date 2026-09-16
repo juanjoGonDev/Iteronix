@@ -25,10 +25,17 @@ Database integration tests MUST use `TEST_DATABASE_URL`, and it MUST differ from
 TEST_DATABASE_URL=postgresql://iteronix_test:password@localhost:5432/iteronix_test pnpm test:db
 ```
 
-Set `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `DATABASE_URL`, then run:
+Copy `.env.example` to `.env` and adjust it before starting the stack. It defines
+`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL`, the HTTP port, the
+administrator account, and the browser origins allowed to use an IDE session:
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
-A fresh database has an empty workflow catalog. Configure a provider in Settings before running a workflow. Reset local development state with `docker compose down --volumes` followed by `docker compose up --build`.
+A fresh database has an empty workflow catalog, and the administrator account is created at
+startup from `ITERONIX_ADMIN_EMAIL` / `ITERONIX_ADMIN_PASSWORD` (default `admin@admin` /
+`admin`, which MUST be changed before the app is exposed to a network). Configure a provider
+in Settings before running a workflow. Reset local development state with
+`docker compose down --volumes` followed by `docker compose up --build`.
