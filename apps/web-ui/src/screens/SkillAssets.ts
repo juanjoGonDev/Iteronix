@@ -1,6 +1,21 @@
 import { Button } from "../components/Button.js";
 import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
+  AssetConfirmDialog,
+  AssetEditorDialog,
+  AssetRow,
+  AssetRowList,
+} from "../components/AssetWorkbench.js";
+import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack,
+} from "../components/PageScaffold.js";
+import {
+  SettingsTextField,
+  SettingsTextareaField,
+} from "../components/SettingsFields.js";
+import {
   Component,
   createElement,
   type ComponentProps,
@@ -21,23 +36,32 @@ import {
 const Selector = {
   Root: "skill-assets-root",
   Create: "skill-assets-create",
-  RowPrefix: "skill-assets-row-",
+  List: "skill-assets-list",
   Editor: "skill-assets-editor",
   Name: "skill-assets-name",
   Description: "skill-assets-description",
   Permissions: "skill-assets-permissions",
   Save: "skill-assets-save",
+  Error: "skill-assets-error",
+  Retry: "skill-assets-retry",
   DeletePrefix: "skill-assets-delete-",
+  DeleteDialog: "skill-assets-delete-dialog",
+  DeleteConfirm: "skill-assets-delete-confirm",
+  DeleteCancel: "skill-assets-delete-cancel",
+  RowPrefix: "skill-assets-row-",
 } as const;
 
 type SkillAssetsState = {
   skills: ReadonlyArray<SkillAssetSummary>;
   loading: boolean;
   errorMessage: string | null;
+  noticeMessage: string | null;
   url: SkillAssetsUrlState;
   name: string;
   description: string;
   permissions: string;
+  pendingDeleteId: string | null;
+  busy: boolean;
 };
 
 export class SkillAssetsScreen extends Component<
@@ -52,10 +76,13 @@ export class SkillAssetsScreen extends Component<
       skills: [],
       loading: true,
       errorMessage: null,
+      noticeMessage: null,
       url,
       name: "",
       description: "",
       permissions: "",
+      pendingDeleteId: null,
+      busy: false,
     });
   }
 
@@ -71,72 +98,82 @@ export class SkillAssetsScreen extends Component<
   override render(): HTMLElement {
     return createElement(
       "main",
-      {
-        className:
-          "min-h-full bg-[#11161d] px-4 py-5 text-white sm:px-6 lg:px-8",
-        "data-testid": Selector.Root,
-      },
+      { className: "min-h-full text-white", "data-testid": Selector.Root },
       [
         createElement(
-          "div",
-          { className: "mx-auto flex max-w-6xl flex-col gap-5" },
-          [this.renderToolbar(), this.renderContent(), this.renderEditor()],
+          PageFrame,
+          { className: "max-w-[1380px] gap-7 pb-28 md:pb-10" },
+          [
+            createElement(PageNoticeStack, {
+              errorMessage: this.state.errorMessage,
+              noticeMessage: this.state.noticeMessage,
+            }),
+            this.renderIntro(),
+            this.renderContent(),
+            this.renderEditor(),
+            this.renderDeleteConfirmation(),
+          ],
         ),
       ],
     );
   }
 
-  private renderToolbar(): HTMLElement {
-    return createElement(
-      "section",
-      {
-        className:
-          "flex flex-col gap-4 border-b border-border-dark pb-5 sm:flex-row sm:items-end sm:justify-between",
-      },
-      [
-        createElement("div", {}, [
-          createElement(
-            "h1",
-            { className: "text-xl font-semibold tracking-tight text-white" },
-            ["Skill assets"],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            ["Reusable governed capabilities for AI agents."],
-          ),
-        ]),
-        createElement(Button, {
-          variant: "primary",
-          size: "sm",
-          icon: "add",
-          children: "Create skill",
-          onClick: () =>
-            this.openEditor({ mode: SkillAssetsUrlMode.Create, skillId: null }),
-          dataset: { testid: Selector.Create },
-        }),
-      ],
-    );
+  private renderIntro(): HTMLElement {
+    return createElement(PageIntro, {
+      title: "Skill assets",
+      description: `Reusable governed capabilities for AI agents. ${this.state.skills.length} registered.`,
+      actions: createElement(Button, {
+        variant: "primary",
+        size: "sm",
+        icon: "add",
+        children: "Create skill",
+        onClick: () =>
+          this.openEditor({ mode: SkillAssetsUrlMode.Create, skillId: null }),
+        dataset: { testid: Selector.Create },
+      }),
+    });
   }
 
   private renderContent(): HTMLElement {
     if (this.state.loading)
       return createElement(
-        "p",
+        "section",
         {
           className:
-            "border border-border-dark bg-[#151b22] px-4 py-8 text-sm text-text-secondary",
+            "rounded-2xl border border-[#202832] bg-[#171c22] px-6 py-10 text-sm text-text-secondary",
+          "aria-busy": "true",
         },
         ["Loading skill assets…"],
       );
     if (this.state.errorMessage)
       return createElement(
-        "p",
+        "section",
         {
           className:
-            "border border-rose-500/40 bg-rose-500/10 px-4 py-4 text-sm text-rose-100",
+            "flex flex-col items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between",
+          role: "alert",
+          "data-testid": Selector.Error,
         },
-        [this.state.errorMessage],
+        [
+          createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+            createElement(
+              "p",
+              { className: "text-sm font-semibold text-rose-100" },
+              ["Could not load skill assets"],
+            ),
+            createElement("p", { className: "text-sm text-rose-100/80" }, [
+              this.state.errorMessage,
+            ]),
+          ]),
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            icon: "refresh",
+            children: "Retry",
+            onClick: () => void this.loadSkills(),
+            dataset: { testid: Selector.Retry },
+          }),
+        ],
       );
     if (this.state.skills.length === 0)
       return createElement(EmptyStatePanel, {
@@ -144,184 +181,127 @@ export class SkillAssetsScreen extends Component<
         title: "No skill assets yet",
         description:
           "Create a reusable skill before connecting it to an AI agent.",
+        action: createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          icon: "add",
+          children: "Create skill",
+          onClick: () =>
+            this.openEditor({ mode: SkillAssetsUrlMode.Create, skillId: null }),
+        }),
       });
-    return createElement(
-      "section",
-      { className: "divide-y divide-border-dark border border-border-dark" },
-      this.state.skills.map((skill) => this.renderSkillRow(skill)),
-    );
+    return createElement(AssetRowList, {
+      testId: Selector.List,
+      rows: this.state.skills.map((skill) => this.renderSkillRow(skill)),
+    });
   }
 
   private renderSkillRow(skill: SkillAssetSummary): HTMLElement {
-    return createElement(
-      "article",
-      {
-        className:
-          "flex flex-col gap-3 bg-[#11161d] px-4 py-4 sm:flex-row sm:items-center sm:justify-between",
-        "data-testid": `${Selector.RowPrefix}${skill.id}`,
-      },
-      [
-        createElement("div", { className: "min-w-0" }, [
-          createElement(
-            "p",
-            { className: "truncate text-sm font-semibold text-white" },
-            [skill.name],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            [`v${skill.version} · ${skill.lifecycle} · ${skill.status}`],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-xs text-text-secondary" },
-            [skill.description],
-          ),
-        ]),
-        createElement("div", { className: "flex gap-2" }, [
-          createElement(Button, {
-            variant: "secondary",
-            size: "sm",
-            icon: "edit",
-            children: "Open editor",
-            onClick: () =>
-              this.openEditor({
-                mode: SkillAssetsUrlMode.Edit,
-                skillId: skill.id,
-              }),
-          }),
-          createElement(Button, {
-            variant: "danger",
-            size: "sm",
-            icon: "delete",
-            children: "Delete",
-            onClick: () => void this.deleteSkill(skill.id),
-            dataset: { testid: `${Selector.DeletePrefix}${skill.id}` },
-          }),
-        ]),
+    return createElement(AssetRow, {
+      testId: `${Selector.RowPrefix}${skill.id}`,
+      icon: "extension",
+      title: skill.name,
+      subtitle: skill.id,
+      status: skill.status === "enabled" ? "enabled" : "disabled",
+      meta: [
+        skill.description,
+        `v${skill.version} · lifecycle ${skill.lifecycle}`,
       ],
-    );
+      chips:
+        skill.permissions.length > 0
+          ? skill.permissions.map((permission) => `perm:${permission}`)
+          : ["no permissions declared"],
+      actions: [
+        {
+          label: "Open editor",
+          icon: "edit",
+          variant: "secondary",
+          onClick: () =>
+            this.openEditor({
+              mode: SkillAssetsUrlMode.Edit,
+              skillId: skill.id,
+            }),
+        },
+        {
+          label: "Delete",
+          icon: "delete",
+          variant: "danger",
+          testId: `${Selector.DeletePrefix}${skill.id}`,
+          onClick: () => this.setState({ pendingDeleteId: skill.id }),
+        },
+      ],
+    });
   }
 
   private renderEditor(): HTMLElement | string {
     if (this.state.url.mode === SkillAssetsUrlMode.Catalog) return "";
-    return createElement(
-      "section",
-      {
-        className:
-          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
-        role: "dialog",
-        "aria-modal": "true",
-        "data-testid": Selector.Editor,
+    const isCreate = this.state.url.mode === SkillAssetsUrlMode.Create;
+    const saveDisabled =
+      this.state.busy ||
+      this.state.name.trim().length === 0 ||
+      this.state.description.trim().length === 0;
+    return createElement(AssetEditorDialog, {
+      testId: Selector.Editor,
+      title: isCreate ? "Create skill asset" : "Edit skill asset",
+      description:
+        "Skills are versioned permissioned assets; agents and workflow nodes bind to a version and inherit these grants.",
+      onClose: () =>
+        this.openEditor({ mode: SkillAssetsUrlMode.Catalog, skillId: null }),
+      save: {
+        label: isCreate ? "Save skill" : "Save changes",
+        testId: Selector.Save,
+        disabled: saveDisabled,
+        disabledReason:
+          "Name and description are required before a skill can be saved.",
+        onClick: () => void this.saveSkill(),
       },
-      [
-        createElement(
-          "div",
-          {
-            className:
-              "w-full max-w-2xl border border-border-dark bg-[#151b22] p-5 shadow-2xl",
-          },
-          [
-            createElement(
-              "h2",
-              { className: "text-base font-semibold text-white" },
-              [
-                this.state.url.mode === SkillAssetsUrlMode.Create
-                  ? "Create skill asset"
-                  : "Edit skill asset",
-              ],
-            ),
-            this.renderInput("Name", this.state.name, Selector.Name, (value) =>
-              this.setState({ name: value }),
-            ),
-            this.renderTextarea(
-              "Description",
-              this.state.description,
-              Selector.Description,
-              (value) => this.setState({ description: value }),
-            ),
-            this.renderInput(
-              "Permissions (comma-separated)",
-              this.state.permissions,
-              Selector.Permissions,
-              (value) => this.setState({ permissions: value }),
-            ),
-            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
-              createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                children: "Close",
-                onClick: () =>
-                  this.openEditor({
-                    mode: SkillAssetsUrlMode.Catalog,
-                    skillId: null,
-                  }),
-              }),
-              createElement(Button, {
-                variant: "primary",
-                size: "sm",
-                children: "Save skill",
-                disabled:
-                  this.state.name.trim().length === 0 ||
-                  this.state.description.trim().length === 0,
-                onClick: () => void this.saveSkill(),
-                dataset: { testid: Selector.Save },
-              }),
-            ]),
-          ],
-        ),
-      ],
-    );
+      children: createElement("div", { className: "grid gap-4" }, [
+        createElement(SettingsTextField, {
+          label: "Name",
+          value: this.state.name,
+          placeholder: "Reference resolver",
+          testId: Selector.Name,
+          onChange: (value: string) => this.setState({ name: value }),
+        }),
+        createElement(SettingsTextareaField, {
+          label: "Description",
+          value: this.state.description,
+          placeholder:
+            "What this skill does, inputs it expects, and guarantees it provides.",
+          testId: Selector.Description,
+          hint: "Agents surface this text when deciding which skill to bind.",
+          onChange: (value: string) => this.setState({ description: value }),
+        }),
+        createElement(SettingsTextField, {
+          label: "Permissions (comma-separated)",
+          value: this.state.permissions,
+          placeholder: "tool.invoke, memory.read",
+          testId: Selector.Permissions,
+          hint: "Least-privilege grants enforced by the governed runtime.",
+          onChange: (value: string) => this.setState({ permissions: value }),
+        }),
+      ]),
+    });
   }
 
-  private renderInput(
-    label: string,
-    value: string,
-    testid: string,
-    onValue: (value: string) => void,
-  ): HTMLElement {
-    return createElement(
-      "label",
-      { className: "mt-4 block text-sm text-text-secondary" },
-      [
-        label,
-        createElement("input", {
-          value,
-          className:
-            "mt-1 h-10 w-full border border-border-dark bg-[#0f151c] px-3 text-sm text-white outline-none focus:border-primary",
-          "data-testid": testid,
-          onInput: (event: Event) => {
-            if (event.target instanceof HTMLInputElement)
-              onValue(event.target.value);
-          },
-        }),
-      ],
+  private renderDeleteConfirmation(): HTMLElement | string {
+    const pendingId = this.state.pendingDeleteId;
+    if (!pendingId) return "";
+    const skill = this.state.skills.find(
+      (candidate) => candidate.id === pendingId,
     );
-  }
-
-  private renderTextarea(
-    label: string,
-    value: string,
-    testid: string,
-    onValue: (value: string) => void,
-  ): HTMLElement {
-    return createElement(
-      "label",
-      { className: "mt-4 block text-sm text-text-secondary" },
-      [
-        label,
-        createElement("textarea", {
-          value,
-          className:
-            "mt-1 min-h-28 w-full border border-border-dark bg-[#0f151c] px-3 py-2 text-sm text-white outline-none focus:border-primary",
-          "data-testid": testid,
-          onInput: (event: Event) => {
-            if (event.target instanceof HTMLTextAreaElement)
-              onValue(event.target.value);
-          },
-        }),
-      ],
-    );
+    return createElement(AssetConfirmDialog, {
+      testId: Selector.DeleteDialog,
+      title: "Delete skill asset",
+      message: `This removes "${skill?.name ?? pendingId}" and its version history from the workspace. Agents and workflow nodes bound to it will fail fast until replaced.`,
+      confirmLabel: this.state.busy ? "Deleting…" : "Delete skill",
+      confirmTestId: Selector.DeleteConfirm,
+      confirmDisabled: this.state.busy,
+      onConfirm: () => void this.deleteSkill(pendingId),
+      cancelLabel: "Cancel",
+      cancelTestId: Selector.DeleteCancel,
+      onCancel: () => this.setState({ pendingDeleteId: null }),
+    });
   }
 
   private async loadSkills(): Promise<void> {
@@ -367,6 +347,7 @@ export class SkillAssetsScreen extends Component<
     const name = this.state.name.trim();
     const description = this.state.description.trim();
     if (!name || !description) return;
+    this.setState({ busy: true });
     const permissions = this.state.permissions
       .split(",")
       .map((permission) => permission.trim())
@@ -398,21 +379,34 @@ export class SkillAssetsScreen extends Component<
           ...this.state.skills.filter((skill) => skill.id !== asset.id),
           asset,
         ],
+        busy: false,
+        noticeMessage: `Skill "${asset.name}" saved.`,
       });
       this.openEditor({ mode: SkillAssetsUrlMode.Edit, skillId: asset.id });
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({ busy: false, errorMessage: readErrorMessage(error) });
     }
   }
 
   private async deleteSkill(assetId: string): Promise<void> {
+    this.setState({ busy: true });
     try {
       await this.client.delete(assetId);
       this.setState({
         skills: this.state.skills.filter((skill) => skill.id !== assetId),
+        pendingDeleteId: null,
+        busy: false,
+        noticeMessage: `Skill "${assetId}" deleted.`,
       });
+      if (this.state.url.skillId === assetId) {
+        this.openEditor({ mode: SkillAssetsUrlMode.Catalog, skillId: null });
+      }
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({
+        busy: false,
+        pendingDeleteId: null,
+        errorMessage: readErrorMessage(error),
+      });
     }
   }
 }

@@ -8,12 +8,20 @@ interface EmptyStatePanelProps extends ComponentProps {
   icon: string;
   title: string;
   description: string;
+  /** Optional primary action so an empty screen never dead-ends the user. */
+  action?: HTMLElement | null;
   className?: string;
 }
 
 export class EmptyStatePanel extends Component<EmptyStatePanelProps> {
   override render(): HTMLElement {
-    const { icon, title, description, className = "" } = this.props;
+    const {
+      icon,
+      title,
+      description,
+      action = null,
+      className = "",
+    } = this.props;
 
     return createElement(
       "section",
@@ -38,6 +46,7 @@ export class EmptyStatePanel extends Component<EmptyStatePanelProps> {
           { className: "max-w-md text-sm text-text-secondary" },
           [description],
         ),
+        action ?? "",
       ],
     );
   }

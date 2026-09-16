@@ -1,6 +1,18 @@
 import { Button } from "../components/Button.js";
 import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
+  AssetConfirmDialog,
+  AssetEditorDialog,
+  AssetRow,
+  AssetRowList,
+} from "../components/AssetWorkbench.js";
+import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack,
+} from "../components/PageScaffold.js";
+import { SettingsTextField } from "../components/SettingsFields.js";
+import {
   Component,
   createElement,
   type ComponentProps,
@@ -20,11 +32,18 @@ import {
 const Selector = {
   Root: "mcp-assets-root",
   Create: "mcp-assets-create",
+  List: "mcp-assets-list",
   Editor: "mcp-assets-editor",
   Name: "mcp-assets-name",
   Endpoint: "mcp-assets-endpoint",
   Tools: "mcp-assets-tools",
   Save: "mcp-assets-save",
+  Error: "mcp-assets-error",
+  Retry: "mcp-assets-retry",
+  DeletePrefix: "mcp-assets-delete-",
+  DeleteDialog: "mcp-assets-delete-dialog",
+  DeleteConfirm: "mcp-assets-delete-confirm",
+  DeleteCancel: "mcp-assets-delete-cancel",
   RowPrefix: "mcp-assets-row-",
 } as const;
 
@@ -32,10 +51,13 @@ type McpAssetsState = {
   assets: ReadonlyArray<McpAssetSummary>;
   loading: boolean;
   errorMessage: string | null;
+  noticeMessage: string | null;
   url: McpAssetsUrlState;
   name: string;
   serverId: string;
   toolVersion: string;
+  pendingDeleteId: string | null;
+  busy: boolean;
 };
 
 export class McpAssetsScreen extends Component<ComponentProps, McpAssetsState> {
@@ -47,10 +69,13 @@ export class McpAssetsScreen extends Component<ComponentProps, McpAssetsState> {
       assets: [],
       loading: true,
       errorMessage: null,
+      noticeMessage: null,
       url,
       name: "",
       serverId: "",
       toolVersion: "",
+      pendingDeleteId: null,
+      busy: false,
     });
   }
 
@@ -66,224 +91,206 @@ export class McpAssetsScreen extends Component<ComponentProps, McpAssetsState> {
   override render(): HTMLElement {
     return createElement(
       "main",
-      {
-        className:
-          "min-h-full bg-[#11161d] px-4 py-5 text-white sm:px-6 lg:px-8",
-        "data-testid": Selector.Root,
-      },
+      { className: "min-h-full text-white", "data-testid": Selector.Root },
       [
         createElement(
-          "div",
-          { className: "mx-auto flex max-w-6xl flex-col gap-5" },
-          [this.renderToolbar(), this.renderContent(), this.renderEditor()],
-        ),
-      ],
-    );
-  }
-
-  private renderToolbar(): HTMLElement {
-    return createElement(
-      "section",
-      {
-        className:
-          "flex flex-col gap-4 border-b border-border-dark pb-5 sm:flex-row sm:items-end sm:justify-between",
-      },
-      [
-        createElement("div", {}, [
-          createElement(
-            "h1",
-            { className: "text-xl font-semibold tracking-tight text-white" },
-            ["MCP connections"],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            ["Governed MCP tools with validated untrusted responses."],
-          ),
-        ]),
-        createElement(Button, {
-          variant: "primary",
-          size: "sm",
-          icon: "add",
-          children: "Create connection",
-          onClick: () =>
-            this.openEditor({ mode: McpAssetsUrlMode.Create, mcpId: null }),
-          dataset: { testid: Selector.Create },
-        }),
-      ],
-    );
-  }
-
-  private renderContent(): HTMLElement {
-    if (this.state.loading)
-      return createElement(
-        "p",
-        {
-          className:
-            "border border-border-dark bg-[#151b22] px-4 py-8 text-sm text-text-secondary",
-        },
-        ["Loading MCP connections…"],
-      );
-    if (this.state.errorMessage)
-      return createElement(
-        "p",
-        {
-          className:
-            "border border-rose-500/40 bg-rose-500/10 px-4 py-4 text-sm text-rose-100",
-        },
-        [this.state.errorMessage],
-      );
-    if (this.state.assets.length === 0)
-      return createElement(EmptyStatePanel, {
-        icon: "extension",
-        title: "No MCP connections yet",
-        description:
-          "Create a connection before binding its tools to an AI agent.",
-      });
-    return createElement(
-      "section",
-      { className: "divide-y divide-border-dark border border-border-dark" },
-      this.state.assets.map((asset) => this.renderRow(asset)),
-    );
-  }
-
-  private renderRow(asset: McpAssetSummary): HTMLElement {
-    return createElement(
-      "article",
-      {
-        className:
-          "flex flex-col gap-3 bg-[#11161d] px-4 py-4 sm:flex-row sm:items-center sm:justify-between",
-        "data-testid": `${Selector.RowPrefix}${asset.id}`,
-      },
-      [
-        createElement("div", { className: "min-w-0" }, [
-          createElement(
-            "p",
-            { className: "truncate text-sm font-semibold text-white" },
-            [asset.name],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 break-all text-sm text-text-secondary" },
-            [`${asset.serverId} · ${asset.status} · v${asset.toolVersion}`],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-xs text-text-secondary" },
-            ["Credentials and server configuration remain server-side"],
-          ),
-        ]),
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
-          icon: "edit",
-          children: "Open editor",
-          onClick: () =>
-            this.openEditor({ mode: McpAssetsUrlMode.Edit, mcpId: asset.id }),
-        }),
-      ],
-    );
-  }
-
-  private renderEditor(): HTMLElement | string {
-    if (this.state.url.mode === McpAssetsUrlMode.Catalog) return "";
-    return createElement(
-      "section",
-      {
-        className:
-          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
-        role: "dialog",
-        "aria-modal": "true",
-        "data-testid": Selector.Editor,
-      },
-      [
-        createElement(
-          "div",
-          {
-            className:
-              "w-full max-w-2xl border border-border-dark bg-[#151b22] p-5 shadow-2xl",
-          },
+          PageFrame,
+          { className: "max-w-[1380px] gap-7 pb-28 md:pb-10" },
           [
-            createElement(
-              "h2",
-              { className: "text-base font-semibold text-white" },
-              [
-                this.state.url.mode === McpAssetsUrlMode.Create
-                  ? "Create MCP connection"
-                  : "Edit MCP connection",
-              ],
-            ),
-            createElement(
-              "p",
-              { className: "mt-1 text-sm text-text-secondary" },
-              [
-                "Connection credentials and untrusted tool payloads are never configured or displayed in the browser.",
-              ],
-            ),
-            this.renderInput("Name", this.state.name, Selector.Name, (name) =>
-              this.setState({ name }),
-            ),
-            this.renderInput(
-              "Server ID",
-              this.state.serverId,
-              Selector.Endpoint,
-              (serverId) => this.setState({ serverId }),
-            ),
-            this.renderInput(
-              "Tool version",
-              this.state.toolVersion,
-              Selector.Tools,
-              (toolVersion) => this.setState({ toolVersion }),
-            ),
-            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
-              createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                children: "Close",
-                onClick: () =>
-                  this.openEditor({
-                    mode: McpAssetsUrlMode.Catalog,
-                    mcpId: null,
-                  }),
-              }),
-              createElement(Button, {
-                variant: "primary",
-                size: "sm",
-                children: "Save connection",
-                disabled: !this.canSave(),
-                onClick: () => void this.saveAsset(),
-                dataset: { testid: Selector.Save },
-              }),
-            ]),
+            createElement(PageNoticeStack, {
+              errorMessage: this.state.errorMessage,
+              noticeMessage: this.state.noticeMessage,
+            }),
+            this.renderIntro(),
+            this.renderContent(),
+            this.renderEditor(),
+            this.renderDeleteConfirmation(),
           ],
         ),
       ],
     );
   }
 
-  private renderInput(
-    label: string,
-    value: string,
-    testid: string,
-    onValue: (value: string) => void,
-  ): HTMLElement {
-    return createElement(
-      "label",
-      { className: "mt-4 block text-sm text-text-secondary" },
-      [
-        label,
-        createElement("input", {
-          value,
+  private renderIntro(): HTMLElement {
+    return createElement(PageIntro, {
+      title: "MCP connections",
+      description: `Connection records for allowlisted MCP tool servers. ${this.state.assets.length} configured. Tokens and endpoints live only on the server.`,
+      actions: createElement(Button, {
+        variant: "primary",
+        size: "sm",
+        icon: "add",
+        children: "Create connection",
+        onClick: () =>
+          this.openEditor({ mode: McpAssetsUrlMode.Create, mcpId: null }),
+        dataset: { testid: Selector.Create },
+      }),
+    });
+  }
+
+  private renderContent(): HTMLElement {
+    if (this.state.loading)
+      return createElement(
+        "section",
+        {
           className:
-            "mt-1 h-10 w-full border border-border-dark bg-[#0f151c] px-3 text-sm text-white outline-none focus:border-primary",
-          "data-testid": testid,
-          onInput: (event: Event) => {
-            if (event.target instanceof HTMLInputElement)
-              onValue(event.target.value);
-          },
+            "rounded-2xl border border-[#202832] bg-[#171c22] px-6 py-10 text-sm text-text-secondary",
+          "aria-busy": "true",
+        },
+        ["Loading MCP connections…"],
+      );
+    if (this.state.errorMessage)
+      return createElement(
+        "section",
+        {
+          className:
+            "flex flex-col items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between",
+          role: "alert",
+          "data-testid": Selector.Error,
+        },
+        [
+          createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+            createElement(
+              "p",
+              { className: "text-sm font-semibold text-rose-100" },
+              ["Could not load MCP connections"],
+            ),
+            createElement("p", { className: "text-sm text-rose-100/80" }, [
+              this.state.errorMessage,
+            ]),
+          ]),
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            icon: "refresh",
+            children: "Retry",
+            onClick: () => void this.loadAssets(),
+            dataset: { testid: Selector.Retry },
+          }),
+        ],
+      );
+    if (this.state.assets.length === 0)
+      return createElement(EmptyStatePanel, {
+        icon: "hub",
+        title: "No MCP connections yet",
+        description:
+          "Create a connection before binding its tools to an AI agent. The server must also list the endpoint in MCP_SERVERS.",
+        action: createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          icon: "add",
+          children: "Create connection",
+          onClick: () =>
+            this.openEditor({ mode: McpAssetsUrlMode.Create, mcpId: null }),
         }),
+      });
+    return createElement(AssetRowList, {
+      testId: Selector.List,
+      rows: this.state.assets.map((asset) => this.renderRow(asset)),
+    });
+  }
+
+  private renderRow(asset: McpAssetSummary): HTMLElement {
+    return createElement(AssetRow, {
+      testId: `${Selector.RowPrefix}${asset.id}`,
+      icon: "hub",
+      title: asset.name,
+      subtitle: asset.id,
+      status: asset.status,
+      meta: [
+        `server ${asset.serverId} · tool contract v${asset.toolVersion}`,
+        "Credentials and untrusted tool payloads never reach the browser",
       ],
+      chips:
+        asset.permissions.length > 0
+          ? asset.permissions.map((permission) => `perm:${permission}`)
+          : ["no permissions declared"],
+      actions: [
+        {
+          label: "Open editor",
+          icon: "edit",
+          variant: "secondary",
+          onClick: () =>
+            this.openEditor({ mode: McpAssetsUrlMode.Edit, mcpId: asset.id }),
+        },
+        {
+          label: "Delete",
+          icon: "delete",
+          variant: "danger",
+          testId: `${Selector.DeletePrefix}${asset.id}`,
+          onClick: () => this.setState({ pendingDeleteId: asset.id }),
+        },
+      ],
+    });
+  }
+
+  private renderEditor(): HTMLElement | string {
+    if (this.state.url.mode === McpAssetsUrlMode.Catalog) return "";
+    const isCreate = this.state.url.mode === McpAssetsUrlMode.Create;
+    const saveDisabled =
+      this.state.busy ||
+      this.state.name.trim().length === 0 ||
+      this.state.serverId.trim().length === 0 ||
+      this.state.toolVersion.trim().length === 0;
+    return createElement(AssetEditorDialog, {
+      testId: Selector.Editor,
+      title: isCreate ? "Create MCP connection" : "Edit MCP connection",
+      description:
+        "Connection credentials and untrusted tool payloads are never configured or displayed in the browser.",
+      onClose: () =>
+        this.openEditor({ mode: McpAssetsUrlMode.Catalog, mcpId: null }),
+      save: {
+        label: isCreate ? "Save connection" : "Save changes",
+        testId: Selector.Save,
+        disabled: saveDisabled,
+        disabledReason: "Name, server ID, and tool version are all required.",
+        onClick: () => void this.saveAsset(),
+      },
+      children: createElement("div", { className: "grid gap-4" }, [
+        createElement(SettingsTextField, {
+          label: "Name",
+          value: this.state.name,
+          placeholder: "Knowledge server",
+          testId: Selector.Name,
+          onChange: (name: string) => this.setState({ name }),
+        }),
+        createElement(SettingsTextField, {
+          label: "Server ID",
+          value: this.state.serverId,
+          placeholder: "reference-knowledge",
+          testId: Selector.Endpoint,
+          hint: "Must match a serverId the operator configured in MCP_SERVERS; the endpoint and token stay server-side.",
+          onChange: (serverId: string) => this.setState({ serverId }),
+        }),
+        createElement(SettingsTextField, {
+          label: "Tool version",
+          value: this.state.toolVersion,
+          placeholder: "1",
+          testId: Selector.Tools,
+          hint: "Connections pin this version; runtime calls with a different pin are rejected.",
+          onChange: (toolVersion: string) => this.setState({ toolVersion }),
+        }),
+      ]),
+    });
+  }
+
+  private renderDeleteConfirmation(): HTMLElement | string {
+    const pendingId = this.state.pendingDeleteId;
+    if (!pendingId) return "";
+    const asset = this.state.assets.find(
+      (candidate) => candidate.id === pendingId,
     );
+    return createElement(AssetConfirmDialog, {
+      testId: Selector.DeleteDialog,
+      title: "Delete MCP connection",
+      message: `This removes "${asset?.name ?? pendingId}" from the workspace. Agents binding its tools will fail fast until the connection is recreated.`,
+      confirmLabel: this.state.busy ? "Deleting…" : "Delete connection",
+      confirmTestId: Selector.DeleteConfirm,
+      confirmDisabled: this.state.busy,
+      onConfirm: () => void this.deleteAsset(pendingId),
+      cancelLabel: "Cancel",
+      cancelTestId: Selector.DeleteCancel,
+      onCancel: () => this.setState({ pendingDeleteId: null }),
+    });
   }
 
   private async loadAssets(): Promise<void> {
@@ -322,16 +329,14 @@ export class McpAssetsScreen extends Component<ComponentProps, McpAssetsState> {
     });
   }
 
-  private canSave(): boolean {
-    return (
-      this.state.name.trim().length > 0 &&
-      this.state.serverId.trim().length > 0 &&
-      this.state.toolVersion.trim().length > 0
-    );
-  }
-
   private async saveAsset(): Promise<void> {
-    if (!this.canSave()) return;
+    if (
+      this.state.name.trim().length === 0 ||
+      this.state.serverId.trim().length === 0 ||
+      this.state.toolVersion.trim().length === 0
+    )
+      return;
+    this.setState({ busy: true });
     try {
       const asset = await this.client.upsert(
         createMcpAssetRecord({
@@ -347,10 +352,34 @@ export class McpAssetsScreen extends Component<ComponentProps, McpAssetsState> {
           ...this.state.assets.filter((item) => item.id !== asset.id),
           asset,
         ],
+        busy: false,
+        noticeMessage: `MCP connection "${asset.name}" saved.`,
       });
       this.openEditor({ mode: McpAssetsUrlMode.Edit, mcpId: asset.id });
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({ busy: false, errorMessage: readErrorMessage(error) });
+    }
+  }
+
+  private async deleteAsset(assetId: string): Promise<void> {
+    this.setState({ busy: true });
+    try {
+      await this.client.delete(assetId);
+      this.setState({
+        assets: this.state.assets.filter((asset) => asset.id !== assetId),
+        pendingDeleteId: null,
+        busy: false,
+        noticeMessage: `MCP connection "${assetId}" deleted.`,
+      });
+      if (this.state.url.mcpId === assetId) {
+        this.openEditor({ mode: McpAssetsUrlMode.Catalog, mcpId: null });
+      }
+    } catch (error) {
+      this.setState({
+        busy: false,
+        pendingDeleteId: null,
+        errorMessage: readErrorMessage(error),
+      });
     }
   }
 }
