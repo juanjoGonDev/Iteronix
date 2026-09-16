@@ -52,6 +52,11 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await expect(row).toContainText("cap:tool-calls");
   await expect(row).toContainText("Last audit: registered");
 
+  // Saving flips the editor to edit mode; closing returns to the catalog where
+  // the row-level controls must be hittable (no overlay interception).
+  await page.getByTestId("plugin-assets-editor-close").click();
+  await expect(page.getByTestId("plugin-assets-editor")).toBeHidden();
+
   await page.getByTestId(`plugin-assets-toggle-${TrustedPluginKey}`).click();
   await expect(row).toContainText("Disabled");
 
@@ -71,6 +76,8 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await page.getByTestId("plugin-assets-save").click();
   await expect(row).toContainText("CI echo plugin (renamed)");
   await expect(row).toContainText("Last audit: updated");
+  await page.getByTestId("plugin-assets-editor-close").click();
+  await expect(page.getByTestId("plugin-assets-editor")).toBeHidden();
 
   await page.getByTestId(`plugin-assets-delete-${TrustedPluginKey}`).click();
   const dialog = page.getByTestId("plugin-assets-delete-dialog");

@@ -202,7 +202,7 @@ export class SkillAssetsScreen extends Component<
       icon: "extension",
       title: skill.name,
       subtitle: skill.id,
-      status: skill.status === "enabled" ? "enabled" : "disabled",
+      status: skill.status,
       meta: [
         skill.description,
         `v${skill.version} · lifecycle ${skill.lifecycle}`,
