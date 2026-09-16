@@ -25,14 +25,10 @@ describe("settings storage", () => {
     const snapshot = readSettingsSnapshot(storage);
 
     expect(snapshot.profileId).toBe(DefaultSettingsProfileId);
-    expect(snapshot.providerProfiles).toHaveLength(1);
-    expect(snapshot.providerProfiles[0]?.providerKind).toBe(
-      ProviderKind.CodexCli,
-    );
+    expect(snapshot.providerProfiles).toEqual([]);
     expect(snapshot.workflowLimits.maxLoops).toBe(50);
     expect(snapshot.notifications.soundEnabled).toBe(true);
-    expect(snapshot.serverConnection.serverUrl).toBe("http://localhost:4000");
-    expect(snapshot.serverConnection.authToken).toBe("dev-token");
+    expect(snapshot).not.toHaveProperty("serverConnection");
   });
 
   it("persists settings without storing secrets", () => {
@@ -48,7 +44,6 @@ describe("settings storage", () => {
             providerKind: ProviderKind.OpenAI,
             modelId: "gpt-5",
             endpointUrl: "https://api.openai.com/v1",
-            apiKey: "secret-api-key",
             apiKeyEnvVar: "LOCAL_AI_API_KEY",
             command: "",
             promptMode: "stdin",
@@ -65,10 +60,6 @@ describe("settings storage", () => {
           soundEnabled: false,
           webhookUrl: "https://example.com/webhook",
         },
-        serverConnection: {
-          serverUrl: "https://server.example.com",
-          authToken: "server-token",
-        },
       },
       storage,
     );
@@ -77,17 +68,13 @@ describe("settings storage", () => {
 
     expect(saved.profileId).toBe("coding");
     expect(reloaded.providerProfiles[0]?.name).toBe("OpenAI planner");
-    expect(reloaded.providerProfiles[0]?.apiKey).toBe("secret-api-key");
     expect(reloaded.providerProfiles[0]?.apiKeyEnvVar).toBe("LOCAL_AI_API_KEY");
     expect(reloaded.workflowLimits.infiniteLoops).toBe(true);
     expect(reloaded.notifications.webhookUrl).toBe(
       "https://example.com/webhook",
     );
-    expect(reloaded.serverConnection.serverUrl).toBe(
-      "https://server.example.com",
-    );
-    expect(reloaded.serverConnection.authToken).toBe("server-token");
-    expect(JSON.stringify(reloaded)).toContain('"apiKey":"secret-api-key"');
+    expect(reloaded).not.toHaveProperty("serverConnection");
+    expect(JSON.stringify(reloaded)).not.toContain('"apiKey"');
   });
 
   it("falls back to defaults when persisted storage is invalid", () => {
@@ -97,6 +84,6 @@ describe("settings storage", () => {
     const snapshot = readSettingsSnapshot(storage);
 
     expect(snapshot.profileId).toBe(DefaultSettingsProfileId);
-    expect(snapshot.providerProfiles).toHaveLength(1);
+    expect(snapshot.providerProfiles).toEqual([]);
   });
 });

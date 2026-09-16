@@ -18,6 +18,7 @@ Desktop.ini
 
 .env
 .env.*
+!.env.example
 
 cache/
 .cache/
@@ -38,6 +39,8 @@ out/
 # UI Screenshots
 apps/web-ui/screenshots/
 screenshots/
+playwright-report/
+test-results/
 
 # No JavaScript files in source (except allowed patterns)
 *.js

@@ -1,27 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
-    "apps/server-api": {
-      "entry": "src/index.ts",
-      "project": "src/**/*.ts"
-    },
+    "apps/server-api": { "entry": "src/index.ts", "project": "src/**/*.ts" },
     "apps/web-ui": {
       "entry": ["src/index.ts", "scripts/test-server.ts", "sw.ts"],
       "project": "src/**/*.ts"
     },
-    "apps/desktop-main": {
-      "entry": "src/index.ts",
-      "project": "src/**/*.ts"
-    },
-    "packages/*": {
-      "entry": "src/index.ts",
-      "project": "src/**/*.ts"
-    }
+    "packages/*": { "entry": "src/index.ts", "project": "src/**/*.ts" }
   },
-  "ignore": [
-    "apps/web-ui/src/components/Input.ts",
-    "apps/web-ui/src/shared/types.ts"
-  ],
-  "ignoreBinaries": ["puppeteer", "preview"],
-  "ignoreDependencies": ["@modelcontextprotocol/sdk"]
+  "ignore": ["apps/web-ui/src/components/Input.ts"],
+  "ignoreBinaries": ["puppeteer", "preview"]
 }

@@ -82,6 +82,34 @@ describe("workflow runtime", () => {
     ]);
   });
 
+  it("reuses pinned outputs only when a test workflow run supplies them", async () => {
+    const providerCalls: string[] = [];
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        providerCalls.push(request.node.id);
+        return {
+          outputText: `Fresh output from ${request.node.id}.`,
+        };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      seedNodeOutputs: {
+        "node-provider-1": "Pinned provider text",
+      },
+    });
+
+    expect(providerCalls).toEqual(["node-provider-2"]);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-2",
+    ]);
+  });
+
   it("keeps server-owned continuity between provider nodes", async () => {
     const providerCalls: Array<{
       nodeId: string;
@@ -465,6 +493,30 @@ describe("workflow runtime", () => {
     expect(providerPrompts.at(-1)).toContain('"total": 1');
   });
 
+  it("ignores prototype-polluting segments in edge mapping target paths", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => ({
+        outputText:
+          request.node.id === "node-provider-source"
+            ? '{"items":[{"name":"First item"}],"meta":{"total":1}}'
+            : '{"result":"Done"}',
+      }),
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createUnsafeTargetPathWorkflowDefinitionRecord(),
+      assets: [],
+    });
+
+    const unpolluted: Record<string, unknown> = {};
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(unpolluted["polluted"]).toBeUndefined();
+    expect(Object.getOwnPropertyNames(Object.prototype)).not.toContain(
+      "polluted",
+    );
+  });
+
   it("maps last-node and accumulated outputs through dynamic paths", async () => {
     const providerPrompts: string[] = [];
     const runtime = createWorkflowRuntime({
@@ -488,6 +540,83 @@ describe("workflow runtime", () => {
     expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
     expect(providerPrompts.at(-1)).toContain('"lastItemName": "First item"');
     expect(providerPrompts.at(-1)).toContain('"accumulatedTotal": 1');
+  });
+
+  it("records every settled sibling before terminalizing a failed canonical stage", async () => {
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        if (request.node.id === "node-provider-right") {
+          throw new Error("right branch failed");
+        }
+        return { outputText: `Output from ${request.node.id}` };
+      },
+    });
+
+    const execution = await runtime.runDefinition({
+      definition: createBranchedWorkflowDefinitionRecord(),
+      assets: [createWorkflowAssetRecord()],
+      executionPlan: {
+        stages: [
+          ["node-trigger"],
+          ["node-prompt"],
+          ["node-provider-left", "node-provider-right"],
+          ["node-provider-target"],
+        ],
+        maxParallelism: 2,
+      },
+    });
+
+    expect(execution.status).toBe(WorkflowExecutionStatus.Failed);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-left",
+      "node-provider-right",
+    ]);
+    expect(execution.nodeRuns.at(-1)?.status).toBe("failed");
+  });
+
+  it("runs canonical sibling stages concurrently while committing deterministic merge output", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const runtime = createWorkflowRuntime({
+      now: createNowSequence(),
+      runProviderNode: async (request) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return { outputText: `Output from ${request.node.id}` };
+      },
+    });
+    const definition = createBranchedWorkflowDefinitionRecord();
+    const execution = await runtime.runDefinition({
+      definition,
+      assets: [createWorkflowAssetRecord()],
+      executionPlan: {
+        stages: [
+          ["node-trigger"],
+          ["node-prompt"],
+          ["node-provider-left", "node-provider-right"],
+          ["node-provider-target"],
+        ],
+        maxParallelism: 2,
+      },
+    });
+
+    expect(maxInFlight).toBe(2);
+    expect(execution.status).toBe(WorkflowExecutionStatus.Completed);
+    expect(execution.nodeRuns.map((nodeRun) => nodeRun.nodeId)).toEqual([
+      "node-trigger",
+      "node-prompt",
+      "node-provider-left",
+      "node-provider-right",
+      "node-provider-target",
+    ]);
+    expect(execution.nodeRuns.at(-1)?.outputSnapshot).toBe(
+      "Output from node-provider-target",
+    );
   });
 
   it("resolves dynamic output references in prompts and guardrail values", async () => {
@@ -548,8 +677,6 @@ const createWorkflowDefinitionRecord = (
   } = {},
 ): WorkflowDefinitionRecord => ({
   id: "workflow-1",
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   name: "Workflow 06.6",
   description: "Workflow runtime continuity",
   status: WorkflowRecordStatus.Draft,
@@ -710,6 +837,49 @@ const createJsonContractWorkflowDefinitionRecord =
     edges: [],
   });
 
+const createUnsafeTargetPathWorkflowDefinitionRecord =
+  (): WorkflowDefinitionRecord => ({
+    ...createWorkflowDefinitionRecord(),
+    nodes: [
+      createNodeRecord({
+        id: "node-provider-source",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-1", "gpt-1"),
+        prompt: "Return items.",
+        outputContract: createItemsOutputContract(),
+      }),
+      createNodeRecord({
+        id: "node-provider-target",
+        kind: WorkflowNodeKind.AiProviderRun,
+        provider: createProviderSelection("profile-2", "gpt-2"),
+        prompt: "Use unsafe paths.",
+        outputContract: createResultOutputContract(),
+      }),
+    ],
+    edges: [
+      {
+        ...createEdgeRecord(
+          "edge-provider-unsafe",
+          "node-provider-source",
+          "node-provider-target",
+        ),
+        mapping: {
+          mode: "object" as const,
+          entries: [
+            {
+              targetPath: "$.__proto__.polluted",
+              source: {
+                kind: "node_output" as const,
+                nodeId: "node-provider-source",
+                path: "$.items[0].name",
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
 const createNestedJsonMappingWorkflowDefinitionRecord =
   (): WorkflowDefinitionRecord => ({
     ...createWorkflowDefinitionRecord(),
@@ -851,10 +1021,8 @@ const createDynamicExpressionReferenceWorkflowDefinitionRecord =
 
 const createWorkflowAssetRecord = (): WorkflowAssetRecord => ({
   id: "asset-prompt",
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   kind: "prompt",
-  scope: "project",
+  scope: "global",
   name: "Prompt asset",
   slug: "prompt-asset",
   description: "",
@@ -873,10 +1041,8 @@ const createGuardrailAssetRecord = (input: {
   message: string;
 }): WorkflowAssetRecord => ({
   id: input.id,
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   kind: "guardrail",
-  scope: "project",
+  scope: "global",
   name: input.id,
   slug: input.id,
   description: "",

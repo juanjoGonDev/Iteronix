@@ -12,6 +12,18 @@ interface NavigationItemProps extends ComponentProps {
   collapsed?: boolean;
 }
 
+export interface NavigationLink {
+  icon: string;
+  label: string;
+  href?: string;
+  active?: boolean;
+  onClick?: (e: Event) => void;
+}
+
+export interface NavigationGroup extends NavigationLink {
+  items: ReadonlyArray<NavigationLink>;
+}
+
 interface BreadcrumbItem {
   label: string;
   href?: string;
@@ -29,23 +41,12 @@ interface SidebarProps extends ComponentProps {
     icon: string;
     version?: string;
   };
-  navigation?: Array<{
-    icon: string;
-    label: string;
-    href?: string;
-    active?: boolean;
-    onClick?: (e: Event) => void;
-  }>;
+  navigation?: ReadonlyArray<NavigationLink | NavigationGroup>;
   user?: {
     name: string;
     avatar?: string | null;
     role?: string;
   } | null;
-  project?: {
-    label: string;
-    rootPath: string | null;
-  } | null;
-  onProjectClick?: () => void;
   onToggle?: () => void;
   collapsed?: boolean;
   className?: string;
@@ -115,6 +116,82 @@ class NavigationItem extends Component<NavigationItemProps> {
   }
 }
 
+const isNavigationGroup = (
+  item: NavigationLink | NavigationGroup,
+): item is NavigationGroup => "items" in item;
+
+class NavigationGroupItem extends Component<
+  { group: NavigationGroup; collapsed: boolean },
+  { expanded: boolean }
+> {
+  constructor(props: { group: NavigationGroup; collapsed: boolean }) {
+    super(props, { expanded: props.group.active ?? false });
+  }
+
+  override render(): HTMLElement {
+    const { group, collapsed } = this.props;
+    const expanded = this.state.expanded;
+    const groupId = `navigation-group-${group.label.toLowerCase().replaceAll(" ", "-")}`;
+
+    return createElement("div", { className: "flex flex-col gap-1" }, [
+      createElement(
+        "button",
+        {
+          type: "button",
+          className: readNavigationGroupToggleClassName(group.active ?? false),
+          onClick: () => this.setState({ expanded: !expanded }),
+          "aria-expanded": String(expanded),
+          "aria-controls": groupId,
+          title: collapsed ? group.label : undefined,
+          "data-testid": `navigation-group-${group.label.toLowerCase().replaceAll(" ", "-")}`,
+        },
+        [
+          createElement(
+            "span",
+            {
+              className: `material-symbols-outlined text-[24px] ${group.active ? "fill-1" : ""}`,
+              "aria-hidden": "true",
+            },
+            [group.icon],
+          ),
+          !collapsed &&
+            createElement(
+              "span",
+              { className: "flex-1 text-left text-sm font-medium" },
+              [group.label],
+            ),
+          !collapsed &&
+            createElement(
+              "span",
+              {
+                className: "material-symbols-outlined text-[18px]",
+                "aria-hidden": "true",
+              },
+              [expanded ? "expand_less" : "expand_more"],
+            ),
+        ],
+      ),
+      expanded &&
+        createElement(
+          "div",
+          {
+            id: groupId,
+            className: readNavigationGroupItemsClassName(collapsed),
+            "data-testid": `${groupId}-items`,
+          },
+          group.items.map((item, index) =>
+            new NavigationItem({
+              key: `group-${index}`,
+              ...item,
+              collapsed,
+              className: collapsed ? "justify-center" : "",
+            }).render(),
+          ),
+        ),
+    ]);
+  }
+}
+
 export class Breadcrumb extends Component<BreadcrumbProps> {
   override render(): HTMLElement {
     const { items = [], className = "" } = this.props;
@@ -173,8 +250,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
     const {
       brand = { name: "Iteronix", icon: "terminal", version: null },
       navigation = [],
-      project = null,
-      onProjectClick,
       onToggle,
       collapsed = false,
       className = "",
@@ -266,24 +341,27 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
             className: readSidebarNavigationClassName(collapsed),
           },
           [
-            navigation.map((item: NavigationItemProps, index: number) => {
-              const navItem = new NavigationItem({
-                key: `nav-${index}`,
-                ...item,
-                collapsed,
-                className: collapsed ? "justify-center" : "",
-              });
-              return navItem.render();
-            }),
+            navigation.map(
+              (item: NavigationLink | NavigationGroup, index: number) => {
+                if (isNavigationGroup(item)) {
+                  const navigationGroupItem = new NavigationGroupItem({
+                    group: item,
+                    collapsed,
+                  });
+                  const rendered = navigationGroupItem.render();
+                  navigationGroupItem.element = rendered;
+                  return rendered;
+                }
+                const navItem = new NavigationItem({
+                  key: `nav-${index}`,
+                  ...item,
+                  collapsed,
+                  className: collapsed ? "justify-center" : "",
+                });
+                return navItem.render();
+              },
+            ),
           ],
-        ),
-
-        createElement(
-          "div",
-          {
-            className: `${collapsed ? "p-3" : "p-4"} border-t border-border-dark`,
-          },
-          [renderProjectButton({ project, collapsed, onProjectClick })],
         ),
       ],
     );
@@ -301,81 +379,8 @@ export const readSidebarRootClassName = (className: string): string =>
 export const readSidebarNavigationClassName = (collapsed: boolean): string =>
   `min-h-0 flex-1 overflow-y-auto overscroll-contain ${collapsed ? "py-4 px-1" : "py-6 px-3"} flex flex-col gap-1`;
 
-const renderProjectButton = (input: {
-  project: {
-    label: string;
-    rootPath: string | null;
-  } | null;
-  collapsed: boolean;
-  onProjectClick: (() => void) | undefined;
-}): HTMLElement =>
-  createElement(
-    "button",
-    {
-      type: "button",
-      className: `flex w-full items-center rounded-xl border border-border-dark bg-surface-dark/60 transition-colors hover:bg-surface-dark-hover ${
-        input.collapsed
-          ? "justify-center px-0 py-3"
-          : "gap-3 px-3 py-3 text-left"
-      }`,
-      "data-testid": "sidebar-project-button",
-      onClick: input.onProjectClick,
-    },
-    [
-      createElement(
-        "span",
-        {
-          className: `material-symbols-outlined shrink-0 text-[20px] ${
-            input.project ? "text-primary" : "text-text-secondary"
-          }`,
-        },
-        [input.project ? "folder_open" : "folder"],
-      ),
-      !input.collapsed &&
-        createElement(
-          "div",
-          {
-            className: "flex min-w-0 flex-1 flex-col",
-          },
-          [
-            createElement(
-              "span",
-              {
-                className:
-                  "text-xs font-semibold uppercase tracking-wide text-text-secondary",
-              },
-              [input.project ? "Active project" : "Project"],
-            ),
-            createElement(
-              "span",
-              {
-                className: "truncate text-sm font-medium text-white",
-                "data-testid": "sidebar-project-label",
-              },
-              [input.project?.label ?? "Select project"],
-            ),
-            createElement(
-              "span",
-              {
-                className: "truncate text-xs text-text-secondary",
-              },
-              [
-                input.project?.rootPath ??
-                  (input.project
-                    ? "Workflow-only project"
-                    : "Open or create a project"),
-              ],
-            ),
-          ],
-        ),
-      !input.collapsed &&
-        createElement(
-          "span",
-          {
-            className:
-              "material-symbols-outlined ml-auto text-[18px] text-text-secondary",
-          },
-          ["chevron_right"],
-        ),
-    ],
-  );
+export const readNavigationGroupToggleClassName = (active: boolean): string =>
+  `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${active ? "bg-primary/15 text-white" : "text-text-secondary hover:bg-surface-dark-hover hover:text-white"}`;
+
+export const readNavigationGroupItemsClassName = (collapsed: boolean): string =>
+  `flex flex-col gap-1 ${collapsed ? "items-center" : "pl-4"}`;

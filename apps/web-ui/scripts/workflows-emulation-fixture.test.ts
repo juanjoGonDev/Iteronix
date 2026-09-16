@@ -7,14 +7,10 @@ import { WorkflowNodeKind } from "../src/screens/workflows-editor-state.js";
 
 describe("workflows emulation fixture", () => {
   it("creates a deterministic reusable workflow for browser tests", () => {
-    const definition = createWorkflowsEmulationDefinition({
-      projectId: WorkflowsEmulationFixture.ProjectId,
-      workspaceId: WorkflowsEmulationFixture.ProjectId,
-    });
+    const definition = createWorkflowsEmulationDefinition();
 
     expect(definition.id).toBe(WorkflowsEmulationFixture.WorkflowId);
     expect(definition.name).toBe(WorkflowsEmulationFixture.WorkflowName);
-    expect(WorkflowsEmulationFixture.ProjectRootPath).toBeNull();
     expect(definition.nodes.map((node) => node.kind)).toEqual([
       WorkflowNodeKind.TriggerManual,
       WorkflowNodeKind.AiAgent,

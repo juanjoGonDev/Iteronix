@@ -4,11 +4,15 @@ export const COMPACT_VIEWPORT_MAX_WIDTH = 960;
 
 // Route aliases configuration
 export const ROUTES = {
-  OVERVIEW: "/overview",
-  PROJECTS: "/projects",
   WORKFLOWS: "/workflows",
-  EXPLORER: "/explorer",
-  KANBAN: "/kanban",
-  HISTORY: "/history",
+  WORKFLOW_EDITOR: "/workflows/:workflowId",
+  PROMPT_ASSETS: "/assets/prompts",
+  SKILL_ASSETS: "/assets/skills",
+  MEMORY_ASSETS: "/assets/memory",
+  MCP_ASSETS: "/assets/mcp",
+  PLUGIN_ASSETS: "/assets/plugins",
   SETTINGS: "/settings",
 } as const;
+
+export const workflowEditorRoute = (workflowId: string): string =>
+  `/workflows/${encodeURIComponent(workflowId)}`;

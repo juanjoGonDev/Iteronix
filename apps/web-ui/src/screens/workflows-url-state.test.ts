@@ -10,6 +10,14 @@ import {
 } from "./workflows-url-state.js";
 
 describe("workflows URL state", () => {
+  it("preserves the selected editor route while updating URL state", () => {
+    expect(
+      applyWorkflowsUrlPatch("http://localhost/workflows/workflow-1", {
+        panel: WorkflowsUrlPanel.Nodes,
+      }),
+    ).toBe("/workflows/workflow-1?panel=nodes");
+  });
+
   it("reads empty workflow URLs as default canvas state", () => {
     expect(readWorkflowsUrlState("http://localhost/workflows")).toEqual({
       panel: null,
@@ -24,6 +32,7 @@ describe("workflows URL state", () => {
       debugOutputTab: null,
       debugInputSourceId: null,
       editor: null,
+      pinnedOutputId: null,
       deepEditorTab: null,
       deepEditorOutputTab: null,
       regexPattern: null,
@@ -106,6 +115,7 @@ describe("workflows URL state", () => {
       modal: WorkflowsUrlModal.NodeEditor,
       nodeId: "node-1",
       editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: "pinned-output-1",
     });
     const deepEditorUrl = applyWorkflowsUrlPatch(
       `http://localhost${outputUrl}`,
@@ -122,6 +132,7 @@ describe("workflows URL state", () => {
       editor: WorkflowsUrlEditor.DeepEditor,
       deepEditorTab: "output",
       deepEditorOutputTab: "json",
+      pinnedOutputId: "pinned-output-1",
     });
   });
 
@@ -187,6 +198,7 @@ describe("workflows URL state", () => {
         compareVersionId: null,
         diffQuery: null,
         editor: null,
+        pinnedOutputId: null,
         debugInputTab: null,
         debugOutputTab: null,
         debugInputSourceId: null,

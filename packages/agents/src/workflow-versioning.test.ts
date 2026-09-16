@@ -153,7 +153,6 @@ describe("workflow versioning", () => {
     });
     const exported = exportWorkflowVersionSnapshot({
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       id: "version-1",
       version: 1,
       createdAt: workflow.updatedAt,
@@ -176,7 +175,6 @@ describe("workflow versioning", () => {
     });
     const versions = [1, 2, 3].map((version) => ({
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       id: `version-${version.toString()}`,
       version,
       createdAt: `2026-05-06T08:0${version.toString()}:00.000Z`,
@@ -222,7 +220,6 @@ describe("workflow versioning", () => {
     });
     const versions = [1, 2].map((version) => ({
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       id: `version-${version.toString()}`,
       version,
       createdAt: `2026-05-06T08:0${version.toString()}:00.000Z`,
@@ -269,6 +266,39 @@ describe("workflow versioning", () => {
     expect(migrated.snapshot.name).toBe("Legacy");
   });
 
+  it("strips duplicate workflow-owned prompt text from pinned prompt imports and exports", () => {
+    const workflow = createWorkflow({
+      name: "Pinned prompt",
+      nodes: [
+        createNode("node-a", "A", {
+          prompt: "legacy duplicate",
+          promptAsset: {
+            assetId: "prompt-a",
+            version: 2,
+            bindings: { name: "Ada" },
+          },
+        }),
+      ],
+    });
+    const exported = exportWorkflowVersionSnapshot({
+      workflowId: workflow.id,
+      id: "version-prompt",
+      version: 1,
+      createdAt: workflow.updatedAt,
+      snapshot: workflow,
+      tags: [],
+    });
+    const imported = migrateWorkflowVersionExport(exported);
+
+    expect(exported.snapshot.nodes[0]?.config.prompt).toBeUndefined();
+    expect(imported.snapshot.nodes[0]?.config.prompt).toBeUndefined();
+    expect(imported.snapshot.nodes[0]?.config.promptAsset).toEqual({
+      assetId: "prompt-a",
+      version: 2,
+      bindings: { name: "Ada" },
+    });
+  });
+
   it("previews import risks before creating a workflow", () => {
     const workflow = createWorkflow({
       name: "Imported",
@@ -276,7 +306,6 @@ describe("workflow versioning", () => {
     });
     const exported = exportWorkflowVersionSnapshot({
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       id: "version-1",
       version: 1,
       createdAt: workflow.updatedAt,
@@ -285,21 +314,15 @@ describe("workflow versioning", () => {
     });
     const preview = previewWorkflowVersionImport({
       exported,
-      targetWorkspaceId: "workspace-2",
-      targetProjectId: "project-2",
       existingWorkflowIds: [workflow.id],
     });
 
     expect(preview.status).toBe("warning");
     expect(preview.checksumValid).toBe(true);
     expect(preview.workflowIdCollision).toBe(true);
-    expect(preview.workspaceMismatch).toBe(true);
-    expect(preview.projectMismatch).toBe(true);
     expect(preview.recommendedIdMode).toBe("regenerate_ids");
     expect(preview.messages.map((message) => message.code)).toEqual([
       "workflow_id_collision",
-      "workspace_mismatch",
-      "project_mismatch",
     ]);
   });
 
@@ -330,7 +353,6 @@ describe("workflow versioning", () => {
     const exported = exportWorkflowVersionSnapshot(
       {
         workflowId: workflow.id,
-        projectId: workflow.projectId,
         id: "version-1",
         version: 1,
         createdAt: workflow.updatedAt,
@@ -363,7 +385,6 @@ describe("workflow versioning", () => {
     });
     const exported = exportWorkflowVersionSnapshot({
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       id: "version-1",
       version: 1,
       createdAt: workflow.updatedAt,
@@ -377,8 +398,6 @@ describe("workflow versioning", () => {
     };
     const preview = previewWorkflowVersionImport({
       exported: unsupported,
-      targetWorkspaceId: workflow.workspaceId,
-      targetProjectId: workflow.projectId,
       existingWorkflowIds: [],
     });
 
@@ -396,7 +415,6 @@ describe("workflow versioning", () => {
     const versions = [1, 2, 3, 4].map((version) => ({
       id: `version-${version.toString()}`,
       workflowId: workflow.id,
-      projectId: workflow.projectId,
       version,
       createdAt: `2026-05-06T08:0${version.toString()}:00.000Z`,
       snapshot: {
@@ -422,8 +440,6 @@ const createWorkflow = (input: {
   edges?: WorkflowDefinitionRecord["edges"];
 }): WorkflowDefinitionRecord => ({
   id: BaseWorkflow,
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   name: input.name,
   description: input.description ?? "Description",
   status: WorkflowRecordStatus.Draft,

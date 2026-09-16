@@ -16,8 +16,11 @@ import {
   readWorkflowPinnedNodeVisualState,
   parseWorkflowEditedOutputSnapshot,
   readWorkflowPinnedTestOutputFromDefinition,
+  readWorkflowPinnedTestOutputsFromDefinition,
+  readWorkflowTestRunSeedOutputs,
   writeWorkflowPinnedTestOutputToDefinition,
-  readWorkflowStepSeedOutputs,
+  writeWorkflowPinnedTestOutputsToDefinition,
+  readWorkflowStepRunSeedOutputs,
   readWorkflowStepExecutionAvailability,
   shouldApplyWorkflowExecutionsRefresh,
   selectWorkflowCanvasExecution,
@@ -25,6 +28,7 @@ import {
   shouldOpenNodeModalFromPointerDetail,
   shouldOpenNodeModalFromPointerSequence,
   selectWorkflowDebugExecution,
+  selectGovernanceLifecycleControlState,
 } from "./workflows-debug-state.js";
 import {
   addWorkflowNode,
@@ -34,6 +38,37 @@ import {
 } from "./workflows-editor-state.js";
 
 describe("workflows debug state", () => {
+  it("derives lifecycle approval controls and audit evidence for the inspector", () => {
+    expect(
+      selectGovernanceLifecycleControlState({
+        state: "awaiting-user-approval",
+        budgets: { execution: 1, repair: 0, review: 2 },
+        fingerprints: {
+          scope: "scope-fingerprint",
+          evidence: "evidence-fingerprint",
+        },
+        transitionCount: 5,
+        feedback: "",
+        pending: false,
+      }),
+    ).toEqual({
+      controlsDisabled: false,
+      rejectDisabled: true,
+      budgetSummary: "execution 1 · repair 0 · review 2",
+      fingerprintSummary: "scope-fingerprint · evidence-fingerprint",
+      historyLabel: "5 decisions",
+    });
+    expect(
+      selectGovernanceLifecycleControlState({
+        state: "approved",
+        budgets: {},
+        fingerprints: { scope: "scope", evidence: "evidence" },
+        transitionCount: 6,
+        feedback: "Needs revision",
+        pending: false,
+      }).controlsDisabled,
+    ).toBe(true);
+  });
   it("counts n8n-like items for arrays and single object outputs", () => {
     expect(readWorkflowDebugItemCount([{ id: 1 }, { id: 2 }])).toBe(2);
     expect(readWorkflowDebugItemLabel({ ok: true })).toBe("1 item");
@@ -66,7 +101,6 @@ describe("workflows debug state", () => {
 
   it("builds selectable input sources from previous connected outputs", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Debug",
     });
     const sourceNode = definition.nodes[0];
@@ -95,10 +129,9 @@ describe("workflows debug state", () => {
     expect(sources[0]?.detail).toContain("1 item");
   });
 
-  it("builds reusable step seed outputs from previous runs and one pinned output", () => {
+  it("uses only persisted selected upstream defaults for test step runs", () => {
     const definition = addWorkflowNode(
       createEmptyWorkflowDefinition({
-        projectId: "project-1",
         name: "Debug",
       }),
       WorkflowNodeKind.AiAgent,
@@ -113,24 +146,102 @@ describe("workflows debug state", () => {
           ?.inputPorts[0]?.id ?? "",
     });
 
-    const seeds = readWorkflowStepSeedOutputs({
-      workflow: connected,
-      executionOutputs: new Map<string, unknown>([
-        [connected.nodes[0]?.id ?? "", { result: "cached" }],
-        ["node-target", { result: "old target" }],
-      ]),
-      pinnedOutput: {
-        workflowId: "workflow-1",
-        nodeId: connected.nodes[0]?.id ?? "",
-        outputSnapshot: { result: "pinned" },
-      },
-      workflowId: "workflow-1",
+    const sourceNodeId = connected.nodes[0]?.id ?? "";
+    const configured = {
+      ...connected,
+      id: "workflow-1",
+      nodes: connected.nodes.map((node) =>
+        node.id === sourceNodeId
+          ? {
+              ...node,
+              config: {
+                ...node.config,
+                pinnedTestOutput: {
+                  outputSnapshot: { result: "legacy" },
+                  updatedAt: "2026-07-15T15:00:00.000Z",
+                },
+                pinnedTestOutputs: [
+                  {
+                    id: "unselected",
+                    name: "Earlier fixture",
+                    outputSnapshot: { result: "unselected" },
+                    updatedAt: "2026-07-15T15:00:00.000Z",
+                  },
+                  {
+                    id: "selected",
+                    name: "Approved fixture",
+                    outputSnapshot: { result: "selected" },
+                    updatedAt: "2026-07-15T15:00:00.000Z",
+                  },
+                ],
+                defaultPinnedTestOutputId: "selected",
+              },
+            }
+          : node,
+      ),
+    };
+
+    expect(
+      readWorkflowStepRunSeedOutputs({
+        mode: "normal",
+        workflow: configured,
+        targetNodeId: "node-target",
+      }),
+    ).toBeUndefined();
+
+    const seeds = readWorkflowStepRunSeedOutputs({
+      mode: "test",
+      workflow: configured,
       targetNodeId: "node-target",
     });
 
     expect(seeds).toEqual({
-      [connected.nodes[0]?.id ?? ""]: { result: "pinned" },
+      [sourceNodeId]: { result: "selected" },
     });
+  });
+
+  it("does not reuse a legacy-only persisted upstream pin for test step runs", () => {
+    const definition = addWorkflowNode(
+      createEmptyWorkflowDefinition({
+        name: "Legacy debug",
+      }),
+      WorkflowNodeKind.AiAgent,
+      () => "node-target",
+    );
+    const connected = connectWorkflowNodes(definition, {
+      sourceNodeId: definition.nodes[0]?.id ?? "",
+      sourcePortId: definition.nodes[0]?.outputPorts[0]?.id ?? "",
+      targetNodeId: "node-target",
+      targetPortId:
+        definition.nodes.find((node) => node.id === "node-target")
+          ?.inputPorts[0]?.id ?? "",
+    });
+    const sourceNodeId = connected.nodes[0]?.id ?? "";
+    const configured = {
+      ...connected,
+      nodes: connected.nodes.map((node) =>
+        node.id === sourceNodeId
+          ? {
+              ...node,
+              config: {
+                ...node.config,
+                pinnedTestOutput: {
+                  outputSnapshot: { result: "legacy" },
+                  updatedAt: "2026-07-15T15:00:00.000Z",
+                },
+              },
+            }
+          : node,
+      ),
+    };
+
+    expect(
+      readWorkflowStepRunSeedOutputs({
+        mode: "test",
+        workflow: configured,
+        targetNodeId: "node-target",
+      }),
+    ).toEqual({});
   });
 
   it("requires confirmation before replacing another pinned step output", () => {
@@ -210,7 +321,6 @@ describe("workflows debug state", () => {
 
   it("persists a single pinned test output in the workflow definition", () => {
     const definition = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Pinned",
     });
     const firstNodeId = definition.nodes[0]?.id ?? "";
@@ -241,10 +351,89 @@ describe("workflows debug state", () => {
       "2026-07-03T10:01:00.000Z",
     );
 
-    expect(replaced.nodes[0]?.config.pinnedTestOutput).toBeUndefined();
-    expect(replaced.nodes[1]?.config.pinnedTestOutput).toEqual({
-      outputSnapshot: { result: "second" },
-      updatedAt: "2026-07-03T10:01:00.000Z",
+    expect(replaced.nodes[0]?.config.pinnedTestOutputs).toBeUndefined();
+    expect(replaced.nodes[1]?.config.pinnedTestOutputs).toEqual([
+      {
+        id: `pinned-${secondNodeId}`,
+        name: "Pinned output 1",
+        outputSnapshot: { result: "second" },
+        updatedAt: "2026-07-03T10:01:00.000Z",
+      },
+    ]);
+    expect(replaced.nodes[1]?.config.defaultPinnedTestOutputId).toBe(
+      `pinned-${secondNodeId}`,
+    );
+  });
+
+  it("persists several pinned outputs per node and exposes only each selected default to test runs", () => {
+    const definition = createEmptyWorkflowDefinition({
+      name: "Pinned test fixtures",
+    });
+    const firstNodeId = definition.nodes[0]?.id ?? "";
+    const secondNodeId = definition.nodes[1]?.id ?? "";
+    const pinned = writeWorkflowPinnedTestOutputsToDefinition(
+      { ...definition, id: "workflow-1" },
+      [
+        {
+          id: "first-response",
+          workflowId: "workflow-1",
+          nodeId: firstNodeId,
+          name: "Initial response",
+          outputSnapshot: { result: "first" },
+        },
+        {
+          id: "selected-response",
+          workflowId: "workflow-1",
+          nodeId: firstNodeId,
+          name: "Approved response",
+          outputSnapshot: { result: "selected" },
+        },
+        {
+          id: "second-node-response",
+          workflowId: "workflow-1",
+          nodeId: secondNodeId,
+          name: "Fallback response",
+          outputSnapshot: { result: "second" },
+        },
+      ],
+      {
+        [firstNodeId]: "selected-response",
+        [secondNodeId]: "second-node-response",
+      },
+      "2026-07-15T14:00:00.000Z",
+    );
+
+    expect(readWorkflowPinnedTestOutputsFromDefinition(pinned)).toEqual([
+      {
+        id: "first-response",
+        workflowId: "workflow-1",
+        nodeId: firstNodeId,
+        name: "Initial response",
+        outputSnapshot: { result: "first" },
+      },
+      {
+        id: "selected-response",
+        workflowId: "workflow-1",
+        nodeId: firstNodeId,
+        name: "Approved response",
+        outputSnapshot: { result: "selected" },
+      },
+      {
+        id: "second-node-response",
+        workflowId: "workflow-1",
+        nodeId: secondNodeId,
+        name: "Fallback response",
+        outputSnapshot: { result: "second" },
+      },
+    ]);
+    expect(
+      readWorkflowTestRunSeedOutputs({
+        workflow: pinned,
+        workflowId: "workflow-1",
+      }),
+    ).toEqual({
+      [firstNodeId]: { result: "selected" },
+      [secondNodeId]: { result: "second" },
     });
   });
 
@@ -330,7 +519,6 @@ describe("workflows debug state", () => {
 
   it("preserves dirty canvas edits while execution auto-refresh reloads catalog data", () => {
     const serverWorkflow = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Saved",
     });
     const savedWorkflow = { ...serverWorkflow, id: "workflow-1" };
@@ -353,7 +541,6 @@ describe("workflows debug state", () => {
 
   it("accepts the server workflow after catalog reload when the local draft is clean", () => {
     const serverWorkflow = createEmptyWorkflowDefinition({
-      projectId: "project-1",
       name: "Server update",
     });
 
@@ -463,7 +650,6 @@ describe("workflows debug state", () => {
     expect(
       readWorkflowStepExecutionAvailability({
         hasNodeSelection: true,
-        hasCurrentProject: true,
         hasCurrentWorkflow: true,
         hasDirtyWorkflow: false,
         dirtyAssetCount: 0,
@@ -483,7 +669,6 @@ describe("workflows debug state", () => {
     expect(
       readWorkflowNodeHoverRunControlState({
         hasTargetNode: true,
-        hasCurrentProject: true,
         hasCurrentWorkflow: true,
         hasDirtyWorkflow: false,
         dirtyAssetCount: 0,
@@ -523,7 +708,6 @@ describe("workflows debug state", () => {
   it("finds connected modal neighbors and keeps the active run when navigating", () => {
     const definition = addWorkflowNode(
       createEmptyWorkflowDefinition({
-        projectId: "project-1",
         name: "Debug",
       }),
       WorkflowNodeKind.AiAgent,

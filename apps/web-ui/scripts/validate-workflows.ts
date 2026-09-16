@@ -8,10 +8,6 @@ import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
 import {
-  DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey,
-} from "../src/shared/server-config.js";
-import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
   parseBrowserValidationRuntimeOptions,
@@ -24,13 +20,15 @@ import {
 
 const ValidationConfig = {
   PreviewBaseUrl: "http://127.0.0.1:4000",
-  StubApiBaseUrl: "http://127.0.0.1:4108",
+  StubApiBaseUrl: "http://127.0.0.1:4001",
   PreviewHealthPath: "/index.html",
   StubHealthPath: "/health",
   WorkflowsRoute: ROUTES.WORKFLOWS,
+  InitialWorkflowId: "workflow-1",
   PreviewStartupTimeoutMs: 30000,
   UiPollingTimeoutMs: 18000,
   UiPollingIntervalMs: 200,
+  StepExecutionDelayMs: 1000,
   ViewportWidth: 1600,
   ViewportHeight: 1080,
   MobileViewportWidth: 390,
@@ -38,8 +36,9 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
-  WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update",
+  AuthMe: "/auth/me",
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   DefinitionsList: "/workflows/definitions/list",
   DefinitionsGet: "/workflows/definitions/get",
   DefinitionsVersions: "/workflows/definitions/versions",
@@ -56,6 +55,7 @@ const RequestPath = {
   DefinitionsUpsert: "/workflows/definitions/upsert",
   DefinitionsDelete: "/workflows/definitions/delete",
   AssetsList: "/workflows/assets/list",
+  PromptAssetsList: "/assets/list",
   AssetsGet: "/workflows/assets/get",
   AssetsUpsert: "/workflows/assets/upsert",
   AssetsDelete: "/workflows/assets/delete",
@@ -67,6 +67,7 @@ const RequestPath = {
 } as const;
 
 const ResponseHeader = {
+  AllowCredentials: "Access-Control-Allow-Credentials",
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
@@ -83,8 +84,11 @@ const WorkflowSelector = {
   ConnectionPreview: "workflows-connection-preview",
   EdgeDeletePrefix: "workflows-edge-delete-",
   EdgeHitPrefix: "workflows-edge-hit-",
-  WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
+  WorkflowRun: "workflows-run",
+  NodeStepRunMenu: "workflows-node-step-run-menu",
+  NodeStepRunMenuNormal: "workflows-node-step-run-normal",
+  NodeStepRunMenuTest: "workflows-node-step-run-test",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
   WorkflowEditHistoryUndo: "workflows-edit-history-undo",
@@ -113,6 +117,7 @@ const WorkflowSelector = {
   DebugOutputTabPrefix: "workflows-debug-output-tab-",
   DebugInputSource: "workflows-debug-input-source",
   OutputPinControl: "workflows-output-pin-control",
+  PinnedOutputsList: "workflows-pinned-outputs-list",
   NodeModalPrevious: "workflows-node-modal-previous",
   NodeModalNext: "workflows-node-modal-next",
   DeepEditorTabOutput: "workflows-deep-editor-tab-output",
@@ -190,6 +195,8 @@ const WorkflowSelector = {
   WorkflowVersionImportPreviewMessage:
     "workflows-version-import-preview-message",
   WorkflowVersionImportVersionSelect: "workflows-version-import-version-select",
+  WorkflowVersionImportVersionOptionPrefix:
+    "workflows-version-import-version-option-",
   WorkflowVersionImportVersionSummary:
     "workflows-version-import-version-summary",
   WorkflowVersionImport: "workflows-version-import",
@@ -208,6 +215,24 @@ const WorkflowSelector = {
   NodePalettePrefix: "workflows-node-palette-",
 } as const;
 
+const WorkflowCatalogSelector = {
+  Root: "workflows-catalog-root",
+  Create: "workflows-catalog-create",
+  EmptyCreate: "workflows-catalog-empty-create",
+  RenamePrefix: "workflows-catalog-rename-",
+  RenameDialog: "workflows-catalog-rename-dialog",
+  RenameInput: "workflows-catalog-rename-input",
+  RenameSave: "workflows-catalog-rename-save",
+  DeletePrefix: "workflows-catalog-delete-",
+  DeleteDialog: "workflows-catalog-delete-dialog",
+  DeleteConfirm: "workflows-catalog-delete-confirm",
+} as const;
+
+const WorkflowRecoverySelector = {
+  Root: "workflows-connection-recovery",
+  OpenSettings: "workflows-open-settings",
+} as const;
+
 const WorkflowNodeKind = {
   TriggerManual: "trigger.manual",
   AssetPrompt: "asset.prompt",
@@ -224,20 +249,10 @@ const WorkflowNodeKind = {
 type WorkflowNodeKind =
   (typeof WorkflowNodeKind)[keyof typeof WorkflowNodeKind];
 
-type StubProjectRecord = {
-  id: string;
-  name: string;
-  rootPath: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
 type StubWorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: "prompt" | "instruction" | "guardrail";
-  scope: "workspace" | "project";
+  scope: "global";
   name: string;
   slug: string;
   description: string;
@@ -247,6 +262,7 @@ type StubWorkflowAssetRecord = {
   tags: ReadonlyArray<string>;
   outputContract?: Record<string, unknown>;
   guardrail?: Record<string, unknown>;
+  prompt?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string;
@@ -268,6 +284,8 @@ type StubWorkflowNodeRecord = {
       requireHumanDecision: boolean;
     };
     pinnedTestOutput?: Record<string, unknown>;
+    pinnedTestOutputs?: ReadonlyArray<Record<string, unknown>>;
+    defaultPinnedTestOutputId?: string;
   };
   inputPorts: ReadonlyArray<{ id: string; name: string; acceptsMany: boolean }>;
   outputPorts: ReadonlyArray<{
@@ -285,8 +303,6 @@ type StubWorkflowNodeRecord = {
 
 type StubWorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: "draft" | "published" | "archived";
@@ -330,7 +346,6 @@ type StubWorkflowDefinitionRecord = {
 type StubWorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: StubWorkflowDefinitionRecord;
@@ -344,7 +359,6 @@ type StubWorkflowDefinitionVersionRecord = {
 type StubExecutionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   triggerKind: "manual";
   status: "running" | "completed" | "failed" | "awaiting_review" | "canceled";
   startedAt: string;
@@ -397,7 +411,6 @@ type StubExecutionRecord = {
 type StubAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: "primary" | "instruction" | "guardrail";
@@ -410,23 +423,18 @@ type StubServerState = {
   definitionVersions: StubWorkflowDefinitionVersionRecord[];
   assets: StubWorkflowAssetRecord[];
   executions: StubExecutionRecord[];
+  nodeExecutionRequests: Array<{
+    nodeId: string;
+    seedNodeOutputs: unknown | undefined;
+  }>;
   nextWorkflowId: number;
   nextAssetId: number;
   versionExportCount: number;
   versionTimelineExportCount: number;
 };
 
-const fixtureProject: StubProjectRecord = {
-  id: "workflows-project",
-  name: "Iteronix",
-  rootPath: "D:\\projects\\Iteronix",
-  createdAt: "2026-05-06T08:00:00.000Z",
-  updatedAt: "2026-05-06T08:00:00.000Z",
-};
-
 const ValidationText = {
   ScreenTitle: "Workflows",
-  CurrentProject: fixtureProject.name,
   WorkflowName: "Daily updates workflow",
   WorkflowDescription: "Server-backed workflow for the integrated editor.",
   PromptNodeLabel: "Primary prompt",
@@ -461,8 +469,7 @@ const ValidationText = {
   ExecutionPrimaryStartedAt: "2026-05-06T08:16:00.000Z",
   ExecutionSecondaryStartedAt: "2026-05-06T08:20:00.000Z",
   ExecutionCleanStartedAt: "2026-05-06T08:12:00.000Z",
-  WorkflowCreatedNotice: "Workflow definition created.",
-  WorkflowSavedNotice: "Workflow saved to the server workspace.",
+  WorkflowSavedNotice: "Workflow saved to PostgreSQL.",
   ExecutionDeletedNotice: "Execution deleted.",
   ConnectionAddedNotice: "Connection added.",
   ConnectionHintTitle: "Connect nodes",
@@ -483,9 +490,9 @@ const ValidationText = {
 const runtimeOptions = parseBrowserValidationRuntimeOptions(
   process.argv.slice(2),
 );
-const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const screenshotDirectory = join(projectRoot, "screenshots");
-const buildOutputPath = join(projectRoot, "dist", "index.js");
+const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const screenshotDirectory = join(appRoot, "screenshots");
+const buildOutputPath = join(appRoot, "dist", "index.js");
 
 await validateWorkflowsScreen();
 
@@ -496,7 +503,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
-  const previewServer = startPreviewServer(projectRoot);
+  const previewServer = startPreviewServer(appRoot);
   const stubServer = await startWorkflowStubServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
@@ -521,28 +528,25 @@ async function validateWorkflowsScreen(): Promise<void> {
       args: ["--no-sandbox"],
     });
 
+    await validateConnectionRecovery(browser);
+
     const page = await browser.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(page);
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
       {
         waitUntil: "networkidle0",
       },
     );
-
-    await waitForTestId(page, WorkflowSelector.Root);
-    await waitForPageTexts(page, [
-      ValidationText.ScreenTitle,
-      ValidationText.CurrentProject,
-    ]);
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await waitForTestId(page, WorkflowCatalogSelector.EmptyCreate);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
-      suffix: "workflows-initial",
+      suffix: "workflows-catalog-empty",
       artifactName: "workflows",
     });
 
@@ -550,10 +554,48 @@ async function validateWorkflowsScreen(): Promise<void> {
       throw new Error(`Unexpected native dialog: ${dialog.message()}`);
     });
 
-    await clickByTestId(page, WorkflowSelector.WorkflowCreate);
-    await waitForPageText(page, ValidationText.WorkflowCreatedNotice);
+    await clickByTestId(page, WorkflowCatalogSelector.EmptyCreate);
+    await waitForUrlPath(
+      page,
+      `${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowSelector.Root);
+    await waitForPageTexts(page, [ValidationText.ScreenTitle]);
+    await waitForMissingTestId(page, "workflows-select");
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/missing-workflow`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await waitForUrlPath(page, ValidationConfig.WorkflowsRoute);
+    await clickByTestId(
+      page,
+      `${WorkflowCatalogSelector.RenamePrefix}${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.RenameDialog);
+    await setInputValueByTestId(
+      page,
+      WorkflowCatalogSelector.RenameInput,
+      "Catalog-renamed workflow",
+    );
+    await clickByTestId(page, WorkflowCatalogSelector.RenameSave);
+    await waitForPageText(page, "Catalog-renamed workflow");
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowSelector.Root);
     await waitForTestId(page, WorkflowSelector.CanvasZoomOut);
     await waitForTestId(page, WorkflowSelector.CanvasResetView);
+    await clickByTestId(page, WorkflowSelector.WorkflowRun);
+    await waitForPageTexts(page, ["Run normally", "Run test"]);
+    await assertWorkflowRunMenuIsAboveCanvas(page);
+    await clickByTestId(page, WorkflowSelector.CanvasZoomIn);
+    await waitForMissingPageText(page, "Run test");
     await waitForTestId(page, WorkflowSelector.CanvasZoomIn);
     await waitForNodeCardCount(page, 2);
 
@@ -666,6 +708,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!promptAsset) {
       throw new Error("Expected prompt asset after creating it.");
     }
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.AssetCardPrefix}${promptAsset.id}`,
+    );
     await clickByTestId(
       page,
       `${WorkflowSelector.AssetCardPrefix}${promptAsset.id}`,
@@ -895,6 +941,7 @@ async function validateWorkflowsScreen(): Promise<void> {
         intervalMs: ValidationConfig.UiPollingIntervalMs,
       },
     );
+    await waitForWorkflowVersionCount(page, 1);
     await setTextAreaValueByTestId(
       page,
       WorkflowSelector.WorkflowVersionImportText,
@@ -953,6 +1000,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForTestId(
       page,
       WorkflowSelector.WorkflowVersionImportVersionSummary,
+    );
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.WorkflowVersionImportVersionOptionPrefix}timeline-import-v1`,
     );
     await selectValueByTestId(
       page,
@@ -1156,6 +1207,10 @@ async function validateWorkflowsScreen(): Promise<void> {
     if (!guardrailAsset) {
       throw new Error("Expected guardrail asset after creating it.");
     }
+    await waitForTestId(
+      page,
+      `${WorkflowSelector.GuardrailAttachmentEditPrefix}${guardrailAsset.id}`,
+    );
     await clickByTestId(
       page,
       `${WorkflowSelector.GuardrailAttachmentEditPrefix}${guardrailAsset.id}`,
@@ -1254,17 +1309,17 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickByTestId(page, WorkflowSelector.OutputPinControl);
-    await waitForTestId(page, WorkflowSelector.WorkflowVersionActionDialog);
-    await clickByTestId(
-      page,
-      WorkflowSelector.WorkflowVersionActionDialogConfirm,
-    );
     await waitForPinnedDefinitionOutput(
       stubServer.state,
       ValidationText.HistoryPinnedOutputNeedle,
     );
     await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await clickButtonByTitle(page, "Close editor");
+
+    const stepTestFixture = addStepTestPinnedDefault(
+      connectedHistoryDefinition,
+    );
+    stubServer.state.definitions = [stepTestFixture.definition];
 
     await page.reload({
       waitUntil: "networkidle0",
@@ -1275,39 +1330,48 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
-    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
+    await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
+    await assertPinnedOutputListHasName(page);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    const inspectorUrl = page.url();
     await clickButtonByText(page, "Execute step");
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenu);
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuNormal);
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    if (page.url() !== inspectorUrl) {
+      throw new Error("Execute step menu must not change the inspector URL.");
+    }
+    await captureBrowserValidationScreenshot({
+      page,
+      directory: screenshotDirectory,
+      suffix: "workflows-step-run-menu",
+      artifactName: "workflows",
+    });
+    stubServer.state.nodeExecutionRequests = [];
+    await clickByTestId(page, WorkflowSelector.NodeStepRunMenuNormal);
     await waitForPageText(page, "Executing");
+    await waitForNodeExecutionSeedOutputs(stubServer.state, undefined);
     await waitForPageText(page, ValidationText.StepOutputNeedle);
     await waitForExecutionWithOutput(
       stubServer.state,
       ValidationText.StepOutputNeedle,
     );
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.WorkflowSavedNotice);
-    await clickButtonByTitle(page, "Close editor");
-    await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
-
-    await page.reload({
-      waitUntil: "networkidle0",
-    });
-    await waitForNodeCardCount(page, 2);
-    const postStepResponseCardTestId = await readNodeCardTestIdByText(
-      page,
-      "Response",
+    await waitForPageText(page, "Execute step");
+    await clickButtonByText(page, "Execute step");
+    await waitForTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    if (page.url() !== inspectorUrl) {
+      throw new Error(
+        "Execute step test menu must not change the inspector URL.",
+      );
+    }
+    stubServer.state.nodeExecutionRequests = [];
+    await clickByTestId(page, WorkflowSelector.NodeStepRunMenuTest);
+    await waitForPageText(page, "Executing");
+    await waitForNodeExecutionSeedOutputs(
+      stubServer.state,
+      stepTestFixture.seedNodeOutputs,
     );
-    await doubleClickByTestId(page, postStepResponseCardTestId);
-    await waitForPageText(page, ValidationText.HistoryPinnedOutputNeedle);
-    await waitForMissingPageText(page, ValidationText.StepOutputNeedle);
-    await waitForMissingPageText(page, ValidationText.EditedPinnedOutputNeedle);
-    await captureBrowserValidationScreenshot({
-      page,
-      directory: screenshotDirectory,
-      suffix: "workflows-pinned-output",
-      artifactName: "workflows",
-    });
     await clickButtonByTitle(page, "Close editor");
     await waitForMissingTestId(page, WorkflowSelector.InspectorPanel);
 
@@ -1316,7 +1380,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       height: ValidationConfig.MobileViewportHeight,
     });
     await page.goto(
-      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
       {
         waitUntil: "networkidle0",
       },
@@ -1329,6 +1393,25 @@ async function validateWorkflowsScreen(): Promise<void> {
       artifactName: "workflows",
     });
 
+    await page.setViewport({
+      width: ValidationConfig.ViewportWidth,
+      height: ValidationConfig.ViewportHeight,
+    });
+    await page.goto(
+      `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}`,
+      {
+        waitUntil: "networkidle0",
+      },
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.Root);
+    await clickByTestId(
+      page,
+      `${WorkflowCatalogSelector.DeletePrefix}${ValidationConfig.InitialWorkflowId}`,
+    );
+    await waitForTestId(page, WorkflowCatalogSelector.DeleteDialog);
+    await clickByTestId(page, WorkflowCatalogSelector.DeleteConfirm);
+    await waitForTestId(page, WorkflowCatalogSelector.EmptyCreate);
+
     await page.close();
     console.log("Browser validation passed for workflows screen.");
   } finally {
@@ -1340,16 +1423,50 @@ async function validateWorkflowsScreen(): Promise<void> {
   }
 }
 
+async function validateConnectionRecovery(
+  browser: Awaited<ReturnType<typeof puppeteer.launch>>,
+): Promise<void> {
+  const page = await browser.newPage();
+  await page.setViewport({
+    width: ValidationConfig.ViewportWidth,
+    height: ValidationConfig.ViewportHeight,
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    const requestUrl = request.url();
+    const isWorkflowRequest =
+      requestUrl.startsWith(ValidationConfig.StubApiBaseUrl) &&
+      !requestUrl.endsWith("/auth/me");
+    if (isWorkflowRequest) {
+      void request.abort();
+      return;
+    }
+
+    void request.continue();
+  });
+  await page.goto(
+    `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.WorkflowsRoute}/${ValidationConfig.InitialWorkflowId}`,
+    {
+      waitUntil: "networkidle0",
+    },
+  );
+  await waitForTestId(page, WorkflowRecoverySelector.Root);
+  await waitForPageText(page, "Workflow service unavailable");
+  await waitForMissingTestId(page, WorkflowRecoverySelector.OpenSettings);
+  await page.close();
+}
+
 async function startWorkflowStubServer(): Promise<{
   state: StubServerState;
   close: () => Promise<void>;
 }> {
   const state: StubServerState = {
-    settings: createDefaultWorkspaceSettings(),
+    settings: createDefaultApplicationSettings(),
     definitions: [],
     definitionVersions: [],
     assets: [],
     executions: [],
+    nodeExecutionRequests: [],
     nextWorkflowId: 1,
     nextAssetId: 1,
     versionExportCount: 0,
@@ -1360,7 +1477,7 @@ async function startWorkflowStubServer(): Promise<{
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(4108, "127.0.0.1", () => resolve());
+    server.listen(4001, "127.0.0.1", () => resolve());
     server.on("error", (error) => reject(error));
   });
 
@@ -1402,9 +1519,12 @@ async function handleStubRequest(
     return;
   }
 
-  if (!isAuthorized(request)) {
-    writeJson(response, 401, {
-      message: "Unauthorized",
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.AuthMe
+  ) {
+    writeJson(response, 200, {
+      user: createValidationAdminUser(),
     });
     return;
   }
@@ -1423,29 +1543,26 @@ async function handleStubRequest(
 
   const body = await readJsonBody(request);
 
-  if (requestUrl.pathname === RequestPath.WorkspaceStateGet) {
+  if (requestUrl.pathname === RequestPath.SettingsGet) {
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings),
+      settings: state.settings,
     });
     return;
   }
 
-  if (requestUrl.pathname === RequestPath.WorkspaceStateUpdate) {
-    if (isRecord(body) && isRecord(body["settings"])) {
-      state.settings = body["settings"];
+  if (requestUrl.pathname === RequestPath.SettingsUpdate) {
+    if (isRecord(body)) {
+      state.settings = body;
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.settings),
+      settings: state.settings,
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsList) {
-    const projectId = readRequiredString(body, "projectId");
     writeJson(response, 200, {
-      definitions: state.definitions.filter(
-        (definition) => definition.projectId === projectId,
-      ),
+      definitions: state.definitions,
     });
     return;
   }
@@ -1478,7 +1595,6 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.DefinitionsUpsert) {
-    const projectId = readRequiredString(body, "projectId");
     const definitionInput = readRequiredRecord(body, "definition");
     const now = "2026-05-06T08:15:00.000Z";
     const existingId = readOptionalString(definitionInput, "id");
@@ -1487,7 +1603,6 @@ async function handleStubRequest(
       : -1;
     const nextDefinition = createDefinitionRecord({
       definitionInput,
-      projectId,
       ...(existingIndex >= 0 && state.definitions[existingIndex]
         ? { existing: state.definitions[existingIndex] }
         : {}),
@@ -1537,15 +1652,13 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.AssetsList) {
-    const projectId = readRequiredString(body, "projectId");
-    const workspaceId = readRequiredString(body, "workspaceId");
     writeJson(response, 200, {
-      assets: state.assets.filter(
-        (asset) =>
-          asset.workspaceId === workspaceId &&
-          (asset.projectId === undefined || asset.projectId === projectId),
-      ),
+      assets: state.assets,
     });
+    return;
+  }
+  if (requestUrl.pathname === RequestPath.PromptAssetsList) {
+    writeJson(response, 200, { assets: [] });
     return;
   }
 
@@ -1561,7 +1674,6 @@ async function handleStubRequest(
   }
 
   if (requestUrl.pathname === RequestPath.AssetsUpsert) {
-    const projectId = readRequiredString(body, "projectId");
     const assetInput = readRequiredRecord(body, "asset");
     const now = "2026-05-06T08:15:30.000Z";
     const existingId = readOptionalString(assetInput, "id");
@@ -1570,7 +1682,6 @@ async function handleStubRequest(
       : -1;
     const nextAsset = createAssetRecord({
       assetInput,
-      projectId,
       ...(existingIndex >= 0 && state.assets[existingIndex]
         ? { existing: state.assets[existingIndex] }
         : {}),
@@ -1609,26 +1720,22 @@ async function handleStubRequest(
   if (requestUrl.pathname === RequestPath.AssetsUsage) {
     const assetId = readOptionalString(body, "assetId");
     const workflowId = readOptionalString(body, "workflowId");
-    const projectId = readOptionalString(body, "projectId");
     writeJson(response, 200, {
       usages: readAssetUsages(state).filter(
         (usage) =>
           (assetId === undefined || usage.assetId === assetId) &&
-          (workflowId === undefined || usage.workflowId === workflowId) &&
-          (projectId === undefined || usage.projectId === projectId),
+          (workflowId === undefined || usage.workflowId === workflowId),
       ),
     });
     return;
   }
 
   if (requestUrl.pathname === RequestPath.ExecutionsList) {
-    const projectId = readRequiredString(body, "projectId");
     const workflowId = readOptionalString(body, "workflowId");
     writeJson(response, 200, {
       executions: state.executions.filter(
         (execution) =>
-          execution.projectId === projectId &&
-          (workflowId === undefined || execution.workflowId === workflowId),
+          workflowId === undefined || execution.workflowId === workflowId,
       ),
     });
     return;
@@ -1897,15 +2004,9 @@ function handleDefinitionVersionRequest(input: {
     const { snapshot, checksumValid, schemaSupported } =
       readVersionImportSnapshot(body);
 
-    const targetWorkspaceId = readRequiredString(body, "targetWorkspaceId");
-    const targetProjectId = readRequiredString(body, "targetProjectId");
     const workflowIdCollision = state.definitions.some(
       (definition) => definition.id === readRequiredString(snapshot, "id"),
     );
-    const workspaceMismatch =
-      readRequiredString(snapshot, "workspaceId") !== targetWorkspaceId;
-    const projectMismatch =
-      readRequiredString(snapshot, "projectId") !== targetProjectId;
     const messages = [
       ...(workflowIdCollision
         ? [
@@ -1917,32 +2018,12 @@ function handleDefinitionVersionRequest(input: {
             },
           ]
         : []),
-      ...(workspaceMismatch
-        ? [
-            {
-              code: "workspace_mismatch",
-              severity: "warning",
-              message: "Snapshot workspace differs from the current workspace.",
-            },
-          ]
-        : []),
-      ...(projectMismatch
-        ? [
-            {
-              code: "project_mismatch",
-              severity: "warning",
-              message: "Snapshot project differs from the current project.",
-            },
-          ]
-        : []),
     ];
     writeJson(response, 200, {
       preview: {
         status: messages.length > 0 ? "warning" : "valid",
         schemaSupported,
         checksumValid,
-        workspaceMismatch,
-        projectMismatch,
         workflowIdCollision,
         recommendedIdMode: workflowIdCollision ? "regenerate_ids" : "keep_ids",
         suggestedName: readRequiredString(snapshot, "name"),
@@ -2012,6 +2093,13 @@ async function handleStreamNodeRequest(
     return;
   }
 
+  state.nodeExecutionRequests.push({
+    nodeId,
+    seedNodeOutputs: readJsonQueryParam(
+      requestUrl.searchParams.get("seedNodeOutputs"),
+    ),
+  });
+
   const execution = createStepExecutionFixture(definition, node);
   state.executions = upsertStubExecution(
     state.executions,
@@ -2024,6 +2112,7 @@ async function handleStreamNodeRequest(
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
+  response.flushHeaders();
 
   writeStreamEvent(response, "workflow_started", {
     workflowId: definition.id,
@@ -2073,7 +2162,7 @@ function writeStreamEvent(
 
 function waitForStubDelay(): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(resolve, 250);
+    setTimeout(resolve, ValidationConfig.StepExecutionDelayMs);
   });
 }
 
@@ -2093,21 +2182,16 @@ function upsertStubExecution(
   );
 }
 
-function createWorkspaceState(
-  settings: Record<string, unknown>,
-): Record<string, unknown> {
+function createValidationAdminUser(): Record<string, unknown> {
   return {
-    activeProjectId: fixtureProject.id,
-    projects: [fixtureProject],
-    settings,
-    workbenchHistory: {
-      runs: [],
-      evals: [],
-    },
+    id: "workflows-validation-admin",
+    email: "admin@iteronix.test",
+    role: "admin",
+    enabled: true,
   };
 }
 
-function createDefaultWorkspaceSettings(): Record<string, unknown> {
+function createDefaultApplicationSettings(): Record<string, unknown> {
   return {
     profileId: "default",
     providerProfiles: [
@@ -2130,16 +2214,11 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
       soundEnabled: true,
       webhookUrl: "",
     },
-    serverConnection: {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-    },
   };
 }
 
 function createDefinitionRecord(input: {
   definitionInput: Record<string, unknown>;
-  projectId: string;
   existing?: StubWorkflowDefinitionRecord;
   workflowId: string;
   updatedAt: string;
@@ -2148,8 +2227,6 @@ function createDefinitionRecord(input: {
   const version = input.existing ? input.existing.version + 1 : 1;
   return {
     id: input.workflowId,
-    workspaceId: readRequiredString(input.definitionInput, "workspaceId"),
-    projectId: input.projectId,
     name: readRequiredString(input.definitionInput, "name"),
     description: readStringValue(input.definitionInput, "description"),
     status: readStatusValue(input.definitionInput, "status"),
@@ -2179,7 +2256,6 @@ function createDefinitionVersionRecord(input: {
   return {
     id: `${input.definition.id}-version-${input.version}`,
     workflowId: input.definition.id,
-    projectId: input.definition.projectId,
     version: input.version,
     createdAt: input.definition.updatedAt,
     snapshot: input.definition,
@@ -2251,7 +2327,6 @@ function createTimelineImportPayload(
 
 function createAssetRecord(input: {
   assetInput: Record<string, unknown>;
-  projectId: string;
   existing?: StubWorkflowAssetRecord;
   assetId: string;
   updatedAt: string;
@@ -2259,26 +2334,38 @@ function createAssetRecord(input: {
   const createdAt = input.existing?.createdAt ?? input.updatedAt;
   const version = input.existing ? input.existing.version + 1 : 1;
   const scope = readAssetScopeValue(input.assetInput, "scope");
-  const projectId = scope === "project" ? input.projectId : undefined;
+  const body = readStringValue(input.assetInput, "body");
   const outputContract = readOptionalRecord(input.assetInput, "outputContract");
   const guardrail = readOptionalRecord(input.assetInput, "guardrail");
   const archivedAt = readOptionalString(input.assetInput, "archivedAt");
 
   return {
     id: input.assetId,
-    workspaceId: readRequiredString(input.assetInput, "workspaceId"),
-    ...(projectId ? { projectId } : {}),
     kind: readAssetKindValue(input.assetInput, "kind"),
     scope,
     name: readRequiredString(input.assetInput, "name"),
     slug: readRequiredString(input.assetInput, "slug"),
     description: readStringValue(input.assetInput, "description"),
-    body: readStringValue(input.assetInput, "body"),
+    body,
     language: readStringValue(input.assetInput, "language"),
     version,
     tags: readStringArray(input.assetInput, "tags"),
     ...(outputContract ? { outputContract } : {}),
     ...(guardrail ? { guardrail } : {}),
+    ...(input.assetInput["kind"] === "prompt"
+      ? {
+          prompt: {
+            activeVersion: 1,
+            versions: [
+              {
+                version: 1,
+                template: body,
+                variables: [],
+              },
+            ],
+          },
+        }
+      : {}),
     createdAt,
     updatedAt: input.updatedAt,
     ...(archivedAt ? { archivedAt } : {}),
@@ -2295,7 +2382,6 @@ function readAssetUsages(
             {
               assetId: node.config.assetId,
               workflowId: definition.id,
-              projectId: definition.projectId,
               nodeId: node.id,
               nodeKind: node.kind,
               role:
@@ -2309,7 +2395,6 @@ function readAssetUsages(
       const guardrailUsages = node.attachedGuardrails.map((guardrail) => ({
         assetId: guardrail.assetId,
         workflowId: definition.id,
-        projectId: definition.projectId,
         nodeId: node.id,
         nodeKind: node.kind,
         role: "guardrail" as const,
@@ -2321,29 +2406,6 @@ function readAssetUsages(
   );
 }
 
-async function seedBrowserStorage(page: Page): Promise<void> {
-  await page.evaluateOnNewDocument(
-    (payload: {
-      serverUrl: string;
-      authToken: string;
-      serverKeys: typeof ServerStorageKey;
-    }) => {
-      window.localStorage.setItem(
-        payload.serverKeys.ServerUrl,
-        payload.serverUrl,
-      );
-      window.localStorage.setItem(
-        payload.serverKeys.AuthToken,
-        payload.authToken,
-      );
-    },
-    {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-      serverKeys: ServerStorageKey,
-    },
-  );
-}
 async function clickByTestId(page: Page, testId: string): Promise<void> {
   const clicked = await page.evaluate((selector: string) => {
     const element = document.querySelector(`[data-testid="${selector}"]`);
@@ -2715,6 +2777,73 @@ async function waitForPageTexts(
   );
 }
 
+async function assertWorkflowRunMenuIsAboveCanvas(page: Page): Promise<void> {
+  const isVisible = await page.evaluate(
+    ({ canvasTestId, runTestId }) => {
+      const runControl = document.querySelector<HTMLElement>(
+        `[data-testid="${runTestId}"]`,
+      );
+      const canvas = document.querySelector<HTMLElement>(
+        `[data-testid="${canvasTestId}"]`,
+      );
+      const testMenuItem = Array.from(
+        document.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((button) => button.textContent?.includes("Run test"));
+      const menu = testMenuItem?.parentElement;
+
+      if (
+        !(runControl instanceof HTMLElement) ||
+        !(canvas instanceof HTMLElement) ||
+        !(menu instanceof HTMLElement)
+      ) {
+        return false;
+      }
+
+      const runRect = runControl.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const menuCenter = document.elementFromPoint(
+        menuRect.left + menuRect.width / 2,
+        menuRect.top + menuRect.height / 2,
+      );
+
+      return (
+        menuRect.top >= runRect.bottom &&
+        menuRect.bottom > canvasRect.top &&
+        menuCenter !== null &&
+        menu.contains(menuCenter)
+      );
+    },
+    {
+      canvasTestId: WorkflowSelector.CanvasViewport,
+      runTestId: WorkflowSelector.WorkflowRun,
+    },
+  );
+
+  if (!isVisible) {
+    throw new Error("Workflow Run menu is obscured by the canvas.");
+  }
+}
+
+async function assertPinnedOutputListHasName(page: Page): Promise<void> {
+  const hasNamedOutput = await page.evaluate((testId: string) => {
+    const list = document.querySelector<HTMLElement>(
+      `[data-testid="${testId}"]`,
+    );
+    if (!(list instanceof HTMLElement)) {
+      return false;
+    }
+
+    return Array.from(list.querySelectorAll<HTMLInputElement>("input")).some(
+      (input) => input.value.trim().length > 0,
+    );
+  }, WorkflowSelector.PinnedOutputsList);
+
+  if (!hasNamedOutput) {
+    throw new Error("Pinned output list is missing editable output names.");
+  }
+}
+
 async function waitForUrlSearchParam(
   page: Page,
   key: string,
@@ -2723,6 +2852,17 @@ async function waitForUrlSearchParam(
   await waitForCondition(
     async () => new URL(page.url()).searchParams.get(key) === expectedValue,
     `url search param ${key}=${expectedValue}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+async function waitForUrlPath(page: Page, expectedPath: string): Promise<void> {
+  await waitForCondition(
+    async () => new URL(page.url()).pathname === expectedPath,
+    `URL path "${expectedPath}"`,
     {
       timeoutMs: ValidationConfig.UiPollingTimeoutMs,
       intervalMs: ValidationConfig.UiPollingIntervalMs,
@@ -2774,7 +2914,7 @@ async function waitForPinnedDefinitionOutput(
     async () =>
       state.definitions.some((definition) =>
         definition.nodes.some((node) =>
-          JSON.stringify(node.config.pinnedTestOutput ?? {}).includes(
+          JSON.stringify(node.config.pinnedTestOutputs ?? []).includes(
             expectedNeedle,
           ),
         ),
@@ -2785,6 +2925,49 @@ async function waitForPinnedDefinitionOutput(
       intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
+}
+
+async function waitForNodeExecutionSeedOutputs(
+  state: StubServerState,
+  expectedSeedNodeOutputs: unknown | undefined,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const request = state.nodeExecutionRequests.at(-1);
+      if (!request) {
+        return false;
+      }
+      return areWorkflowValidationValuesEqual(
+        request.seedNodeOutputs,
+        expectedSeedNodeOutputs,
+      );
+    },
+    "expected node execution seed outputs",
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
+function areWorkflowValidationValuesEqual(
+  left: unknown | undefined,
+  right: unknown | undefined,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function readJsonQueryParam(value: string | null): unknown | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed;
+  } catch {
+    return undefined;
+  }
 }
 
 async function waitForTestId(page: Page, testId: string): Promise<void> {
@@ -2864,6 +3047,30 @@ async function waitForExecutionCardCount(
     },
   );
 }
+
+async function waitForWorkflowVersionCount(
+  page: Page,
+  expectedCount: number,
+): Promise<void> {
+  await waitForCondition(
+    async () => {
+      const count = await page.evaluate(
+        (prefix: string) =>
+          Array.from(
+            document.querySelectorAll(`[data-testid^="${prefix}"]`),
+          ).filter((entry) => entry instanceof HTMLElement).length,
+        WorkflowSelector.WorkflowVersionDetailsPrefix,
+      );
+      return count === expectedCount;
+    },
+    `workflow version count ${expectedCount.toString()}`,
+    {
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
+    },
+  );
+}
+
 async function waitForNodeCardText(page: Page, text: string): Promise<void> {
   await waitForCondition(
     async () => {
@@ -2966,6 +3173,60 @@ function ensureHistoryNavigationEdge(
   };
 }
 
+function addStepTestPinnedDefault(definition: StubWorkflowDefinitionRecord): {
+  definition: StubWorkflowDefinitionRecord;
+  seedNodeOutputs: Readonly<Record<string, unknown>>;
+} {
+  const upstreamNode = definition.nodes.find(
+    (node) => node.kind === WorkflowNodeKind.TriggerManual,
+  );
+  if (!upstreamNode) {
+    throw new Error("Expected an upstream node for step test validation.");
+  }
+
+  const selectedOutput = {
+    source: "step-test-default",
+    value: "selected-upstream-pin",
+  };
+  return {
+    definition: {
+      ...definition,
+      nodes: definition.nodes.map((node) =>
+        node.id === upstreamNode.id
+          ? {
+              ...node,
+              config: {
+                ...node.config,
+                pinnedTestOutput: {
+                  outputSnapshot: { source: "legacy-step-pin" },
+                  updatedAt: "2026-07-15T18:20:00.000Z",
+                },
+                pinnedTestOutputs: [
+                  {
+                    id: "step-test-unselected",
+                    name: "Earlier fixture",
+                    outputSnapshot: { source: "unselected-step-pin" },
+                    updatedAt: "2026-07-15T18:20:00.000Z",
+                  },
+                  {
+                    id: "step-test-selected",
+                    name: "Selected fixture",
+                    outputSnapshot: selectedOutput,
+                    updatedAt: "2026-07-15T18:20:00.000Z",
+                  },
+                ],
+                defaultPinnedTestOutputId: "step-test-selected",
+              },
+            }
+          : node,
+      ),
+    },
+    seedNodeOutputs: {
+      [upstreamNode.id]: selectedOutput,
+    },
+  };
+}
+
 function addConnectedAgentNode(
   definition: StubWorkflowDefinitionRecord,
 ): StubWorkflowDefinitionRecord {
@@ -3064,7 +3325,6 @@ function createPinnedOutputExecutionFixture(
   return {
     id: ValidationText.ExecutionPinnedId,
     workflowId: definition.id,
-    projectId: definition.projectId,
     triggerKind: "manual",
     status: "completed",
     startedAt: "2026-05-06T08:30:00.000Z",
@@ -3150,7 +3410,6 @@ function createStepExecutionFixture(
   return {
     id: "execution-step-response",
     workflowId: definition.id,
-    projectId: definition.projectId,
     triggerKind: "manual",
     status: "completed",
     startedAt: "2026-05-06T08:45:00.000Z",
@@ -3209,7 +3468,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionCleanId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "completed",
       startedAt: ValidationText.ExecutionCleanStartedAt,
@@ -3262,7 +3520,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionPrimaryId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "completed",
       startedAt: ValidationText.ExecutionPrimaryStartedAt,
@@ -3330,7 +3587,6 @@ function createExecutionFixtures(
     {
       id: ValidationText.ExecutionSecondaryId,
       workflowId: definition.id,
-      projectId: definition.projectId,
       triggerKind: "manual",
       status: "failed",
       startedAt: ValidationText.ExecutionSecondaryStartedAt,
@@ -3430,13 +3686,6 @@ function normalizeRequestChunk(chunk: unknown): Buffer | null {
   }
 
   return null;
-}
-
-function isAuthorized(request: IncomingMessage): boolean {
-  return (
-    request.headers.authorization ===
-    `Bearer ${DefaultServerConnection.authToken}`
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -3630,6 +3879,14 @@ function readNodeConfigRecord(
   const provider = readOptionalRecord(value, "provider");
   const reviewPolicyValue = readOptionalRecord(value, "reviewPolicy");
   const pinnedTestOutput = readOptionalRecord(value, "pinnedTestOutput");
+  const pinnedTestOutputsValue = value["pinnedTestOutputs"];
+  const pinnedTestOutputs = Array.isArray(pinnedTestOutputsValue)
+    ? pinnedTestOutputsValue.filter(isRecord)
+    : undefined;
+  const defaultPinnedTestOutputId = readOptionalString(
+    value,
+    "defaultPinnedTestOutputId",
+  );
   const reviewPolicy = reviewPolicyValue
     ? {
         requireHumanDecision: readBooleanValue(
@@ -3646,6 +3903,8 @@ function readNodeConfigRecord(
     ...(provider ? { provider } : {}),
     ...(reviewPolicy ? { reviewPolicy } : {}),
     ...(pinnedTestOutput ? { pinnedTestOutput } : {}),
+    ...(pinnedTestOutputs ? { pinnedTestOutputs } : {}),
+    ...(defaultPinnedTestOutputId ? { defaultPinnedTestOutputId } : {}),
   };
 }
 
@@ -3833,7 +4092,7 @@ function readAssetScopeValue(
   key: string,
 ): StubWorkflowAssetRecord["scope"] {
   const nested = readRequiredString(value, key);
-  if (nested === "workspace" || nested === "project") {
+  if (nested === "global") {
     return nested;
   }
   throw new Error(`Invalid ${key}`);
@@ -3853,8 +4112,9 @@ function writeJson(
 
 function createCorsHeaders(): Record<string, string> {
   return {
-    [ResponseHeader.AllowOrigin]: "*",
-    [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
+    [ResponseHeader.AllowOrigin]: ValidationConfig.PreviewBaseUrl,
+    [ResponseHeader.AllowCredentials]: "true",
+    [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

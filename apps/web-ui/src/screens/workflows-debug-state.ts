@@ -19,6 +19,11 @@ export type WorkflowPinnedTestOutput = {
   outputSnapshot: unknown;
 };
 
+export type WorkflowPinnedTestOutputOption = WorkflowPinnedTestOutput & {
+  id: string;
+  name: string;
+};
+
 export type WorkflowPinnedOutputAction =
   | "pin"
   | "unpin"
@@ -34,12 +39,17 @@ type WorkflowPinnedDefinitionLike = Pick<WorkflowDefinitionRecord, "nodes"> & {
   id?: string;
 };
 
+type WorkflowPinnedNodeConfig =
+  WorkflowPinnedDefinitionLike["nodes"][number]["config"];
+
 export type ExecutionRefreshPollingAction = "start" | "stop" | "keep";
 
 export type WorkflowStepExecutionAvailability = {
   disabled: boolean;
   label: "Execute step" | "Executing";
 };
+
+export type WorkflowStepRunMode = "normal" | "test";
 
 export type WorkflowNodeHoverRunControlState = {
   disabled: boolean;
@@ -113,30 +123,33 @@ export const readWorkflowDebugItemLabel = (value: unknown): string => {
   return `${count.toString()} item${count === 1 ? "" : "s"}`;
 };
 
-export const readWorkflowStepSeedOutputs = (input: {
+export const readWorkflowStepRunSeedOutputs = (input: {
+  mode: WorkflowStepRunMode;
   workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike;
-  executionOutputs: WorkflowDebugOutputMap;
-  pinnedOutput: WorkflowPinnedTestOutput | null;
-  workflowId: string;
   targetNodeId: string;
-}): Readonly<Record<string, unknown>> => {
+}): Readonly<Record<string, unknown>> | undefined => {
+  if (input.mode === "normal") {
+    return undefined;
+  }
+
   const upstreamNodeIds = collectWorkflowUpstreamNodeIds(
     input.workflow,
     input.targetNodeId,
   );
   const entries = new Map<string, unknown>();
-  for (const [nodeId, output] of input.executionOutputs.entries()) {
-    if (upstreamNodeIds.has(nodeId) && output !== undefined) {
-      entries.set(nodeId, output);
-    }
-  }
 
-  if (
-    input.pinnedOutput !== null &&
-    input.pinnedOutput.workflowId === input.workflowId &&
-    upstreamNodeIds.has(input.pinnedOutput.nodeId)
-  ) {
-    entries.set(input.pinnedOutput.nodeId, input.pinnedOutput.outputSnapshot);
+  for (const node of input.workflow.nodes) {
+    if (!upstreamNodeIds.has(node.id)) {
+      continue;
+    }
+
+    const output = readWorkflowNodeSelectedPersistedPinnedTestOutput(
+      node.config,
+      node.id,
+    );
+    if (output) {
+      entries.set(node.id, output.outputSnapshot);
+    }
   }
 
   return Object.fromEntries(entries.entries());
@@ -210,18 +223,47 @@ export const readWorkflowPinnedTestOutputFromDefinition = (
     return null;
   }
 
-  const node = workflow.nodes.find(
-    (candidate) => candidate.config.pinnedTestOutput !== undefined,
-  );
-  if (!node?.config.pinnedTestOutput) {
-    return null;
+  const options = readWorkflowPinnedTestOutputsFromDefinition(workflow);
+  return selectDefaultWorkflowPinnedTestOutput(workflow, options);
+};
+
+export const readWorkflowPinnedTestOutputsFromDefinition = (
+  workflow: WorkflowPinnedDefinitionLike | null,
+): ReadonlyArray<WorkflowPinnedTestOutputOption> => {
+  if (!workflow) {
+    return [];
   }
 
-  return {
-    workflowId: workflow.id ?? "",
-    nodeId: node.id,
-    outputSnapshot: node.config.pinnedTestOutput.outputSnapshot,
-  };
+  return workflow.nodes.flatMap((node) =>
+    readWorkflowNodePinnedTestOutputs(node.config, node.id).map((output) => ({
+      ...output,
+      workflowId: workflow.id ?? "",
+      nodeId: node.id,
+    })),
+  );
+};
+
+export const readWorkflowTestRunSeedOutputs = (input: {
+  workflow: WorkflowPinnedDefinitionLike;
+  workflowId: string;
+}): Readonly<Record<string, unknown>> => {
+  const options = readWorkflowPinnedTestOutputsFromDefinition(input.workflow);
+  const defaults = new Map<string, unknown>();
+
+  for (const node of input.workflow.nodes) {
+    const defaultId = readWorkflowNodeDefaultPinnedTestOutputId(node.config);
+    const selected = options.find(
+      (option) =>
+        option.workflowId === input.workflowId &&
+        option.nodeId === node.id &&
+        option.id === defaultId,
+    );
+    if (selected) {
+      defaults.set(node.id, selected.outputSnapshot);
+    }
+  }
+
+  return Object.fromEntries(defaults.entries());
 };
 
 export const writeWorkflowPinnedTestOutputToDefinition = <
@@ -230,21 +272,57 @@ export const writeWorkflowPinnedTestOutputToDefinition = <
   workflow: TWorkflow,
   pinnedOutput: WorkflowPinnedTestOutput | null,
   updatedAt: string,
+): TWorkflow =>
+  writeWorkflowPinnedTestOutputsToDefinition(
+    workflow,
+    pinnedOutput
+      ? [
+          {
+            ...pinnedOutput,
+            id: `pinned-${pinnedOutput.nodeId}`,
+            name: "Pinned output 1",
+          },
+        ]
+      : [],
+    pinnedOutput
+      ? { [pinnedOutput.nodeId]: `pinned-${pinnedOutput.nodeId}` }
+      : {},
+    updatedAt,
+  );
+
+export const writeWorkflowPinnedTestOutputsToDefinition = <
+  TWorkflow extends WorkflowPinnedDefinitionLike,
+>(
+  workflow: TWorkflow,
+  pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+  defaultOutputIdsByNodeId: Readonly<Record<string, string>>,
+  updatedAt: string,
 ): TWorkflow => ({
   ...workflow,
   nodes: workflow.nodes.map((node) => {
+    const outputs = pinnedOutputs.filter(
+      (output) =>
+        output.workflowId === (workflow.id ?? "") && output.nodeId === node.id,
+    );
+    const defaultOutputId = defaultOutputIdsByNodeId[node.id];
+    const selectedDefaultId = outputs.some(
+      (output) => output.id === defaultOutputId,
+    )
+      ? defaultOutputId
+      : outputs[0]?.id;
     const nextConfig = { ...node.config };
     delete nextConfig.pinnedTestOutput;
+    delete nextConfig.pinnedTestOutputs;
+    delete nextConfig.defaultPinnedTestOutputId;
 
-    if (
-      pinnedOutput &&
-      pinnedOutput.workflowId === (workflow.id ?? "") &&
-      pinnedOutput.nodeId === node.id
-    ) {
-      nextConfig.pinnedTestOutput = {
-        outputSnapshot: pinnedOutput.outputSnapshot,
+    if (outputs.length > 0 && selectedDefaultId) {
+      nextConfig.pinnedTestOutputs = outputs.map((output) => ({
+        id: output.id,
+        name: output.name,
+        outputSnapshot: output.outputSnapshot,
         updatedAt,
-      };
+      }));
+      nextConfig.defaultPinnedTestOutputId = selectedDefaultId;
     }
 
     return {
@@ -319,7 +397,6 @@ export const selectWorkflowCanvasExecution = <
 
 export const readWorkflowStepExecutionAvailability = (input: {
   hasNodeSelection: boolean;
-  hasCurrentProject: boolean;
   hasCurrentWorkflow: boolean;
   hasDirtyWorkflow: boolean;
   dirtyAssetCount: number;
@@ -336,7 +413,6 @@ export const readWorkflowStepExecutionAvailability = (input: {
   return {
     disabled:
       !input.hasNodeSelection ||
-      !input.hasCurrentProject ||
       !input.hasCurrentWorkflow ||
       input.hasDirtyWorkflow ||
       input.dirtyAssetCount > 0 ||
@@ -347,7 +423,6 @@ export const readWorkflowStepExecutionAvailability = (input: {
 
 export const readWorkflowNodeHoverRunControlState = (input: {
   hasTargetNode: boolean;
-  hasCurrentProject: boolean;
   hasCurrentWorkflow: boolean;
   hasDirtyWorkflow: boolean;
   dirtyAssetCount: number;
@@ -356,7 +431,6 @@ export const readWorkflowNodeHoverRunControlState = (input: {
 }): WorkflowNodeHoverRunControlState => {
   const availability = readWorkflowStepExecutionAvailability({
     hasNodeSelection: input.hasTargetNode,
-    hasCurrentProject: input.hasCurrentProject,
     hasCurrentWorkflow: input.hasCurrentWorkflow,
     hasDirtyWorkflow: input.hasDirtyWorkflow,
     dirtyAssetCount: input.dirtyAssetCount,
@@ -622,6 +696,73 @@ type WorkflowCanvasExecutionLike = Pick<
   "id" | "workflowId" | "status" | "startedAt"
 >;
 
+const readWorkflowNodePinnedTestOutputs = (
+  config: WorkflowPinnedNodeConfig,
+  nodeId: string,
+): ReadonlyArray<
+  Pick<WorkflowPinnedTestOutputOption, "id" | "name" | "outputSnapshot">
+> => {
+  if (config.pinnedTestOutputs && config.pinnedTestOutputs.length > 0) {
+    return config.pinnedTestOutputs.map((output, index) => ({
+      id: output.id,
+      name: output.name ?? `Pinned output ${(index + 1).toString()}`,
+      outputSnapshot: output.outputSnapshot,
+    }));
+  }
+
+  if (!config.pinnedTestOutput) {
+    return [];
+  }
+
+  return [
+    {
+      id: `legacy-${nodeId}`,
+      name: "Pinned output 1",
+      outputSnapshot: config.pinnedTestOutput.outputSnapshot,
+    },
+  ];
+};
+
+const readWorkflowNodeDefaultPinnedTestOutputId = (
+  config: WorkflowPinnedNodeConfig,
+): string | undefined =>
+  config.defaultPinnedTestOutputId ?? config.pinnedTestOutputs?.[0]?.id;
+
+const readWorkflowNodeSelectedPersistedPinnedTestOutput = (
+  config: WorkflowPinnedNodeConfig,
+  nodeId: string,
+): { outputSnapshot: unknown } | undefined => {
+  const outputs = readWorkflowNodePinnedTestOutputs(config, nodeId);
+
+  if (!config.pinnedTestOutputs || config.pinnedTestOutputs.length === 0) {
+    return undefined;
+  }
+
+  const selectedId = readWorkflowNodeDefaultPinnedTestOutputId(config);
+  return outputs.find((output) => output.id === selectedId);
+};
+
+const selectDefaultWorkflowPinnedTestOutput = (
+  workflow: WorkflowPinnedDefinitionLike,
+  options: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+): WorkflowPinnedTestOutput | null => {
+  for (const node of workflow.nodes) {
+    const defaultId = readWorkflowNodeDefaultPinnedTestOutputId(node.config);
+    const selected = options.find(
+      (option) => option.nodeId === node.id && option.id === defaultId,
+    );
+    if (selected) {
+      return {
+        workflowId: selected.workflowId,
+        nodeId: selected.nodeId,
+        outputSnapshot: selected.outputSnapshot,
+      };
+    }
+  }
+
+  return null;
+};
+
 const collectWorkflowUpstreamNodeIds = (
   workflow: WorkflowDefinitionRecord | WorkflowDefinitionInputLike,
   nodeId: string,
@@ -744,4 +885,36 @@ const readValueType = (value: unknown): string => {
   }
 
   return typeof value;
+};
+export const selectGovernanceLifecycleControlState = (input: {
+  state: string;
+  budgets: Readonly<Record<string, unknown>>;
+  fingerprints: Readonly<{ scope: string; evidence: string }>;
+  transitionCount: number;
+  feedback: string;
+  pending: boolean;
+}): {
+  controlsDisabled: boolean;
+  rejectDisabled: boolean;
+  budgetSummary: string;
+  fingerprintSummary: string;
+  historyLabel: string;
+} => {
+  const controlsDisabled =
+    input.state !== "awaiting-user-approval" || input.pending;
+  return {
+    controlsDisabled,
+    rejectDisabled: controlsDisabled || input.feedback.trim().length === 0,
+    budgetSummary: `execution ${readLifecycleBudgetValue(input.budgets, "execution")} · repair ${readLifecycleBudgetValue(input.budgets, "repair")} · review ${readLifecycleBudgetValue(input.budgets, "review")}`,
+    fingerprintSummary: `${input.fingerprints.scope} · ${input.fingerprints.evidence}`,
+    historyLabel: `${input.transitionCount} decision${input.transitionCount === 1 ? "" : "s"}`,
+  };
+};
+
+const readLifecycleBudgetValue = (
+  budgets: Readonly<Record<string, unknown>>,
+  key: string,
+): string => {
+  const value = budgets[key];
+  return typeof value === "number" ? value.toString() : "0";
 };

@@ -52,24 +52,24 @@ describe("PageScaffold", () => {
   it("keeps page notices out of the page layout because notifications are global toasts", () => {
     const recorded = renderWithFakeDocument(() => {
       new PageNoticeStack({
-        errorMessage: "A project root path is required.",
+        errorMessage: "A workflow selection is required.",
         noticeMessage: null,
       }).render();
     });
 
     expect(recorded).toContain("attr:data-notice-stack=global-toast-adapter");
-    expect(recorded).not.toContain("text:A project root path is required.");
+    expect(recorded).not.toContain("text:A workflow selection is required.");
   });
 
   it("emits each unchanged notice only once until it is cleared", () => {
     const recorded = renderWithFakeBrowser(() => {
       new PageNoticeStack({
         errorMessage: null,
-        noticeMessage: "Workflow saved to the server workspace.",
+        noticeMessage: "Workflow saved to PostgreSQL.",
       }).render();
       new PageNoticeStack({
         errorMessage: null,
-        noticeMessage: "Workflow saved to the server workspace.",
+        noticeMessage: "Workflow saved to PostgreSQL.",
       }).render();
       new PageNoticeStack({
         errorMessage: null,
@@ -77,13 +77,13 @@ describe("PageScaffold", () => {
       }).render();
       new PageNoticeStack({
         errorMessage: null,
-        noticeMessage: "Workflow saved to the server workspace.",
+        noticeMessage: "Workflow saved to PostgreSQL.",
       }).render();
     });
 
     expect(
       recorded.filter(
-        (entry) => entry === "text:Workflow saved to the server workspace.",
+        (entry) => entry === "text:Workflow saved to PostgreSQL.",
       ),
     ).toHaveLength(2);
   });

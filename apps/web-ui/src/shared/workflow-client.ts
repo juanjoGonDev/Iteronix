@@ -1,4 +1,5 @@
-import { requestJson, streamText } from "./server-api-client.js";
+import { readBackendOrigin } from "./backend-origin.js";
+import { WorkflowAssetScope } from "../screens/workflows-editor-state.js";
 import type {
   WorkflowAlertRecord,
   WorkflowAssetRecord,
@@ -14,6 +15,82 @@ import type {
   WorkflowProviderSelectionRecord,
   WorkflowUsageTotalsRecord,
 } from "../screens/workflows-editor-state.js";
+
+const requestJson = <TResult>(input: {
+  path: string;
+  method?: "GET" | "POST";
+  body?: Readonly<Record<string, unknown>>;
+  parse: (value: unknown) => TResult;
+}): Promise<TResult> => requestCredentialedJson(input);
+
+const streamText = (input: {
+  path: string;
+  signal?: AbortSignal;
+  onChunk: (chunk: string) => void;
+}): Promise<void> => streamCredentialedText(input);
+
+const requestCredentialedJson = async <TResult>(input: {
+  path: string;
+  method?: "GET" | "POST";
+  body?: Readonly<Record<string, unknown>>;
+  parse: (value: unknown) => TResult;
+}): Promise<TResult> => {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
+    method: input.method ?? "POST",
+    credentials: "include",
+    headers: input.body ? { "Content-Type": "application/json" } : {},
+    ...(input.body ? { body: JSON.stringify(input.body) } : {}),
+  });
+  const payload = await readCredentialedJson(response);
+  if (!response.ok)
+    throw new Error(readCredentialedError(payload, response.status));
+  return input.parse(payload);
+};
+
+const streamCredentialedText = async (input: {
+  path: string;
+  signal?: AbortSignal;
+  onChunk: (chunk: string) => void;
+}): Promise<void> => {
+  const response = await fetch(`${readBackendOrigin()}${input.path}`, {
+    method: "GET",
+    credentials: "include",
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  if (!response.ok)
+    throw new Error(
+      readCredentialedError(
+        await readCredentialedJson(response),
+        response.status,
+      ),
+    );
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    const chunk = decoder.decode(result.value, { stream: true });
+    if (chunk) input.onChunk(chunk);
+  }
+  const finalChunk = decoder.decode();
+  if (finalChunk) input.onChunk(finalChunk);
+};
+
+const readCredentialedJson = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+};
+const readCredentialedError = (value: unknown, status: number): string =>
+  value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  typeof (value as Record<string, unknown>)["message"] === "string"
+    ? ((value as Record<string, unknown>)["message"] as string)
+    : `Request failed with status ${status}`;
 
 const EndpointPath = {
   DefinitionsList: "/workflows/definitions/list",
@@ -45,6 +122,7 @@ const EndpointPath = {
   ExecutionsRunNode: "/workflows/executions/run-node",
   ExecutionsStreamNode: "/workflows/executions/stream-node",
   ProvidersTest: "/workflows/providers/test",
+  ExternalApiKeyDependencies: "/settings/api-keys/workflow-dependencies",
 } as const;
 
 export type WorkflowVersionRestorePart =
@@ -98,10 +176,8 @@ export type WorkflowVersionImportSourceRecord =
 type WorkflowVersionImportPreviewMessage = {
   code:
     | "checksum_mismatch"
-    | "project_mismatch"
     | "unsupported_schema_version"
-    | "workflow_id_collision"
-    | "workspace_mismatch";
+    | "workflow_id_collision";
   severity: "error" | "warning";
   message: string;
 };
@@ -110,8 +186,6 @@ export type WorkflowVersionImportPreviewRecord = {
   status: "valid" | "warning" | "invalid";
   schemaSupported: boolean;
   checksumValid: boolean;
-  workspaceMismatch: boolean;
-  projectMismatch: boolean;
   workflowIdCollision: boolean;
   recommendedIdMode: "keep_ids" | "regenerate_ids";
   suggestedName: string;
@@ -204,9 +278,10 @@ export type WorkflowRunStreamEvent =
     };
 
 export type WorkflowClient = {
-  listDefinitions: (input: {
-    projectId: string;
-  }) => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
+  listExternalApiKeyDependencies: (input: {
+    workflowId: string;
+  }) => Promise<ReadonlyArray<{ id: string; name: string }>>;
+  listDefinitions: () => Promise<ReadonlyArray<WorkflowDefinitionRecord>>;
   getDefinition: (input: {
     workflowId: string;
   }) => Promise<WorkflowDefinitionRecord>;
@@ -237,8 +312,6 @@ export type WorkflowClient = {
   }) => Promise<WorkflowVersionTimelineExportRecord>;
   previewDefinitionVersionImport: (input: {
     exported: WorkflowVersionImportSourceRecord;
-    targetWorkspaceId: string;
-    targetProjectId: string;
     versionId?: string;
   }) => Promise<WorkflowVersionImportPreviewRecord>;
   importDefinitionVersion: (input: {
@@ -254,29 +327,22 @@ export type WorkflowClient = {
     removed: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   }>;
   upsertDefinition: (input: {
-    projectId: string;
     definition: WorkflowDefinitionUpsertInput;
   }) => Promise<WorkflowDefinitionRecord>;
   deleteDefinition: (input: {
     workflowId: string;
   }) => Promise<WorkflowDefinitionRecord>;
-  listAssets: (input: {
-    projectId: string;
-    workspaceId: string;
-  }) => Promise<ReadonlyArray<WorkflowAssetRecord>>;
+  listAssets: () => Promise<ReadonlyArray<WorkflowAssetRecord>>;
   getAsset: (input: { assetId: string }) => Promise<WorkflowAssetRecord>;
   upsertAsset: (input: {
-    projectId: string;
     asset: WorkflowAssetUpsertInput;
   }) => Promise<WorkflowAssetRecord>;
   deleteAsset: (input: { assetId: string }) => Promise<WorkflowAssetRecord>;
   listAssetUsages: (input: {
     assetId?: string;
     workflowId?: string;
-    projectId?: string;
   }) => Promise<ReadonlyArray<WorkflowAssetUsageRecord>>;
-  listExecutions: (input: {
-    projectId: string;
+  listExecutions: (input?: {
     workflowId?: string;
   }) => Promise<ReadonlyArray<WorkflowExecutionRecord>>;
   getExecution: (input: {
@@ -290,9 +356,11 @@ export type WorkflowClient = {
   }) => Promise<WorkflowExecutionRecord>;
   runWorkflow: (input: {
     workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
   }) => Promise<WorkflowExecutionRecord>;
   streamWorkflow: (input: {
     workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent: (event: WorkflowRunStreamEvent) => void;
   }) => Promise<void>;
@@ -317,12 +385,16 @@ export type WorkflowClient = {
 };
 
 export const createWorkflowClient = (): WorkflowClient => ({
-  listDefinitions: (input) =>
+  listExternalApiKeyDependencies: (input) =>
+    requestJson({
+      path: EndpointPath.ExternalApiKeyDependencies,
+      body: { workflowId: input.workflowId },
+      parse: parseExternalApiKeyDependenciesResponse,
+    }),
+  listDefinitions: () =>
     requestJson({
       path: EndpointPath.DefinitionsList,
-      body: {
-        projectId: input.projectId,
-      },
+      body: {},
       parse: parseWorkflowDefinitionListResponse,
     }),
   getDefinition: (input) =>
@@ -393,8 +465,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.DefinitionsPreviewImportVersion,
       body: {
         exported: input.exported,
-        targetWorkspaceId: input.targetWorkspaceId,
-        targetProjectId: input.targetProjectId,
         ...(input.versionId ? { versionId: input.versionId } : {}),
       },
       parse: parseWorkflowDefinitionImportPreviewResponse,
@@ -422,7 +492,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.DefinitionsUpsert,
       body: {
-        projectId: input.projectId,
         definition: input.definition,
       },
       parse: parseWorkflowDefinitionResponse,
@@ -435,13 +504,10 @@ export const createWorkflowClient = (): WorkflowClient => ({
       },
       parse: parseWorkflowDefinitionResponse,
     }),
-  listAssets: (input) =>
+  listAssets: () =>
     requestJson({
       path: EndpointPath.AssetsList,
-      body: {
-        projectId: input.projectId,
-        workspaceId: input.workspaceId,
-      },
+      body: {},
       parse: parseWorkflowAssetListResponse,
     }),
   getAsset: (input) =>
@@ -456,7 +522,6 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.AssetsUpsert,
       body: {
-        projectId: input.projectId,
         asset: input.asset,
       },
       parse: parseWorkflowAssetResponse,
@@ -474,8 +539,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.AssetsUsage,
       body: {
         ...(input.assetId ? { assetId: input.assetId } : {}),
-        ...(input.workflowId ? { workflowId: input.workflowId } : {}),
-        ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input?.workflowId ? { workflowId: input?.workflowId } : {}),
       },
       parse: parseWorkflowAssetUsageListResponse,
     }),
@@ -483,8 +547,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
     requestJson({
       path: EndpointPath.ExecutionsList,
       body: {
-        projectId: input.projectId,
-        ...(input.workflowId ? { workflowId: input.workflowId } : {}),
+        ...(input?.workflowId ? { workflowId: input?.workflowId } : {}),
       },
       parse: parseWorkflowExecutionListResponse,
     }),
@@ -517,6 +580,9 @@ export const createWorkflowClient = (): WorkflowClient => ({
       path: EndpointPath.ExecutionsRun,
       body: {
         workflowId: input.workflowId,
+        ...(input.seedNodeOutputs
+          ? { seedNodeOutputs: input.seedNodeOutputs }
+          : {}),
       },
       parse: parseWorkflowExecutionResponse,
     }),
@@ -524,7 +590,7 @@ export const createWorkflowClient = (): WorkflowClient => ({
     let buffer = "";
 
     await streamText({
-      path: `${EndpointPath.ExecutionsStream}?workflowId=${encodeURIComponent(input.workflowId)}`,
+      path: readWorkflowStreamPath(input),
       ...(input.signal ? { signal: input.signal } : {}),
       onChunk: (chunk) => {
         buffer += chunk;
@@ -591,6 +657,24 @@ export const createWorkflowClient = (): WorkflowClient => ({
       parse: parseWorkflowNodeProviderTestResponse,
     }),
 });
+
+const parseExternalApiKeyDependenciesResponse = (
+  value: unknown,
+): ReadonlyArray<{ id: string; name: string }> => {
+  const record = ensureRecord(value, "externalApiKeyDependenciesResponse");
+  const keys = readRequiredArray(
+    record,
+    "externalApiKeyDependenciesResponse",
+    "keys",
+  );
+  return keys.map((key) => {
+    const item = ensureRecord(key, "externalApiKeyDependency");
+    return {
+      id: readRequiredString(item, "externalApiKeyDependency", "id"),
+      name: readRequiredString(item, "externalApiKeyDependency", "name"),
+    };
+  });
+};
 
 export const parseWorkflowDefinitionListResponse = (
   value: unknown,
@@ -764,16 +848,6 @@ export const parseWorkflowDefinitionImportPreviewResponse = (
       "workflowVersionImportPreview",
       "checksumValid",
     ),
-    workspaceMismatch: readRequiredBoolean(
-      record,
-      "workflowVersionImportPreview",
-      "workspaceMismatch",
-    ),
-    projectMismatch: readRequiredBoolean(
-      record,
-      "workflowVersionImportPreview",
-      "projectMismatch",
-    ),
     workflowIdCollision: readRequiredBoolean(
       record,
       "workflowVersionImportPreview",
@@ -866,10 +940,8 @@ const parseWorkflowVersionImportMessageCode = (
 ): WorkflowVersionImportPreviewMessage["code"] => {
   if (
     value === "checksum_mismatch" ||
-    value === "project_mismatch" ||
     value === "unsupported_schema_version" ||
-    value === "workflow_id_collision" ||
-    value === "workspace_mismatch"
+    value === "workflow_id_collision"
   ) {
     return value;
   }
@@ -925,6 +997,20 @@ const parseWorkflowExecutionResponse = (
   parseWorkflowExecutionRecord(
     readRequiredRecord(value, "workflowExecutionResponse", "execution"),
   );
+
+const readWorkflowStreamPath = (input: {
+  workflowId: string;
+  seedNodeOutputs?: Readonly<Record<string, unknown>>;
+}): string => {
+  const params = new URLSearchParams({
+    workflowId: input.workflowId,
+  });
+  if (input.seedNodeOutputs) {
+    params.set("seedNodeOutputs", JSON.stringify(input.seedNodeOutputs));
+  }
+
+  return `${EndpointPath.ExecutionsStream}?${params.toString()}`;
+};
 
 const readWorkflowNodeStreamPath = (input: {
   workflowId: string;
@@ -1255,12 +1341,6 @@ const parseWorkflowDefinitionRecord = (
   value: Record<string, unknown>,
 ): WorkflowDefinitionRecord => ({
   id: readRequiredString(value, "workflowDefinitionRecord", "id"),
-  workspaceId: readRequiredString(
-    value,
-    "workflowDefinitionRecord",
-    "workspaceId",
-  ),
-  projectId: readRequiredString(value, "workflowDefinitionRecord", "projectId"),
   name: readRequiredString(value, "workflowDefinitionRecord", "name"),
   description: readRequiredString(
     value,
@@ -1300,6 +1380,11 @@ const parseWorkflowDefinitionRecord = (
     "workflowDefinitionRecord",
     "executionPolicy",
   ) as WorkflowDefinitionRecord["executionPolicy"],
+  ...(readWorkflowRuntimeSettingsOverride(value)
+    ? {
+        runtimeSettingsOverride: readWorkflowRuntimeSettingsOverride(value)!,
+      }
+    : {}),
   defaultContextPolicy: readRequiredRecord(
     value,
     "workflowDefinitionRecord",
@@ -1307,6 +1392,34 @@ const parseWorkflowDefinitionRecord = (
   ) as WorkflowDefinitionRecord["defaultContextPolicy"],
   tags: readRequiredStringArray(value, "workflowDefinitionRecord", "tags"),
 });
+
+const readWorkflowRuntimeSettingsOverride = (
+  value: Record<string, unknown>,
+): WorkflowDefinitionRecord["runtimeSettingsOverride"] => {
+  const candidate = value["runtimeSettingsOverride"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return undefined;
+  }
+
+  const record = ensureRecord(candidate, "workflowRuntimeSettingsOverride");
+  return {
+    ...(typeof record["infiniteLoops"] === "boolean"
+      ? { infiniteLoops: record["infiniteLoops"] }
+      : {}),
+    ...(typeof record["maxLoops"] === "number"
+      ? { maxLoops: record["maxLoops"] }
+      : {}),
+    ...(typeof record["externalCalls"] === "boolean"
+      ? { externalCalls: record["externalCalls"] }
+      : {}),
+    ...(typeof record["soundEnabled"] === "boolean"
+      ? { soundEnabled: record["soundEnabled"] }
+      : {}),
+    ...(typeof record["webhookUrl"] === "string"
+      ? { webhookUrl: record["webhookUrl"] }
+      : {}),
+  };
+};
 
 const parseWorkflowDefinitionVersionRecord = (
   value: Record<string, unknown>,
@@ -1324,11 +1437,6 @@ const parseWorkflowDefinitionVersionRecord = (
       value,
       "workflowDefinitionVersionRecord",
       "workflowId",
-    ),
-    projectId: readRequiredString(
-      value,
-      "workflowDefinitionVersionRecord",
-      "projectId",
     ),
     version: readRequiredNumber(
       value,
@@ -1379,7 +1487,6 @@ const parseWorkflowVersionChangeType = (
 const parseWorkflowAssetRecord = (
   value: Record<string, unknown>,
 ): WorkflowAssetRecord => {
-  const projectId = readOptionalString(value, "projectId");
   const archivedAt = readOptionalString(value, "archivedAt");
   const outputContract = hasDefinedProperty(value, "outputContract")
     ? (readRequiredRecord(
@@ -1398,22 +1505,14 @@ const parseWorkflowAssetRecord = (
 
   return {
     id: readRequiredString(value, "workflowAssetRecord", "id"),
-    workspaceId: readRequiredString(
-      value,
-      "workflowAssetRecord",
-      "workspaceId",
-    ),
-    ...(projectId ? { projectId } : {}),
     kind: readRequiredString(
       value,
       "workflowAssetRecord",
       "kind",
     ) as WorkflowAssetRecord["kind"],
-    scope: readRequiredString(
-      value,
-      "workflowAssetRecord",
-      "scope",
-    ) as WorkflowAssetRecord["scope"],
+    scope: parseWorkflowAssetScope(
+      readRequiredString(value, "workflowAssetRecord", "scope"),
+    ),
     name: readRequiredString(value, "workflowAssetRecord", "name"),
     slug: readRequiredString(value, "workflowAssetRecord", "slug"),
     description: readRequiredString(
@@ -1433,6 +1532,16 @@ const parseWorkflowAssetRecord = (
   };
 };
 
+const parseWorkflowAssetScope = (
+  value: string,
+): WorkflowAssetRecord["scope"] => {
+  if (value === WorkflowAssetScope.Global) {
+    return value;
+  }
+
+  throw new Error(`Invalid workflowAssetRecord.scope: ${value}`);
+};
+
 const parseWorkflowAssetUsageRecord = (
   value: Record<string, unknown>,
 ): WorkflowAssetUsageRecord => ({
@@ -1442,7 +1551,6 @@ const parseWorkflowAssetUsageRecord = (
     "workflowAssetUsageRecord",
     "workflowId",
   ),
-  projectId: readRequiredString(value, "workflowAssetUsageRecord", "projectId"),
   nodeId: readRequiredString(value, "workflowAssetUsageRecord", "nodeId"),
   nodeKind: readRequiredString(
     value,
@@ -1462,18 +1570,15 @@ const parseWorkflowExecutionRecord = (
 ): WorkflowExecutionRecord => {
   const finishedAt = readOptionalString(value, "finishedAt");
   const durationMs = readOptionalNumber(value, "durationMs");
+  const lifecycleId = readOptionalString(value, "lifecycleId");
 
   return {
     id: readRequiredString(value, "workflowExecutionRecord", "id"),
+    ...(lifecycleId ? { lifecycleId } : {}),
     workflowId: readRequiredString(
       value,
       "workflowExecutionRecord",
       "workflowId",
-    ),
-    projectId: readRequiredString(
-      value,
-      "workflowExecutionRecord",
-      "projectId",
     ),
     triggerKind: readRequiredString(
       value,

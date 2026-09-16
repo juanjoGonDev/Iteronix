@@ -63,8 +63,7 @@ export type WorkflowAssetKind =
   (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
-  Workspace: "workspace",
-  Project: "project",
+  Global: "global",
 } as const;
 
 export type WorkflowAssetScope =
@@ -111,6 +110,25 @@ export type WorkflowProviderSelectionRecord = {
 
 type WorkflowNodeConfigRecord = {
   assetId?: string;
+  promptAsset?: {
+    assetId: string;
+    version: number;
+    bindings: Readonly<Record<string, unknown>>;
+  };
+  skillAsset?: {
+    assetId: string;
+    version: number;
+  };
+  mcpConnection?: {
+    assetId: string;
+    serverId: string;
+    toolVersion: string;
+  };
+  pluginAsset?: {
+    assetId: string;
+    version: string;
+  };
+  memorySourceId?: string;
   role?: WorkflowNodeRole;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
@@ -118,6 +136,13 @@ type WorkflowNodeConfigRecord = {
     outputSnapshot: unknown;
     updatedAt: string;
   };
+  pinnedTestOutputs?: ReadonlyArray<{
+    id: string;
+    name?: string;
+    outputSnapshot: unknown;
+    updatedAt: string;
+  }>;
+  defaultPinnedTestOutputId?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
   };
@@ -402,6 +427,14 @@ type WorkflowExecutionPolicyRecord = {
   allowManualCheckpointResume: boolean;
 };
 
+type WorkflowRuntimeSettingsOverride = {
+  infiniteLoops?: boolean;
+  maxLoops?: number;
+  externalCalls?: boolean;
+  soundEnabled?: boolean;
+  webhookUrl?: string;
+};
+
 export type WorkflowAssetExecutionPolicyRecord = {
   maxRetries: number;
   timeoutMs: number;
@@ -415,8 +448,6 @@ type WorkflowContextPolicyRecord = {
 
 export type WorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: WorkflowRecordStatus;
@@ -428,6 +459,7 @@ export type WorkflowDefinitionRecord = {
   nodes: ReadonlyArray<WorkflowNodeRecord>;
   edges: ReadonlyArray<WorkflowEdgeRecord>;
   executionPolicy: WorkflowExecutionPolicyRecord;
+  runtimeSettingsOverride?: WorkflowRuntimeSettingsOverride;
   defaultContextPolicy: WorkflowContextPolicyRecord;
   tags: ReadonlyArray<string>;
 };
@@ -435,7 +467,6 @@ export type WorkflowDefinitionRecord = {
 export type WorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: WorkflowDefinitionRecord;
@@ -449,8 +480,6 @@ export type WorkflowDefinitionVersionRecord = {
 
 export type WorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: WorkflowAssetKind;
   scope: WorkflowAssetScope;
   name: string;
@@ -471,7 +500,6 @@ export type WorkflowAssetRecord = {
 export type WorkflowAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: "primary" | "guardrail" | "instruction";
@@ -525,8 +553,8 @@ export type WorkflowNodeExecutionRecord = {
 
 export type WorkflowExecutionRecord = {
   id: string;
+  lifecycleId?: string;
   workflowId: string;
-  projectId: string;
   triggerKind: WorkflowTriggerKind;
   status:
     | "queued"
@@ -547,7 +575,7 @@ export type WorkflowExecutionRecord = {
 
 export type WorkflowDefinitionUpsertInput = Omit<
   WorkflowDefinitionRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
   versionNote?: string;
@@ -556,10 +584,9 @@ export type WorkflowDefinitionUpsertInput = Omit<
 
 export type WorkflowAssetUpsertInput = Omit<
   WorkflowAssetRecord,
-  "id" | "projectId" | "version" | "createdAt" | "updatedAt"
+  "id" | "version" | "createdAt" | "updatedAt"
 > & {
   id?: string;
-  projectId?: string;
 };
 
 const DefaultNodeWidth = 264;
@@ -572,7 +599,6 @@ const DefaultWorkflowViewport = {
 const DefaultNodeGridColumnWidth = 312;
 const DefaultNodeGridRowHeight = 168;
 const DefaultWorkflowLanguage = "en";
-const DefaultWorkspaceId = "iteronix-workspace";
 const DefaultReasoningLevel = WorkflowReasoningLevel.Medium;
 const DefaultVerbosity = WorkflowVerbosity.Medium;
 const DefaultTemperature = 0.2;
@@ -615,8 +641,6 @@ export type WorkflowRegexEvaluationResult =
       flags: string;
       error: string;
     };
-
-export const readDefaultWorkflowWorkspaceId = (): string => DefaultWorkspaceId;
 
 export const normalizeWorkflowAssetExecutionPolicy = (
   value: WorkflowAssetExecutionPolicyRecord | undefined,
@@ -689,11 +713,8 @@ export const evaluateWorkflowRegex = (input: {
 };
 
 export const createEmptyWorkflowDefinition = (input: {
-  workspaceId?: string;
-  projectId: string;
   name: string;
 }): WorkflowDefinitionUpsertInput => ({
-  workspaceId: input.workspaceId ?? DefaultWorkspaceId,
   name: input.name.trim().length > 0 ? input.name.trim() : "Untitled workflow",
   description: "",
   status: WorkflowRecordStatus.Draft,
@@ -722,8 +743,6 @@ export const createEmptyWorkflowDefinition = (input: {
 
 export const createWorkflowAssetDraft = (input: {
   kind: WorkflowAssetKind;
-  projectId: string;
-  workspaceId?: string;
   name?: string;
   idFactory?: () => string;
   now?: () => string;
@@ -735,12 +754,8 @@ export const createWorkflowAssetDraft = (input: {
 
   const draft: WorkflowAssetUpsertInput = {
     id: idFactory(),
-    workspaceId: input.workspaceId ?? DefaultWorkspaceId,
-    ...(input.kind === WorkflowAssetKind.Guardrail
-      ? { projectId: input.projectId }
-      : { projectId: input.projectId }),
     kind: input.kind,
-    scope: WorkflowAssetScope.Project,
+    scope: WorkflowAssetScope.Global,
     name: baseName,
     slug: toSlug(baseName),
     description: "",
@@ -1764,7 +1779,6 @@ export const stripDefinitionVersionFields = (
   definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
 ): WorkflowDefinitionUpsertInput => ({
   ...(definition.id ? { id: definition.id } : {}),
-  workspaceId: definition.workspaceId,
   name: definition.name,
   description: definition.description,
   status: definition.status,
@@ -1781,8 +1795,6 @@ const stripAssetPersistenceFields = (
   asset: WorkflowAssetRecord | WorkflowAssetUpsertInput,
 ): WorkflowAssetUpsertInput => ({
   ...(asset.id ? { id: asset.id } : {}),
-  workspaceId: asset.workspaceId,
-  ...(asset.projectId ? { projectId: asset.projectId } : {}),
   kind: asset.kind,
   scope: asset.scope,
   name: asset.name,
@@ -2048,8 +2060,7 @@ export const readAssetKindLabel = (kind: WorkflowAssetKind): string => {
   return "Guardrail";
 };
 
-export const readAssetScopeLabel = (scope: WorkflowAssetScope): string =>
-  scope === WorkflowAssetScope.Workspace ? "Workspace" : "Project";
+export const readAssetScopeLabel = (): string => "Global";
 
 export const readNodeAssetKind = (
   kind: WorkflowNodeKind,
@@ -2362,6 +2373,13 @@ const readRangeIssues = (
   return [];
 };
 
+const readJsonCodeLiteral = (value: unknown): string =>
+  JSON.stringify(value).replace(
+    /[<>&'\u2028\u2029]/gu,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+
 const buildJsonSchemaZodExpression = (schema: JsonSchemaNodeRecord): string => {
   const baseExpression = buildJsonSchemaZodExpressionCore(schema);
   return schema.nullable ? `${baseExpression}.nullable()` : baseExpression;
@@ -2401,13 +2419,13 @@ const buildJsonSchemaZodExpressionCore = (
       stringExpression = `${stringExpression}.max(${schema.maxLength.toString()})`;
     }
     if (schema.pattern) {
-      stringExpression = `${stringExpression}.regex(new RegExp(${JSON.stringify(schema.pattern)}, "u"))`;
+      stringExpression = `${stringExpression}.regex(new RegExp(${readJsonCodeLiteral(schema.pattern)}, "u"))`;
     }
     if (schema.format) {
       stringExpression = `${stringExpression}${readJsonSchemaStringFormatZodSuffix(schema.format)}`;
     }
     if (schema.enum && schema.enum.length > 0) {
-      stringExpression = `${stringExpression}.refine((value) => ${JSON.stringify(schema.enum)}.includes(value))`;
+      stringExpression = `${stringExpression}.refine((value) => ${readJsonCodeLiteral(schema.enum)}.includes(value))`;
     }
     return stringExpression;
   }
@@ -2456,7 +2474,7 @@ const readJsonSchemaStringFormatZodSuffix = (
     return ".regex(/^(?:\\d{8}|[XYZ]\\d{7})[A-Z]$/iu)";
   }
 
-  return `.refine((value) => ${readJsonSchemaStringFormatPredicate(format)}, { message: ${JSON.stringify(format)} })`;
+  return `.refine((value) => ${readJsonSchemaStringFormatPredicate(format)}, { message: ${readJsonCodeLiteral(format)} })`;
 };
 
 const readJsonSchemaStringFormatPredicate = (

@@ -61,6 +61,7 @@ export type WorkflowsUrlState = {
   debugOutputTab: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId: string | null;
   editor: WorkflowsUrlEditor | null;
+  pinnedOutputId: string | null;
   deepEditorTab: WorkflowsUrlDeepEditorTab | null;
   deepEditorOutputTab: WorkflowsUrlDeepEditorOutputTab | null;
   regexPattern: string | null;
@@ -81,6 +82,7 @@ export type WorkflowsUrlPatch = {
   debugOutputTab?: WorkflowsUrlDebugPanelTab | null;
   debugInputSourceId?: string | null;
   editor?: WorkflowsUrlEditor | null;
+  pinnedOutputId?: string | null;
   deepEditorTab?: WorkflowsUrlDeepEditorTab | null;
   deepEditorOutputTab?: WorkflowsUrlDeepEditorOutputTab | null;
   regexPattern?: string | null;
@@ -102,6 +104,7 @@ const UrlParam = {
   OutputTab: "outputTab",
   InputSource: "inputSource",
   Editor: "editor",
+  PinnedOutput: "pinnedOutput",
   DeepEditorTab: "deepTab",
   DeepEditorOutputTab: "deepOutputTab",
   RegexPattern: "regexPattern",
@@ -126,6 +129,9 @@ export const readWorkflowsUrlState = (urlInput: string): WorkflowsUrlState => {
       url.searchParams.get(UrlParam.InputSource),
     ),
     editor: readEditor(url.searchParams.get(UrlParam.Editor)),
+    pinnedOutputId: readNonEmptyParam(
+      url.searchParams.get(UrlParam.PinnedOutput),
+    ),
     deepEditorTab: readDeepEditorTab(
       url.searchParams.get(UrlParam.DeepEditorTab),
     ),
@@ -147,7 +153,7 @@ export const applyWorkflowsUrlPatch = (
   patch: WorkflowsUrlPatch,
 ): string => {
   const url = new URL(urlInput, "http://localhost");
-  url.pathname = WorkflowsRoutePath;
+  url.pathname = readWorkflowRoutePath(url.pathname);
   writeOptionalParam(url.searchParams, UrlParam.Panel, patch.panel);
   writeOptionalParam(url.searchParams, UrlParam.Modal, patch.modal);
   writeOptionalParam(url.searchParams, UrlParam.Node, patch.nodeId);
@@ -174,6 +180,11 @@ export const applyWorkflowsUrlPatch = (
   writeOptionalParam(url.searchParams, UrlParam.Editor, patch.editor);
   writeOptionalParam(
     url.searchParams,
+    UrlParam.PinnedOutput,
+    patch.pinnedOutputId,
+  );
+  writeOptionalParam(
+    url.searchParams,
     UrlParam.DeepEditorTab,
     patch.deepEditorTab,
   );
@@ -194,9 +205,7 @@ export const applyWorkflowsUrlPatch = (
     patch.versionAction,
   );
   const query = url.searchParams.toString();
-  return query.length > 0
-    ? `${WorkflowsRoutePath}?${query}`
-    : WorkflowsRoutePath;
+  return query.length > 0 ? `${url.pathname}?${query}` : url.pathname;
 };
 
 export const readWorkflowsUrlStateFromLocation = (
@@ -221,6 +230,12 @@ const readPanel = (value: string | null): WorkflowsUrlPanel | null => {
   }
   return null;
 };
+
+const readWorkflowRoutePath = (pathname: string): string =>
+  pathname === WorkflowsRoutePath ||
+  pathname.startsWith(`${WorkflowsRoutePath}/`)
+    ? pathname
+    : WorkflowsRoutePath;
 
 const readModal = (value: string | null): WorkflowsUrlModal | null => {
   if (value === WorkflowsUrlModal.EditHistory) {

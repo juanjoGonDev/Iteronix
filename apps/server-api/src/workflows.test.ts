@@ -10,7 +10,6 @@ import {
 } from "../../../packages/shared/src/workflows";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
 import { ErrorMessage, HttpStatus } from "./constants";
-import { createProjectStore } from "./projects";
 import { ResultType } from "./result";
 import {
   executeWorkflowAssetDelete,
@@ -62,7 +61,6 @@ const BaseTime = "2026-05-06T18:00:00.000Z";
 describe("workflow api contracts", () => {
   it("accepts a manual-trigger workflow definition request", () => {
     const result = parseWorkflowDefinitionUpsertRequest({
-      projectId: "project-1",
       definition: createWorkflowDefinitionInput(),
     });
 
@@ -78,7 +76,6 @@ describe("workflow api contracts", () => {
 
   it("rejects workflow definitions that enable non-manual triggers in the MVP", () => {
     const result = parseWorkflowDefinitionUpsertRequest({
-      projectId: "project-1",
       definition: {
         ...createWorkflowDefinitionInput(),
         trigger: {
@@ -98,21 +95,16 @@ describe("workflow api contracts", () => {
     });
   });
 
-  it("creates, lists, gets and deletes workflow definitions", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
+  it("creates, lists, gets and deletes workflow catalog records", () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const upserted = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -122,15 +114,7 @@ describe("workflow api contracts", () => {
       throw new Error("Expected workflow upsert to succeed.");
     }
 
-    const listed = executeWorkflowDefinitionList(
-      {
-        projectId: "project-1",
-      },
-      {
-        projectStore,
-        catalog,
-      },
-    );
+    const listed = executeWorkflowDefinitionList({ catalog });
     const fetched = executeWorkflowDefinitionGet(
       {
         workflowId: upserted.value.id,
@@ -153,24 +137,24 @@ describe("workflow api contracts", () => {
     expect(deleted.type).toBe(ResultType.Ok);
     if (listed.type === ResultType.Ok) {
       expect(listed.value).toHaveLength(1);
+      expect(listed.value[0]).toMatchObject({
+        id: upserted.value.id,
+        name: upserted.value.name,
+        updatedAt: BaseTime,
+      });
     }
   });
 
   it("lists and restores persisted workflow definition versions", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const first = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -180,7 +164,6 @@ describe("workflow api contracts", () => {
 
     executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: {
           ...createWorkflowDefinitionInput(),
           id: first.value.id,
@@ -188,7 +171,6 @@ describe("workflow api contracts", () => {
         },
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -242,20 +224,15 @@ describe("workflow api contracts", () => {
   });
 
   it("exports, imports, partially restores and cleans workflow versions", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const created = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -269,7 +246,6 @@ describe("workflow api contracts", () => {
 
     const updated = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: {
           ...createWorkflowDefinitionInput(),
           id: created.value.id,
@@ -283,7 +259,6 @@ describe("workflow api contracts", () => {
         },
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -366,20 +341,15 @@ describe("workflow api contracts", () => {
   });
 
   it("exports a selected workflow version timeline range", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const created = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -389,7 +359,6 @@ describe("workflow api contracts", () => {
 
     const updated = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: {
           ...createWorkflowDefinitionInput(),
           id: created.value.id,
@@ -397,7 +366,6 @@ describe("workflow api contracts", () => {
         },
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -438,20 +406,15 @@ describe("workflow api contracts", () => {
   });
 
   it("previews timeline bundle imports using the selected version", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
     const created = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
         catalog,
-        projectStore,
       },
     );
     expect(created.type).toBe(ResultType.Ok);
@@ -460,7 +423,6 @@ describe("workflow api contracts", () => {
     }
     const updated = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: {
           ...createWorkflowDefinitionInput(),
           id: created.value.id,
@@ -469,7 +431,6 @@ describe("workflow api contracts", () => {
       },
       {
         catalog,
-        projectStore,
       },
     );
     expect(updated.type).toBe(ResultType.Ok);
@@ -493,8 +454,6 @@ describe("workflow api contracts", () => {
     const parsed = parseWorkflowDefinitionPreviewImportVersionRequest({
       exported: exported.value,
       versionId: versions[1]?.id,
-      targetWorkspaceId: created.value.workspaceId,
-      targetProjectId: created.value.projectId,
     });
     const preview =
       parsed.type === ResultType.Ok
@@ -510,19 +469,14 @@ describe("workflow api contracts", () => {
   });
 
   it("previews workflow version imports with checksum and collision warnings", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
     const created = executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -555,8 +509,6 @@ describe("workflow api contracts", () => {
 
     const parsed = parseWorkflowDefinitionPreviewImportVersionRequest({
       exported: exported.value,
-      targetWorkspaceId: "workspace-2",
-      targetProjectId: "project-2",
     });
     const preview =
       parsed.type === ResultType.Ok
@@ -569,26 +521,19 @@ describe("workflow api contracts", () => {
     if (preview.type === ResultType.Ok) {
       expect(preview.value.status).toBe("warning");
       expect(preview.value.workflowIdCollision).toBe(true);
-      expect(preview.value.workspaceMismatch).toBe(true);
-      expect(preview.value.projectMismatch).toBe(true);
     }
   });
 
   it("creates assets, lists usages and blocks deleting referenced assets", () => {
-    const projectStore = createProjectStore({
-      projects: [createProjectRecord()],
-    });
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const asset = executeWorkflowAssetUpsert(
       {
-        projectId: "project-1",
         asset: createWorkflowAssetInput(),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -600,11 +545,9 @@ describe("workflow api contracts", () => {
 
     executeWorkflowDefinitionUpsert(
       {
-        projectId: "project-1",
         definition: createWorkflowDefinitionInput(asset.value.id),
       },
       {
-        projectStore,
         catalog,
       },
     );
@@ -618,12 +561,8 @@ describe("workflow api contracts", () => {
       },
     );
     const listed = executeWorkflowAssetList(
+      {},
       {
-        projectId: "project-1",
-        workspaceId: "workspace-1",
-      },
-      {
-        projectStore,
         catalog,
       },
     );
@@ -662,7 +601,6 @@ describe("workflow api contracts", () => {
     });
     const execution = catalog.upsertExecution({
       workflowId: "workflow-1",
-      projectId: "project-1",
       triggerKind: WorkflowTriggerKind.Manual,
       status: WorkflowExecutionStatus.Completed,
       startedAt: BaseTime,
@@ -680,9 +618,7 @@ describe("workflow api contracts", () => {
     });
 
     const listed = executeWorkflowExecutionList(
-      {
-        projectId: "project-1",
-      },
+      {},
       {
         catalog,
       },
@@ -716,7 +652,6 @@ describe("workflow api contracts", () => {
     catalog.upsertWorkflow({
       ...createWorkflowDefinitionInput(),
       id: "workflow-1",
-      projectId: "project-1",
       nodes: [createProviderRunNodeRecord()],
     });
 
@@ -729,7 +664,6 @@ describe("workflow api contracts", () => {
         runWorkflow: async ({ definition }) => ({
           id: "execution-1",
           workflowId: definition.id,
-          projectId: definition.projectId,
           triggerKind: WorkflowTriggerKind.Manual,
           status: WorkflowExecutionStatus.Completed,
           startedAt: BaseTime,
@@ -759,6 +693,57 @@ describe("workflow api contracts", () => {
     }
   });
 
+  it("forwards pinned test outputs only when a test run provides them", async () => {
+    const catalog = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+    catalog.upsertWorkflow({
+      ...createWorkflowDefinitionInput(),
+      id: "workflow-1",
+      nodes: [createProviderRunNodeRecord()],
+    });
+    let receivedSeedNodeOutputs: Readonly<Record<string, unknown>> | undefined;
+
+    await executeWorkflowExecutionRun(
+      {
+        workflowId: "workflow-1",
+        seedNodeOutputs: {
+          "node-1": { result: "pinned" },
+        },
+      },
+      {
+        catalog,
+        runWorkflow: async ({ definition, seedNodeOutputs }) => {
+          receivedSeedNodeOutputs = seedNodeOutputs;
+          return {
+            id: "execution-test-1",
+            workflowId: definition.id,
+            triggerKind: WorkflowTriggerKind.Manual,
+            status: WorkflowExecutionStatus.Completed,
+            startedAt: BaseTime,
+            finishedAt: "2026-05-06T18:01:00.000Z",
+            durationMs: 60000,
+            warningsCount: 0,
+            errorsCount: 0,
+            totals: {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              estimatedCostEur: 0,
+              latencyMs: 0,
+            },
+            contextSessionId: "ctx-test-1",
+            nodeRuns: [],
+          };
+        },
+      },
+    );
+
+    expect(receivedSeedNodeOutputs).toEqual({
+      "node-1": { result: "pinned" },
+    });
+  });
+
   it("runs and persists a partial node execution", async () => {
     const catalog = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
@@ -766,7 +751,6 @@ describe("workflow api contracts", () => {
     catalog.upsertWorkflow({
       ...createWorkflowDefinitionInput(),
       id: "workflow-1",
-      projectId: "project-1",
       nodes: [createProviderRunNodeRecord()],
     });
 
@@ -783,7 +767,6 @@ describe("workflow api contracts", () => {
         runNode: async ({ definition, nodeId, inputSource }) => ({
           id: "execution-node-1",
           workflowId: definition.id,
-          projectId: definition.projectId,
           triggerKind: WorkflowTriggerKind.Manual,
           status: WorkflowExecutionStatus.Completed,
           startedAt: BaseTime,
@@ -820,7 +803,6 @@ describe("workflow api contracts", () => {
     const execution = catalog.upsertExecution({
       id: "execution-running",
       workflowId: "workflow-1",
-      projectId: "project-1",
       triggerKind: WorkflowTriggerKind.Manual,
       status: WorkflowExecutionStatus.Running,
       startedAt: BaseTime,
@@ -881,7 +863,6 @@ describe("workflow api contracts", () => {
     catalog.upsertWorkflow({
       ...createWorkflowDefinitionInput(),
       id: "workflow-1",
-      projectId: "project-1",
       nodes: [createProviderRunNodeRecord()],
     });
 
@@ -915,7 +896,6 @@ describe("workflow api contracts", () => {
   it("parses workflow asset and execution request payloads", () => {
     expect(
       parseWorkflowAssetUpsertRequest({
-        projectId: "project-1",
         asset: createWorkflowAssetInput(),
       }).type,
     ).toBe(ResultType.Ok);
@@ -965,11 +945,7 @@ describe("workflow api contracts", () => {
         keepLatest: 3,
       }).type,
     ).toBe(ResultType.Ok);
-    expect(
-      parseWorkflowExecutionListRequest({
-        projectId: "project-1",
-      }).type,
-    ).toBe(ResultType.Ok);
+    expect(parseWorkflowExecutionListRequest({}).type).toBe(ResultType.Ok);
     expect(
       parseWorkflowExecutionGetRequest({
         executionId: "execution-1",
@@ -1026,16 +1002,7 @@ describe("workflow api contracts", () => {
   });
 });
 
-const createProjectRecord = () => ({
-  id: "project-1",
-  name: "Iteronix",
-  rootPath: null,
-  createdAt: BaseTime,
-  updatedAt: BaseTime,
-});
-
 const createWorkflowDefinitionInput = (assetId = "asset-1") => ({
-  workspaceId: "workspace-1",
   name: "Example workflow",
   description: "Description",
   status: WorkflowRecordStatus.Draft,
@@ -1082,9 +1049,8 @@ const createWorkflowDefinitionInput = (assetId = "asset-1") => ({
 });
 
 const createWorkflowAssetInput = () => ({
-  workspaceId: "workspace-1",
   kind: WorkflowAssetKind.Prompt,
-  scope: WorkflowAssetScope.Workspace,
+  scope: WorkflowAssetScope.Global,
   name: "Planner prompt",
   slug: "planner-prompt",
   description: "Prompt",

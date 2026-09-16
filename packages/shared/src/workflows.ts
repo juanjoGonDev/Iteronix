@@ -14,6 +14,7 @@ export const WorkflowNodeKind = {
   AiProviderRun: "ai.provider-run",
   LogicCondition: "logic.condition",
   LogicMerge: "logic.merge",
+  WorkflowInvocation: "workflow.invocation",
   HumanReview: "human.review",
   TerminalResponse: "terminal.response",
 } as const;
@@ -51,8 +52,7 @@ export type WorkflowAssetKind =
   (typeof WorkflowAssetKind)[keyof typeof WorkflowAssetKind];
 
 export const WorkflowAssetScope = {
-  Workspace: "workspace",
-  Project: "project",
+  Global: "global",
 } as const;
 
 export type WorkflowAssetScope =
@@ -105,8 +105,27 @@ export type WorkflowViewportRecord = {
 
 export type WorkflowExecutionPolicyRecord = {
   maxNodeRetries: number;
+  maxConcurrency?: number;
   allowManualCheckpointResume: boolean;
 };
+
+export type WorkflowRuntimeSettings = {
+  infiniteLoops: boolean;
+  maxLoops: number;
+  externalCalls: boolean;
+  soundEnabled: boolean;
+  webhookUrl: string;
+};
+
+export type WorkflowRuntimeSettingsOverride = Partial<WorkflowRuntimeSettings>;
+
+export const resolveWorkflowRuntimeSettings = (
+  defaults: WorkflowRuntimeSettings,
+  override: WorkflowRuntimeSettingsOverride | undefined,
+): WorkflowRuntimeSettings => ({
+  ...defaults,
+  ...override,
+});
 
 export type WorkflowAssetExecutionPolicyRecord = {
   maxRetries: number;
@@ -201,15 +220,47 @@ export type WorkflowProviderSelectionRecord = {
 
 export type WorkflowNodeConfigRecord = {
   assetId?: string;
+  promptAsset?: {
+    assetId: string;
+    version: number;
+    bindings: Readonly<Record<string, unknown>>;
+  };
   role?: WorkflowNodeRole;
+  skillId?: string;
+  skillAsset?: {
+    assetId: string;
+    version: number;
+  };
+  mcpConnection?: {
+    assetId: string;
+    serverId: string;
+    toolVersion: string;
+  };
+  pluginAsset?: {
+    assetId: string;
+    version: string;
+  };
+  memorySourceId?: string;
+  grantedPermissions?: ReadonlyArray<string>;
   provider?: WorkflowProviderSelectionRecord;
   prompt?: string;
   pinnedTestOutput?: {
     outputSnapshot: unknown;
     updatedAt: string;
   };
+  pinnedTestOutputs?: ReadonlyArray<{
+    id: string;
+    name?: string;
+    outputSnapshot: unknown;
+    updatedAt: string;
+  }>;
+  defaultPinnedTestOutputId?: string;
   reviewPolicy?: {
     requireHumanDecision: boolean;
+  };
+  workflowInvocation?: {
+    workflowId: string;
+    workflowVersion: number;
   };
 };
 
@@ -339,8 +390,6 @@ export type WorkflowEdgeRecord = {
 
 export type WorkflowDefinitionRecord = {
   id: string;
-  workspaceId: string;
-  projectId: string;
   name: string;
   description: string;
   status: WorkflowRecordStatus;
@@ -352,6 +401,7 @@ export type WorkflowDefinitionRecord = {
   nodes: ReadonlyArray<WorkflowNodeRecord>;
   edges: ReadonlyArray<WorkflowEdgeRecord>;
   executionPolicy: WorkflowExecutionPolicyRecord;
+  runtimeSettingsOverride?: WorkflowRuntimeSettingsOverride;
   defaultContextPolicy: WorkflowContextPolicyRecord;
   tags: ReadonlyArray<string>;
 };
@@ -359,7 +409,6 @@ export type WorkflowDefinitionRecord = {
 export type WorkflowDefinitionVersionRecord = {
   id: string;
   workflowId: string;
-  projectId: string;
   version: number;
   createdAt: string;
   snapshot: WorkflowDefinitionRecord;
@@ -373,8 +422,6 @@ export type WorkflowDefinitionVersionRecord = {
 
 export type WorkflowAssetRecord = {
   id: string;
-  workspaceId: string;
-  projectId?: string;
   kind: WorkflowAssetKind;
   scope: WorkflowAssetScope;
   name: string;
@@ -404,7 +451,6 @@ export type WorkflowAssetUsageRole =
 export type WorkflowAssetUsageRecord = {
   assetId: string;
   workflowId: string;
-  projectId: string;
   nodeId: string;
   nodeKind: WorkflowNodeKind;
   role: WorkflowAssetUsageRole;
@@ -449,10 +495,18 @@ export type WorkflowNodeExecutionRecord = {
   outputSnapshot?: unknown;
 };
 
+export type WorkflowPromptProvenanceRecord = {
+  assetId: string;
+  version: number;
+  bindings: Readonly<Record<string, unknown>>;
+  renderedFingerprint: string;
+  validation: "passed";
+};
+
 export type WorkflowExecutionRecord = {
   id: string;
+  lifecycleId?: string;
   workflowId: string;
-  projectId: string;
   triggerKind: WorkflowTriggerKind;
   status: WorkflowExecutionStatus;
   startedAt: string;
@@ -463,6 +517,7 @@ export type WorkflowExecutionRecord = {
   totals: WorkflowUsageTotalsRecord;
   contextSessionId: string;
   nodeRuns: ReadonlyArray<WorkflowNodeExecutionRecord>;
+  promptProvenance?: ReadonlyArray<WorkflowPromptProvenanceRecord>;
 };
 
 export type WorkflowCatalogState = {

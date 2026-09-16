@@ -20,8 +20,8 @@ describe("Button", () => {
 
     try {
       const button = new Button({
-        children: "Files",
-        "data-testid": "explorer-compact-toggle-files",
+        children: "Workflow",
+        "data-testid": "workflow-compact-toggle",
       });
 
       button.render();
@@ -36,9 +36,7 @@ describe("Button", () => {
       }
     }
 
-    expect(recorded).toContain(
-      "attr:data-testid=explorer-compact-toggle-files",
-    );
+    expect(recorded).toContain("attr:data-testid=workflow-compact-toggle");
   });
 
   it("uses destructive rose styling for the danger variant", () => {

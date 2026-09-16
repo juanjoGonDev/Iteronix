@@ -8,10 +8,6 @@
     "types": ["node"],
     "lib": ["ES2022"]
   },
-  "include": [
-    "apps/server-api/src/**/*.ts",
-    "apps/desktop-main/src/**/*.ts",
-    "packages/*/src/**/*.ts"
-  ],
+  "include": ["apps/server-api/src/**/*.ts", "packages/*/src/**/*.ts"],
   "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

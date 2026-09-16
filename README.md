@@ -1,115 +1,43 @@
 # Iteronix
 
-Iteronix is a PNPM monorepo for a server-first AI Engineering Workbench. The current repository ships a typed headless server API, a reusable web UI, an Electron wrapper, and an extensible AI stack covering hierarchical memory, skills, MCP interoperability, RAG/CAG, multi-agent orchestration, guardrails, observability, and evaluation.
+Iteronix is a workflow-only application backed by PostgreSQL.
 
-## Architecture
+## Product boundary
 
-- `apps/server-api`: headless HTTP API, SSE streams, project/files/history/kanban endpoints, and AI workbench routes.
-- `apps/web-ui`: responsive PWA shell reused by browser and desktop.
-- `apps/desktop-main`: Electron-style desktop launcher for local or remote server usage.
-- `packages/domain`: stable provider and port contracts.
-- `packages/adapters`: CLI/provider and log adapters.
-- `packages/ai-core`: shared AI runtime types, serializable schemas, env config.
-- `packages/memory`: working, episodic, and semantic memory management with local file persistence.
-- `packages/skills`: on-disk skill registry and skill execution pipeline.
-- `packages/rag`: ingestion, chunking, retrieval, cache-augmented generation, credibility scoring, file/Qdrant/pgvector vector stores.
-- `packages/mcp`: MCP server exposure plus external client connection helpers.
-- `packages/guardrails`: prompt/tool/output guardrails and least-privilege policy checks.
-- `packages/observability`: OpenTelemetry runtime and evidence report persistence.
-- `packages/eval`: JSONL evaluation harness and CI smoke suite.
-- `packages/agents`: planner-retriever-executor-reviewer workflow orchestration.
+- Workflow catalog at `/workflows`
+- Single-workflow editor and execution at `/workflows/:workflowId`
+- Provider configuration and external workflow API keys in Settings
+- External callers use scoped, revocable workflow API keys
 
-## AI Workbench Vertical Slice
+The browser connects to its colocated backend automatically. Provider credentials are referenced by environment-variable name and are redacted from persisted state and API responses.
 
-The repository now includes an end-to-end backend slice:
-
-- `POST /ai/skills/run`
-- `POST /ai/workflows/run`
-- `POST /ai/evals/run`
-- `POST /ai/memory/query`
-
-The default skill is loaded from `skills/example-skill/skill.json`. Runs use file-backed memory, repository ingestion, retrieval gating, citations, confidence scoring, evidence reports, and deterministic evaluation so CI can execute without external model access.
-
-## Quickstart
-
-### Prerequisites
-
-- Node.js 20+
-- PNPM 10+
-
-### Install
+## Run locally
 
 ```bash
-pnpm install
+cp .env.example .env
+docker compose up --build
 ```
 
-### Development
+Open `http://localhost:4000` and sign in with the administrator account defined by
+`ITERONIX_ADMIN_EMAIL` / `ITERONIX_ADMIN_PASSWORD` (`admin@admin` / `admin` by default;
+change the password before exposing the app to any network).
 
-```bash
-pnpm dev
-pnpm dev:server
-pnpm dev:web
-pnpm dev:desktop
-```
+The browser talks to its colocated backend with the IDE session cookie, so no bearer token
+is required between the UI and the API. `AUTH_TOKEN` is optional and only needed by
+programmatic callers that authorize with `Authorization: Bearer <token>`. `IDE_UI_ORIGINS`
+lists the browser origins allowed to use a session; add your own host and port there when it
+differs from `http://localhost:4000`.
 
-### Quality Gates
+To run without Docker, set `DATABASE_URL` in `.env` and start PostgreSQL plus `pnpm dev`.
+Configure a runnable provider in Settings before executing a workflow.
+
+## Verification
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm eval:min
+pnpm -C apps/web-ui validate:settings
+pnpm -C apps/web-ui validate:workflows
 ```
-
-### Browser validation
-
-| Command                                                | Use case                                                               |
-| ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `pnpm -C apps/web-ui validate:source-linking`          | Deterministic browser validation for normal verification               |
-| `pnpm -C apps/web-ui validate:quality-gates`           | Deterministic browser validation for the `Projects` quality-gates flow |
-| `pnpm -C apps/web-ui validate:source-linking:preserve` | Manual debugging and visual comparison across runs                     |
-
-GitHub Actions runs `pnpm -C apps/web-ui validate:source-linking` and `pnpm -C apps/web-ui validate:quality-gates` after `pnpm build`. The canonical operational reference, including screenshot-retention behavior, lives in [`docs/RUNNING.md`](docs/RUNNING.md#browser-validation).
-
-### Run the AI evaluation slice
-
-```bash
-pnpm eval:min
-```
-
-### Example AI skill request
-
-```bash
-curl -X POST http://localhost:4000/ai/skills/run \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "skillName": "example-skill",
-    "sessionId": "demo-session",
-    "input": { "question": "What is Iteronix?" }
-  }'
-```
-
-## Storage and infra
-
-- Local/dev persistence is file-based under `.iteronix/`.
-- Optional vector backends are available for Qdrant and pgvector.
-- `compose.yaml` starts Qdrant for production-like retrieval experiments.
-
-## Documentation
-
-- `docs/RUNNING.md`: developer commands.
-- `docs/DEPLOYMENT.md`: deployment and infrastructure notes.
-- `docs/AI_WORKBENCH.md`: workbench architecture and API details.
-- `CHANGELOG.md`: release notes template.
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=juanjoGonDev%2FIteronix&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&theme=dark&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=juanjoGonDev/Iteronix&type=date&legend=top-left&sealed_token=g22sQOlOBU4ef6SlM4R7se1os9eLFxwA1YSo-1LJnQHf3ahyYh7EzwIDe_1lnkmRSweP2AJBDzzJJoTjSvtnAo67ICArGwRIFaMyPAe_aNMxxbxvi_vQxqGrkAxoK-B0IZq7m-J0bVJ21CipiZm2MGLXXmglYwkuOHAPm4Srd9U2OVfnKobGmcpeUsFe" />
- </picture>
-</a>

@@ -28,36 +28,15 @@ const ForbiddenUrlState = [
 
 const UrlStatePolicies = [
   {
-    route: ROUTES.OVERVIEW,
+    route: ROUTES.WORKFLOWS,
     status: "none",
     allowedParams: [],
     forbiddenState: ForbiddenUrlState,
-    reason: "Static overview has no reload-useful deep state yet.",
-  },
-  {
-    route: ROUTES.PROJECTS,
-    status: "mixed",
-    allowedParams: ["run", "gates", "diff", "path"],
-    forbiddenState: ForbiddenUrlState,
     reason:
-      "Restores selected quality run, gate filters and focused diff path.",
+      "Workflow selection belongs to this catalog route, not query state.",
   },
   {
-    route: ROUTES.EXPLORER,
-    status: "mixed",
-    allowedParams: ["section", "file", "q", "regex", "case", "word"],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Restores sidebar section, relative file path and search flags.",
-  },
-  {
-    route: ROUTES.KANBAN,
-    status: "push",
-    allowedParams: ["task"],
-    forbiddenState: ForbiddenUrlState,
-    reason: "Restores selected task modal.",
-  },
-  {
-    route: ROUTES.WORKFLOWS,
+    route: ROUTES.WORKFLOW_EDITOR,
     status: "mixed",
     allowedParams: [
       "panel",
@@ -82,11 +61,44 @@ const UrlStatePolicies = [
     reason: "Restores workflow panels, modals and useful debug/editor state.",
   },
   {
-    route: ROUTES.HISTORY,
-    status: "mixed",
-    allowedParams: ["kind", "id", "source"],
+    route: ROUTES.PROMPT_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "prompt", "version"],
     forbiddenState: ForbiddenUrlState,
-    reason: "Restores selected run/evaluation and evidence source.",
+    reason:
+      "Restores prompt catalog editor selection without serializing drafts.",
+  },
+  {
+    route: ROUTES.SKILL_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "skill"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores skill catalog editor selection without serializing drafts.",
+  },
+  {
+    route: ROUTES.MEMORY_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "memory", "panel"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores memory source editor selection and document panel without serializing drafts.",
+  },
+  {
+    route: ROUTES.MCP_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "mcp"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores MCP connection editor selection without serializing credentials or remote payloads.",
+  },
+  {
+    route: ROUTES.PLUGIN_ASSETS,
+    status: "push",
+    allowedParams: ["mode", "plugin"],
+    forbiddenState: ForbiddenUrlState,
+    reason:
+      "Restores server plugin manifest inspection without serializing code or secrets.",
   },
   {
     route: ROUTES.SETTINGS,
@@ -101,11 +113,6 @@ const RegisteredRouteValues = Object.values(ROUTES);
 
 export const listUrlStateRoutePolicies =
   (): ReadonlyArray<UrlStateRoutePolicy> => UrlStatePolicies;
-
-export const getUrlStateRoutePolicy = (
-  route: string,
-): UrlStateRoutePolicy | undefined =>
-  UrlStatePolicies.find((policy) => policy.route === route);
 
 export const validateUrlStateRegistryCoverage = (): ReadonlyArray<string> => {
   const policyRoutes = new Set(UrlStatePolicies.map((policy) => policy.route));

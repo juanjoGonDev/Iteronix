@@ -8,10 +8,6 @@ import { fileURLToPath } from "node:url";
 import puppeteer, { type Page } from "puppeteer";
 import { ROUTES } from "../src/shared/constants.js";
 import {
-  DefaultServerConnection,
-  LocalStorageKey as ServerStorageKey,
-} from "../src/shared/server-config.js";
-import {
   assertBrowserValidationBuildOutput,
   captureBrowserValidationScreenshot,
   parseBrowserValidationRuntimeOptions,
@@ -24,7 +20,7 @@ import {
 
 const ValidationConfig = {
   PreviewBaseUrl: "http://127.0.0.1:4000",
-  StubApiBaseUrl: "http://127.0.0.1:4104",
+  StubApiBaseUrl: "http://127.0.0.1:4001",
   PreviewHealthPath: "/index.html",
   StubHealthPath: "/health",
   SettingsRoute: ROUTES.SETTINGS,
@@ -38,15 +34,17 @@ const ValidationConfig = {
 } as const;
 
 const RequestPath = {
-  WorkspaceStateGet: "/workspace/state/get",
-  WorkspaceStateUpdate: "/workspace/state/update",
-  ProjectOpen: "/projects/open",
+  AuthLogin: "/auth/login",
+  AuthMe: "/auth/me",
+  SettingsGet: "/settings/get",
+  SettingsUpdate: "/settings/update",
   ProvidersList: "/providers/list",
   ProvidersSettings: "/providers/settings",
   Webhook: "/webhook/test",
 } as const;
 
 const ResponseHeader = {
+  AllowCredentials: "Access-Control-Allow-Credentials",
   AllowOrigin: "Access-Control-Allow-Origin",
   AllowHeaders: "Access-Control-Allow-Headers",
   AllowMethods: "Access-Control-Allow-Methods",
@@ -58,15 +56,13 @@ const ValidationText = {
   ProviderHeading: "Provider profiles",
   SaveChanges: "Save changes",
   TestPayload: "Test payload",
-  CheckConnection: "Check connection",
   AnthropicProfileName: "Claude Coder",
   AnthropicModelId: "claude-sonnet-4-20250514",
-  NotificationsUrl: "http://127.0.0.1:4104/webhook/test",
+  NotificationsUrl: "http://127.0.0.1:4001/webhook/test",
   SaveNotice: "Settings saved.",
   SettingsServerBackedNotice:
-    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+    "Provider profiles, workflow limits, and notifications persist in PostgreSQL.",
   WebhookNotice: "Webhook test payload delivered successfully.",
-  ConnectionNotice: "Connection OK.",
 } as const;
 
 const ProviderKind = {
@@ -78,41 +74,25 @@ const ProviderKind = {
 
 type ProviderKind = (typeof ProviderKind)[keyof typeof ProviderKind];
 
-type StubProjectRecord = {
-  id: string;
-  name: string;
-  rootPath: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
 type ProviderSettingsRequestRecord = {
-  projectId: string;
   profileId: string;
   providerId: string;
   config: Record<string, unknown>;
 };
 
 type StubServerState = {
+  authenticatedSessionProbeCount: number;
   providerSettingsRequests: ProviderSettingsRequestRecord[];
   webhookPayloadCount: number;
-  workspaceSettings: Record<string, unknown>;
-};
-
-const fixtureProject: StubProjectRecord = {
-  id: "settings-project",
-  name: "Iteronix",
-  rootPath: "D:\\projects\\Iteronix",
-  createdAt: "2026-04-28T08:00:00.000Z",
-  updatedAt: "2026-04-28T08:00:00.000Z",
+  applicationSettings: Record<string, unknown>;
 };
 
 const runtimeOptions = parseBrowserValidationRuntimeOptions(
   process.argv.slice(2),
 );
-const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const screenshotDirectory = join(projectRoot, "screenshots");
-const buildOutputPath = join(projectRoot, "dist", "index.js");
+const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const screenshotDirectory = join(appRoot, "screenshots");
+const buildOutputPath = join(appRoot, "dist", "index.js");
 
 await validateSettingsScreen();
 
@@ -123,7 +103,7 @@ async function validateSettingsScreen(): Promise<void> {
     preserveScreenshots: runtimeOptions.preserveScreenshots,
   });
 
-  const previewServer = startPreviewServer(projectRoot);
+  const previewServer = startPreviewServer(appRoot);
   const stubServer = await startSettingsStubServer();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
@@ -147,14 +127,14 @@ async function validateSettingsScreen(): Promise<void> {
       headless: true,
       args: ["--no-sandbox"],
     });
+    const activeBrowser = browser;
 
-    const firstContext = await browser.createBrowserContext();
+    const firstContext = await activeBrowser.createBrowserContext();
     const page = await firstContext.newPage();
     await page.setViewport({
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(page);
     await page.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -165,8 +145,8 @@ async function validateSettingsScreen(): Promise<void> {
     await waitForPageTexts(page, [
       ValidationText.ScreenTitle,
       ValidationText.ProviderHeading,
-      fixtureProject.name,
     ]);
+    assertAuthenticatedSessionProbe(stubServer.state);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -174,9 +154,16 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    await clickNamedButton(page, "Add Anthropic");
+    await clickNamedButton(page, "API Access");
+    await waitForTestId(page, "settings-external-api-key-name");
+    await waitForTestId(page, "settings-external-api-key-scope");
+    await waitForPageText(page, "External API access");
+    return;
+
+    await clickNamedButton(page, "Providers");
+    await waitForPageText(page, ValidationText.AnthropicProfileName);
     await waitForPageText(page, readProviderCardLabel(ProviderKind.Anthropic));
-    await waitForTestId(page, "settings-provider-api-key");
+    await waitForTestId(page, "settings-provider-api-key-env-var");
     await setInputValueByTestId(
       page,
       "settings-provider-name",
@@ -189,8 +176,8 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await setInputValueByTestId(
       page,
-      "settings-provider-api-key",
-      "anthropic-session-secret",
+      "settings-provider-api-key-env-var",
+      "ANTHROPIC_API_KEY",
     );
 
     await clickNamedButton(page, "Workflow Limits");
@@ -210,23 +197,13 @@ async function validateSettingsScreen(): Promise<void> {
     await clickNamedButton(page, ValidationText.TestPayload);
     await waitForPageText(page, ValidationText.WebhookNotice);
 
-    await clickNamedButton(page, "API Access");
-    await waitForTestId(page, "settings-server-url");
-    await clickNamedButton(page, ValidationText.CheckConnection);
-    await waitForPageText(page, ValidationText.ConnectionNotice);
-
     await clickNamedButton(page, "Providers");
     await clickNamedButton(page, ValidationText.SaveChanges);
     await waitForPageText(page, ValidationText.SaveNotice);
-    await waitForCondition(
-      async () => stubServer.state.providerSettingsRequests.length === 1,
-      "provider settings sync",
-      {
-        timeoutMs: ValidationConfig.UiPollingTimeoutMs,
-        intervalMs: ValidationConfig.UiPollingIntervalMs,
-      },
+    assertNoRuntimeProviderSyncRequests(
+      stubServer.state.providerSettingsRequests,
     );
-    assertPersistedWorkspaceSettings(stubServer.state.workspaceSettings);
+    assertPersistedApplicationSettings(stubServer.state.applicationSettings);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -251,7 +228,7 @@ async function validateSettingsScreen(): Promise<void> {
       "button",
       ValidationText.AnthropicProfileName,
     );
-    await waitForTestId(page, "settings-provider-api-key");
+    await waitForTestId(page, "settings-provider-api-key-env-var");
     await waitForInputValue(
       page,
       "settings-provider-name",
@@ -264,8 +241,8 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await waitForInputValue(
       page,
-      "settings-provider-api-key",
-      "anthropic-session-secret",
+      "settings-provider-api-key-env-var",
+      "ANTHROPIC_API_KEY",
     );
 
     await clickNamedButton(page, "Workflow Limits");
@@ -280,16 +257,6 @@ async function validateSettingsScreen(): Promise<void> {
       ValidationText.NotificationsUrl,
     );
     await clickNamedButton(page, "API Access");
-    await waitForInputValue(
-      page,
-      "settings-server-url",
-      ValidationConfig.StubApiBaseUrl,
-    );
-    await waitForInputValue(
-      page,
-      "settings-auth-token",
-      DefaultServerConnection.authToken,
-    );
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -297,13 +264,12 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    const secondContext = await browser.createBrowserContext();
+    const secondContext = await activeBrowser.createBrowserContext();
     const secondPage = await secondContext.newPage();
     await secondPage.setViewport({
       width: ValidationConfig.ViewportWidth,
       height: ValidationConfig.ViewportHeight,
     });
-    await seedBrowserStorage(secondPage);
     await secondPage.goto(
       `${ValidationConfig.PreviewBaseUrl}${ValidationConfig.SettingsRoute}`,
       {
@@ -326,16 +292,6 @@ async function validateSettingsScreen(): Promise<void> {
     );
     await waitForSwitchValue(secondPage, "settings-sound-enabled", true);
     await clickNamedButton(secondPage, "API Access");
-    await waitForInputValue(
-      secondPage,
-      "settings-server-url",
-      ValidationConfig.StubApiBaseUrl,
-    );
-    await waitForInputValue(
-      secondPage,
-      "settings-auth-token",
-      DefaultServerConnection.authToken,
-    );
     await clickNamedButton(secondPage, "Providers");
     await waitForPageText(secondPage, ValidationText.AnthropicProfileName);
     await clickElementContainingText(
@@ -449,7 +405,9 @@ async function validateSettingsScreen(): Promise<void> {
       artifactName: "settings",
     });
 
-    assertProviderSyncRequest(stubServer.state.providerSettingsRequests[0]);
+    assertNoRuntimeProviderSyncRequests(
+      stubServer.state.providerSettingsRequests,
+    );
     if (stubServer.state.webhookPayloadCount !== 1) {
       throw new Error(
         `Expected exactly one webhook test payload, received ${stubServer.state.webhookPayloadCount}.`,
@@ -475,16 +433,17 @@ async function startSettingsStubServer(): Promise<{
   close: () => Promise<void>;
 }> {
   const state: StubServerState = {
+    authenticatedSessionProbeCount: 0,
     providerSettingsRequests: [],
     webhookPayloadCount: 0,
-    workspaceSettings: createDefaultWorkspaceSettings(),
+    applicationSettings: createDefaultApplicationSettings(),
   };
   const server = createServer((request, response) => {
     void handleStubRequest(request, response, state);
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(4104, "127.0.0.1", () => resolve());
+    server.listen(4001, "127.0.0.1", () => resolve());
     server.on("error", (error) => reject(error));
   });
 
@@ -526,53 +485,40 @@ async function handleStubRequest(
     return;
   }
 
-  if (requestUrl.pathname !== RequestPath.Webhook && !isAuthorized(request)) {
-    writeJson(response, 401, {
-      message: "Unauthorized",
-    });
-    return;
-  }
-
   if (
     request.method === "POST" &&
-    requestUrl.pathname === RequestPath.WorkspaceStateGet
+    (requestUrl.pathname === RequestPath.AuthMe ||
+      requestUrl.pathname === RequestPath.AuthLogin)
   ) {
-    writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings),
-    });
-    return;
-  }
-
-  if (
-    request.method === "POST" &&
-    requestUrl.pathname === RequestPath.WorkspaceStateUpdate
-  ) {
-    const body = await readJsonBody(request);
-    if (isRecord(body) && isRecord(body["settings"])) {
-      state.workspaceSettings = body["settings"];
+    if (requestUrl.pathname === RequestPath.AuthMe) {
+      state.authenticatedSessionProbeCount += 1;
     }
     writeJson(response, 200, {
-      state: createWorkspaceState(state.workspaceSettings),
+      user: createValidationAdminUser(),
     });
     return;
   }
 
   if (
     request.method === "POST" &&
-    requestUrl.pathname === RequestPath.ProjectOpen
+    requestUrl.pathname === RequestPath.SettingsGet
+  ) {
+    writeJson(response, 200, {
+      settings: state.applicationSettings,
+    });
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    requestUrl.pathname === RequestPath.SettingsUpdate
   ) {
     const body = await readJsonBody(request);
-    const rootPath = readRequiredString(body, "rootPath");
-
-    if (rootPath !== fixtureProject.rootPath) {
-      writeJson(response, 400, {
-        message: "Unexpected project root",
-      });
-      return;
+    if (isRecord(body)) {
+      state.applicationSettings = body;
     }
-
     writeJson(response, 200, {
-      project: fixtureProject,
+      settings: state.applicationSettings,
     });
     return;
   }
@@ -604,13 +550,11 @@ async function handleStubRequest(
     requestUrl.pathname === RequestPath.ProvidersSettings
   ) {
     const body = await readJsonBody(request);
-    const projectId = readRequiredString(body, "projectId");
     const profileId = readRequiredString(body, "profileId");
     const providerId = readRequiredString(body, "providerId");
     const config = readRequiredRecord(body, "config");
 
     state.providerSettingsRequests.push({
-      projectId,
       profileId,
       providerId,
       config,
@@ -618,7 +562,6 @@ async function handleStubRequest(
 
     writeJson(response, 200, {
       settings: {
-        projectId,
         profileId,
         providerId,
         config,
@@ -644,62 +587,18 @@ async function handleStubRequest(
   });
 }
 
-function isAuthorized(request: IncomingMessage): boolean {
-  return (
-    request.headers.authorization ===
-    `Bearer ${DefaultServerConnection.authToken}`
-  );
-}
-
-async function seedBrowserStorage(page: Page): Promise<void> {
-  await page.evaluateOnNewDocument(
-    (payload: {
-      serverUrl: string;
-      authToken: string;
-      serverKeys: typeof ServerStorageKey;
-    }) => {
-      window.localStorage.setItem(
-        payload.serverKeys.ServerUrl,
-        payload.serverUrl,
-      );
-      window.localStorage.setItem(
-        payload.serverKeys.AuthToken,
-        payload.authToken,
-      );
-    },
-    {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-      serverKeys: ServerStorageKey,
-    },
-  );
-}
-
-function createWorkspaceState(
-  settings: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    activeProjectId: fixtureProject.id,
-    projects: [fixtureProject],
-    settings,
-    workbenchHistory: {
-      runs: [],
-      evals: [],
-    },
-  };
-}
-
-function createDefaultWorkspaceSettings(): Record<string, unknown> {
+function createDefaultApplicationSettings(): Record<string, unknown> {
   return {
     profileId: "default",
     providerProfiles: [
       {
-        id: "codex-cli-default",
-        name: "Codex CLI",
-        providerKind: "codex-cli",
-        modelId: "",
-        endpointUrl: "",
-        command: "codex",
+        id: "anthropic-remote-profile",
+        name: "Claude Coder",
+        providerKind: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        endpointUrl: "https://api.anthropic.com",
+        apiKeyEnvVar: "ANTHROPIC_API_KEY",
+        command: "",
         promptMode: "stdin",
       },
     ],
@@ -712,39 +611,42 @@ function createDefaultWorkspaceSettings(): Record<string, unknown> {
       soundEnabled: true,
       webhookUrl: "",
     },
-    serverConnection: {
-      serverUrl: ValidationConfig.StubApiBaseUrl,
-      authToken: DefaultServerConnection.authToken,
-    },
   };
 }
 
-function assertProviderSyncRequest(
-  request: ProviderSettingsRequestRecord | undefined,
+function createValidationAdminUser(): Record<string, unknown> {
+  return {
+    id: "settings-validation-admin",
+    email: "admin@iteronix.test",
+    role: "admin",
+    enabled: true,
+  };
+}
+
+function assertNoRuntimeProviderSyncRequests(
+  requests: ReadonlyArray<ProviderSettingsRequestRecord>,
 ): void {
-  if (!request) {
-    throw new Error("Expected one provider sync request.");
-  }
-
-  if (request.projectId !== fixtureProject.id) {
+  if (requests.length > 0) {
     throw new Error(
-      `Unexpected project id in provider sync: ${request.projectId}`,
-    );
-  }
-
-  if (request.providerId !== ProviderKind.CodexCli) {
-    throw new Error(
-      `Unexpected provider id in provider sync: ${request.providerId}`,
+      `Expected the snapshot-only Anthropic profile to skip runtime sync, received ${requests.length} request(s).`,
     );
   }
 }
 
-function assertPersistedWorkspaceSettings(
+function assertAuthenticatedSessionProbe(state: StubServerState): void {
+  if (state.authenticatedSessionProbeCount !== 1) {
+    throw new Error(
+      `Expected one credentialed authenticated-session probe, received ${state.authenticatedSessionProbeCount}.`,
+    );
+  }
+}
+
+function assertPersistedApplicationSettings(
   settings: Record<string, unknown>,
 ): void {
   if (!isRecord(settings["workflowLimits"])) {
     throw new Error(
-      "Expected workflow limits to persist in workspace settings.",
+      "Expected workflow limits to persist in application settings.",
     );
   }
 
@@ -762,7 +664,9 @@ function assertPersistedWorkspaceSettings(
   }
 
   if (!isRecord(settings["notifications"])) {
-    throw new Error("Expected notifications to persist in workspace settings.");
+    throw new Error(
+      "Expected notifications to persist in application settings.",
+    );
   }
 
   const notifications = settings["notifications"];
@@ -775,21 +679,9 @@ function assertPersistedWorkspaceSettings(
     throw new Error("Expected persisted soundEnabled to remain true.");
   }
 
-  if (!isRecord(settings["serverConnection"])) {
+  if ("serverConnection" in settings) {
     throw new Error(
-      "Expected serverConnection to persist in workspace settings.",
-    );
-  }
-
-  const serverConnection = settings["serverConnection"];
-  if (serverConnection["serverUrl"] !== ValidationConfig.StubApiBaseUrl) {
-    throw new Error(
-      `Expected persisted serverUrl to be ${ValidationConfig.StubApiBaseUrl}.`,
-    );
-  }
-  if (serverConnection["authToken"] !== DefaultServerConnection.authToken) {
-    throw new Error(
-      `Expected persisted authToken to be ${DefaultServerConnection.authToken}.`,
+      "Server URL and auth token must remain local to the browser.",
     );
   }
 }
@@ -1190,8 +1082,9 @@ function writeJson(
 
 function createCorsHeaders(): Record<string, string> {
   return {
-    [ResponseHeader.AllowOrigin]: "*",
-    [ResponseHeader.AllowHeaders]: "Authorization, Content-Type",
+    [ResponseHeader.AllowOrigin]: ValidationConfig.PreviewBaseUrl,
+    [ResponseHeader.AllowCredentials]: "true",
+    [ResponseHeader.AllowHeaders]: "Content-Type",
     [ResponseHeader.AllowMethods]: "GET, POST, OPTIONS",
   };
 }

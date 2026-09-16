@@ -1,14 +1,11 @@
 import {
-  DefaultServerConnection,
-  type ServerConnection,
-  type StorageLike,
-} from "./server-config.js";
-import {
   ProviderKind,
   createDefaultProviderProfiles,
   normalizeProviderProfiles,
   type ProviderProfileRecord,
 } from "../screens/settings-state.js";
+
+export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const DefaultSettingsProfileId = "default";
 const SettingsSnapshotStorageKey = "iteronix_settings_snapshot";
@@ -29,7 +26,6 @@ export type SettingsSnapshot = {
   providerProfiles: ReadonlyArray<ProviderProfileRecord>;
   workflowLimits: WorkflowLimitsSettings;
   notifications: NotificationsSettings;
-  serverConnection: ServerConnection;
 };
 
 export type SettingsStorage = {
@@ -47,11 +43,6 @@ const DefaultWorkflowLimits: WorkflowLimitsSettings = {
 const DefaultNotifications: NotificationsSettings = {
   soundEnabled: true,
   webhookUrl: "",
-};
-
-const DefaultSettingsServerConnection: ServerConnection = {
-  serverUrl: DefaultServerConnection.serverUrl,
-  authToken: DefaultServerConnection.authToken,
 };
 
 let settingsSnapshotCache = createDefaultSettingsSnapshot();
@@ -110,9 +101,6 @@ export function createDefaultSettingsSnapshot(): SettingsSnapshot {
     notifications: {
       ...DefaultNotifications,
     },
-    serverConnection: {
-      ...DefaultSettingsServerConnection,
-    },
   };
 }
 
@@ -127,7 +115,6 @@ export const parseSettingsSnapshot = (value: unknown): SettingsSnapshot => {
     providerProfiles: normalizeProviderProfiles(value["providerProfiles"]),
     workflowLimits: parseWorkflowLimits(value["workflowLimits"]),
     notifications: parseNotifications(value["notifications"]),
-    serverConnection: parseServerConnection(value["serverConnection"]),
   });
 };
 
@@ -145,7 +132,6 @@ const normalizeSettingsSnapshot = (
         : createDefaultProviderProfiles(),
     workflowLimits: normalizeWorkflowLimits(input.workflowLimits),
     notifications: normalizeNotifications(input.notifications),
-    serverConnection: normalizeServerConnection(input.serverConnection),
   };
 };
 
@@ -185,23 +171,6 @@ const parseNotifications = (value: unknown): NotificationsSettings => {
   });
 };
 
-const parseServerConnection = (value: unknown): ServerConnection => {
-  if (!isRecord(value)) {
-    return {
-      ...DefaultSettingsServerConnection,
-    };
-  }
-
-  return normalizeServerConnection({
-    serverUrl:
-      readOptionalString(value, "serverUrl") ??
-      DefaultSettingsServerConnection.serverUrl,
-    authToken:
-      readOptionalString(value, "authToken") ??
-      DefaultSettingsServerConnection.authToken,
-  });
-};
-
 const normalizeWorkflowLimits = (
   value: WorkflowLimitsSettings,
 ): WorkflowLimitsSettings => ({
@@ -218,15 +187,6 @@ const normalizeNotifications = (
 ): NotificationsSettings => ({
   soundEnabled: value.soundEnabled,
   webhookUrl: normalizeText(value.webhookUrl),
-});
-
-const normalizeServerConnection = (
-  value: ServerConnection,
-): ServerConnection => ({
-  serverUrl:
-    normalizeText(value.serverUrl) || DefaultSettingsServerConnection.serverUrl,
-  authToken:
-    normalizeText(value.authToken) || DefaultSettingsServerConnection.authToken,
 });
 
 const normalizePositiveInteger = (value: number, fallback: number): number => {

@@ -3,98 +3,29 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { resolve } from "node:path";
 import {
-  AiField,
   BearerPrefix,
   BearerScheme,
+  DefaultServerConfig,
   ErrorMessage,
-  FileField,
-  FileSearchField,
-  FileMoveField,
   HeaderName,
   HttpMethod,
   HttpStatus,
-  KanbanBoardField,
-  KanbanColumnField,
-  KanbanTaskField,
   MimeType,
-  LogsField,
   ProviderField,
-  ProjectField,
   QueryParam,
   RoutePath,
-  HistoryField,
-  SessionField,
   TextEncoding,
 } from "./constants";
-import { loadConfig, type ServerConfig } from "./config";
 import {
-  createDirectory,
-  deleteFile,
-  listFileTree,
-  moveFile,
-  readFileContent,
-  searchFiles,
-  writeFileContent,
-} from "./files";
-import {
-  executeGitBranchCheckout,
-  executeGitBranchCreate,
-  executeGitBranchList,
-  executeGitBranchPublish,
-  executeGitBranchPush,
-  GitPathOperationKind,
-  executeGitPathOperation,
-  executeGitCommit,
-  executeGitDiff,
-  executeGitStatus,
-  parseGitBranchMutationRequest,
-  parseGitPathRequest,
-  parseGitCommitRequest,
-  parseGitDiffRequest,
-  parseGitStatusRequest,
-} from "./git";
-import {
-  createDefaultQualityGateCatalog,
-  createQualityGateEventHub,
-  listQualityGateEvents,
-  listQualityGateRuns,
-  parseQualityGateEventsRequest,
-  parseQualityGateListRequest,
-  parseQualityGateRunRequest,
-  parseQualityGateStreamRequest,
-  QualityGateEventName,
-  startQualityGateRun,
-  type QualityGateCatalog,
-  type QualityGateEventHub,
-} from "./quality-gates";
-import {
-  createProjectStore,
-  ProjectStoreErrorCode,
-  type Project,
-  type ProjectCreateInput,
-  type ProjectOpenInput,
-  type ProjectStore,
-} from "./projects";
-import {
-  createHistoryStore,
-  HistoryRunStatus,
-  HistoryStoreErrorCode,
-  type HistoryStoreError,
-  type HistoryStore,
-} from "./history";
-import { LogLevel as LogLevelValues, type LogLevel } from "./logs";
-import {
-  LogsStoreErrorCode as DomainLogsStoreErrorCode,
-  type LogsStoreError as DomainLogsStoreError,
-} from "../../../packages/domain/src/ports/logs-store";
-import {
-  createServerLogsStore,
-  type ServerLogEntry,
-  type ServerLogsStore,
-} from "./server-logs-store";
+  loadConfig,
+  readAdminCredentials,
+  readIdeUiOrigins,
+  type ServerConfig,
+} from "./config";
 import {
   createProviderStore,
   ProviderStoreErrorCode,
@@ -102,47 +33,12 @@ import {
   type ProviderStoreError,
   type ProviderStore,
 } from "./providers";
-import {
-  createCommandPolicy,
-  createWorkspacePolicy,
-  type CommandPolicy,
-  type WorkspacePolicy,
-} from "./sandbox";
-import {
-  createKanbanStore,
-  KanbanStoreErrorCode,
-  type KanbanStoreError,
-  type KanbanStore,
-} from "./kanban";
-import {
-  createSessionEventHub,
-  createSessionStore,
-  createStatusEvent,
-  SessionEventType,
-  type Session,
-  SessionStoreErrorCode,
-  type SessionStoreError,
-  type SessionStore,
-  type SessionEventHub,
-} from "./sessions";
 import { createSseStream } from "./sse";
 import { err, ok, ResultType, type Result } from "./result";
-import {
-  createAiWorkbenchService,
-  type AiWorkbenchService,
-} from "./ai-workbench";
 import {
   createWorkflowCatalogStore,
   type WorkflowCatalogStore,
 } from "../../../packages/agents/src/workflow-catalog";
-import {
-  createCommandRunnerAdapter,
-  type CommandRunner,
-} from "../../../packages/adapters/src/command-runner/command-runner";
-import {
-  createGitCliAdapter,
-  type GitRepository,
-} from "../../../packages/adapters/src/git/git-adapter";
 import {
   executeWorkflowAssetDelete,
   executeWorkflowAssetGet,
@@ -167,6 +63,7 @@ import {
   executeWorkflowExecutionList,
   executeWorkflowExecutionCancel,
   executeWorkflowNodeExecutionRun,
+  executeWorkflowDefinitionRun,
   executeWorkflowExecutionRun,
   executeWorkflowNodeProviderTest,
   parseWorkflowAssetDeleteRequest,
@@ -212,121 +109,351 @@ import {
   type WorkflowUsageTotalsRecord,
 } from "../../../packages/shared/src/workflows";
 import {
-  createFileWorkspaceStateStore,
-  createWorkspaceStateFromStores,
-  parseWorkspaceState,
-  type WorkspaceSettingsSnapshot,
-  type WorkspaceState,
-  type WorkspaceStateStore,
-  type WorkspaceWorkbenchHistory,
-} from "./workspace-state";
+  cutOverLegacyExternalApiKeys,
+  createApplicationStateFromStores,
+  parseApplicationState,
+  type ApplicationSettingsSnapshot,
+  type ApplicationState,
+  type ApplicationStateStore,
+} from "./application-state";
 import {
-  installConsoleForwarder,
-  type SharedLogEntry,
-} from "../../web-ui/src/shared/logger-core";
+  AssetKind,
+  AssetStatus,
+  appendPluginAuditEvent,
+  parseEditableAssetCatalog,
+  removeEditableAsset,
+  upsertEditableAsset,
+  withServerOwnedPluginAudit,
+  type EditableAssetCatalog,
+  type EditableAssetRecord,
+} from "./editable-assets";
+import {
+  indexMemoryDocument,
+  createApplicationMemoryRagPort,
+  type MemoryDocument,
+  type MemoryDocumentCatalog,
+} from "./memory-rag";
+import { summarizePromptAssetUsage } from "./prompt-asset-usage";
+import {
+  createIdeAuthService,
+  MinimumPasswordLength,
+  IdeUserRole,
+  type IdeAuthState,
+  type IdeAuthService,
+  type PasswordResetDelivery,
+} from "./ide-auth";
+import {
+  createPostgresPool,
+  createPostgresApplicationStateStore,
+} from "./postgres-application-state";
+import { readDatabaseMigrationCatalog } from "./database-migration-catalog";
+import { verifyDatabaseMigrations } from "./database-migrations";
+import {
+  createPostgresExternalWorkflowCredentialRepository,
+  createPostgresExternalWorkflowCredentialSecretStore,
+  type ExternalWorkflowCredentialAuditActor,
+  type ExternalWorkflowCredentialMetadata,
+  type ExternalWorkflowCredentialSecretStore,
+  type PostgresExternalWorkflowCredentialRepository,
+} from "./postgres-external-workflow-credentials";
+import {
+  ExternalApiKeyScopeKind,
+  ExternalWorkflowRateLimit,
+  ExternalWorkflowOperation,
+  revokeExternalApiKeysForWorkflow,
+  toExternalApiKeyView,
+  type ExternalApiKeyRecord,
+  type ExternalApiKeyScope,
+} from "../../../packages/domain/src/external-api-keys";
+import { createExternalApiKey } from "./external-api-keys";
+import {
+  GovernanceTransitionKind,
+  type GovernanceLifecycle,
+} from "../../../packages/domain/src/governance-lifecycle";
+import {
+  createGovernanceLifecycleService,
+  isRetryableResumeReady,
+  type GovernanceLifecycleService,
+} from "./governance-lifecycle-service";
+import {
+  createGovernedAgentToolService,
+  type GovernedAgentToolService,
+} from "./governed-agent-tool-service";
+import {
+  createRunGovernedNodeCallback,
+  registerSkillsAndPlugins,
+  resolveMcpConnection,
+  resolveMcpConnectionForSkill,
+} from "./governed-workflow-runtime";
+import {
+  createConfiguredMcpConnectionPort,
+  type ServerMcpConnectionPort,
+} from "./mcp-connection-port";
+import {
+  createChildProcessReferencePluginHost,
+  createTrustedPluginRegistry,
+  type TrustedPluginRegistry,
+} from "./server-plugin-runtime";
+import { createMemoryScope } from "../../../packages/domain/src/agent-tool-contracts";
+import { tryServeStaticUi } from "./static-ui";
 
-const responseErrorLogMap = new WeakMap<ServerResponse, string>();
+const UiSafeRedactedBindingKey = "[redacted]";
+const UiSafeRedactedBindingValue = "[redacted]";
+const SensitivePromptBindingKeyFragments = [
+  "apikey",
+  "authorization",
+  "credential",
+  "password",
+  "private",
+  "secret",
+  "token",
+] as const;
+const ReferencePluginId = "reference.echo";
+const AuthRoutePaths = new Set<string>([
+  RoutePath.AuthBootstrapAdmin,
+  RoutePath.AuthRegister,
+  RoutePath.AuthLogin,
+  RoutePath.AuthLogout,
+  RoutePath.AuthMe,
+  RoutePath.AuthPasswordResetRequest,
+  RoutePath.AuthPasswordResetConfirm,
+  RoutePath.AuthAdminRegistration,
+  RoutePath.AuthAdminUserEnabled,
+]);
+const CredentialManagementRoutePaths = new Set<string>([
+  RoutePath.ExternalCredentialsList,
+  RoutePath.ExternalCredentialsCreate,
+  RoutePath.ExternalCredentialsRotate,
+  RoutePath.ExternalCredentialsRevoke,
+  RoutePath.ExternalCredentialsAudits,
+]);
+const ExternalWorkflowRouteOperations = new Map<
+  string,
+  ExternalWorkflowOperation
+>([
+  [RoutePath.ExternalWorkflowRead, ExternalWorkflowOperation.WorkflowRead],
+  [RoutePath.ExternalWorkflowInvoke, ExternalWorkflowOperation.WorkflowInvoke],
+]);
 
+const WorkflowOnlyRoutePaths = new Set<string>([
+  ...AuthRoutePaths,
+  RoutePath.SettingsGet,
+  RoutePath.SettingsUpdate,
+  RoutePath.ProvidersList,
+  RoutePath.ProvidersSelect,
+  RoutePath.ProvidersSettings,
+  RoutePath.WorkflowDefinitionsList,
+  RoutePath.WorkflowDefinitionsGet,
+  RoutePath.WorkflowDefinitionsVersions,
+  RoutePath.WorkflowDefinitionsRestoreVersion,
+  RoutePath.WorkflowDefinitionsRestoreVersionPart,
+  RoutePath.WorkflowDefinitionsCloneVersion,
+  RoutePath.WorkflowDefinitionsExportVersion,
+  RoutePath.WorkflowDefinitionsExportVersionTimeline,
+  RoutePath.WorkflowDefinitionsPreviewImportVersion,
+  RoutePath.WorkflowDefinitionsImportVersion,
+  RoutePath.WorkflowDefinitionsCleanupVersions,
+  RoutePath.WorkflowDefinitionsUpsert,
+  RoutePath.WorkflowDefinitionsDelete,
+  RoutePath.WorkflowAssetsList,
+  RoutePath.WorkflowAssetsGet,
+  RoutePath.WorkflowAssetsUpsert,
+  RoutePath.WorkflowAssetsDelete,
+  RoutePath.WorkflowAssetsUsage,
+  RoutePath.WorkflowExecutionsList,
+  RoutePath.WorkflowExecutionsGet,
+  RoutePath.WorkflowExecutionsDelete,
+  RoutePath.WorkflowExecutionsCancel,
+  RoutePath.WorkflowExecutionsRun,
+  RoutePath.WorkflowExecutionsStream,
+  RoutePath.WorkflowExecutionsRunNode,
+  RoutePath.WorkflowExecutionsStreamNode,
+  RoutePath.WorkflowProvidersTest,
+  RoutePath.GovernanceLifecyclesGet,
+  RoutePath.GovernanceLifecyclesBegin,
+  RoutePath.GovernanceLifecyclesApprove,
+  RoutePath.GovernanceLifecyclesContinue,
+  RoutePath.GovernanceLifecyclesReject,
+  RoutePath.GovernanceLifecyclesResume,
+  RoutePath.EditableAssetsList,
+  RoutePath.EditableAssetsUsage,
+  RoutePath.EditableAssetsUpsert,
+  RoutePath.EditableAssetsDelete,
+  RoutePath.MemoryDocumentsIndex,
+  RoutePath.MemoryDocumentsList,
+  RoutePath.ExternalApiKeysList,
+  RoutePath.ExternalApiKeysCreate,
+  RoutePath.ExternalApiKeysUpdate,
+  RoutePath.ExternalApiKeysRevoke,
+  RoutePath.ExternalApiKeysWorkflowDependencies,
+]);
+
+export const isWorkflowOnlyRoute = (path: string): boolean =>
+  WorkflowOnlyRoutePaths.has(path);
+const isCredentialManagementRoute = (path: string): boolean =>
+  CredentialManagementRoutePaths.has(path);
+const isInternalApiRoute = (path: string): boolean =>
+  isWorkflowOnlyRoute(path) || isCredentialManagementRoute(path);
 type ActiveWorkflowExecutionRegistry = {
   register: (executionId: string, controller: AbortController) => void;
   cancel: (executionId: string) => void;
   delete: (executionId: string) => void;
 };
 
+export type ApplicationPersistence = {
+  read: () => ApplicationState;
+  saveCurrent: () => Promise<ApplicationState>;
+  updateUiState: (input: {
+    settings?: ApplicationSettingsSnapshot;
+  }) => Promise<ApplicationState>;
+  updateExternalApiKeys: (
+    externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
+  ) => Promise<ApplicationState>;
+  updateGovernanceLifecycles: (
+    governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+  ) => Promise<ApplicationState>;
+  updateEditableAssets: (
+    editableAssets: EditableAssetCatalog,
+  ) => Promise<ApplicationState>;
+  mutateEditableAssets: (
+    updater: (editableAssets: EditableAssetCatalog) => EditableAssetCatalog,
+  ) => Promise<ApplicationState>;
+  updateMemoryDocuments: (
+    memoryDocuments: MemoryDocumentCatalog,
+  ) => Promise<ApplicationState>;
+  updateIdeAuth: (ideAuth: IdeAuthState) => Promise<ApplicationState>;
+  mutateGovernanceLifecycles: (
+    updater: (
+      governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+    ) => ReadonlyArray<GovernanceLifecycle>,
+  ) => Promise<ApplicationState>;
+};
 export const startServer = async (): Promise<void> => {
   const config = loadConfig(process.env);
-  const logsStore = await createServerLogsStore(
-    config.logDir,
-    config.logMaxEntries,
+  const postgresPool = createPostgresPool(config.databaseUrl);
+  const applicationStateStore =
+    createPostgresApplicationStateStore(postgresPool);
+  const initialApplicationState = await loadInitialApplicationState(
+    applicationStateStore,
+    postgresPool,
   );
-  installServerConsoleForwarder(logsStore);
-
-  const workspaceStateStore = createFileWorkspaceStateStore(
-    config.workspaceStateFile,
-  );
-  const initialWorkspaceState = await workspaceStateStore.load();
-  const projectStore = createProjectStore({
-    projects: initialWorkspaceState.projects,
-    activeProjectId: initialWorkspaceState.activeProjectId,
-  });
-  const sessionStore = createSessionStore();
-  const sessionEvents = createSessionEventHub();
-  let persistHistoryStoreChange = (): void => {
-    return;
-  };
-  const historyStore = createHistoryStore(
-    initialWorkspaceState.qualityHistory,
-    () => {
-      persistHistoryStoreChange();
-    },
-  );
-  const qualityGateEventHub = createQualityGateEventHub();
   const providerStore = createProviderStore({
-    selections: initialWorkspaceState.providerSelections,
-    settings: initialWorkspaceState.providerSettings,
+    selections: initialApplicationState.providerSelections,
+    settings: initialApplicationState.providerSettings,
   });
-  const kanbanStore = createKanbanStore(initialWorkspaceState.kanban);
   const workflowCatalog = createWorkflowCatalogStore(
-    initialWorkspaceState.workflows,
+    initialApplicationState.workflows,
   );
-  const workspacePersistence = createWorkspacePersistence({
-    stateStore: workspaceStateStore,
-    initialState: initialWorkspaceState,
-    projectStore,
+  const applicationPersistence = createApplicationPersistence({
+    stateStore: applicationStateStore,
+    initialState: initialApplicationState,
     providerStore,
-    kanbanStore,
-    historyStore,
     workflowCatalog,
   });
-  let historySaveQueue = Promise.resolve();
-  persistHistoryStoreChange = () => {
-    historySaveQueue = historySaveQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await workspacePersistence.saveCurrent();
-      });
-    void historySaveQueue.catch(() => undefined);
-  };
-  const workspacePolicy = createWorkspacePolicy(config.workspaceRoots);
-  const commandPolicy = createCommandPolicy(
-    config.commandAllowlist,
-    workspacePolicy,
-  );
-  const aiWorkbench = await createAiWorkbenchService({
-    workspaceRoot: config.workspaceRoots[0] ?? process.cwd(),
-  });
+  await ensureConfiguredAdministrator({ applicationPersistence, config });
   const workflowRuntime = createWorkflowRuntimeService({
-    readWorkspaceState: () => workspacePersistence.read(),
+    readApplicationState: () => applicationPersistence.read(),
   });
+  const governanceLifecycle = createGovernanceLifecycleService(
+    applicationPersistence,
+  );
+  const mcpConnectionPort = createConfiguredMcpConnectionPort({
+    servers: config.mcpServers ?? [],
+  });
+  const credentialRepository =
+    createPostgresExternalWorkflowCredentialRepository(postgresPool);
+  const credentialSecretStore =
+    createPostgresExternalWorkflowCredentialSecretStore(postgresPool);
+  const server = createApiServer({
+    config,
+    providerStore,
+    workflowRuntime,
+    applicationPersistence,
+    governanceLifecycle,
+    workflowCatalog,
+    mcpConnectionPort,
+    credentialRepository,
+    credentialSecretStore,
+    webUiRoot: readWebUiRoot(),
+  });
+
+  server.listen(config.port, config.host);
+  console.info("server.started", { host: config.host, port: config.port });
+};
+
+export const createApiServer = (input: {
+  config: ServerConfig;
+  providerStore: ProviderStore;
+  workflowRuntime: WorkflowRuntimeService;
+  applicationPersistence: ApplicationPersistence;
+  governanceLifecycle?: GovernanceLifecycleService;
+  workflowCatalog: WorkflowCatalogStore;
+  passwordResetDelivery?: PasswordResetDelivery;
+  mcpConnectionPort?: ServerMcpConnectionPort;
+  pluginRegistry?: TrustedPluginRegistry;
+  credentialRepository?: PostgresExternalWorkflowCredentialRepository;
+  credentialSecretStore?: ExternalWorkflowCredentialSecretStore;
+  webUiRoot?: string;
+}) => {
   const activeWorkflowExecutions = createActiveWorkflowExecutionRegistry();
-  const commandRunner = createCommandRunnerAdapter();
-  const qualityGateCatalog = createDefaultQualityGateCatalog();
-  const git = createGitCliAdapter();
-  const server = createServer((req, res) => {
-    const startedAt = Date.now();
-    installRequestLogLifecycle(req, res, startedAt);
+  const governanceLifecycle =
+    input.governanceLifecycle ??
+    createGovernanceLifecycleService(input.applicationPersistence);
+
+  const initialInvoke =
+    input.mcpConnectionPort ??
+    createConfiguredMcpConnectionPort({ servers: [] });
+  const pluginRegistry =
+    input.pluginRegistry ??
+    createTrustedPluginRegistry({
+      allowedPluginIds: [ReferencePluginId],
+      host: createChildProcessReferencePluginHost(),
+    });
+  const createGovernedServiceSnapshot = (): GovernedAgentToolService => {
+    const governedService = createGovernedAgentToolService(
+      input.applicationPersistence,
+      createApplicationMemoryRagPort({
+        read: input.applicationPersistence.read,
+      }),
+      async (audit) => {
+        await input.applicationPersistence.mutateEditableAssets((assets) =>
+          appendPluginAuditEvent(assets, {
+            assetId: audit.assetId,
+            action: audit.action,
+            actorId: "server-runtime",
+            at: audit.at,
+          }),
+        );
+      },
+    );
+    const state = input.applicationPersistence.read();
+    registerSkillsAndPlugins(
+      governedService,
+      state,
+      "server-agent",
+      initialInvoke,
+      pluginRegistry.createSnapshot(state.editableAssets.records),
+    );
+    return governedService;
+  };
+
+  return createServer((req, res) => {
     void handleRequest(
       req,
       res,
-      config,
-      projectStore,
-      sessionStore,
-      sessionEvents,
-      historyStore,
-      qualityGateEventHub,
-      logsStore,
-      providerStore,
-      kanbanStore,
-      workspacePolicy,
-      commandPolicy,
-      commandRunner,
-      qualityGateCatalog,
-      aiWorkbench,
-      workflowRuntime,
+      input.config,
+      input.providerStore,
+      input.workflowRuntime,
       activeWorkflowExecutions,
-      git,
-      workspacePersistence,
-      workflowCatalog,
+      input.applicationPersistence,
+      governanceLifecycle,
+      input.workflowCatalog,
+      input.passwordResetDelivery,
+      input.webUiRoot,
+      createGovernedServiceSnapshot,
+      pluginRegistry,
+      input.credentialRepository,
+      input.credentialSecretStore,
     ).catch((error: unknown) => {
       console.error(
         "server.unhandled",
@@ -342,118 +469,189 @@ export const startServer = async (): Promise<void> => {
       }
     });
   });
-
-  server.listen(config.port, config.host);
-  console.info("server.started", {
-    host: config.host,
-    port: config.port,
-    logDir: config.logDir,
-    logMaxEntries: config.logMaxEntries,
-  });
 };
 
-type WorkspacePersistence = {
-  read: () => WorkspaceState;
-  saveCurrent: () => Promise<WorkspaceState>;
-  updateUiState: (input: {
-    settings?: WorkspaceSettingsSnapshot;
-    workbenchHistory?: WorkspaceWorkbenchHistory;
-    activeProjectId?: string | null;
-  }) => Promise<WorkspaceState>;
+const loadInitialApplicationState = async (
+  applicationStateStore: ReturnType<typeof createPostgresApplicationStateStore>,
+  postgresPool: ReturnType<typeof createPostgresPool>,
+): Promise<ApplicationState> => {
+  try {
+    const migrationVerification = await verifyDatabaseMigrations(
+      postgresPool,
+      readDatabaseMigrationCatalog(),
+    );
+    if (migrationVerification.pending.length > 0) {
+      throw new Error(
+        `Pending database migrations: ${migrationVerification.pending.join(", ")}`,
+      );
+    }
+    await applicationStateStore.initialize();
+    await cutOverLegacyExternalApiKeys({
+      client: postgresPool,
+      now: new Date().toISOString(),
+    });
+    // The cutover persists the migrated state inside its own transaction, so the
+    // canonical state is read back from the store: downstream subsystems never
+    // consume the credential-bearing migration result.
+    return await applicationStateStore.load();
+  } catch (error) {
+    await postgresPool.end();
+    const message = error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`PostgreSQL startup failed: ${message}`);
+  }
 };
 
-const createWorkspacePersistence = (input: {
-  stateStore: WorkspaceStateStore;
-  initialState: WorkspaceState;
-  projectStore: ProjectStore;
+const readWebUiRoot = (): string => {
+  const packagedRoot = resolve(process.cwd(), "web-ui");
+  return existsSync(packagedRoot)
+    ? packagedRoot
+    : resolve(process.cwd(), "apps", "web-ui");
+};
+
+export const createApplicationPersistence = (input: {
+  stateStore: ApplicationStateStore;
+  initialState: ApplicationState;
   providerStore: ProviderStore;
-  kanbanStore: KanbanStore;
-  historyStore: HistoryStore;
   workflowCatalog: WorkflowCatalogStore;
-}): WorkspacePersistence => {
+}): ApplicationPersistence => {
   let state = input.initialState;
+  let saveQueue: Promise<void> = Promise.resolve();
+
+  const enqueueSave = <TValue>(
+    operation: () => Promise<TValue>,
+  ): Promise<TValue> => {
+    const queuedSave = saveQueue.then(operation);
+    saveQueue = queuedSave.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queuedSave;
+  };
 
   const buildState = (
-    overrides: {
-      settings?: WorkspaceSettingsSnapshot;
-      workbenchHistory?: WorkspaceWorkbenchHistory;
+    update: {
+      settings?: ApplicationSettingsSnapshot;
+      externalApiKeys?: ReadonlyArray<ExternalApiKeyRecord>;
+      governanceLifecycles?: ReadonlyArray<GovernanceLifecycle>;
+      editableAssets?: EditableAssetCatalog;
+      memoryDocuments?: MemoryDocumentCatalog;
+      ideAuth?: IdeAuthState;
     } = {},
-  ): WorkspaceState =>
-    createWorkspaceStateFromStores({
-      projectSnapshot: input.projectStore.snapshot(),
+  ): ApplicationState =>
+    createApplicationStateFromStores({
       providerSnapshot: input.providerStore.snapshot(),
-      kanbanSnapshot: input.kanbanStore.snapshot(),
-      historySnapshot: input.historyStore.snapshot(),
       workflowSnapshot: input.workflowCatalog.snapshot(),
-      settings: overrides.settings ?? state.settings,
-      workbenchHistory: overrides.workbenchHistory ?? state.workbenchHistory,
+      settings: update.settings ?? state.settings,
+      externalApiKeys: update.externalApiKeys ?? state.externalApiKeys,
+      governanceLifecycles:
+        update.governanceLifecycles ?? state.governanceLifecycles,
+      editableAssets: update.editableAssets ?? state.editableAssets,
+      memoryDocuments: update.memoryDocuments ?? state.memoryDocuments,
+      ideAuth: update.ideAuth ?? state.ideAuth,
       previousState: state,
     });
 
-  const saveCurrent = async (): Promise<WorkspaceState> => {
-    state = await input.stateStore.save(buildState());
-    return state;
+  const saveState = async (
+    candidate: ApplicationState,
+  ): Promise<ApplicationState> => {
+    try {
+      state = await input.stateStore.save(candidate);
+      return state;
+    } catch (error) {
+      input.providerStore.restore({
+        selections: state.providerSelections,
+        settings: state.providerSettings,
+      });
+      input.workflowCatalog.restore(state.workflows);
+      throw error;
+    }
   };
+
+  const saveCurrent = async (): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState()));
 
   const updateUiState = async (update: {
-    settings?: WorkspaceSettingsSnapshot;
-    workbenchHistory?: WorkspaceWorkbenchHistory;
-    activeProjectId?: string | null;
-  }): Promise<WorkspaceState> => {
-    if (Object.hasOwn(update, "activeProjectId")) {
-      const activeResult = input.projectStore.setActive(
-        update.activeProjectId ?? null,
-      );
-      if (activeResult.type === ResultType.Err) {
-        throw new Error(activeResult.error.message);
-      }
-    }
-
-    const overrides: {
-      settings?: WorkspaceSettingsSnapshot;
-      workbenchHistory?: WorkspaceWorkbenchHistory;
-    } = {};
-    if (update.settings !== undefined) {
-      overrides.settings = update.settings;
-    }
-
-    if (update.workbenchHistory !== undefined) {
-      overrides.workbenchHistory = update.workbenchHistory;
-    }
-
-    state = await input.stateStore.save(buildState(overrides));
-    return state;
+    settings?: ApplicationSettingsSnapshot;
+  }): Promise<ApplicationState> => {
+    return enqueueSave(() => saveState(buildState(update)));
   };
+
+  const updateExternalApiKeys = async (
+    externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ externalApiKeys })));
+
+  const updateGovernanceLifecycles = async (
+    governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ governanceLifecycles })));
+
+  const updateEditableAssets = async (
+    editableAssets: EditableAssetCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ editableAssets })));
+
+  const mutateEditableAssets = async (
+    updater: (editableAssets: EditableAssetCatalog) => EditableAssetCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() =>
+      saveState(buildState({ editableAssets: updater(state.editableAssets) })),
+    );
+
+  const updateMemoryDocuments = async (
+    memoryDocuments: MemoryDocumentCatalog,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ memoryDocuments })));
+
+  const updateIdeAuth = async (
+    ideAuth: IdeAuthState,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() => saveState(buildState({ ideAuth })));
+
+  const mutateGovernanceLifecycles = async (
+    updater: (
+      governanceLifecycles: ReadonlyArray<GovernanceLifecycle>,
+    ) => ReadonlyArray<GovernanceLifecycle>,
+  ): Promise<ApplicationState> =>
+    enqueueSave(() =>
+      saveState(
+        buildState({
+          governanceLifecycles: updater(state.governanceLifecycles),
+        }),
+      ),
+    );
 
   return {
     read: () => state,
     saveCurrent,
     updateUiState,
+    updateExternalApiKeys,
+    updateGovernanceLifecycles,
+    updateEditableAssets,
+    mutateEditableAssets,
+    updateMemoryDocuments,
+    updateIdeAuth,
+    mutateGovernanceLifecycles,
   };
 };
-
 const handleRequest = async (
   req: IncomingMessage,
   res: ServerResponse,
   config: ServerConfig,
-  projectStore: ProjectStore,
-  sessionStore: SessionStore,
-  sessionEvents: SessionEventHub,
-  historyStore: HistoryStore,
-  qualityGateEventHub: QualityGateEventHub,
-  logsStore: ServerLogsStore,
   providerStore: ProviderStore,
-  kanbanStore: KanbanStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  commandRunner: CommandRunner,
-  qualityGateCatalog: QualityGateCatalog,
-  aiWorkbench: AiWorkbenchService,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  git: GitRepository,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
   workflowCatalog: WorkflowCatalogStore,
+  passwordResetDelivery: PasswordResetDelivery | undefined,
+  webUiRoot: string | undefined,
+  createGovernedServiceSnapshot: () => GovernedAgentToolService,
+  pluginRegistry: TrustedPluginRegistry,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  credentialSecretStore: ExternalWorkflowCredentialSecretStore | undefined,
 ): Promise<void> => {
   if (!req.url || !req.method) {
     respondError(res, {
@@ -463,260 +661,363 @@ const handleRequest = async (
     return;
   }
 
-  if (handleCorsPreflight(req, res)) {
+  const allowedOrigins = readIdeUiOrigins(config);
+  if (handleCorsPreflight(req, res, allowedOrigins)) {
     return;
   }
 
-  applyCorsHeaders(req, res);
-
-  if (!isAuthorized(req, config.authToken)) {
-    respondUnauthorized(res);
-    return;
-  }
+  applyCorsHeaders(req, res, allowedOrigins);
 
   const url = new URL(req.url, `http://${config.host}`);
   const path = url.pathname;
   const method = req.method;
+  const ideAuth = createRequestIdeAuth(
+    applicationPersistence,
+    passwordResetDelivery,
+  );
 
-  if (path === RoutePath.WorkspaceStateGet) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleWorkspaceStateGet(res, workspacePersistence);
+  if (
+    webUiRoot &&
+    !isInternalApiRoute(path) &&
+    !isExternalWorkflowRoute(path) &&
+    tryServeStaticUi(req, res, webUiRoot)
+  ) {
     return;
   }
 
-  if (path === RoutePath.WorkspaceStateUpdate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleWorkspaceStateUpdate(req, res, workspacePersistence);
-    return;
-  }
-
-  if (path === RoutePath.ProjectsCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleCreateProject(
+  if (isAuthRoute(path)) {
+    await handleIdeAuthRequest({
       req,
       res,
-      projectStore,
-      workspacePolicy,
-      workspacePersistence,
+      path,
+      method,
+      config,
+      ideAuth,
+      applicationPersistence,
+    });
+    return;
+  }
+
+  const externalOperation = externalWorkflowOperationForRoute(path);
+  if (externalOperation) {
+    await handleExternalWorkflowRequest({
+      req,
+      res,
+      method,
+      operation: externalOperation,
+      workflowCatalog,
+      workflowRuntime,
+      applicationPersistence,
+      governanceLifecycle,
+      governedService: createGovernedServiceSnapshot,
+      ...(credentialRepository ? { credentialRepository } : {}),
+      ...(credentialSecretStore ? { credentialSecretStore } : {}),
+    });
+    return;
+  }
+
+  const hasIdeSession =
+    readSessionUser(req, ideAuth) !== undefined &&
+    isTrustedIdeSessionRequest(req, readIdeUiOrigins(config));
+  // Without AUTH_TOKEN the browser session is the only credential, so a trusted
+  // session authorizes every internal route. With a token configured, the
+  // narrower IDE route groups are preserved.
+  const acceptsIdeSession =
+    hasIdeSession &&
+    (config.authToken === undefined ||
+      isEditableAssetRoute(path) ||
+      isWorkflowOnlyRoute(path) ||
+      isIdeGovernanceLifecycleRoute(path) ||
+      isIdeWorkflowExecutionRoute(path) ||
+      isCredentialManagementRoute(path));
+  if (!isAuthorized(req, config.authToken) && !acceptsIdeSession) {
+    respondUnauthorized(res);
+    return;
+  }
+  if (
+    config.authToken !== undefined &&
+    requiresStrictBearerAuthentication(path) &&
+    readBearerToken(req) !== config.authToken &&
+    !acceptsIdeSession
+  ) {
+    respondUnauthorized(res);
+    return;
+  }
+  if (
+    isCredentialManagementRoute(path) &&
+    !isCredentialAdministrator(req, ideAuth, config.authToken)
+  ) {
+    respondError(res, {
+      status: HttpStatus.Forbidden,
+      message: ErrorMessage.Unauthorized,
+    });
+    return;
+  }
+
+  if (!isInternalApiRoute(path)) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  if (path === RoutePath.EditableAssetsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    respondJson(res, HttpStatus.Ok, {
+      assets: applicationPersistence.read().editableAssets.records,
+    });
+    return;
+  }
+  if (path === RoutePath.EditableAssetsUsage) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetUsage(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.EditableAssetsUpsert) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetUpsert(
+      req,
+      res,
+      applicationPersistence,
+      pluginRegistry,
     );
     return;
   }
+  if (path === RoutePath.EditableAssetsDelete) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleEditableAssetDelete(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.MemoryDocumentsIndex) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleMemoryDocumentIndex(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.MemoryDocumentsList) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleMemoryDocumentList(req, res, applicationPersistence);
+    return;
+  }
 
-  if (path === RoutePath.ProjectsOpen) {
+  if (path === RoutePath.SettingsGet) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleOpenProject(
+    await handleSettingsGet(res, applicationPersistence);
+    return;
+  }
+
+  if (path === RoutePath.SettingsUpdate) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+
+    await handleSettingsUpdate(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesGet) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleGet(req, res, applicationPersistence);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesBegin) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleBegin(req, res, governanceLifecycle);
+    return;
+  }
+  if (path === RoutePath.GovernanceLifecyclesApprove) {
+    if (method !== HttpMethod.Post) {
+      respondMethodNotAllowed(res);
+      return;
+    }
+    await handleGovernanceLifecycleControl(
       req,
       res,
-      projectStore,
-      workspacePolicy,
-      workspacePersistence,
+      governanceLifecycle,
+      ideAuth,
+      GovernanceTransitionKind.Approve,
     );
     return;
   }
-
-  if (path === RoutePath.FilesTree) {
+  if (path === RoutePath.GovernanceLifecyclesContinue) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileTree(req, res, projectStore);
+    await handleGovernanceLifecycleControl(
+      req,
+      res,
+      governanceLifecycle,
+      ideAuth,
+      GovernanceTransitionKind.Continue,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesRead) {
+  if (path === RoutePath.GovernanceLifecyclesReject) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileRead(req, res, projectStore);
+    await handleGovernanceLifecycleControl(
+      req,
+      res,
+      governanceLifecycle,
+      ideAuth,
+      GovernanceTransitionKind.RejectWithFeedback,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesSearch) {
+  if (path === RoutePath.GovernanceLifecyclesResume) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileSearch(req, res, projectStore);
+    await handleGovernanceLifecycleResume(
+      req,
+      res,
+      governanceLifecycle,
+      workflowCatalog,
+      workflowRuntime,
+      applicationPersistence,
+      createGovernedServiceSnapshot,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesDelete) {
+  if (path === RoutePath.ExternalCredentialsList) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileDelete(req, res, projectStore);
+    if (!credentialRepository) {
+      respondError(res, {
+        status: HttpStatus.InternalServerError,
+        message: ErrorMessage.CredentialStorageUnavailable,
+      });
+      return;
+    }
+    respondJson(res, HttpStatus.Ok, {
+      credentials: (await credentialRepository.list()).map(
+        redactExternalCredentialResponse,
+      ),
+    });
     return;
   }
-
-  if (path === RoutePath.FilesCreate) {
+  if (path === RoutePath.ExternalCredentialsCreate) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileCreate(req, res, projectStore);
+    await handleExternalCredentialCreate(
+      req,
+      res,
+      workflowCatalog,
+      credentialRepository,
+      credentialSecretStore,
+      ideAuth,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesMove) {
+  if (path === RoutePath.ExternalCredentialsRotate) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileMove(req, res, projectStore);
+    await handleExternalCredentialRotate(
+      req,
+      res,
+      credentialRepository,
+      ideAuth,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesWrite) {
+  if (path === RoutePath.ExternalCredentialsRevoke) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileWrite(req, res, projectStore);
+    await handleExternalCredentialRevoke(
+      req,
+      res,
+      credentialRepository,
+      ideAuth,
+    );
     return;
   }
-
-  if (path === RoutePath.FilesDelete) {
-    if (method !== HttpMethod.Post) {
+  if (path === RoutePath.ExternalCredentialsAudits) {
+    if (method !== HttpMethod.Get && method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
-
-    await handleFileDelete(req, res, projectStore);
-    return;
-  }
-
-  if (path === RoutePath.FilesCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
+    if (!credentialRepository) {
+      respondError(res, {
+        status: HttpStatus.InternalServerError,
+        message: ErrorMessage.CredentialStorageUnavailable,
+      });
       return;
     }
-
-    await handleFileCreate(req, res, projectStore);
-    return;
-  }
-
-  if (path === RoutePath.FilesMove) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
+    let credentialId: string | false | undefined;
+    if (method === HttpMethod.Post) {
+      const body = await readJsonBody(req);
+      if (body.type === ResultType.Err) {
+        respondError(res, body.error);
+        return;
+      }
+      credentialId = readOptionalCredentialId(body.value);
+      if (credentialId === false) {
+        respondInvalidBody(res);
+        return;
+      }
     }
-
-    await handleFileMove(req, res, projectStore);
+    await credentialRepository.purgeAudits({ now: new Date().toISOString() });
+    respondJson(res, HttpStatus.Ok, {
+      audits: await credentialRepository.listAudits({
+        ...(credentialId ? { credentialId } : {}),
+      }),
+    });
     return;
   }
-
-  if (path === RoutePath.SessionsStart) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleSessionStart(req, res, sessionStore, sessionEvents);
+  if (isRetiredLegacyExternalApiKeyRoute(path)) {
+    respondError(res, {
+      status: HttpStatus.Gone,
+      message: ErrorMessage.LegacyApiKeyRoutesRetired,
+    });
     return;
   }
-
-  if (path === RoutePath.SessionsStop) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleSessionStop(req, res, sessionStore, sessionEvents);
-    return;
-  }
-
-  if (path === RoutePath.SessionsStream) {
-    if (method !== HttpMethod.Get) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    handleSessionStream(req, res, sessionStore, sessionEvents, url);
-    return;
-  }
-
-  if (path === RoutePath.HistoryList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleHistoryList(req, res, historyStore);
-    return;
-  }
-
-  if (path === RoutePath.HistoryEvents) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleHistoryEvents(req, res, historyStore);
-    return;
-  }
-
-  if (path === RoutePath.LogsQuery) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleLogsQuery(req, res, logsStore);
-    return;
-  }
-
-  if (path === RoutePath.LogsAppend) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleLogsAppend(req, res, logsStore);
-    return;
-  }
-
-  if (path === RoutePath.LogsReset) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleLogsReset(res, logsStore);
-    return;
-  }
-
   if (path === RoutePath.ProvidersList) {
     if (method !== HttpMethod.Post) {
       respondMethodNotAllowed(res);
       return;
     }
 
-    await handleProvidersList(req, res, projectStore, providerStore);
+    await handleProvidersList(req, res, providerStore);
     return;
   }
 
@@ -729,9 +1030,8 @@ const handleRequest = async (
     await handleProvidersSelect(
       req,
       res,
-      projectStore,
       providerStore,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -745,9 +1045,8 @@ const handleRequest = async (
     await handleProviderSettingsUpdate(
       req,
       res,
-      projectStore,
       providerStore,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -758,7 +1057,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowDefinitionList(req, res, projectStore, workflowCatalog);
+    await handleWorkflowDefinitionList(req, res, workflowCatalog);
     return;
   }
 
@@ -792,7 +1091,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -807,7 +1106,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -822,7 +1121,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -875,7 +1174,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -890,7 +1189,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -904,9 +1203,8 @@ const handleRequest = async (
     await handleWorkflowDefinitionUpsert(
       req,
       res,
-      projectStore,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -921,7 +1219,8 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
+      credentialRepository,
     );
     return;
   }
@@ -932,7 +1231,7 @@ const handleRequest = async (
       return;
     }
 
-    await handleWorkflowAssetList(req, res, projectStore, workflowCatalog);
+    await handleWorkflowAssetList(req, res, workflowCatalog);
     return;
   }
 
@@ -955,9 +1254,8 @@ const handleRequest = async (
     await handleWorkflowAssetUpsert(
       req,
       res,
-      projectStore,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -972,7 +1270,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -1017,7 +1315,7 @@ const handleRequest = async (
       req,
       res,
       workflowCatalog,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -1033,7 +1331,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -1049,7 +1347,9 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
+      governanceLifecycle,
+      createGovernedServiceSnapshot,
     );
     return;
   }
@@ -1065,7 +1365,7 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -1083,7 +1383,9 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
+      governanceLifecycle,
+      createGovernedServiceSnapshot,
     );
     return;
   }
@@ -1100,7 +1402,7 @@ const handleRequest = async (
       workflowCatalog,
       workflowRuntime,
       activeWorkflowExecutions,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
@@ -1116,583 +1418,29 @@ const handleRequest = async (
       res,
       workflowCatalog,
       workflowRuntime,
-      workspacePersistence,
+      applicationPersistence,
     );
     return;
   }
-
-  if (path === RoutePath.GitStatus) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitStatusRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitDiff) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitDiffRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitStage) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitPathOperationRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      GitPathOperationKind.Stage,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitUnstage) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitPathOperationRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      GitPathOperationKind.Unstage,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitRevert) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitPathOperationRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      GitPathOperationKind.Revert,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitCommit) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitCommitRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitBranchesList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitBranchListRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitBranchesCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitBranchMutationRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      "create",
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitBranchesCheckout) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitBranchMutationRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      "checkout",
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitBranchesPush) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitBranchRemoteRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      "push",
-    );
-    return;
-  }
-
-  if (path === RoutePath.GitBranchesPublish) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleGitBranchRemoteRequest(
-      req,
-      res,
-      projectStore,
-      workspacePolicy,
-      commandPolicy,
-      git,
-      "publish",
-    );
-    return;
-  }
-
-  if (path === RoutePath.QualityGatesRun) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleQualityGateRunRequest(
-      req,
-      res,
-      projectStore,
-      historyStore,
-      workspacePolicy,
-      commandPolicy,
-      commandRunner,
-      qualityGateEventHub,
-      qualityGateCatalog,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.QualityGatesList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleQualityGateListRequest(req, res, historyStore);
-    return;
-  }
-
-  if (path === RoutePath.QualityGatesEvents) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleQualityGateEventsRequest(req, res, historyStore);
-    return;
-  }
-
-  if (path === RoutePath.QualityGatesStream) {
-    if (method !== HttpMethod.Get) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    handleQualityGateStreamRequest(
-      req,
-      res,
-      url,
-      historyStore,
-      qualityGateEventHub,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanBoardsCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanBoardCreate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanBoardsList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanBoardList(req, res, projectStore, kanbanStore);
-    return;
-  }
-
-  if (path === RoutePath.KanbanBoardsUpdate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanBoardUpdate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanBoardsDelete) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanBoardDelete(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanColumnsCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanColumnCreate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanColumnsList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanColumnList(req, res, projectStore, kanbanStore);
-    return;
-  }
-
-  if (path === RoutePath.KanbanColumnsUpdate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanColumnUpdate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanColumnsDelete) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanColumnDelete(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanTasksCreate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanTaskCreate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanTasksList) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanTaskList(req, res, projectStore, kanbanStore);
-    return;
-  }
-
-  if (path === RoutePath.KanbanTasksUpdate) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanTaskUpdate(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.KanbanTasksDelete) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleKanbanTaskDelete(
-      req,
-      res,
-      projectStore,
-      kanbanStore,
-      workspacePersistence,
-    );
-    return;
-  }
-
-  if (path === RoutePath.AiSkillsRun) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleAiSkillRun(req, res, aiWorkbench);
-    return;
-  }
-
-  if (path === RoutePath.AiWorkflowsRun) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleAiWorkflowRun(req, res, aiWorkbench);
-    return;
-  }
-
-  if (path === RoutePath.AiEvalsRun) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleAiEvalRun(req, res, aiWorkbench);
-    return;
-  }
-
-  if (path === RoutePath.AiMemoryQuery) {
-    if (method !== HttpMethod.Post) {
-      respondMethodNotAllowed(res);
-      return;
-    }
-
-    await handleAiMemoryQuery(req, res, aiWorkbench);
-    return;
-  }
-
   respondError(res, {
     status: HttpStatus.NotFound,
     message: ErrorMessage.NotFound,
   });
 };
 
-const handleCreateProject = async (
-  req: IncomingMessage,
+const handleSettingsGet = async (
   res: ServerResponse,
-  store: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseCreateProject(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const rootResult = assertProjectRootIfPresent(
-    parsed.value.rootPath,
-    workspacePolicy,
-  );
-  if (rootResult.type === ResultType.Err) {
-    respondError(res, rootResult.error);
-    return;
-  }
-
-  const created = store.create({
-    ...parsed.value,
-    rootPath: rootResult.value,
-  });
-  if (created.type === ResultType.Err) {
-    respondError(res, mapProjectStoreError(created.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Created, {
-    project: created.value,
-  });
-};
-
-const handleOpenProject = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseOpenProject(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const rootResult = assertProjectRootIfPresent(
-    parsed.value.rootPath,
-    workspacePolicy,
-  );
-  if (rootResult.type === ResultType.Err) {
-    respondError(res, rootResult.error);
-    return;
-  }
-
-  const openInput =
-    parsed.value.name !== undefined
-      ? { name: parsed.value.name, rootPath: rootResult.value }
-      : { rootPath: rootResult.value };
-
-  const opened = store.open(openInput);
-  if (opened.type === ResultType.Err) {
-    respondError(res, mapProjectStoreError(opened.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    project: opened.value,
-  });
-};
-
-const handleWorkspaceStateGet = async (
-  res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   respondJson(res, HttpStatus.Ok, {
-    state: workspacePersistence.read(),
+    settings: redactSettingsForClient(applicationPersistence.read().settings),
   });
 };
 
-const handleWorkspaceStateUpdate = async (
+const handleSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -1700,9 +1448,9 @@ const handleWorkspaceStateUpdate = async (
     return;
   }
 
-  const parsed = parseWorkspaceStateUpdateRequest(
+  const parsed = parseSettingsUpdateRequest(
     bodyResult.value,
-    workspacePersistence.read(),
+    applicationPersistence.read(),
   );
   if (parsed.type === ResultType.Err) {
     respondError(res, parsed.error);
@@ -1710,9 +1458,11 @@ const handleWorkspaceStateUpdate = async (
   }
 
   try {
-    const state = await workspacePersistence.updateUiState(parsed.value);
+    const state = await applicationPersistence.updateUiState({
+      settings: parsed.value,
+    });
     respondJson(res, HttpStatus.Ok, {
-      state,
+      settings: redactSettingsForClient(state.settings),
     });
   } catch (error) {
     respondError(res, {
@@ -1723,17 +1473,10 @@ const handleWorkspaceStateUpdate = async (
   }
 };
 
-export const parseWorkspaceStateUpdateRequest = (
+export const parseSettingsUpdateRequest = (
   value: unknown,
-  currentState: WorkspaceState,
-): Result<
-  {
-    settings?: WorkspaceSettingsSnapshot;
-    workbenchHistory?: WorkspaceWorkbenchHistory;
-    activeProjectId?: string | null;
-  },
-  ApiError
-> => {
+  currentState: ApplicationState,
+): Result<ApplicationSettingsSnapshot, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
@@ -1741,51 +1484,12 @@ export const parseWorkspaceStateUpdateRequest = (
     });
   }
 
-  const parsed = parseWorkspaceStateUpdateValue(value, currentState);
-  if (parsed.type === ResultType.Err) {
-    return parsed;
-  }
-
-  const update: {
-    settings?: WorkspaceSettingsSnapshot;
-    workbenchHistory?: WorkspaceWorkbenchHistory;
-    activeProjectId?: string | null;
-  } = {};
-
-  if (Object.hasOwn(value, "settings")) {
-    update.settings = parsed.value.settings;
-  }
-
-  if (Object.hasOwn(value, "workbenchHistory")) {
-    update.workbenchHistory = parsed.value.workbenchHistory;
-  }
-
-  if (Object.hasOwn(value, "activeProjectId")) {
-    update.activeProjectId = parsed.value.activeProjectId;
-  }
-
-  return ok(update);
-};
-
-const parseWorkspaceStateUpdateValue = (
-  value: Record<string, unknown>,
-  currentState: WorkspaceState,
-): Result<WorkspaceState, ApiError> => {
   try {
-    return ok(
-      parseWorkspaceState({
-        ...currentState,
-        ...(Object.hasOwn(value, "settings")
-          ? { settings: value["settings"] }
-          : {}),
-        ...(Object.hasOwn(value, "workbenchHistory")
-          ? { workbenchHistory: value["workbenchHistory"] }
-          : {}),
-        ...(Object.hasOwn(value, "activeProjectId")
-          ? { activeProjectId: value["activeProjectId"] }
-          : {}),
-      }),
-    );
+    const settings = parseApplicationState({
+      ...currentState,
+      settings: value,
+    }).settings;
+    return ok(settings);
   } catch {
     return err({
       status: HttpStatus.BadRequest,
@@ -1794,574 +1498,12 @@ const parseWorkspaceStateUpdateValue = (
   }
 };
 
-const assertProjectRootIfPresent = (
-  rootPath: string | null,
-  workspacePolicy: WorkspacePolicy,
-): Result<string | null, ApiError> => {
-  if (rootPath === null) {
-    return ok(null);
-  }
-
-  return workspacePolicy.assertPathAllowed(rootPath);
-};
-
-const readProjectFilesystemRoot = (
-  project: Project,
-): Result<string, ApiError> => {
-  if (project.rootPath === null) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingRootPath,
-    });
-  }
-
-  return ok(project.rootPath);
-};
-
-const handleFileTree = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileTreeRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const treeResult = await listFileTree(rootPath.value, parsed.value.path);
-  if (treeResult.type === ResultType.Err) {
-    respondError(res, treeResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    entries: treeResult.value,
-  });
-};
-
-const handleFileRead = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileReadRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const readResult = await readFileContent(rootPath.value, parsed.value.path, {
-    ...(parsed.value.startLine !== undefined
-      ? { startLine: parsed.value.startLine }
-      : {}),
-    ...(parsed.value.lineCount !== undefined
-      ? { lineCount: parsed.value.lineCount }
-      : {}),
-  });
-  if (readResult.type === ResultType.Err) {
-    respondError(res, readResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    content: readResult.value.content,
-    startLine: readResult.value.startLine,
-    endLine: readResult.value.endLine,
-    totalLines: readResult.value.totalLines,
-    truncated: readResult.value.truncated,
-  });
-};
-
-const handleFileSearch = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileSearchRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const searchResult = await searchFiles(rootPath.value, {
-    query: parsed.value.query,
-    isRegex: parsed.value.isRegex,
-    matchCase: parsed.value.matchCase,
-    wholeWord: parsed.value.wholeWord,
-  });
-  if (searchResult.type === ResultType.Err) {
-    respondError(res, searchResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    results: searchResult.value,
-  });
-};
-
-const handleFileDelete = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileDeleteRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const deleteResult = await deleteFile(rootPath.value, parsed.value.path);
-  if (deleteResult.type === ResultType.Err) {
-    respondError(res, deleteResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    success: deleteResult.value.success,
-  });
-};
-
-const handleFileCreate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileCreateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const createResult = await createDirectory(
-    rootPath.value,
-    dirname(parsed.value.path),
-  );
-  if (createResult.type === ResultType.Err) {
-    respondError(res, createResult.error);
-    return;
-  }
-
-  const writeResult = await writeFileContent(
-    rootPath.value,
-    parsed.value.path,
-    parsed.value.content,
-  );
-  if (writeResult.type === ResultType.Err) {
-    respondError(res, writeResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Created, {
-    path: parsed.value.path,
-    bytesWritten: writeResult.value.bytesWritten,
-  });
-};
-
-const handleFileMove = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileMoveRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const moveResult = await moveFile(
-    rootPath.value,
-    parsed.value.sourcePath,
-    parsed.value.targetPath,
-  );
-  if (moveResult.type === ResultType.Err) {
-    respondError(res, moveResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    success: moveResult.value.success,
-  });
-};
-
-const handleFileWrite = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  store: ProjectStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseFileWriteRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(store, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-  const rootPath = readProjectFilesystemRoot(projectResult.value);
-  if (rootPath.type === ResultType.Err) {
-    respondError(res, rootPath.error);
-    return;
-  }
-
-  const writeResult = await writeFileContent(
-    rootPath.value,
-    parsed.value.path,
-    parsed.value.content,
-  );
-  if (writeResult.type === ResultType.Err) {
-    respondError(res, writeResult.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    bytesWritten: writeResult.value.bytesWritten,
-  });
-};
-
-const handleSessionStart = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  sessionStore: SessionStore,
-  sessionEvents: SessionEventHub,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseSessionStartRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const started = sessionStore.start(parsed.value);
-  if (started.type === ResultType.Err) {
-    respondError(res, mapSessionStoreError(started.error));
-    return;
-  }
-
-  sessionEvents.publish(createStatusEvent(started.value));
-
-  respondJson(res, HttpStatus.Created, {
-    session: started.value,
-  });
-};
-
-const handleSessionStop = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  sessionStore: SessionStore,
-  sessionEvents: SessionEventHub,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseSessionStopRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const stopped = sessionStore.stop(parsed.value.sessionId);
-  if (stopped.type === ResultType.Err) {
-    respondError(res, mapSessionStoreError(stopped.error));
-    return;
-  }
-
-  sessionEvents.publish(createStatusEvent(stopped.value));
-
-  respondJson(res, HttpStatus.Ok, {
-    session: stopped.value,
-  });
-};
-
-const handleSessionStream = (
-  req: IncomingMessage,
-  res: ServerResponse,
-  sessionStore: SessionStore,
-  sessionEvents: SessionEventHub,
-  url: URL,
-): void => {
-  const sessionId = url.searchParams.get(QueryParam.SessionId) ?? undefined;
-  if (!sessionId || sessionId.trim().length === 0) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingSessionId,
-    });
-    return;
-  }
-
-  const sessionResult = getSessionById(sessionStore, sessionId);
-  if (sessionResult.type === ResultType.Err) {
-    respondError(res, sessionResult.error);
-    return;
-  }
-
-  const stream = createSseStream(res);
-  const initialEvent = createStatusEvent(sessionResult.value);
-  stream.send({
-    event: SessionEventType.Status,
-    data: initialEvent,
-    id: initialEvent.id,
-  });
-
-  const unsubscribe = sessionEvents.subscribe(sessionId, (event) => {
-    stream.send({
-      event: event.type,
-      data: event,
-      id: event.id,
-    });
-  });
-
-  req.on("close", () => {
-    unsubscribe();
-    stream.close();
-  });
-};
-
-const handleHistoryList = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  historyStore: HistoryStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseHistoryListRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const listed = historyStore.listRuns(parsed.value);
-  if (listed.type === ResultType.Err) {
-    respondError(res, mapHistoryStoreError(listed.error));
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    runs: listed.value,
-  });
-};
-
-const handleHistoryEvents = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  historyStore: HistoryStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseHistoryEventsRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const events = historyStore.listEvents(parsed.value.runId);
-  if (events.type === ResultType.Err) {
-    respondError(res, mapHistoryStoreError(events.error));
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    events: events.value,
-  });
-};
-
-const handleLogsQuery = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  logsStore: ServerLogsStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseLogsQueryRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const logs = logsStore.query(parsed.value);
-  if (logs.type === ResultType.Err) {
-    respondError(res, mapDomainLogsStoreError(logs.error));
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    logs: logs.value,
-  });
-};
-
-const handleLogsAppend = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  logsStore: ServerLogsStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseLogsAppendRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await logsStore.append(parsed.value);
-  if (result.type === ResultType.Err) {
-    respondError(res, mapDomainLogsStoreError(result.error));
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    success: true,
-  });
-};
-
-const handleLogsReset = async (
-  res: ServerResponse,
-  logsStore: ServerLogsStore,
-): Promise<void> => {
-  await logsStore.reset();
-
-  respondJson(res, HttpStatus.Ok, {
-    success: true,
-  });
-};
-
+const redactSettingsForClient = (
+  settings: ApplicationSettingsSnapshot,
+): ApplicationSettingsSnapshot => settings;
 const handleProvidersList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   providerStore: ProviderStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
@@ -2378,15 +1520,8 @@ const handleProvidersList = async (
 
   let selection: ProviderSelection | undefined;
 
-  if (parsed.value.projectId && parsed.value.profileId) {
-    const projectResult = getProjectById(projectStore, parsed.value.projectId);
-    if (projectResult.type === ResultType.Err) {
-      respondError(res, projectResult.error);
-      return;
-    }
-
+  if (parsed.value.profileId) {
     const selectionResult = providerStore.getSelection({
-      projectId: parsed.value.projectId,
       profileId: parsed.value.profileId,
     });
     if (selectionResult.type === ResultType.Err) {
@@ -2407,9 +1542,8 @@ const handleProvidersList = async (
 const handleProvidersSelect = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2423,19 +1557,13 @@ const handleProvidersSelect = async (
     return;
   }
 
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
   const selected = providerStore.selectProvider(parsed.value);
   if (selected.type === ResultType.Err) {
     respondError(res, mapProviderStoreError(selected.error));
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     selection: selected.value,
   });
@@ -2444,9 +1572,8 @@ const handleProvidersSelect = async (
 const handleProviderSettingsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   providerStore: ProviderStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -2460,461 +1587,706 @@ const handleProviderSettingsUpdate = async (
     return;
   }
 
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
   const updated = providerStore.updateSettings(parsed.value);
   if (updated.type === ResultType.Err) {
     respondError(res, mapProviderStoreError(updated.error));
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     settings: updated.value,
   });
 };
 
-const handleKanbanBoardCreate = async (
+const mapProviderStoreError = (error: ProviderStoreError): ApiError =>
+  error.code === ProviderStoreErrorCode.NotFound
+    ? { status: HttpStatus.NotFound, message: error.message }
+    : { status: HttpStatus.BadRequest, message: error.message };
+
+const handleEditableAssetUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
+  pluginRegistry: TrustedPluginRegistry,
 ): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
     return;
   }
-
-  const parsed = parseKanbanBoardCreateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
+  const parsed = parseEditableAssetCatalog({ records: [body.value] });
+  const asset = parsed.records[0];
+  if (!asset) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
+  if (asset.kind === "plugin" && !pluginRegistry.isAllowed(asset.id)) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: "Plugin registry key is not trusted.",
+    });
     return;
   }
-
-  const created = kanbanStore.createBoard(parsed.value);
-  if (created.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(created.error));
+  let serverOwnedAsset: EditableAssetRecord | undefined;
+  try {
+    await applicationPersistence.mutateEditableAssets((catalog) => {
+      const existing = catalog.records.find(
+        (candidate) => candidate.id === asset.id,
+      );
+      const nextAsset = withServerOwnedPluginAudit(asset, existing, {
+        action: existing ? "updated" : "registered",
+        actorId: "ide-session",
+        at: new Date().toISOString(),
+      });
+      serverOwnedAsset = nextAsset;
+      return upsertEditableAsset(catalog, nextAsset);
+    });
+  } catch {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
     return;
   }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Created, {
-    board: created.value,
-  });
+  respondJson(res, HttpStatus.Ok, { asset: serverOwnedAsset });
 };
 
-const handleKanbanBoardList = async (
+const handleEditableAssetDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
     return;
   }
-
-  const parsed = parseKanbanBoardListRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
+  const assetId = readEditableAssetId(body.value);
+  if (!assetId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
+  const usage = summarizePromptAssetUsage({
+    assetId,
+    definitions: applicationPersistence.read().workflows.definitions,
+  });
+  if (usage.nodeCount > 0) {
+    const usageFingerprint = readUsageFingerprint(body.value);
+    const confirmImpact = readImpactConfirmation(body.value);
+    if (usageFingerprint !== usage.fingerprint || !confirmImpact) {
+      respondError(res, {
+        status: HttpStatus.Conflict,
+        message: "Prompt asset usage changed or impact was not confirmed.",
+      });
+      return;
+    }
+    let tombstoned = false;
+    await applicationPersistence.mutateEditableAssets((catalog) => {
+      const asset = catalog.records.find(
+        (candidate) => candidate.id === assetId,
+      );
+      if (!asset) return catalog;
+      tombstoned = true;
+      return upsertEditableAsset(catalog, {
+        ...asset,
+        status: AssetStatus.Disabled,
+      });
+    });
+    if (!tombstoned) {
+      respondError(res, {
+        status: HttpStatus.NotFound,
+        message: ErrorMessage.NotFound,
+      });
+      return;
+    }
+    respondJson(res, HttpStatus.Ok, { assetId, tombstoned: true });
     return;
   }
-
-  const listed = kanbanStore.listBoards(parsed.value);
-  if (listed.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(listed.error));
+  let deleted = false;
+  await applicationPersistence.mutateEditableAssets((catalog) => {
+    const asset = catalog.records.find((candidate) => candidate.id === assetId);
+    if (!asset) return catalog;
+    deleted = true;
+    return removeEditableAsset(catalog, assetId);
+  });
+  if (!deleted) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
     return;
   }
+  respondJson(res, HttpStatus.Ok, { assetId });
+};
 
+const handleEditableAssetUsage = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const assetId = readEditableAssetId(body.value);
+  if (!assetId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const asset = applicationPersistence
+    .read()
+    .editableAssets.records.find((candidate) => candidate.id === assetId);
+  if (!asset || asset.kind !== "prompt") {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(
+    res,
+    HttpStatus.Ok,
+    summarizePromptAssetUsage({
+      assetId,
+      definitions: applicationPersistence.read().workflows.definitions,
+    }),
+  );
+};
+
+const handleMemoryDocumentIndex = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const document = readMemoryDocument(body.value);
+  if (!document) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  const source = applicationPersistence
+    .read()
+    .editableAssets.records.find((asset) => asset.id === document.sourceId);
+  if (
+    !source ||
+    source.kind !== "memory-source" ||
+    source.status !== AssetStatus.Enabled ||
+    !source.memory?.optInIndexing ||
+    source.memory.tenantId !== document.tenantId ||
+    source.memory.workflowId !== document.workflowId
+  ) {
+    respondError(res, {
+      status: HttpStatus.Forbidden,
+      message: "Memory source does not permit this document.",
+    });
+    return;
+  }
+  try {
+    await applicationPersistence.updateMemoryDocuments(
+      indexMemoryDocument(
+        applicationPersistence.read().memoryDocuments,
+        document,
+      ),
+    );
+  } catch {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { document });
+};
+
+const handleMemoryDocumentList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  applicationPersistence: ApplicationPersistence,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const sourceId = readEditableAssetId(body.value);
+  if (!sourceId) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+    return;
+  }
   respondJson(res, HttpStatus.Ok, {
-    boards: listed.value,
+    documents: applicationPersistence
+      .read()
+      .memoryDocuments.documents.filter(
+        (document) => document.sourceId === sourceId,
+      )
+      .map(toMemoryDocumentMetadata),
   });
 };
 
-const handleKanbanBoardUpdate = async (
+const toMemoryDocumentMetadata = (document: MemoryDocument) => ({
+  id: document.id,
+  sourceId: document.sourceId,
+  tenantId: document.tenantId,
+  workflowId: document.workflowId,
+  createdAt: document.createdAt,
+  provenance: { ...document.provenance },
+});
+
+const readMemoryDocument = (value: unknown): MemoryDocument | undefined => {
+  if (!isRecord(value) || !isRecord(value["document"])) return undefined;
+  const document = value["document"];
+  if (
+    typeof document["id"] !== "string" ||
+    typeof document["sourceId"] !== "string" ||
+    typeof document["tenantId"] !== "string" ||
+    typeof document["workflowId"] !== "string" ||
+    typeof document["content"] !== "string" ||
+    typeof document["createdAt"] !== "string" ||
+    !isRecord(document["provenance"]) ||
+    typeof document["provenance"]["source"] !== "string" ||
+    typeof document["provenance"]["artifactFingerprint"] !== "string" ||
+    typeof document["provenance"]["registeredAt"] !== "string"
+  )
+    return undefined;
+  return {
+    id: document["id"],
+    sourceId: document["sourceId"],
+    tenantId: document["tenantId"],
+    workflowId: document["workflowId"],
+    content: document["content"],
+    createdAt: document["createdAt"],
+    provenance: {
+      source: document["provenance"]["source"],
+      artifactFingerprint: document["provenance"]["artifactFingerprint"],
+      registeredAt: document["provenance"]["registeredAt"],
+    },
+  };
+};
+
+const readEditableAssetId = (value: unknown): string | undefined =>
+  isRecord(value) &&
+  typeof value["assetId"] === "string" &&
+  value["assetId"].trim().length > 0
+    ? value["assetId"].trim()
+    : undefined;
+
+const readUsageFingerprint = (value: unknown): string | undefined =>
+  isRecord(value) && typeof value["usageFingerprint"] === "string"
+    ? value["usageFingerprint"]
+    : undefined;
+
+const readImpactConfirmation = (value: unknown): boolean =>
+  isRecord(value) && value["confirmImpact"] === true;
+
+const handleGovernanceLifecycleGet = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
     respondError(res, bodyResult.error);
     return;
   }
-
-  const parsed = parseKanbanBoardUpdateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
+  const lifecycleId = parseGovernanceLifecycleId(bodyResult.value);
+  if (lifecycleId.type === ResultType.Err) {
+    respondError(res, lifecycleId.error);
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
+  const lifecycle = applicationPersistence
+    .read()
+    .governanceLifecycles.find(
+      (candidate) => candidate.id === lifecycleId.value,
+    );
+  if (!lifecycle) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
     return;
   }
-
-  const updated = kanbanStore.updateBoard(parsed.value);
-  if (updated.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(updated.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
-    board: updated.value,
+    lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
   });
 };
 
-const handleKanbanBoardDelete = async (
+const toUiSafeGovernanceLifecycle = (
+  lifecycle: GovernanceLifecycle,
+): GovernanceLifecycle => ({
+  ...lifecycle,
+  promptExecutions: lifecycle.promptExecutions.map((execution) => ({
+    ...execution,
+    bindings: redactPromptBindingsForUi(execution.bindings),
+  })),
+});
+
+const redactPromptBindingsForUi = (
+  bindings: Readonly<Record<string, unknown>>,
+): Record<string, unknown> => {
+  const uiSafeBindings: Record<string, unknown> = {};
+  let redacted = false;
+  for (const [key, value] of Object.entries(bindings)) {
+    if (isSensitivePromptBindingKey(key)) {
+      redacted = true;
+      continue;
+    }
+    uiSafeBindings[key] = redactPromptBindingValueForUi(value);
+  }
+  if (redacted) {
+    uiSafeBindings[UiSafeRedactedBindingKey] = UiSafeRedactedBindingValue;
+  }
+  return uiSafeBindings;
+};
+
+const redactPromptBindingValueForUi = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(redactPromptBindingValueForUi);
+  }
+  return isRecord(value) ? redactPromptBindingsForUi(value) : value;
+};
+
+const isSensitivePromptBindingKey = (key: string): boolean => {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return SensitivePromptBindingKeyFragments.some((fragment) =>
+    normalized.includes(fragment),
+  );
+};
+
+const handleGovernanceLifecycleBegin = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
+  governanceLifecycle: GovernanceLifecycleService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
     respondError(res, bodyResult.error);
     return;
   }
-
-  const parsed = parseKanbanBoardDeleteRequest(bodyResult.value);
+  const parsed = parseGovernanceLifecycleBegin(bodyResult.value);
   if (parsed.type === ResultType.Err) {
     respondError(res, parsed.error);
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
+  try {
+    const lifecycle = await governanceLifecycle.begin({
+      ...parsed.value,
+      now: new Date().toISOString(),
+    });
+    respondJson(res, HttpStatus.Ok, {
+      lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
+    });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
   }
-
-  const deleted = kanbanStore.deleteBoard(parsed.value);
-  if (deleted.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(deleted.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    board: deleted.value,
-  });
 };
 
-const handleKanbanColumnCreate = async (
+const handleGovernanceLifecycleControl = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
+  governanceLifecycle: GovernanceLifecycleService,
+  ideAuth: IdeAuthService,
+  kind: GovernanceTransitionKind,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
     respondError(res, bodyResult.error);
     return;
   }
-
-  const parsed = parseKanbanColumnCreateRequest(bodyResult.value);
+  const parsed = parseGovernanceLifecycleControl(bodyResult.value, kind);
   if (parsed.type === ResultType.Err) {
     respondError(res, parsed.error);
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
+  try {
+    const lifecycle = await governanceLifecycle.transition({
+      ...parsed.value,
+      kind,
+      actorId: readAuthenticatedActorId(req, ideAuth),
+      now: new Date().toISOString(),
+    });
+    respondJson(res, HttpStatus.Ok, {
+      lifecycle: toUiSafeGovernanceLifecycle(lifecycle),
+    });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
   }
-
-  const created = kanbanStore.createColumn(parsed.value);
-  if (created.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(created.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Created, {
-    column: created.value,
-  });
 };
 
-const handleKanbanColumnList = async (
+const handleGovernanceLifecycleResume = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
+  governanceLifecycle: GovernanceLifecycleService,
+  workflowCatalog: WorkflowCatalogStore,
+  workflowRuntime: WorkflowRuntimeService,
+  applicationPersistence: ApplicationPersistence,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
     return;
   }
-
-  const parsed = parseKanbanColumnListRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
+  const lifecycleId = parseGovernanceLifecycleId(body.value);
+  if (lifecycleId.type === ResultType.Err) {
+    respondError(res, lifecycleId.error);
     return;
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
+  const lifecycle = governanceLifecycle.read(lifecycleId.value);
+  const workflow = lifecycle
+    ? workflowCatalog.getWorkflow(lifecycle.workflowId)
+    : undefined;
+  if (
+    !lifecycle ||
+    !workflow ||
+    !isRetryableResumeReady(lifecycle) ||
+    !hasMatchingWorkflowFingerprint(lifecycle, workflow)
+  ) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
     return;
   }
-
-  const listed = kanbanStore.listColumns(parsed.value);
-  if (listed.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(listed.error));
-    return;
+  try {
+    let execution: WorkflowExecutionRecord | undefined;
+    const memoryScope = createMemoryScope({
+      tenantId: workflow.id,
+      workflowId: workflow.id,
+      enabled: true,
+      retentionDays: 30,
+    });
+    const resumed = await governanceLifecycle.executeBoundedPass({
+      lifecycleId: lifecycle.id,
+      execute: async () => {
+        const result = await executeWorkflowExecutionRun(
+          { workflowId: workflow.id },
+          {
+            catalog: workflowCatalog,
+            runWorkflow: workflowRuntime.runWorkflow,
+            runGovernedNode: createRunGovernedNodeCallback({
+              governedService: governedService(),
+              lifecycleId: lifecycle.id,
+              grantedPermissions: [],
+              memoryScope,
+              resolveMemoryScope: (sourceId) =>
+                resolvePersistedMemoryScope(
+                  applicationPersistence,
+                  workflow.id,
+                  sourceId,
+                ),
+              resolveMcpConnection: (connection) =>
+                resolveMcpConnection(applicationPersistence.read(), connection),
+              resolveMcpConnectionForSkill: (assetId) =>
+                resolveMcpConnectionForSkill(
+                  applicationPersistence.read(),
+                  assetId,
+                ),
+              now: () => new Date(),
+            }),
+          },
+        );
+        if (result.type === ResultType.Err) {
+          throw new Error(result.error.message);
+        }
+        execution = result.value;
+        await persistPromptExecutionProvenance({
+          lifecycleId: lifecycle.id,
+          execution: result.value,
+          governanceLifecycle,
+        });
+      },
+      classifyFailure: classifyExternalWorkflowFailure,
+      now: () => new Date().toISOString(),
+    });
+    if (execution) {
+      await applicationPersistence.saveCurrent();
+    }
+    respondJson(res, HttpStatus.Ok, { lifecycle: resumed });
+  } catch (error: unknown) {
+    respondError(res, mapGovernanceError(error));
   }
+};
 
-  respondJson(res, HttpStatus.Ok, {
-    columns: listed.value,
+const persistPromptExecutionProvenance = async (input: {
+  lifecycleId: string;
+  execution: WorkflowExecutionRecord;
+  governanceLifecycle: GovernanceLifecycleService;
+}): Promise<void> => {
+  const attempt = input.governanceLifecycle.read(input.lifecycleId)?.budgets
+    .execution;
+  if (!attempt) {
+    throw new Error("Prompt provenance requires an active execution attempt.");
+  }
+  for (const [index, provenance] of (
+    input.execution.promptProvenance ?? []
+  ).entries()) {
+    await input.governanceLifecycle.recordPromptExecution({
+      id: `${input.lifecycleId}:prompt:${attempt.toString()}:${index.toString()}`,
+      lifecycleId: input.lifecycleId,
+      assetId: provenance.assetId,
+      version: provenance.version,
+      bindings: provenance.bindings,
+      renderedFingerprint: provenance.renderedFingerprint,
+      validation: provenance.validation,
+      timestamp: input.execution.finishedAt ?? input.execution.startedAt,
+    });
+  }
+};
+
+const hasMatchingWorkflowFingerprint = (
+  lifecycle: GovernanceLifecycle,
+  workflow: WorkflowDefinitionRecord,
+): boolean =>
+  lifecycle.fingerprints.scope ===
+    `${workflow.id}@${workflow.version.toString()}` &&
+  lifecycle.fingerprints.evidence === workflow.updatedAt;
+
+const parseGovernanceLifecycleId = (
+  value: unknown,
+): Result<string, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return readRequiredString(value, "lifecycleId", ErrorMessage.InvalidBody);
+};
+
+const parseGovernanceLifecycleBegin = (
+  value: unknown,
+): Result<
+  {
+    id: string;
+    workflowId: string;
+    fingerprints: { scope: string; evidence: string };
+    limits: { execution: number; repair: number; review: number };
+  },
+  ApiError
+> => {
+  if (
+    !isRecord(value) ||
+    !isRecord(value["fingerprints"]) ||
+    !isRecord(value["limits"])
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  const id = readRequiredString(value, "lifecycleId", ErrorMessage.InvalidBody);
+  const workflowId = readRequiredString(
+    value,
+    "workflowId",
+    ErrorMessage.InvalidBody,
+  );
+  const scope = readRequiredString(
+    value["fingerprints"],
+    "scope",
+    ErrorMessage.InvalidBody,
+  );
+  const evidence = readRequiredString(
+    value["fingerprints"],
+    "evidence",
+    ErrorMessage.InvalidBody,
+  );
+  const execution = readNonNegativeIntegerField(value["limits"], "execution");
+  const repair = readNonNegativeIntegerField(value["limits"], "repair");
+  const review = readNonNegativeIntegerField(value["limits"], "review");
+  if (
+    id.type === ResultType.Err ||
+    workflowId.type === ResultType.Err ||
+    scope.type === ResultType.Err ||
+    evidence.type === ResultType.Err ||
+    execution.type === ResultType.Err ||
+    repair.type === ResultType.Err ||
+    review.type === ResultType.Err
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return ok({
+    id: id.value,
+    workflowId: workflowId.value,
+    fingerprints: { scope: scope.value, evidence: evidence.value },
+    limits: {
+      execution: execution.value,
+      repair: repair.value,
+      review: review.value,
+    },
   });
 };
 
-const handleKanbanColumnUpdate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
+const parseGovernanceLifecycleControl = (
+  value: unknown,
+  kind: GovernanceTransitionKind,
+): Result<{ lifecycleId: string; reason: string }, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
   }
-
-  const parsed = parseKanbanColumnUpdateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
+  const lifecycleId = readRequiredString(
+    value,
+    "lifecycleId",
+    ErrorMessage.InvalidBody,
+  );
+  const reason = readRequiredString(
+    value,
+    kind === GovernanceTransitionKind.RejectWithFeedback
+      ? "feedback"
+      : "reason",
+    ErrorMessage.InvalidBody,
+  );
+  if (lifecycleId.type === ResultType.Err || reason.type === ResultType.Err) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
   }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const updated = kanbanStore.updateColumn(parsed.value);
-  if (updated.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(updated.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    column: updated.value,
-  });
+  return ok({ lifecycleId: lifecycleId.value, reason: reason.value });
 };
 
-const handleKanbanColumnDelete = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseKanbanColumnDeleteRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const deleted = kanbanStore.deleteColumn(parsed.value);
-  if (deleted.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(deleted.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    column: deleted.value,
-  });
+const readNonNegativeIntegerField = (
+  value: Record<string, unknown>,
+  key: string,
+): Result<number, ApiError> => {
+  const candidate = value[key];
+  return typeof candidate === "number" &&
+    Number.isInteger(candidate) &&
+    candidate >= 0
+    ? ok(candidate)
+    : err({ status: HttpStatus.BadRequest, message: ErrorMessage.InvalidBody });
 };
 
-const handleKanbanTaskCreate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseKanbanTaskCreateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const created = kanbanStore.createTask(parsed.value);
-  if (created.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(created.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Created, {
-    task: created.value,
-  });
-};
-
-const handleKanbanTaskList = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseKanbanTaskListRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const listed = kanbanStore.listTasks(parsed.value);
-  if (listed.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(listed.error));
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    tasks: listed.value,
-  });
-};
-
-const handleKanbanTaskUpdate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseKanbanTaskUpdateRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const updated = kanbanStore.updateTask(parsed.value);
-  if (updated.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(updated.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    task: updated.value,
-  });
-};
-
-const handleKanbanTaskDelete = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  kanbanStore: KanbanStore,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseKanbanTaskDeleteRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const projectResult = getProjectById(projectStore, parsed.value.projectId);
-  if (projectResult.type === ResultType.Err) {
-    respondError(res, projectResult.error);
-    return;
-  }
-
-  const deleted = kanbanStore.deleteTask(parsed.value);
-  if (deleted.type === ResultType.Err) {
-    respondError(res, mapKanbanStoreError(deleted.error));
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Ok, {
-    task: deleted.value,
-  });
-};
+const mapGovernanceError = (error: unknown): ApiError => ({
+  status: HttpStatus.BadRequest,
+  message: error instanceof Error ? error.message : ErrorMessage.InvalidBody,
+});
 
 type ApiError = {
   status: number;
@@ -2962,638 +2334,14 @@ const readJsonBody = (
     });
   });
 
-const parseFileDeleteRequest = (
-  value: unknown,
-): Result<{ projectId: string; path: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readRequiredString(
-    value,
-    FileField.Path,
-    ErrorMessage.MissingPath,
-  );
-  if (path.type === ResultType.Err) {
-    return path;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    path: path.value,
-  });
-};
-
-const parseFileCreateRequest = (
-  value: unknown,
-): Result<{ projectId: string; path: string; content: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readRequiredString(
-    value,
-    FileField.Path,
-    ErrorMessage.MissingPath,
-  );
-  if (path.type === ResultType.Err) {
-    return path;
-  }
-
-  const content = readRequiredStringAllowEmpty(
-    value,
-    FileField.Content,
-    ErrorMessage.MissingContent,
-  );
-  if (content.type === ResultType.Err) {
-    return content;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    path: path.value,
-    content: content.value,
-  });
-};
-
-const parseFileMoveRequest = (
-  value: unknown,
-): Result<
-  { projectId: string; sourcePath: string; targetPath: string },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const sourcePath = readRequiredString(
-    value,
-    FileMoveField.SourcePath,
-    ErrorMessage.MissingSourcePath,
-  );
-  if (sourcePath.type === ResultType.Err) {
-    return sourcePath;
-  }
-
-  const targetPath = readRequiredString(
-    value,
-    FileMoveField.TargetPath,
-    ErrorMessage.MissingTargetPath,
-  );
-  if (targetPath.type === ResultType.Err) {
-    return targetPath;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    sourcePath: sourcePath.value,
-    targetPath: targetPath.value,
-  });
-};
-
-const parseFileWriteRequest = (
-  value: unknown,
-): Result<{ projectId: string; path: string; content: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readRequiredString(
-    value,
-    FileField.Path,
-    ErrorMessage.MissingPath,
-  );
-  if (path.type === ResultType.Err) {
-    return path;
-  }
-
-  const content = readRequiredStringAllowEmpty(
-    value,
-    FileField.Content,
-    ErrorMessage.MissingContent,
-  );
-  if (content.type === ResultType.Err) {
-    return content;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    path: path.value,
-    content: content.value,
-  });
-};
-
-const parseCreateProject = (
-  value: unknown,
-): Result<ProjectCreateInput, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const name = readRequiredString(
-    value,
-    ProjectField.Name,
-    ErrorMessage.MissingName,
-  );
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
-
-  return ok({
-    name: name.value,
-    rootPath,
-  });
-};
-
-const parseOpenProject = (
-  value: unknown,
-): Result<ProjectOpenInput, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const rootPath = readOptionalNullableString(value, ProjectField.RootPath);
-  const name = readOptionalString(value, ProjectField.Name);
-
-  if (name) {
-    return ok({
-      name,
-      rootPath,
-    });
-  }
-
-  return ok({
-    rootPath,
-  });
-};
-
-const parseFileTreeRequest = (
-  value: unknown,
-): Result<{ projectId: string; path?: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readOptionalString(value, FileField.Path);
-
-  if (path) {
-    return ok({
-      projectId: projectId.value,
-      path,
-    });
-  }
-
-  return ok({
-    projectId: projectId.value,
-  });
-};
-
-const parseFileSearchRequest = (
-  value: unknown,
-): Result<
-  {
-    projectId: string;
-    query: string;
-    isRegex: boolean;
-    matchCase: boolean;
-    wholeWord: boolean;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileSearchField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const query = readRequiredString(
-    value,
-    FileSearchField.Query,
-    ErrorMessage.MissingQuery,
-  );
-  if (query.type === ResultType.Err) {
-    return query;
-  }
-
-  const isRegex = readOptionalBooleanField(value, FileSearchField.IsRegex);
-  if (isRegex.type === ResultType.Err) {
-    return isRegex;
-  }
-
-  const matchCase = readOptionalBooleanField(value, FileSearchField.MatchCase);
-  if (matchCase.type === ResultType.Err) {
-    return matchCase;
-  }
-
-  const wholeWord = readOptionalBooleanField(value, FileSearchField.WholeWord);
-  if (wholeWord.type === ResultType.Err) {
-    return wholeWord;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    query: query.value,
-    isRegex: isRegex.value ?? false,
-    matchCase: matchCase.value ?? false,
-    wholeWord: wholeWord.value ?? false,
-  });
-};
-
-const parseFileReadRequest = (
-  value: unknown,
-): Result<
-  {
-    projectId: string;
-    path: string;
-    startLine?: number;
-    lineCount?: number;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    FileField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const path = readRequiredString(
-    value,
-    FileField.Path,
-    ErrorMessage.MissingPath,
-  );
-  if (path.type === ResultType.Err) {
-    return path;
-  }
-
-  const startLine = readOptionalPositiveIntegerField(
-    value,
-    FileField.StartLine,
-  );
-  if (startLine.type === ResultType.Err) {
-    return startLine;
-  }
-
-  const lineCount = readOptionalPositiveIntegerField(
-    value,
-    FileField.LineCount,
-  );
-  if (lineCount.type === ResultType.Err) {
-    return lineCount;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    path: path.value,
-    ...(startLine.value !== undefined ? { startLine: startLine.value } : {}),
-    ...(lineCount.value !== undefined ? { lineCount: lineCount.value } : {}),
-  });
-};
-
-const parseSessionStartRequest = (
-  value: unknown,
-): Result<{ projectId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    SessionField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-  });
-};
-
-const parseSessionStopRequest = (
-  value: unknown,
-): Result<{ sessionId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const sessionId = readRequiredString(
-    value,
-    SessionField.SessionId,
-    ErrorMessage.MissingSessionId,
-  );
-  if (sessionId.type === ResultType.Err) {
-    return sessionId;
-  }
-
-  return ok({
-    sessionId: sessionId.value,
-  });
-};
-
-const parseHistoryListRequest = (
-  value: unknown,
-): Result<{ status?: HistoryRunStatus; limit?: number }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const statusValue = readOptionalStringField(value, HistoryField.Status);
-  if (statusValue.type === ResultType.Err) {
-    return statusValue;
-  }
-
-  const limitValue = readOptionalNumberField(value, HistoryField.Limit);
-  if (limitValue.type === ResultType.Err) {
-    return limitValue;
-  }
-
-  let status: HistoryRunStatus | undefined;
-  if (statusValue.value !== undefined) {
-    const parsedStatus = parseHistoryRunStatus(statusValue.value);
-    if (parsedStatus.type === ResultType.Err) {
-      return parsedStatus;
-    }
-
-    status = parsedStatus.value;
-  }
-
-  const input: { status?: HistoryRunStatus; limit?: number } = {};
-
-  if (status !== undefined) {
-    input.status = status;
-  }
-
-  if (limitValue.value !== undefined) {
-    input.limit = limitValue.value;
-  }
-
-  return ok(input);
-};
-
-const parseHistoryEventsRequest = (
-  value: unknown,
-): Result<{ runId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const runId = readRequiredString(
-    value,
-    HistoryField.RunId,
-    ErrorMessage.MissingRunId,
-  );
-  if (runId.type === ResultType.Err) {
-    return runId;
-  }
-
-  return ok({
-    runId: runId.value,
-  });
-};
-
-const parseLogsQueryRequest = (
-  value: unknown,
-): Result<{ level?: LogLevel; runId?: string; limit?: number }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const levelValue = readOptionalStringField(value, LogsField.Level);
-  if (levelValue.type === ResultType.Err) {
-    return levelValue;
-  }
-
-  const runIdValue = readOptionalStringField(value, LogsField.RunId);
-  if (runIdValue.type === ResultType.Err) {
-    return runIdValue;
-  }
-
-  const limitValue = readOptionalNumberField(value, LogsField.Limit);
-  if (limitValue.type === ResultType.Err) {
-    return limitValue;
-  }
-
-  let level: LogLevel | undefined;
-  if (levelValue.value !== undefined) {
-    const parsedLevel = parseLogLevel(levelValue.value);
-    if (parsedLevel.type === ResultType.Err) {
-      return parsedLevel;
-    }
-
-    level = parsedLevel.value;
-  }
-
-  const input: { level?: LogLevel; runId?: string; limit?: number } = {};
-
-  if (level !== undefined) {
-    input.level = level;
-  }
-
-  if (runIdValue.value !== undefined) {
-    input.runId = runIdValue.value;
-  }
-
-  if (limitValue.value !== undefined) {
-    input.limit = limitValue.value;
-  }
-
-  return ok(input);
-};
-
-const LogsAppendField = {
-  Id: "id",
-  Timestamp: "timestamp",
-  Level: "level",
-  Message: "message",
-  RunId: "runId",
-} as const;
-
-const parseLogsAppendRequest = (
-  value: unknown,
-): Result<ServerLogEntry, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const id = readRequiredString(
-    value,
-    LogsAppendField.Id,
-    ErrorMessage.InvalidBody,
-  );
-  if (id.type === ResultType.Err) {
-    return id;
-  }
-
-  const timestamp = readRequiredString(
-    value,
-    LogsAppendField.Timestamp,
-    ErrorMessage.InvalidBody,
-  );
-  if (timestamp.type === ResultType.Err) {
-    return timestamp;
-  }
-
-  const levelValue = readRequiredString(
-    value,
-    LogsAppendField.Level,
-    ErrorMessage.InvalidBody,
-  );
-  if (levelValue.type === ResultType.Err) {
-    return levelValue;
-  }
-
-  const parsedLevel = parseLogLevel(levelValue.value);
-  if (parsedLevel.type === ResultType.Err) {
-    return parsedLevel;
-  }
-
-  const message = readRequiredString(
-    value,
-    LogsAppendField.Message,
-    ErrorMessage.InvalidBody,
-  );
-  if (message.type === ResultType.Err) {
-    return message;
-  }
-
-  const runId = readOptionalString(value, LogsAppendField.RunId);
-
-  const entry: ServerLogEntry = {
-    id: id.value,
-    timestamp: timestamp.value,
-    level: parsedLevel.value,
-    message: message.value,
-  };
-
-  if (runId) {
-    entry.runId = runId;
-  }
-
-  return ok(entry);
-};
-
 const parseProvidersListRequest = (
   value: unknown,
-): Result<{ projectId?: string; profileId?: string }, ApiError> => {
+): Result<{ profileId?: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody,
     });
-  }
-
-  const projectIdValue = readOptionalStringField(
-    value,
-    ProviderField.ProjectId,
-  );
-  if (projectIdValue.type === ResultType.Err) {
-    return projectIdValue;
   }
 
   const profileIdValue = readOptionalStringField(
@@ -3604,31 +2352,7 @@ const parseProvidersListRequest = (
     return profileIdValue;
   }
 
-  if (
-    projectIdValue.value !== undefined &&
-    profileIdValue.value === undefined
-  ) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingProfileId,
-    });
-  }
-
-  if (
-    profileIdValue.value !== undefined &&
-    projectIdValue.value === undefined
-  ) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingProjectId,
-    });
-  }
-
-  const input: { projectId?: string; profileId?: string } = {};
-
-  if (projectIdValue.value !== undefined) {
-    input.projectId = projectIdValue.value;
-  }
+  const input: { profileId?: string } = {};
 
   if (profileIdValue.value !== undefined) {
     input.profileId = profileIdValue.value;
@@ -3639,24 +2363,12 @@ const parseProvidersListRequest = (
 
 const parseProvidersSelectRequest = (
   value: unknown,
-): Result<
-  { projectId: string; profileId: string; providerId: string },
-  ApiError
-> => {
+): Result<{ profileId: string; providerId: string }, ApiError> => {
   if (!isRecord(value)) {
     return err({
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody,
     });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    ProviderField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
   }
 
   const profileId = readRequiredString(
@@ -3678,7 +2390,6 @@ const parseProvidersSelectRequest = (
   }
 
   return ok({
-    projectId: projectId.value,
     profileId: profileId.value,
     providerId: providerId.value,
   });
@@ -3688,7 +2399,6 @@ const parseProviderSettingsRequest = (
   value: unknown,
 ): Result<
   {
-    projectId: string;
     profileId: string;
     providerId: string;
     config: Record<string, unknown>;
@@ -3700,15 +2410,6 @@ const parseProviderSettingsRequest = (
       status: HttpStatus.BadRequest,
       message: ErrorMessage.InvalidBody,
     });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    ProviderField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
   }
 
   const profileId = readRequiredString(
@@ -3739,685 +2440,15 @@ const parseProviderSettingsRequest = (
   }
 
   return ok({
-    projectId: projectId.value,
     profileId: profileId.value,
     providerId: providerId.value,
     config: config.value,
   });
 };
 
-const parseKanbanBoardCreateRequest = (
-  value: unknown,
-): Result<{ projectId: string; name: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const name = readRequiredString(
-    value,
-    KanbanBoardField.Name,
-    ErrorMessage.MissingBoardName,
-  );
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    name: name.value,
-  });
-};
-
-const parseKanbanBoardListRequest = (
-  value: unknown,
-): Result<{ projectId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-  });
-};
-
-const parseKanbanBoardUpdateRequest = (
-  value: unknown,
-): Result<{ projectId: string; boardId: string; name: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanBoardField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const name = readRequiredString(
-    value,
-    KanbanBoardField.Name,
-    ErrorMessage.MissingBoardName,
-  );
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    boardId: boardId.value,
-    name: name.value,
-  });
-};
-
-const parseKanbanBoardDeleteRequest = (
-  value: unknown,
-): Result<{ projectId: string; boardId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanBoardField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanBoardField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    boardId: boardId.value,
-  });
-};
-
-const parseKanbanColumnCreateRequest = (
-  value: unknown,
-): Result<
-  { projectId: string; boardId: string; name: string; position?: number },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const name = readRequiredString(
-    value,
-    KanbanColumnField.Name,
-    ErrorMessage.MissingColumnName,
-  );
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-
-  const position = readOptionalNumberField(value, KanbanColumnField.Position);
-  if (position.type === ResultType.Err) {
-    return position;
-  }
-
-  const input: {
-    projectId: string;
-    boardId: string;
-    name: string;
-    position?: number;
-  } = {
-    projectId: projectId.value,
-    boardId: boardId.value,
-    name: name.value,
-  };
-
-  if (position.value !== undefined) {
-    input.position = position.value;
-  }
-
-  return ok(input);
-};
-
-const parseKanbanColumnListRequest = (
-  value: unknown,
-): Result<{ projectId: string; boardId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    boardId: boardId.value,
-  });
-};
-
-const parseKanbanColumnUpdateRequest = (
-  value: unknown,
-): Result<
-  {
-    projectId: string;
-    boardId: string;
-    columnId: string;
-    name?: string;
-    position?: number;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const columnId = readRequiredString(
-    value,
-    KanbanColumnField.ColumnId,
-    ErrorMessage.MissingColumnId,
-  );
-  if (columnId.type === ResultType.Err) {
-    return columnId;
-  }
-
-  const name = readOptionalStringField(value, KanbanColumnField.Name);
-  if (name.type === ResultType.Err) {
-    return name;
-  }
-
-  const position = readOptionalNumberField(value, KanbanColumnField.Position);
-  if (position.type === ResultType.Err) {
-    return position;
-  }
-
-  const input: {
-    projectId: string;
-    boardId: string;
-    columnId: string;
-    name?: string;
-    position?: number;
-  } = {
-    projectId: projectId.value,
-    boardId: boardId.value,
-    columnId: columnId.value,
-  };
-
-  if (name.value !== undefined) {
-    input.name = name.value;
-  }
-
-  if (position.value !== undefined) {
-    input.position = position.value;
-  }
-
-  if (input.name === undefined && input.position === undefined) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  return ok(input);
-};
-
-const parseKanbanColumnDeleteRequest = (
-  value: unknown,
-): Result<
-  { projectId: string; boardId: string; columnId: string },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanColumnField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanColumnField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const columnId = readRequiredString(
-    value,
-    KanbanColumnField.ColumnId,
-    ErrorMessage.MissingColumnId,
-  );
-  if (columnId.type === ResultType.Err) {
-    return columnId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    boardId: boardId.value,
-    columnId: columnId.value,
-  });
-};
-
-const parseKanbanTaskCreateRequest = (
-  value: unknown,
-): Result<
-  {
-    projectId: string;
-    boardId: string;
-    columnId: string;
-    title: string;
-    description?: string;
-    position?: number;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const columnId = readRequiredString(
-    value,
-    KanbanTaskField.ColumnId,
-    ErrorMessage.MissingColumnId,
-  );
-  if (columnId.type === ResultType.Err) {
-    return columnId;
-  }
-
-  const title = readRequiredString(
-    value,
-    KanbanTaskField.Title,
-    ErrorMessage.MissingTaskTitle,
-  );
-  if (title.type === ResultType.Err) {
-    return title;
-  }
-
-  const description = readOptionalStringField(
-    value,
-    KanbanTaskField.Description,
-  );
-  if (description.type === ResultType.Err) {
-    return description;
-  }
-
-  const position = readOptionalNumberField(value, KanbanTaskField.Position);
-  if (position.type === ResultType.Err) {
-    return position;
-  }
-
-  const input: {
-    projectId: string;
-    boardId: string;
-    columnId: string;
-    title: string;
-    description?: string;
-    position?: number;
-  } = {
-    projectId: projectId.value,
-    boardId: boardId.value,
-    columnId: columnId.value,
-    title: title.value,
-  };
-
-  if (description.value !== undefined) {
-    input.description = description.value;
-  }
-
-  if (position.value !== undefined) {
-    input.position = position.value;
-  }
-
-  return ok(input);
-};
-
-const parseKanbanTaskListRequest = (
-  value: unknown,
-): Result<
-  { projectId: string; boardId: string; columnId?: string },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const columnId = readOptionalStringField(value, KanbanTaskField.ColumnId);
-  if (columnId.type === ResultType.Err) {
-    return columnId;
-  }
-
-  const input: { projectId: string; boardId: string; columnId?: string } = {
-    projectId: projectId.value,
-    boardId: boardId.value,
-  };
-
-  if (columnId.value !== undefined) {
-    input.columnId = columnId.value;
-  }
-
-  return ok(input);
-};
-
-const parseKanbanTaskUpdateRequest = (
-  value: unknown,
-): Result<
-  {
-    projectId: string;
-    boardId: string;
-    taskId: string;
-    columnId?: string;
-    title?: string;
-    description?: string;
-    position?: number;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const taskId = readRequiredString(
-    value,
-    KanbanTaskField.TaskId,
-    ErrorMessage.MissingTaskId,
-  );
-  if (taskId.type === ResultType.Err) {
-    return taskId;
-  }
-
-  const title = readOptionalStringField(value, KanbanTaskField.Title);
-  if (title.type === ResultType.Err) {
-    return title;
-  }
-
-  const description = readOptionalStringField(
-    value,
-    KanbanTaskField.Description,
-  );
-  if (description.type === ResultType.Err) {
-    return description;
-  }
-
-  const columnId = readOptionalStringField(value, KanbanTaskField.ColumnId);
-  if (columnId.type === ResultType.Err) {
-    return columnId;
-  }
-
-  const position = readOptionalNumberField(value, KanbanTaskField.Position);
-  if (position.type === ResultType.Err) {
-    return position;
-  }
-
-  const input: {
-    projectId: string;
-    boardId: string;
-    taskId: string;
-    columnId?: string;
-    title?: string;
-    description?: string;
-    position?: number;
-  } = {
-    projectId: projectId.value,
-    boardId: boardId.value,
-    taskId: taskId.value,
-  };
-
-  if (title.value !== undefined) {
-    input.title = title.value;
-  }
-
-  if (description.value !== undefined) {
-    input.description = description.value;
-  }
-
-  if (columnId.value !== undefined) {
-    input.columnId = columnId.value;
-  }
-
-  if (position.value !== undefined) {
-    input.position = position.value;
-  }
-
-  if (
-    input.title === undefined &&
-    input.description === undefined &&
-    input.columnId === undefined &&
-    input.position === undefined
-  ) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  return ok(input);
-};
-
-const parseKanbanTaskDeleteRequest = (
-  value: unknown,
-): Result<{ projectId: string; boardId: string; taskId: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const projectId = readRequiredString(
-    value,
-    KanbanTaskField.ProjectId,
-    ErrorMessage.MissingProjectId,
-  );
-  if (projectId.type === ResultType.Err) {
-    return projectId;
-  }
-
-  const boardId = readRequiredString(
-    value,
-    KanbanTaskField.BoardId,
-    ErrorMessage.MissingBoardId,
-  );
-  if (boardId.type === ResultType.Err) {
-    return boardId;
-  }
-
-  const taskId = readRequiredString(
-    value,
-    KanbanTaskField.TaskId,
-    ErrorMessage.MissingTaskId,
-  );
-  if (taskId.type === ResultType.Err) {
-    return taskId;
-  }
-
-  return ok({
-    projectId: projectId.value,
-    boardId: boardId.value,
-    taskId: taskId.value,
-  });
-};
-
 const handleWorkflowDefinitionList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
@@ -4432,8 +2463,7 @@ const handleWorkflowDefinitionList = async (
     return;
   }
 
-  const result = executeWorkflowDefinitionList(parsed.value, {
-    projectStore,
+  const result = executeWorkflowDefinitionList({
     catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
@@ -4510,7 +2540,7 @@ const handleWorkflowDefinitionRestoreVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4532,7 +2562,7 @@ const handleWorkflowDefinitionRestoreVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -4542,7 +2572,7 @@ const handleWorkflowDefinitionRestoreVersionPart = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4566,7 +2596,7 @@ const handleWorkflowDefinitionRestoreVersionPart = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -4576,7 +2606,7 @@ const handleWorkflowDefinitionCloneVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4598,7 +2628,7 @@ const handleWorkflowDefinitionCloneVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -4671,7 +2701,7 @@ const handleWorkflowDefinitionImportVersion = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4693,7 +2723,7 @@ const handleWorkflowDefinitionImportVersion = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -4735,7 +2765,7 @@ const handleWorkflowDefinitionCleanupVersions = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4759,16 +2789,15 @@ const handleWorkflowDefinitionCleanupVersions = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, result.value);
 };
 
 const handleWorkflowDefinitionUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4783,7 +2812,6 @@ const handleWorkflowDefinitionUpsert = async (
   }
 
   const result = executeWorkflowDefinitionUpsert(parsed.value, {
-    projectStore,
     catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
@@ -4791,7 +2819,7 @@ const handleWorkflowDefinitionUpsert = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
   });
@@ -4801,7 +2829,10 @@ const handleWorkflowDefinitionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4823,16 +2854,174 @@ const handleWorkflowDefinitionDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  const revokedAt = new Date().toISOString();
+  const keyUpdate = revokeExternalApiKeysForWorkflow({
+    keys: applicationPersistence.read().externalApiKeys,
+    workflowId: parsed.value.workflowId,
+    revokedAt,
+  });
+  if (credentialRepository) {
+    await credentialRepository.revokeForWorkflow({
+      workflowId: parsed.value.workflowId,
+      now: revokedAt,
+    });
+  }
+  await applicationPersistence.updateExternalApiKeys(keyUpdate.keys);
   respondJson(res, HttpStatus.Ok, {
     definition: result.value,
+    revokedKeys: keyUpdate.revoked,
   });
+};
+
+const handleExternalCredentialCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  workflowCatalog: WorkflowCatalogStore,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  credentialSecretStore: ExternalWorkflowCredentialSecretStore | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const parsed = parseExternalCredentialCreateRequest(body.value);
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
+  if (
+    parsed.value.scope.kind === ExternalApiKeyScopeKind.SelectedWorkflows &&
+    parsed.value.scope.workflowIds.some(
+      (workflowId) => !workflowCatalog.getWorkflow(workflowId),
+    )
+  ) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  if (!credentialRepository || !credentialSecretStore) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  if (
+    !(await credentialRepository.isNameAvailable({ name: parsed.value.name }))
+  ) {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+  const created = createExternalApiKey({ ...parsed.value, now: new Date() });
+  const creation = await credentialRepository.create({
+    credential: toExternalApiKeyView(created.key),
+    plaintext: created.plaintext,
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (creation === "duplicate") {
+    respondError(res, {
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.DuplicateApiKeyName,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, {
+    credential: redactExternalCredentialResponse(created.key),
+    plaintextCredential: created.plaintext,
+  });
+};
+
+const handleExternalCredentialRotate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const credentialId = readCredentialId(body.value);
+  if (credentialId.type === ResultType.Err) {
+    respondError(res, credentialId.error);
+    return;
+  }
+  const plaintext = createExternalApiKey({
+    name: "rotation",
+    scope: { kind: ExternalApiKeyScopeKind.AllWorkflows },
+    id: credentialId.value,
+    now: new Date(),
+  }).plaintext;
+  if (!credentialRepository) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  const now = new Date().toISOString();
+  const rotated = await credentialRepository.rotate({
+    credentialId: credentialId.value,
+    plaintext,
+    now,
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (!rotated) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { plaintextCredential: plaintext });
+};
+
+const handleExternalCredentialRevoke = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  credentialRepository:
+    | PostgresExternalWorkflowCredentialRepository
+    | undefined,
+  ideAuth: IdeAuthService,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  if (body.type === ResultType.Err) {
+    respondError(res, body.error);
+    return;
+  }
+  const credentialId = readCredentialId(body.value);
+  if (credentialId.type === ResultType.Err) {
+    respondError(res, credentialId.error);
+    return;
+  }
+  if (!credentialRepository) {
+    respondCredentialStorageUnavailable(res);
+    return;
+  }
+  const revoked = await credentialRepository.revoke({
+    credentialId: credentialId.value,
+    now: new Date().toISOString(),
+    actor: readCredentialLifecycleActor(req, ideAuth),
+  });
+  if (!revoked) {
+    respondError(res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+  respondJson(res, HttpStatus.Ok, { credentialId: credentialId.value });
 };
 
 const handleWorkflowAssetList = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
@@ -4848,7 +3037,6 @@ const handleWorkflowAssetList = async (
   }
 
   const result = executeWorkflowAssetList(parsed.value, {
-    projectStore,
     catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
@@ -4894,9 +3082,8 @@ const handleWorkflowAssetGet = async (
 const handleWorkflowAssetUpsert = async (
   req: IncomingMessage,
   res: ServerResponse,
-  projectStore: ProjectStore,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4911,7 +3098,6 @@ const handleWorkflowAssetUpsert = async (
   }
 
   const result = executeWorkflowAssetUpsert(parsed.value, {
-    projectStore,
     catalog: workflowCatalog,
   });
   if (result.type === ResultType.Err) {
@@ -4919,7 +3105,7 @@ const handleWorkflowAssetUpsert = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     asset: result.value,
   });
@@ -4929,7 +3115,7 @@ const handleWorkflowAssetDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -4951,7 +3137,7 @@ const handleWorkflowAssetDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     asset: result.value,
   });
@@ -5051,7 +3237,7 @@ const handleWorkflowExecutionDelete = async (
   req: IncomingMessage,
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5073,7 +3259,7 @@ const handleWorkflowExecutionDelete = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -5084,7 +3270,7 @@ const handleWorkflowExecutionCancel = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5108,7 +3294,7 @@ const handleWorkflowExecutionCancel = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -5119,7 +3305,9 @@ const handleWorkflowExecutionRun = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5133,19 +3321,130 @@ const handleWorkflowExecutionRun = async (
     return;
   }
 
-  const result = await executeWorkflowExecutionRun(parsed.value, {
+  const result = await executeGovernedWorkflowExecution(parsed.value, {
     catalog: workflowCatalog,
     runWorkflow: workflowRuntime.runWorkflow,
+    governanceLifecycle,
+    applicationPersistence,
+    governedService,
   });
   if (result.type === ResultType.Err) {
     respondError(res, result.error);
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
+};
+
+const executeGovernedWorkflowExecution = async (
+  request: {
+    workflowId: string;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+  },
+  dependencies: {
+    catalog: WorkflowCatalogStore;
+    runWorkflow: WorkflowRuntimeService["runWorkflow"];
+    governanceLifecycle: GovernanceLifecycleService;
+    applicationPersistence: ApplicationPersistence;
+    governedService: () => GovernedAgentToolService;
+    signal?: AbortSignal;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  },
+): Promise<Result<WorkflowExecutionRecord, ApiError>> => {
+  const workflow = dependencies.catalog.getWorkflow(request.workflowId);
+  if (!workflow) {
+    return err({ status: HttpStatus.NotFound, message: ErrorMessage.NotFound });
+  }
+
+  const lifecycle = await dependencies.governanceLifecycle.begin({
+    id: `ide:${workflow.id}:${randomUUID()}`,
+    workflowId: workflow.id,
+    fingerprints: {
+      scope: `${workflow.id}@${workflow.version.toString()}`,
+      evidence: workflow.updatedAt,
+    },
+    limits: {
+      execution: workflow.executionPolicy.maxNodeRetries + 1,
+      repair: workflow.executionPolicy.maxNodeRetries,
+      review: 1,
+    },
+    now: new Date().toISOString(),
+  });
+  await dependencies.governanceLifecycle.transition({
+    lifecycleId: lifecycle.id,
+    kind: GovernanceTransitionKind.StartPlanning,
+    actorId: "ide-session",
+    reason: "IDE requested a bounded workflow pass.",
+    now: new Date().toISOString(),
+  });
+
+  let execution: WorkflowExecutionRecord | undefined;
+  const memoryScope = createMemoryScope({
+    tenantId: workflow.id,
+    workflowId: workflow.id,
+    enabled: true,
+    retentionDays: 30,
+  });
+  await dependencies.governanceLifecycle.executeBoundedPass({
+    lifecycleId: lifecycle.id,
+    execute: async () => {
+      const result = await executeWorkflowExecutionRun(request, {
+        catalog: dependencies.catalog,
+        runWorkflow: dependencies.runWorkflow,
+        ...(dependencies.signal ? { signal: dependencies.signal } : {}),
+        ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
+        runGovernedNode: createRunGovernedNodeCallback({
+          governedService: dependencies.governedService(),
+          lifecycleId: lifecycle.id,
+          grantedPermissions: [],
+          memoryScope,
+          resolveMemoryScope: (sourceId) =>
+            resolvePersistedMemoryScope(
+              dependencies.applicationPersistence,
+              workflow.id,
+              sourceId,
+            ),
+          resolveMcpConnection: (connection) =>
+            resolveMcpConnection(
+              dependencies.applicationPersistence.read(),
+              connection,
+            ),
+          resolveMcpConnectionForSkill: (assetId) =>
+            resolveMcpConnectionForSkill(
+              dependencies.applicationPersistence.read(),
+              assetId,
+            ),
+          now: () => new Date(),
+        }),
+      });
+      if (result.type === ResultType.Err) {
+        throw new Error(result.error.message);
+      }
+      execution = dependencies.catalog.upsertExecution({
+        ...result.value,
+        lifecycleId: lifecycle.id,
+      });
+      await persistPromptExecutionProvenance({
+        lifecycleId: lifecycle.id,
+        execution,
+        governanceLifecycle: dependencies.governanceLifecycle,
+      });
+    },
+    classifyFailure: classifyExternalWorkflowFailure,
+    now: () => new Date().toISOString(),
+  });
+  await dependencies.applicationPersistence.saveCurrent();
+
+  if (!execution) {
+    return err({
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.InternalServerError,
+    });
+  }
+  return ok(execution);
 };
 
 const handleWorkflowNodeExecutionRun = async (
@@ -5153,7 +3452,7 @@ const handleWorkflowNodeExecutionRun = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5176,7 +3475,7 @@ const handleWorkflowNodeExecutionRun = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, {
     execution: result.value,
   });
@@ -5189,7 +3488,9 @@ const handleWorkflowExecutionStream = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
+  governanceLifecycle: GovernanceLifecycleService,
+  governedService: () => GovernedAgentToolService,
 ): Promise<void> => {
   const workflowId = url.searchParams.get(QueryParam.WorkflowId) ?? undefined;
   if (!workflowId || workflowId.trim().length === 0) {
@@ -5199,37 +3500,39 @@ const handleWorkflowExecutionStream = async (
     });
     return;
   }
+  const seedNodeOutputs = readJsonQueryParam(
+    url.searchParams.get(QueryParam.SeedNodeOutputs),
+  );
+  const parsed = parseWorkflowExecutionRunRequest({
+    workflowId,
+    ...(seedNodeOutputs ? { seedNodeOutputs } : {}),
+  });
+  if (parsed.type === ResultType.Err) {
+    respondError(res, parsed.error);
+    return;
+  }
 
   const stream = createSseStream(res);
-  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const progressSaves = createApplicationSaveScheduler(applicationPersistence);
   const executionAbortController = new AbortController();
-  let workflowRunId: string | null = null;
+  const streamEvents = createWorkflowStreamEvents({
+    workflowCatalog,
+    activeWorkflowExecutions,
+    executionAbortController,
+    progressSaves,
+    stream,
+  });
 
   try {
-    const result = await executeWorkflowExecutionRun(
-      { workflowId },
-      {
-        catalog: workflowCatalog,
-        runWorkflow: workflowRuntime.runWorkflow,
-        signal: executionAbortController.signal,
-        onEvent: (event) => {
-          if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
-            workflowRunId = event.workflowRunId;
-            activeWorkflowExecutions.register(
-              event.workflowRunId,
-              executionAbortController,
-            );
-          }
-          if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
-            progressSaves.schedule();
-          }
-          stream.send({
-            event: readWorkflowStreamEventName(event),
-            data: event,
-          });
-        },
-      },
-    );
+    const result = await executeGovernedWorkflowExecution(parsed.value, {
+      catalog: workflowCatalog,
+      runWorkflow: workflowRuntime.runWorkflow,
+      signal: executionAbortController.signal,
+      onEvent: streamEvents.onEvent,
+      governanceLifecycle,
+      applicationPersistence,
+      governedService,
+    });
 
     if (result.type === ResultType.Err) {
       stream.send({
@@ -5246,7 +3549,8 @@ const handleWorkflowExecutionStream = async (
     }
 
     await progressSaves.flush();
-    await workspacePersistence.saveCurrent();
+    await applicationPersistence.saveCurrent();
+    streamEvents.sendTerminal();
   } catch (error) {
     stream.send({
       event: WorkflowRuntimeEventType.WorkflowFailed,
@@ -5260,10 +3564,8 @@ const handleWorkflowExecutionStream = async (
       },
     });
   } finally {
-    if (workflowRunId) {
-      activeWorkflowExecutions.delete(workflowRunId);
-    }
-    await progressSaves.flush();
+    streamEvents.dispose();
+    await progressSaves.flush().catch(() => undefined);
     stream.close();
   }
 };
@@ -5274,7 +3576,7 @@ const handleWorkflowNodeExecutionStream = async (
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
   activeWorkflowExecutions: ActiveWorkflowExecutionRegistry,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const parsed = parseWorkflowNodeExecutionRunRequest(
     readWorkflowNodeExecutionStreamRequest(url),
@@ -5285,31 +3587,22 @@ const handleWorkflowNodeExecutionStream = async (
   }
 
   const stream = createSseStream(res);
-  const progressSaves = createWorkspaceSaveScheduler(workspacePersistence);
+  const progressSaves = createApplicationSaveScheduler(applicationPersistence);
   const executionAbortController = new AbortController();
-  let workflowRunId: string | null = null;
+  const streamEvents = createWorkflowStreamEvents({
+    workflowCatalog,
+    activeWorkflowExecutions,
+    executionAbortController,
+    progressSaves,
+    stream,
+  });
 
   try {
     const result = await executeWorkflowNodeExecutionRun(parsed.value, {
       catalog: workflowCatalog,
       runNode: workflowRuntime.runNode,
       signal: executionAbortController.signal,
-      onEvent: (event) => {
-        if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
-          workflowRunId = event.workflowRunId;
-          activeWorkflowExecutions.register(
-            event.workflowRunId,
-            executionAbortController,
-          );
-        }
-        if (persistWorkflowRuntimeProgress(workflowCatalog, event)) {
-          progressSaves.schedule();
-        }
-        stream.send({
-          event: readWorkflowStreamEventName(event),
-          data: event,
-        });
-      },
+      onEvent: streamEvents.onEvent,
     });
 
     if (result.type === ResultType.Err) {
@@ -5327,7 +3620,8 @@ const handleWorkflowNodeExecutionStream = async (
     }
 
     await progressSaves.flush();
-    await workspacePersistence.saveCurrent();
+    await applicationPersistence.saveCurrent();
+    streamEvents.sendTerminal();
   } catch (error) {
     stream.send({
       event: WorkflowRuntimeEventType.WorkflowFailed,
@@ -5343,10 +3637,8 @@ const handleWorkflowNodeExecutionStream = async (
       },
     });
   } finally {
-    if (workflowRunId) {
-      activeWorkflowExecutions.delete(workflowRunId);
-    }
-    await progressSaves.flush();
+    streamEvents.dispose();
+    await progressSaves.flush().catch(() => undefined);
     stream.close();
   }
 };
@@ -5387,7 +3679,7 @@ const handleWorkflowNodeProviderTest = async (
   res: ServerResponse,
   workflowCatalog: WorkflowCatalogStore,
   workflowRuntime: WorkflowRuntimeService,
-  workspacePersistence: WorkspacePersistence,
+  applicationPersistence: ApplicationPersistence,
 ): Promise<void> => {
   const bodyResult = await readJsonBody(req);
   if (bodyResult.type === ResultType.Err) {
@@ -5410,7 +3702,7 @@ const handleWorkflowNodeProviderTest = async (
     return;
   }
 
-  await workspacePersistence.saveCurrent();
+  await applicationPersistence.saveCurrent();
   respondJson(res, HttpStatus.Ok, result.value);
 };
 
@@ -5443,8 +3735,8 @@ const createActiveWorkflowExecutionRegistry =
     };
   };
 
-const createWorkspaceSaveScheduler = (
-  workspacePersistence: WorkspacePersistence,
+const createApplicationSaveScheduler = (
+  applicationPersistence: ApplicationPersistence,
 ): {
   schedule: () => void;
   flush: () => Promise<void>;
@@ -5452,16 +3744,14 @@ const createWorkspaceSaveScheduler = (
   let saveQueue: Promise<void> = Promise.resolve();
 
   const schedule = (): void => {
-    saveQueue = saveQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await workspacePersistence.saveCurrent();
-      });
+    saveQueue = saveQueue.then(async () => {
+      await applicationPersistence.saveCurrent();
+    });
     void saveQueue.catch(() => undefined);
   };
 
   const flush = async (): Promise<void> => {
-    await saveQueue.catch(() => undefined);
+    await saveQueue;
   };
 
   return {
@@ -5469,6 +3759,67 @@ const createWorkspaceSaveScheduler = (
     flush,
   };
 };
+
+const createWorkflowStreamEvents = (input: {
+  workflowCatalog: WorkflowCatalogStore;
+  activeWorkflowExecutions: ActiveWorkflowExecutionRegistry;
+  executionAbortController: AbortController;
+  progressSaves: ReturnType<typeof createApplicationSaveScheduler>;
+  stream: ReturnType<typeof createSseStream>;
+}): {
+  onEvent: (event: WorkflowRuntimeEvent) => void;
+  sendTerminal: () => void;
+  dispose: () => void;
+} => {
+  let workflowRunId: string | null = null;
+  let terminalEvent: WorkflowRuntimeEvent | null = null;
+
+  const onEvent = (event: WorkflowRuntimeEvent): void => {
+    if (event.type === WorkflowRuntimeEventType.WorkflowStarted) {
+      workflowRunId = event.workflowRunId;
+      input.activeWorkflowExecutions.register(
+        event.workflowRunId,
+        input.executionAbortController,
+      );
+    }
+    if (persistWorkflowRuntimeProgress(input.workflowCatalog, event)) {
+      input.progressSaves.schedule();
+    }
+    if (isWorkflowTerminalEvent(event)) {
+      terminalEvent = event;
+      return;
+    }
+
+    input.stream.send({
+      event: readWorkflowStreamEventName(event),
+      data: event,
+    });
+  };
+
+  const sendTerminal = (): void => {
+    if (!terminalEvent) {
+      return;
+    }
+
+    input.stream.send({
+      event: readWorkflowStreamEventName(terminalEvent),
+      data: terminalEvent,
+    });
+    terminalEvent = null;
+  };
+
+  const dispose = (): void => {
+    if (workflowRunId) {
+      input.activeWorkflowExecutions.delete(workflowRunId);
+    }
+  };
+
+  return { onEvent, sendTerminal, dispose };
+};
+
+const isWorkflowTerminalEvent = (event: WorkflowRuntimeEvent): boolean =>
+  event.type === WorkflowRuntimeEventType.WorkflowCompleted ||
+  event.type === WorkflowRuntimeEventType.WorkflowFailed;
 
 const persistWorkflowRuntimeProgress = (
   workflowCatalog: WorkflowCatalogStore,
@@ -5522,7 +3873,6 @@ const createWorkflowProgressExecution = (
   return {
     id: event.workflowRunId,
     workflowId: workflow.id,
-    projectId: workflow.projectId,
     triggerKind: workflow.trigger.kind,
     status: WorkflowExecutionStatus.Running,
     startedAt,
@@ -5544,7 +3894,6 @@ const createRunningWorkflowExecution = (
 ): WorkflowExecutionRecord => ({
   id: event.workflowRunId,
   workflowId: workflow.id,
-  projectId: workflow.projectId,
   triggerKind: workflow.trigger.kind,
   status: WorkflowExecutionStatus.Running,
   startedAt: current?.startedAt ?? event.startedAt,
@@ -5719,866 +4068,741 @@ const createEmptyWorkflowUsageTotals = (): WorkflowUsageTotalsRecord => ({
 const readDurationMs = (startedAt: string, finishedAt: string): number =>
   Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
 
-const handleGitStatusRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitStatusRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await executeGitStatus(parsed.value, {
-    projectStore,
-    workspacePolicy,
-    commandPolicy,
-    git,
+const createRequestIdeAuth = (
+  applicationPersistence: ApplicationPersistence,
+  passwordResetDelivery: PasswordResetDelivery | undefined,
+): IdeAuthService =>
+  createIdeAuthService({
+    load: () => applicationPersistence.read().ideAuth,
+    save: () => undefined,
+    now: () => new Date().toISOString(),
+    randomToken: randomUUID,
+    ...(passwordResetDelivery
+      ? { deliverPasswordReset: passwordResetDelivery }
+      : {}),
   });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
+
+const ensureConfiguredAdministrator = async (input: {
+  applicationPersistence: ApplicationPersistence;
+  config: ServerConfig;
+}): Promise<void> => {
+  const credentials = readAdminCredentials(input.config);
+  const ideAuth = createRequestIdeAuth(input.applicationPersistence, undefined);
+  const { user, outcome } = ideAuth.ensureAdministrator(credentials);
+  if (outcome !== "kept") {
+    await input.applicationPersistence.updateIdeAuth(ideAuth.snapshot());
+    console.info("server.administrator_configured", {
+      outcome,
+      email: user.email,
+    });
+  } else if (user.email !== credentials.email) {
+    console.warn("server.administrator_env_ignored", {
+      configuredEmail: credentials.email,
+      activeEmail: user.email,
+    });
   }
 
-  respondJson(res, HttpStatus.Ok, {
-    repository: result.value,
-  });
+  if (
+    credentials.password === DefaultServerConfig.AdminPassword ||
+    credentials.password.length < MinimumPasswordLength
+  ) {
+    console.warn("server.administrator_password_insecure", {
+      email: credentials.email,
+    });
+  }
 };
 
-const handleGitDiffRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
+const IdeAuthClientErrorMessages = new Set([
+  "Administrator already exists",
+  "Administrator access is required",
+  "Email is already registered",
+  "Email is invalid",
+  "Invalid credentials",
+  "Invalid password reset token",
+  "Password must be at least 12 characters",
+  "Password reset is unavailable",
+  "Registration is disabled",
+  "User not found",
+]);
+
+const handleIdeAuthRequest = async (input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  path: string;
+  method: string;
+  config: ServerConfig;
+  ideAuth: IdeAuthService;
+  applicationPersistence: ApplicationPersistence;
+}): Promise<void> => {
+  if (input.method !== HttpMethod.Post) {
+    respondMethodNotAllowed(input.res);
     return;
   }
-
-  const parsed = parseGitDiffRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
+  const body = await readJsonBody(input.req);
+  if (body.type === ResultType.Err) {
+    respondError(input.res, body.error);
     return;
   }
-
-  const result = await executeGitDiff(parsed.value, {
-    projectStore,
-    workspacePolicy,
-    commandPolicy,
-    git,
-  });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    diff: result.value.diff,
-    staged: result.value.staged,
-  });
-};
-
-const handleGitCommitRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitCommitRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await executeGitCommit(parsed.value, {
-    projectStore,
-    workspacePolicy,
-    commandPolicy,
-    git,
-  });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Created, {
-    commit: result.value,
-  });
-};
-
-const handleGitBranchListRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitStatusRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await executeGitBranchList(parsed.value, {
-    projectStore,
-    workspacePolicy,
-    commandPolicy,
-    git,
-  });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    branches: result.value,
-  });
-};
-
-const handleGitBranchMutationRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-  operation: "create" | "checkout",
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitBranchMutationRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result =
-    operation === "create"
-      ? await executeGitBranchCreate(parsed.value, {
-          projectStore,
-          workspacePolicy,
-          commandPolicy,
-          git,
-        })
-      : await executeGitBranchCheckout(parsed.value, {
-          projectStore,
-          workspacePolicy,
-          commandPolicy,
-          git,
+  const sessionUser = readSessionUser(input.req, input.ideAuth);
+  try {
+    if (input.path === RoutePath.AuthBootstrapAdmin) {
+      if (input.config.authToken === undefined) {
+        respondError(input.res, {
+          status: HttpStatus.Forbidden,
+          message: ErrorMessage.BootstrapAdminDisabled,
         });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
+        return;
+      }
+      if (!isAuthorized(input.req, input.config.authToken)) {
+        respondUnauthorized(input.res);
+        return;
+      }
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const user = input.ideAuth.bootstrapAdmin(credentials);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { user: toIdeUserView(user) });
+      return;
+    }
+    if (input.path === RoutePath.AuthRegister) {
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const registered = await input.ideAuth.register(credentials);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {
+        user: toIdeUserView(registered.user),
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthLogin) {
+      const credentials = readCredentials(body.value);
+      if (!credentials) return respondInvalidBody(input.res);
+      const session = await input.ideAuth.login(credentials);
+      await persistIdeAuth(input);
+      input.res.setHeader(
+        HeaderName.SetCookie,
+        createSessionCookie(session.token),
+      );
+      const user = input.ideAuth.getSessionUser(session.token);
+      respondJson(input.res, HttpStatus.Ok, {
+        user: user ? toIdeUserView(user) : null,
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthLogout) {
+      const token = readSessionToken(input.req);
+      if (token) input.ideAuth.logout(token);
+      await persistIdeAuth(input);
+      input.res.setHeader(HeaderName.SetCookie, clearSessionCookie());
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (input.path === RoutePath.AuthMe) {
+      if (!sessionUser) {
+        respondUnauthorized(input.res);
+        return;
+      }
+      respondJson(input.res, HttpStatus.Ok, {
+        user: toIdeUserView(sessionUser),
+      });
+      return;
+    }
+    if (input.path === RoutePath.AuthPasswordResetRequest) {
+      const email = readStringField(body.value, "email");
+      if (!email) return respondInvalidBody(input.res);
+      input.ideAuth.requestPasswordReset(email);
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (input.path === RoutePath.AuthPasswordResetConfirm) {
+      const token = readStringField(body.value, "token");
+      const password = readStringField(body.value, "password");
+      if (!token || !password) return respondInvalidBody(input.res);
+      await input.ideAuth.confirmPasswordReset({ token, password });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, {});
+      return;
+    }
+    if (!sessionUser || sessionUser.role !== IdeUserRole.Admin) {
+      respondUnauthorized(input.res);
+      return;
+    }
+    if (input.path === RoutePath.AuthAdminRegistration) {
+      const enabled = readBooleanField(body.value, "enabled");
+      if (enabled === undefined) return respondInvalidBody(input.res);
+      input.ideAuth.setRegistrationEnabled({
+        actorId: sessionUser.id,
+        enabled,
+      });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { registrationEnabled: enabled });
+      return;
+    }
+    if (input.path === RoutePath.AuthAdminUserEnabled) {
+      const userId = readStringField(body.value, "userId");
+      const enabled = readBooleanField(body.value, "enabled");
+      if (!userId || enabled === undefined)
+        return respondInvalidBody(input.res);
+      input.ideAuth.setUserEnabled({
+        actorId: sessionUser.id,
+        userId,
+        enabled,
+      });
+      await persistIdeAuth(input);
+      respondJson(input.res, HttpStatus.Ok, { userId, enabled });
+      return;
+    }
+    respondError(input.res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : ErrorMessage.InternalServerError;
+    const isClientError = IdeAuthClientErrorMessages.has(message);
+    respondError(input.res, {
+      status: isClientError
+        ? HttpStatus.BadRequest
+        : HttpStatus.InternalServerError,
+      message: isClientError ? message : ErrorMessage.InternalServerError,
+    });
+  }
+};
+
+const persistIdeAuth = async (input: {
+  ideAuth: IdeAuthService;
+  applicationPersistence: ApplicationPersistence;
+}): Promise<void> => {
+  await input.applicationPersistence.updateIdeAuth(input.ideAuth.snapshot());
+};
+
+const readSessionUser = (req: IncomingMessage, ideAuth: IdeAuthService) => {
+  const token = readSessionToken(req);
+  return token ? ideAuth.getSessionUser(token) : undefined;
+};
+
+const readSessionToken = (req: IncomingMessage): string | undefined => {
+  const raw = req.headers[HeaderName.Cookie];
+  if (!raw) return undefined;
+  const values = raw.split(";").map((entry) => entry.trim());
+  const session = values.find((entry) => entry.startsWith("iteronix_session="));
+  return session
+    ? decodeURIComponent(session.slice("iteronix_session=".length))
+    : undefined;
+};
+
+const createSessionCookie = (token: string): string =>
+  `iteronix_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800`;
+const clearSessionCookie = (): string =>
+  "iteronix_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0";
+const toIdeUserView = (user: {
+  id: string;
+  email: string;
+  role: IdeUserRole;
+  enabled: boolean;
+}) => ({
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  enabled: user.enabled,
+});
+const readCredentials = (
+  value: unknown,
+): { email: string; password: string } | undefined => {
+  const email = readStringField(value, "email");
+  const password = readStringField(value, "password");
+  return email && password ? { email, password } : undefined;
+};
+const readStringField = (value: unknown, key: string): string | undefined =>
+  isRecord(value) &&
+  typeof value[key] === "string" &&
+  value[key].trim().length > 0
+    ? value[key].trim()
+    : undefined;
+const readBooleanField = (value: unknown, key: string): boolean | undefined =>
+  isRecord(value) && typeof value[key] === "boolean" ? value[key] : undefined;
+const respondInvalidBody = (res: ServerResponse): void =>
+  respondError(res, {
+    status: HttpStatus.BadRequest,
+    message: ErrorMessage.InvalidBody,
+  });
+const isAuthRoute = (path: string): boolean => AuthRoutePaths.has(path);
+
+const isAuthorized = (
+  req: IncomingMessage,
+  authToken: string | undefined,
+): boolean => authToken !== undefined && readBearerToken(req) === authToken;
+
+const isTrustedIdeSessionRequest = (
+  req: IncomingMessage,
+  allowedOrigins: ReadonlyArray<string>,
+): boolean => {
+  const origin = readCorsOrigin(req);
+  return origin !== undefined && isAllowedCorsOrigin(origin, allowedOrigins);
+};
+
+export const externalWorkflowOperationForRoute = (
+  path: string,
+): ExternalWorkflowOperation | undefined =>
+  ExternalWorkflowRouteOperations.get(path);
+
+export const redactExternalCredentialResponse = (
+  credential: ExternalApiKeyRecord | ExternalWorkflowCredentialMetadata,
+): ExternalWorkflowCredentialMetadata => ({
+  id: credential.id,
+  name: credential.name,
+  scope:
+    credential.scope.kind === ExternalApiKeyScopeKind.AllWorkflows
+      ? { kind: ExternalApiKeyScopeKind.AllWorkflows }
+      : {
+          kind: ExternalApiKeyScopeKind.SelectedWorkflows,
+          workflowIds: [...credential.scope.workflowIds],
+        },
+  createdAt: credential.createdAt,
+  ...(credential.operations ? { operations: [...credential.operations] } : {}),
+  ...(credential.expiresAt ? { expiresAt: credential.expiresAt } : {}),
+  ...(credential.rateLimitPerMinute
+    ? { rateLimitPerMinute: credential.rateLimitPerMinute }
+    : {}),
+  ...(credential.generation ? { generation: credential.generation } : {}),
+  ...(credential.lastUsedAt ? { lastUsedAt: credential.lastUsedAt } : {}),
+  ...(credential.revokedAt ? { revokedAt: credential.revokedAt } : {}),
+});
+
+const isExternalWorkflowRoute = (path: string): boolean =>
+  externalWorkflowOperationForRoute(path) !== undefined;
+
+const isGovernanceLifecycleRoute = (path: string): boolean =>
+  path === RoutePath.GovernanceLifecyclesGet ||
+  path === RoutePath.GovernanceLifecyclesBegin ||
+  path === RoutePath.GovernanceLifecyclesApprove ||
+  path === RoutePath.GovernanceLifecyclesContinue ||
+  path === RoutePath.GovernanceLifecyclesReject ||
+  path === RoutePath.GovernanceLifecyclesResume;
+
+const isIdeGovernanceLifecycleRoute = (path: string): boolean =>
+  path === RoutePath.GovernanceLifecyclesGet ||
+  path === RoutePath.GovernanceLifecyclesApprove ||
+  path === RoutePath.GovernanceLifecyclesContinue ||
+  path === RoutePath.GovernanceLifecyclesReject;
+
+const isEditableAssetRoute = (path: string): boolean =>
+  path === RoutePath.EditableAssetsList ||
+  path === RoutePath.EditableAssetsUsage ||
+  path === RoutePath.EditableAssetsUpsert ||
+  path === RoutePath.EditableAssetsDelete ||
+  path === RoutePath.MemoryDocumentsIndex ||
+  path === RoutePath.MemoryDocumentsList;
+
+const isIdeWorkflowExecutionRoute = (path: string): boolean =>
+  path === RoutePath.WorkflowExecutionsRun ||
+  path === RoutePath.WorkflowExecutionsStream;
+
+const requiresStrictBearerAuthentication = (path: string): boolean =>
+  isGovernanceLifecycleRoute(path) || isEditableAssetRoute(path);
+
+const handleExternalWorkflowRequest = async (input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  method: string;
+  operation: ExternalWorkflowOperation;
+  workflowCatalog: WorkflowCatalogStore;
+  workflowRuntime: WorkflowRuntimeService;
+  applicationPersistence: ApplicationPersistence;
+  governanceLifecycle: GovernanceLifecycleService;
+  governedService: () => GovernedAgentToolService;
+  credentialRepository?: PostgresExternalWorkflowCredentialRepository;
+  credentialSecretStore?: ExternalWorkflowCredentialSecretStore;
+}): Promise<void> => {
+  if (input.method !== HttpMethod.Post) {
+    respondMethodNotAllowed(input.res);
     return;
   }
 
-  respondJson(
-    res,
-    operation === "create" ? HttpStatus.Created : HttpStatus.Ok,
-    {
-      branch: result.value,
+  const plaintextKey = readBearerToken(input.req);
+  if (!plaintextKey) {
+    respondUnauthorized(input.res);
+    return;
+  }
+  const bodyResult = await readJsonBody(input.req);
+  if (bodyResult.type === ResultType.Err) {
+    respondError(input.res, bodyResult.error);
+    return;
+  }
+  const workflowId = readWorkflowId(bodyResult.value);
+  if (workflowId.type === ResultType.Err) {
+    respondError(input.res, workflowId.error);
+    return;
+  }
+  const operation = input.operation;
+  if (!input.credentialRepository || !input.credentialSecretStore) {
+    respondError(input.res, {
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.CredentialStorageUnavailable,
+    });
+    return;
+  }
+  const verified = await input.credentialSecretStore.verify(plaintextKey);
+  const now = new Date().toISOString();
+  if (!verified) {
+    await input.credentialRepository.recordAuthenticationFailure({
+      operation,
+      workflowId: workflowId.value,
+      now,
+    });
+    respondUnauthorized(input.res);
+    return;
+  }
+  const consumption = await input.credentialRepository.consumeAuthorized({
+    credentialId: verified.credentialId,
+    plaintext: plaintextKey,
+    operation,
+    workflowId: workflowId.value,
+    now,
+  });
+  if (consumption !== "authorized") {
+    respondExternalCredentialConsumptionError(input.res, consumption);
+    return;
+  }
+
+  const workflow = input.workflowCatalog.getWorkflow(workflowId.value);
+  if (!workflow) {
+    respondError(input.res, {
+      status: HttpStatus.NotFound,
+      message: ErrorMessage.NotFound,
+    });
+    return;
+  }
+
+  if (operation === ExternalWorkflowOperation.WorkflowRead) {
+    respondJson(input.res, HttpStatus.Ok, { definition: workflow });
+    return;
+  }
+
+  const lifecycle = await input.governanceLifecycle.begin({
+    id: `external:${workflow.id}:${randomUUID()}`,
+    workflowId: workflow.id,
+    fingerprints: {
+      scope: `${workflow.id}@${workflow.version.toString()}`,
+      evidence: workflow.updatedAt,
     },
-  );
-};
-
-const handleGitBranchRemoteRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-  operation: "push" | "publish",
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitStatusRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result =
-    operation === "push"
-      ? await executeGitBranchPush(parsed.value, {
-          projectStore,
-          workspacePolicy,
-          commandPolicy,
-          git,
-        })
-      : await executeGitBranchPublish(parsed.value, {
-          projectStore,
-          workspacePolicy,
-          commandPolicy,
-          git,
-        });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(
-    res,
-    operation === "publish" ? HttpStatus.Created : HttpStatus.Ok,
-    {
-      branch: result.value,
+    limits: {
+      execution: workflow.executionPolicy.maxNodeRetries + 1,
+      repair: workflow.executionPolicy.maxNodeRetries,
+      review: 1,
     },
-  );
-};
-
-const handleGitPathOperationRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  git: GitRepository,
-  operation: GitPathOperationKind,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseGitPathRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await executeGitPathOperation(parsed.value, operation, {
-    projectStore,
-    workspacePolicy,
-    commandPolicy,
-    git,
+    now: new Date().toISOString(),
   });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    paths: result.value.paths,
+  await input.governanceLifecycle.transition({
+    lifecycleId: lifecycle.id,
+    kind: "start-planning",
+    actorId: "external-api",
+    reason: "External invocation requested a bounded workflow pass.",
+    now: new Date().toISOString(),
   });
-};
-
-const handleQualityGateRunRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectStore: ProjectStore,
-  historyStore: HistoryStore,
-  workspacePolicy: WorkspacePolicy,
-  commandPolicy: CommandPolicy,
-  commandRunner: CommandRunner,
-  eventHub: QualityGateEventHub,
-  catalog: QualityGateCatalog,
-  workspacePersistence: WorkspacePersistence,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseQualityGateRunRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = await startQualityGateRun(parsed.value, {
-    projectStore,
-    historyStore,
-    workspacePolicy,
-    commandPolicy,
-    commandRunner,
-    eventHub,
-    catalog,
+  let execution: WorkflowExecutionRecord | undefined;
+  const memoryScope = createMemoryScope({
+    tenantId: workflow.id,
+    workflowId: workflow.id,
+    enabled: true,
+    retentionDays: 30,
   });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  await workspacePersistence.saveCurrent();
-  respondJson(res, HttpStatus.Created, {
-    run: result.value,
+  await input.governanceLifecycle.executeBoundedPass({
+    lifecycleId: lifecycle.id,
+    execute: async () => {
+      execution = await executeWorkflowDefinitionRun(
+        { definition: workflow },
+        {
+          catalog: input.workflowCatalog,
+          runWorkflow: input.workflowRuntime.runWorkflow,
+          runGovernedNode: createRunGovernedNodeCallback({
+            governedService: input.governedService(),
+            lifecycleId: lifecycle.id,
+            grantedPermissions: [],
+            memoryScope,
+            resolveMemoryScope: (sourceId) =>
+              resolvePersistedMemoryScope(
+                input.applicationPersistence,
+                workflow.id,
+                sourceId,
+              ),
+            resolveMcpConnection: (connection) =>
+              resolveMcpConnection(
+                input.applicationPersistence.read(),
+                connection,
+              ),
+            resolveMcpConnectionForSkill: (assetId) =>
+              resolveMcpConnectionForSkill(
+                input.applicationPersistence.read(),
+                assetId,
+              ),
+            now: () => new Date(),
+          }),
+        },
+      );
+      await persistPromptExecutionProvenance({
+        lifecycleId: lifecycle.id,
+        execution,
+        governanceLifecycle: input.governanceLifecycle,
+      });
+    },
+    classifyFailure: classifyExternalWorkflowFailure,
+    now: () => new Date().toISOString(),
   });
-};
-
-const handleQualityGateListRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  historyStore: HistoryStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseQualityGateListRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = listQualityGateRuns(parsed.value, {
-    historyStore,
-  });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    runs: result.value,
-  });
-};
-
-const handleQualityGateEventsRequest = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  historyStore: HistoryStore,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseQualityGateEventsRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const result = listQualityGateEvents(parsed.value, {
-    historyStore,
-  });
-  if (result.type === ResultType.Err) {
-    respondError(res, result.error);
-    return;
-  }
-
-  respondJson(res, HttpStatus.Ok, {
-    events: result.value,
-  });
-};
-
-const handleQualityGateStreamRequest = (
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-  historyStore: HistoryStore,
-  eventHub: QualityGateEventHub,
-): void => {
-  const parsed = parseQualityGateStreamRequest(url.searchParams);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  const existing = listQualityGateEvents(parsed.value, {
-    historyStore,
-  });
-  if (existing.type === ResultType.Err) {
-    respondError(res, existing.error);
-    return;
-  }
-
-  const stream = createSseStream(res);
-  for (const event of existing.value) {
-    stream.send({
-      event: QualityGateEventName.Progress,
-      id: event.id,
-      data: event,
+  if (!execution) {
+    respondError(input.res, {
+      status: HttpStatus.InternalServerError,
+      message: ErrorMessage.InternalServerError,
     });
+    return;
   }
-
-  const unsubscribe = eventHub.subscribe(parsed.value.runId, (event) => {
-    stream.send({
-      event: QualityGateEventName.Progress,
-      id: event.id,
-      data: event,
-    });
-  });
-
-  req.on("close", () => {
-    unsubscribe();
-    stream.close();
+  await input.applicationPersistence.saveCurrent();
+  respondJson(input.res, HttpStatus.Ok, {
+    execution,
+    lifecycleId: lifecycle.id,
   });
 };
 
-const handleAiSkillRun = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  aiWorkbench: AiWorkbenchService,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
+const resolvePersistedMemoryScope = (
+  applicationPersistence: ApplicationPersistence,
+  workflowId: string,
+  sourceId: string,
+) => {
+  const source = applicationPersistence
+    .read()
+    .editableAssets.records.find((asset) => asset.id === sourceId);
+  if (
+    !source ||
+    source.kind !== AssetKind.MemorySource ||
+    source.status !== AssetStatus.Enabled ||
+    !source.memory ||
+    !source.memory.optInIndexing
+  ) {
+    throw new Error("Memory source is unavailable.");
   }
-
-  const parsed = parseAiSkillRunRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
+  if (source.memory.workflowId !== workflowId) {
+    throw new Error("Memory source workflow does not match the workflow.");
   }
-
-  try {
-    const result = await aiWorkbench.runSkill(parsed.value);
-    respondJson(res, HttpStatus.Ok, result);
-  } catch (error) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message:
-        error instanceof Error
-          ? error.message
-          : ErrorMessage.InternalServerError,
-    });
-  }
-};
-
-const handleAiWorkflowRun = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  aiWorkbench: AiWorkbenchService,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseAiWorkflowRunRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  try {
-    const result = await aiWorkbench.runWorkflow(parsed.value);
-    respondJson(res, HttpStatus.Ok, result);
-  } catch (error) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message:
-        error instanceof Error
-          ? error.message
-          : ErrorMessage.InternalServerError,
-    });
-  }
-};
-
-const handleAiEvalRun = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  aiWorkbench: AiWorkbenchService,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseAiEvalRunRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  try {
-    const result = await aiWorkbench.runEvaluation(parsed.value);
-    respondJson(res, HttpStatus.Ok, result);
-  } catch (error) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message:
-        error instanceof Error
-          ? error.message
-          : ErrorMessage.InternalServerError,
-    });
-  }
-};
-
-const handleAiMemoryQuery = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-  aiWorkbench: AiWorkbenchService,
-): Promise<void> => {
-  const bodyResult = await readJsonBody(req);
-  if (bodyResult.type === ResultType.Err) {
-    respondError(res, bodyResult.error);
-    return;
-  }
-
-  const parsed = parseAiMemoryQueryRequest(bodyResult.value);
-  if (parsed.type === ResultType.Err) {
-    respondError(res, parsed.error);
-    return;
-  }
-
-  try {
-    const result = await aiWorkbench.searchMemory(parsed.value);
-    respondJson(res, HttpStatus.Ok, {
-      items: result,
-    });
-  } catch (error) {
-    respondError(res, {
-      status: HttpStatus.BadRequest,
-      message:
-        error instanceof Error
-          ? error.message
-          : ErrorMessage.InternalServerError,
-    });
-  }
-};
-
-const parseAiSkillRunRequest = (
-  value: unknown,
-): Result<
-  { skillName: string; sessionId: string; input: unknown },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const skillName = readRequiredString(
-    value,
-    AiField.SkillName,
-    ErrorMessage.MissingSkillName,
-  );
-  if (skillName.type === ResultType.Err) {
-    return skillName;
-  }
-
-  const sessionId = readRequiredString(
-    value,
-    SessionField.SessionId,
-    ErrorMessage.MissingSessionId,
-  );
-  if (sessionId.type === ResultType.Err) {
-    return sessionId;
-  }
-
-  if (!(AiField.Input in value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.MissingInput,
-    });
-  }
-
-  return ok({
-    skillName: skillName.value,
-    sessionId: sessionId.value,
-    input: value[AiField.Input],
+  return createMemoryScope({
+    tenantId: source.memory.tenantId,
+    workflowId: source.memory.workflowId,
+    sourceId: source.id,
+    enabled: true,
+    retentionDays: source.memory.retentionDays,
   });
 };
 
-const parseAiWorkflowRunRequest = (
-  value: unknown,
-): Result<
-  {
-    skillName: string;
-    sessionId: string;
-    question: string;
-    autoApprove: boolean;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const skillName = readRequiredString(
-    value,
-    AiField.SkillName,
-    ErrorMessage.MissingSkillName,
-  );
-  if (skillName.type === ResultType.Err) {
-    return skillName;
-  }
-
-  const sessionId = readRequiredString(
-    value,
-    SessionField.SessionId,
-    ErrorMessage.MissingSessionId,
-  );
-  if (sessionId.type === ResultType.Err) {
-    return sessionId;
-  }
-
-  const question = readRequiredString(
-    value,
-    AiField.Question,
-    ErrorMessage.MissingQuestion,
-  );
-  if (question.type === ResultType.Err) {
-    return question;
-  }
-
-  const autoApprove = readOptionalBooleanField(value, AiField.AutoApprove);
-  if (autoApprove.type === ResultType.Err) {
-    return autoApprove;
-  }
-
-  return ok({
-    skillName: skillName.value,
-    sessionId: sessionId.value,
-    question: question.value,
-    autoApprove: autoApprove.value ?? true,
-  });
-};
-
-const parseAiEvalRunRequest = (
-  value: unknown,
-): Result<{ datasetPath: string }, ApiError> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const datasetPath = readRequiredString(
-    value,
-    AiField.DatasetPath,
-    ErrorMessage.MissingDatasetPath,
-  );
-  if (datasetPath.type === ResultType.Err) {
-    return datasetPath;
-  }
-
-  return ok({
-    datasetPath: datasetPath.value,
-  });
-};
-
-const parseAiMemoryQueryRequest = (
-  value: unknown,
-): Result<
-  {
-    sessionId: string;
-    query: string;
-    limit: number;
-  },
-  ApiError
-> => {
-  if (!isRecord(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  const sessionId = readRequiredString(
-    value,
-    SessionField.SessionId,
-    ErrorMessage.MissingSessionId,
-  );
-  if (sessionId.type === ResultType.Err) {
-    return sessionId;
-  }
-
-  const query = readRequiredString(
-    value,
-    AiField.Query,
-    ErrorMessage.MissingQuestion,
-  );
-  if (query.type === ResultType.Err) {
-    return query;
-  }
-
-  const limit = readOptionalNumberField(value, AiField.Limit);
-  if (limit.type === ResultType.Err) {
-    return limit;
-  }
-
-  return ok({
-    sessionId: sessionId.value,
-    query: query.value,
-    limit: limit.value ?? 10,
-  });
-};
-
-const getSessionById = (
-  store: SessionStore,
-  id: string,
-): Result<Session, ApiError> => {
-  const result = store.getById(id);
-  if (result.type === ResultType.Err) {
-    return err(mapSessionStoreError(result.error));
-  }
-
-  return ok(result.value);
-};
-
-const mapSessionStoreError = (error: SessionStoreError): ApiError => {
-  if (error.code === SessionStoreErrorCode.NotFound) {
-    return {
-      status: HttpStatus.NotFound,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.BadRequest,
-    message: error.message,
-  };
-};
-
-const mapHistoryStoreError = (error: HistoryStoreError): ApiError => {
-  if (error.code === HistoryStoreErrorCode.NotFound) {
-    return {
-      status: HttpStatus.NotFound,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.BadRequest,
-    message: error.message,
-  };
-};
-
-const mapDomainLogsStoreError = (error: DomainLogsStoreError): ApiError => {
-  if (error.code === DomainLogsStoreErrorCode.InvalidQuery) {
-    return {
-      status: HttpStatus.BadRequest,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.InternalServerError,
-    message: error.message,
-  };
-};
-
-const mapProviderStoreError = (error: ProviderStoreError): ApiError => {
-  if (error.code === ProviderStoreErrorCode.NotFound) {
-    return {
-      status: HttpStatus.NotFound,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.BadRequest,
-    message: error.message,
-  };
-};
-
-const mapKanbanStoreError = (error: KanbanStoreError): ApiError => {
-  if (error.code === KanbanStoreErrorCode.NotFound) {
-    return {
-      status: HttpStatus.NotFound,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.BadRequest,
-    message: error.message,
-  };
-};
-
-const getProjectById = (
-  store: ProjectStore,
-  id: string,
-): Result<Project, ApiError> => {
-  const result = store.getById(id);
-  if (result.type === ResultType.Err) {
-    return err(mapProjectStoreError(result.error));
-  }
-
-  return ok(result.value);
-};
-
-const mapProjectStoreError = (error: {
-  code: ProjectStoreErrorCode;
-  message: string;
-}): ApiError => {
-  if (error.code === ProjectStoreErrorCode.Conflict) {
-    return {
-      status: HttpStatus.Conflict,
-      message: error.message,
-    };
-  }
-
-  if (error.code === ProjectStoreErrorCode.NotFound) {
-    return {
-      status: HttpStatus.NotFound,
-      message: error.message,
-    };
-  }
-
-  return {
-    status: HttpStatus.BadRequest,
-    message: error.message,
-  };
-};
-
-const isAuthorized = (req: IncomingMessage, authToken: string): boolean => {
+const readBearerToken = (req: IncomingMessage): string | undefined => {
   const header = req.headers[HeaderName.Authorization];
-  const value = typeof header === "string" ? header : undefined;
+  return typeof header === "string" ? extractBearerToken(header) : undefined;
+};
 
-  if (!value) {
-    return false;
+const readAuthenticatedActorId = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+): string =>
+  readBearerToken(req)
+    ? "authenticated-bearer-client"
+    : (readSessionUser(req, ideAuth)?.id ?? "authenticated-colocated-web-ui");
+
+const readCredentialLifecycleActor = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+): ExternalWorkflowCredentialAuditActor => ({
+  kind: "administrator",
+  id: readSessionUser(req, ideAuth)?.id ?? "static-bearer-administrator",
+});
+
+const classifyExternalWorkflowFailure = (
+  error: unknown,
+): {
+  classification: "retryable" | "non-retryable";
+  before: string;
+  after: string;
+} => {
+  const message =
+    error instanceof Error ? error.message : "Unknown workflow failure.";
+  const classification = /timeout|temporar|rate limit|\b429\b|\b5\d\d\b/i.test(
+    message,
+  )
+    ? "retryable"
+    : "non-retryable";
+  return {
+    classification,
+    before: message,
+    after:
+      classification === "retryable"
+        ? "A bounded repair pass is available."
+        : "The failure is terminal and requires a new lifecycle.",
+  };
+};
+
+const parseExternalApiKeyCreateRequest = (
+  value: Record<string, unknown>,
+): Result<{ name: string; scope: ExternalApiKeyScope }, ApiError> => {
+  const name = typeof value["name"] === "string" ? value["name"].trim() : "";
+  if (!name) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingApiKeyName,
+    });
   }
+  const scope = parseExternalApiKeyScope(value["scope"]);
+  return scope.type === ResultType.Err
+    ? scope
+    : ok({ name, scope: scope.value });
+};
 
-  const token = extractBearerToken(value);
-  if (!token) {
-    return false;
+const isRetiredLegacyExternalApiKeyRoute = (path: string): boolean =>
+  path === RoutePath.ExternalApiKeysList ||
+  path === RoutePath.ExternalApiKeysCreate ||
+  path === RoutePath.ExternalApiKeysUpdate ||
+  path === RoutePath.ExternalApiKeysRevoke ||
+  path === RoutePath.ExternalApiKeysWorkflowDependencies;
+
+const isCredentialAdministrator = (
+  req: IncomingMessage,
+  ideAuth: IdeAuthService,
+  authToken: string | undefined,
+): boolean =>
+  isAuthorized(req, authToken) ||
+  readSessionUser(req, ideAuth)?.role === IdeUserRole.Admin;
+
+const parseExternalCredentialCreateRequest = (
+  value: unknown,
+): Result<
+  {
+    name: string;
+    scope: ExternalApiKeyScope;
+    operations: ReadonlyArray<ExternalWorkflowOperation>;
+    expiresAt?: string;
+    rateLimitPerMinute: number;
+  },
+  ApiError
+> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
   }
+  const base = parseExternalApiKeyCreateRequest(value);
+  if (base.type === ResultType.Err) {
+    return err(base.error);
+  }
+  const operations = readExternalCredentialOperations(value["operations"]);
+  const rateLimitPerMinute = value["rateLimitPerMinute"];
+  const expiresAt = readCredentialExpiresAt(value["expiresAt"]);
+  if (
+    !operations ||
+    typeof rateLimitPerMinute !== "number" ||
+    !ExternalWorkflowRateLimit.isValid(rateLimitPerMinute) ||
+    expiresAt === false
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidBody,
+    });
+  }
+  return ok({
+    ...base.value,
+    operations,
+    rateLimitPerMinute,
+    ...(expiresAt ? { expiresAt } : {}),
+  });
+};
 
-  return token === authToken;
+const readExternalCredentialOperations = (
+  value: unknown,
+): ReadonlyArray<ExternalWorkflowOperation> | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const operations = value.filter(
+    (operation): operation is ExternalWorkflowOperation =>
+      typeof operation === "string" &&
+      Object.values(ExternalWorkflowOperation).includes(
+        operation as ExternalWorkflowOperation,
+      ),
+  );
+  return operations.length === value.length && operations.length > 0
+    ? [...new Set(operations)]
+    : undefined;
+};
+
+const readCredentialExpiresAt = (
+  value: unknown,
+): string | false | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return typeof value === "string" && !Number.isNaN(Date.parse(value))
+    ? new Date(value).toISOString()
+    : false;
+};
+
+const parseExternalApiKeyScope = (
+  value: unknown,
+): Result<ExternalApiKeyScope, ApiError> => {
+  if (!isRecord(value)) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidApiKeyScope,
+    });
+  }
+  if (value["kind"] === ExternalApiKeyScopeKind.AllWorkflows) {
+    return ok({ kind: ExternalApiKeyScopeKind.AllWorkflows });
+  }
+  if (
+    value["kind"] !== ExternalApiKeyScopeKind.SelectedWorkflows ||
+    !Array.isArray(value["workflowIds"])
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.InvalidApiKeyScope,
+    });
+  }
+  const workflowIds = value["workflowIds"].filter(
+    (entry): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0,
+  );
+  return workflowIds.length > 0
+    ? ok({ kind: ExternalApiKeyScopeKind.SelectedWorkflows, workflowIds })
+    : err({
+        status: HttpStatus.BadRequest,
+        message: ErrorMessage.InvalidApiKeyScope,
+      });
+};
+
+const readExternalApiKeyId = (value: unknown): Result<string, ApiError> => {
+  const keyId =
+    isRecord(value) && typeof value["credentialId"] === "string"
+      ? value["credentialId"]
+      : isRecord(value)
+        ? value["keyId"]
+        : undefined;
+  if (typeof keyId !== "string" || !keyId.trim()) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingApiKeyId,
+    });
+  }
+  return ok(keyId.trim());
+};
+
+const readWorkflowId = (value: unknown): Result<string, ApiError> => {
+  if (
+    !isRecord(value) ||
+    typeof value["workflowId"] !== "string" ||
+    !value["workflowId"].trim()
+  ) {
+    return err({
+      status: HttpStatus.BadRequest,
+      message: ErrorMessage.MissingWorkflowId,
+    });
+  }
+  return ok(value["workflowId"].trim());
 };
 
 const extractBearerToken = (header: string): string | undefined => {
@@ -6590,11 +4814,32 @@ const extractBearerToken = (header: string): string | undefined => {
   return token.length > 0 ? token : undefined;
 };
 
+const readOptionalCredentialId = (
+  value: unknown,
+): string | false | undefined => {
+  if (!isRecord(value) || value["credentialId"] === undefined) {
+    return undefined;
+  }
+  return typeof value["credentialId"] === "string" &&
+    value["credentialId"].trim()
+    ? value["credentialId"].trim()
+    : false;
+};
+
+const readCredentialId = (value: unknown): Result<string, ApiError> => {
+  const credentialId = readOptionalCredentialId(value);
+  if (typeof credentialId === "string") {
+    return ok(credentialId);
+  }
+  return readExternalApiKeyId(value);
+};
+
 const CorsHeaderName = {
   Origin: "origin",
   AccessControlAllowOrigin: "access-control-allow-origin",
   AccessControlAllowHeaders: "access-control-allow-headers",
   AccessControlAllowMethods: "access-control-allow-methods",
+  AccessControlAllowCredentials: "access-control-allow-credentials",
   AccessControlMaxAge: "access-control-max-age",
   Vary: "vary",
 } as const;
@@ -6605,18 +4850,16 @@ const CorsHeaderValue = {
   MaxAgeSeconds: "600",
   OptionsMethod: "OPTIONS",
   VaryOrigin: "origin",
-} as const;
-
-const Separator = {
-  Space: " ",
+  AllowCredentials: "true",
 } as const;
 
 const handleCorsPreflight = (
   req: IncomingMessage,
   res: ServerResponse,
+  allowedOrigins: ReadonlyArray<string>,
 ): boolean => {
   const origin = readCorsOrigin(req);
-  if (!origin || !isAllowedCorsOrigin(origin)) {
+  if (!origin || !isAllowedCorsOrigin(origin, allowedOrigins)) {
     return false;
   }
 
@@ -6624,19 +4867,27 @@ const handleCorsPreflight = (
     return false;
   }
 
-  applyCorsHeaders(req, res);
+  applyCorsHeaders(req, res, allowedOrigins);
   res.statusCode = HttpStatus.Ok;
   res.end();
   return true;
 };
 
-const applyCorsHeaders = (req: IncomingMessage, res: ServerResponse): void => {
+const applyCorsHeaders = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  allowedOrigins: ReadonlyArray<string>,
+): void => {
   const origin = readCorsOrigin(req);
-  if (!origin || !isAllowedCorsOrigin(origin)) {
+  if (!origin || !isAllowedCorsOrigin(origin, allowedOrigins)) {
     return;
   }
 
   res.setHeader(CorsHeaderName.AccessControlAllowOrigin, origin);
+  res.setHeader(
+    CorsHeaderName.AccessControlAllowCredentials,
+    CorsHeaderValue.AllowCredentials,
+  );
   res.setHeader(
     CorsHeaderName.AccessControlAllowHeaders,
     CorsHeaderValue.AllowHeaders,
@@ -6657,94 +4908,43 @@ const readCorsOrigin = (req: IncomingMessage): string | undefined => {
   return typeof originHeader === "string" ? originHeader : undefined;
 };
 
-const isAllowedCorsOrigin = (origin: string): boolean => {
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return false;
-    }
-
-    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  } catch {
-    return false;
-  }
-};
-
-const installServerConsoleForwarder = (logsStore: ServerLogsStore): void => {
-  installConsoleForwarder({
-    send: async (entry: SharedLogEntry) => {
-      await logsStore.append({
-        id: entry.id,
-        timestamp: entry.timestamp,
-        level: toServerLogLevel(entry.level),
-        message: entry.message,
-        ...(entry.runId ? { runId: entry.runId } : {}),
-      });
-    },
-    createId: () => randomUUID(),
-  });
-};
-
-const installRequestLogLifecycle = (
-  req: IncomingMessage,
-  res: ServerResponse,
-  startedAt: number,
-): void => {
-  res.on("finish", () => {
-    const durationMs = Date.now() - startedAt;
-    const summary = [
-      "server.request",
-      req.method ?? "UNKNOWN",
-      req.url ?? "",
-      res.statusCode.toString(),
-      `${durationMs.toString()}ms`,
-    ].join(Separator.Space);
-    const errorMessage = responseErrorLogMap.get(res);
-    responseErrorLogMap.delete(res);
-
-    if (res.statusCode >= HttpStatus.InternalServerError) {
-      console.error(summary, errorMessage ?? "");
-      return;
-    }
-
-    if (res.statusCode >= HttpStatus.BadRequest) {
-      console.warn(summary, errorMessage ?? "");
-      return;
-    }
-
-    console.info(summary);
-  });
-};
-
-const toServerLogLevel = (level: string): LogLevel => {
-  if (level === LogLevelValues.Trace) {
-    return LogLevelValues.Trace;
-  }
-
-  if (level === LogLevelValues.Debug) {
-    return LogLevelValues.Debug;
-  }
-
-  if (level === LogLevelValues.Warn) {
-    return LogLevelValues.Warn;
-  }
-
-  if (level === LogLevelValues.Error) {
-    return LogLevelValues.Error;
-  }
-
-  if (level === LogLevelValues.Fatal) {
-    return LogLevelValues.Fatal;
-  }
-
-  return LogLevelValues.Info;
-};
+const isAllowedCorsOrigin = (
+  origin: string,
+  allowedOrigins: ReadonlyArray<string>,
+): boolean => allowedOrigins.some((trustedOrigin) => trustedOrigin === origin);
 
 const respondUnauthorized = (res: ServerResponse): void => {
   res.setHeader(HeaderName.WwwAuthenticate, BearerScheme);
   respondError(res, {
     status: HttpStatus.Unauthorized,
     message: ErrorMessage.Unauthorized,
+  });
+};
+
+const respondExternalCredentialConsumptionError = (
+  res: ServerResponse,
+  result: "unauthorized" | "forbidden" | "throttled",
+): void => {
+  if (result === "unauthorized") {
+    respondUnauthorized(res);
+    return;
+  }
+  respondError(res, {
+    status:
+      result === "throttled"
+        ? HttpStatus.TooManyRequests
+        : HttpStatus.Forbidden,
+    message:
+      result === "throttled"
+        ? ErrorMessage.CredentialRateLimitExceeded
+        : ErrorMessage.WorkflowApiKeyOutOfScope,
+  });
+};
+
+const respondCredentialStorageUnavailable = (res: ServerResponse): void => {
+  respondError(res, {
+    status: HttpStatus.InternalServerError,
+    message: ErrorMessage.CredentialStorageUnavailable,
   });
 };
 
@@ -6756,7 +4956,6 @@ const respondMethodNotAllowed = (res: ServerResponse): void => {
 };
 
 const respondError = (res: ServerResponse, error: ApiError): void => {
-  responseErrorLogMap.set(res, error.message);
   respondJson(res, error.status, {
     error: {
       message: error.message,
@@ -6803,22 +5002,6 @@ const readRequiredString = (
   return ok(trimmed);
 };
 
-const readRequiredStringAllowEmpty = (
-  record: Record<string, unknown>,
-  key: string,
-  missingMessage: string,
-): Result<string, ApiError> => {
-  const value = record[key];
-  if (typeof value !== "string") {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: missingMessage,
-    });
-  }
-
-  return ok(value);
-};
-
 const readRequiredRecord = (
   record: Record<string, unknown>,
   key: string,
@@ -6842,32 +5025,6 @@ const readRequiredRecord = (
   return ok(value);
 };
 
-const readOptionalString = (
-  record: Record<string, unknown>,
-  key: string,
-): string | undefined => {
-  const value = record[key];
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const readOptionalNullableString = (
-  record: Record<string, unknown>,
-  key: string,
-): string | null => {
-  const value = record[key];
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
 const readOptionalStringField = (
   record: Record<string, unknown>,
   key: string,
@@ -6888,106 +5045,9 @@ const readOptionalStringField = (
   return ok(trimmed.length > 0 ? trimmed : undefined);
 };
 
-const readOptionalNumberField = (
-  record: Record<string, unknown>,
-  key: string,
-): Result<number | undefined, ApiError> => {
-  const value = record[key];
-  if (value === undefined) {
-    return ok(undefined);
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  return ok(value);
-};
-
-const readOptionalPositiveIntegerField = (
-  record: Record<string, unknown>,
-  key: string,
-): Result<number | undefined, ApiError> => {
-  const value = record[key];
-  if (value === undefined) {
-    return ok(undefined);
-  }
-
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  return ok(value);
-};
-
-const readOptionalBooleanField = (
-  record: Record<string, unknown>,
-  key: string,
-): Result<boolean | undefined, ApiError> => {
-  const value = record[key];
-  if (value === undefined) {
-    return ok(undefined);
-  }
-
-  if (typeof value !== "boolean") {
-    return err({
-      status: HttpStatus.BadRequest,
-      message: ErrorMessage.InvalidBody,
-    });
-  }
-
-  return ok(value);
-};
-
-const parseHistoryRunStatus = (
-  value: string,
-): Result<HistoryRunStatus, ApiError> => {
-  if (isHistoryRunStatus(value)) {
-    return ok(value);
-  }
-
-  return err({
-    status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody,
-  });
-};
-
-const parseLogLevel = (value: string): Result<LogLevel, ApiError> => {
-  if (isLogLevel(value)) {
-    return ok(value);
-  }
-
-  return err({
-    status: HttpStatus.BadRequest,
-    message: ErrorMessage.InvalidBody,
-  });
-};
-
-const isHistoryRunStatus = (value: string): value is HistoryRunStatus =>
-  value === HistoryRunStatus.Pending ||
-  value === HistoryRunStatus.Running ||
-  value === HistoryRunStatus.Completed ||
-  value === HistoryRunStatus.Failed ||
-  value === HistoryRunStatus.Canceled;
-
-const isLogLevel = (value: string): value is LogLevel =>
-  value === LogLevelValues.Trace ||
-  value === LogLevelValues.Debug ||
-  value === LogLevelValues.Info ||
-  value === LogLevelValues.Warn ||
-  value === LogLevelValues.Error ||
-  value === LogLevelValues.Fatal;
-
 const parseJson = (raw: string): Result<unknown, ApiError> => {
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    return ok(parsed);
+    return ok(JSON.parse(raw) as unknown);
   } catch {
     return err({
       status: HttpStatus.BadRequest,

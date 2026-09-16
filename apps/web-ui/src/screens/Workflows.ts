@@ -1,18 +1,13 @@
 import { Button, IconButton } from "../components/Button.js";
 import { StatusBadge } from "../components/Card.js";
 import { PageNoticeStack } from "../components/PageScaffold.js";
-import { EmptyStatePanel } from "../components/WorkbenchPanels.js";
+import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
   Component,
   createElement,
   type ComponentProps,
 } from "../shared/Component.js";
-import { COMPACT_VIEWPORT_MAX_WIDTH } from "../shared/constants.js";
-import {
-  createLogsClient,
-  ServerLogLevel,
-  type ServerLogEntry,
-} from "../shared/logs-client.js";
+import { COMPACT_VIEWPORT_MAX_WIDTH, ROUTES } from "../shared/constants.js";
 import {
   createWorkflowClient,
   WorkflowRunStreamEventType,
@@ -23,11 +18,37 @@ import {
   type WorkflowVersionRestorePart,
   type WorkflowVersionTimelineExportRecord,
 } from "../shared/workflow-client.js";
+import { createSettingsClient } from "../shared/settings-client.js";
 import {
-  createWorkspaceStateClient,
-  type WorkspaceStateSnapshot,
-} from "../shared/workspace-state-client.js";
-import type { ProjectRecord } from "../shared/workbench-types.js";
+  createPromptAssetsClient,
+  type PromptAssetSummary,
+} from "../shared/prompt-assets-client.js";
+import {
+  createSkillAssetsClient,
+  selectEnabledSkillAssets,
+  type SkillAssetSummary,
+} from "../shared/skill-assets-client.js";
+import {
+  createMemoryAssetsClient,
+  selectEnabledMemoryAssets,
+  type MemoryAssetSummary,
+} from "../shared/memory-assets-client.js";
+import {
+  createMcpAssetsClient,
+  selectEnabledMcpAssets,
+  type McpAssetSummary,
+} from "../shared/mcp-assets-client.js";
+import {
+  createPluginAssetsClient,
+  selectEnabledPluginAssets,
+  type PluginAssetSummary,
+} from "../shared/plugin-assets-client.js";
+import {
+  createGovernanceLifecycleClient,
+  redactLifecyclePromptBindings,
+  type GovernanceLifecycleTrace,
+} from "../shared/governance-lifecycle-client.js";
+import type { SettingsSnapshot } from "../shared/settings-storage.js";
 import type { ProviderProfileRecord } from "./settings-state.js";
 import {
   createWorkflowEditHistoryEntry,
@@ -43,6 +64,7 @@ import {
   readWorkflowVersionImportCandidates,
   type WorkflowVersionImportCandidateRecord,
 } from "./workflows-version-import-state.js";
+import { readWorkflowEditorTarget } from "./workflows-catalog-state.js";
 import {
   WorkflowsUrlEditor,
   WorkflowsUrlModal,
@@ -53,6 +75,13 @@ import {
   type WorkflowsUrlPatch,
   type WorkflowsUrlState,
 } from "./workflows-url-state.js";
+import {
+  createPromptNodeConfig,
+  readPromptNodeBindings,
+  readPromptNodeConfig,
+  renderPromptNodePreview,
+  type JsonValue,
+} from "./prompt-node-config-state.js";
 import {
   buildWorkflowDebugInputSources,
   readExecutionRefreshPollingAction,
@@ -67,11 +96,15 @@ import {
   readWorkflowPinnedOutputAction,
   parseWorkflowEditedOutputSnapshot,
   readWorkflowPinnedTestOutputFromDefinition,
+  readWorkflowPinnedTestOutputsFromDefinition,
+  readWorkflowTestRunSeedOutputs,
   writeWorkflowPinnedTestOutputToDefinition,
-  readWorkflowStepSeedOutputs,
+  writeWorkflowPinnedTestOutputsToDefinition,
+  readWorkflowStepRunSeedOutputs,
   readWorkflowNodeStepLaunchState,
   readWorkflowRunControlState,
   readWorkflowStepExecutionAvailability,
+  selectGovernanceLifecycleControlState,
   selectWorkflowCanvasExecution,
   selectWorkflowDebugExecution,
   selectWorkflowDraftAfterCatalogReload,
@@ -81,7 +114,10 @@ import {
   type WorkflowDebugOutputMap,
   type WorkflowDebugStatusTone,
   type WorkflowPinnedTestOutput,
+  type WorkflowPinnedTestOutputOption,
+  type WorkflowRunControlState,
   type WorkflowStepExecutionAvailability,
+  type WorkflowStepRunMode,
 } from "./workflows-debug-state.js";
 import {
   WorkflowAssetKind,
@@ -102,7 +138,6 @@ import {
   attachGuardrailToNode,
   createJsonSchemaNode,
   connectWorkflowNodes,
-  createEmptyWorkflowDefinition,
   createWorkflowAssetDraft,
   detachGuardrailFromNode,
   evaluateWorkflowRegex,
@@ -115,7 +150,6 @@ import {
   readJsonSchemaPaths,
   readAssetKindLabel,
   readAssetScopeLabel,
-  readDefaultWorkflowWorkspaceId,
   readGuardrailDefinitionValidity,
   readJsonContractValidation,
   readWorkflowExpressionUsageHints,
@@ -175,7 +209,6 @@ const WorkflowScreenSelector = {
   SidebarRail: "workflows-sidebar-rail",
   SidebarPanel: "workflows-sidebar-panel",
   InspectorPanel: "workflows-inspector-panel",
-  WorkflowCreate: "workflows-create",
   WorkflowSave: "workflows-save",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
@@ -188,7 +221,10 @@ const WorkflowScreenSelector = {
   WorkflowEditHistoryClose: "workflows-edit-history-close",
   WorkflowDelete: "workflows-delete",
   WorkflowRun: "workflows-run",
-  WorkflowSelect: "workflows-select",
+  WorkflowRunMenu: "workflows-run-menu",
+  NodeStepRunMenu: "workflows-node-step-run-menu",
+  NodeStepRunMenuNormal: "workflows-node-step-run-normal",
+  NodeStepRunMenuTest: "workflows-node-step-run-test",
   CanvasZoomOut: "workflows-canvas-zoom-out",
   CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
@@ -229,6 +265,20 @@ const WorkflowScreenSelector = {
   WorkflowDescriptionInput: "workflows-description-input",
   NodeLabelInput: "workflows-node-label-input",
   NodePromptInput: "workflows-node-prompt-input",
+  PromptAssetSelect: "workflows-prompt-asset-select",
+  PromptAssetVersionSelect: "workflows-prompt-version-select",
+  PromptAssetBindingsInput: "workflows-prompt-bindings-input",
+  PromptAssetPreview: "workflows-prompt-preview",
+  PromptAssetValidation: "workflows-prompt-validation",
+  PromptProvenance: "workflows-prompt-provenance",
+  GovernanceApprove: "workflows-governance-approve",
+  GovernanceContinue: "workflows-governance-continue",
+  GovernanceReject: "workflows-governance-reject",
+  GovernanceFeedback: "workflows-governance-feedback",
+  SkillAssetSelect: "workflows-skill-asset-select",
+  McpAssetSelect: "workflows-mcp-asset-select",
+  PluginAssetSelect: "workflows-plugin-asset-select",
+  MemoryAssetSelect: "workflows-memory-asset-select",
   NodeRoleSelect: "workflows-node-role-select",
   NodeProviderSelect: "workflows-node-provider-select",
   NodeProviderTest: "workflows-node-provider-test",
@@ -388,10 +438,8 @@ const InspectorInputClassName =
 const InspectorTextInputClassName = `h-10 ${InspectorInputClassName}`;
 const InspectorTextAreaClassName = `min-h-32 resize-y py-3 leading-6 ${InspectorInputClassName}`;
 const InspectorSelectClassName = `h-10 appearance-none pr-10 ${InspectorInputClassName}`;
-const ProviderFallbackId = "codex-cli";
 
 const SidebarSection = {
-  Workflows: "workflows",
   Nodes: "nodes",
   Assets: "assets",
   History: "history",
@@ -409,7 +457,6 @@ type CompactView = (typeof CompactView)[keyof typeof CompactView];
 
 const PendingAction = {
   Load: "load",
-  CreateWorkflow: "create-workflow",
   SaveWorkflow: "save-workflow",
   DeleteWorkflow: "delete-workflow",
   CreateAsset: "create-asset",
@@ -436,6 +483,16 @@ const WorkflowLogsFilter = {
 
 type WorkflowLogsFilter =
   (typeof WorkflowLogsFilter)[keyof typeof WorkflowLogsFilter];
+
+type WorkflowLogLevel = "info" | "warn" | "error";
+
+type WorkflowLogEntry = {
+  id: string;
+  level: WorkflowLogLevel;
+  message: string;
+  runId: string;
+  timestamp: string;
+};
 
 type WorkflowSelection =
   | { type: "workflow"; id: string | null }
@@ -532,6 +589,7 @@ type ExecutionNodeModalState = {
 
 type WorkflowOutputEditorState = {
   nodeId: string;
+  pinnedOutputId: string | null;
   text: string;
 };
 
@@ -544,6 +602,7 @@ type WorkflowPinnedOutputOverwriteDialogState = {
 type WorkflowDeleteDialogState = {
   workflowId: string;
   workflowName: string;
+  dependentApiKeyNames: ReadonlyArray<string>;
 };
 
 type WorkflowNodeRenameDialogState = {
@@ -709,14 +768,20 @@ const AssetOutputContractEditorSelectors: OutputContractEditorSelectorSet = {
 };
 
 interface WorkflowsScreenState {
-  currentProject: ProjectRecord | null;
-  workspaceState: WorkspaceStateSnapshot | null;
+  settingsSnapshot: SettingsSnapshot | null;
   workflows: ReadonlyArray<WorkflowDefinitionRecord>;
   assets: ReadonlyArray<WorkflowAssetRecord>;
+  promptAssets: ReadonlyArray<PromptAssetSummary>;
+  skillAssets: ReadonlyArray<SkillAssetSummary>;
+  mcpAssets: ReadonlyArray<McpAssetSummary>;
+  pluginAssets: ReadonlyArray<PluginAssetSummary>;
+  memoryAssets: ReadonlyArray<MemoryAssetSummary>;
   assetUsages: ReadonlyArray<WorkflowAssetUsageRecord>;
   workflowVersions: ReadonlyArray<WorkflowDefinitionVersionRecord>;
   executions: ReadonlyArray<WorkflowExecutionRecord>;
-  serverLogs: ReadonlyArray<ServerLogEntry>;
+  governanceLifecycle: GovernanceLifecycleTrace | null;
+  governanceFeedback: string;
+  governanceControlPending: boolean;
   workflowLogsFilter: WorkflowLogsFilter;
   executionHistoryFilter: ExecutionHistoryFilter;
   executionAutoRefreshEnabled: boolean;
@@ -728,7 +793,6 @@ interface WorkflowsScreenState {
   desktopInspectorCollapsed: boolean;
   isCompactViewport: boolean;
   pendingAction: PendingAction | null;
-  refreshingLogs: boolean;
   loadingExecutionId: string | null;
   activeProviderTestNodeId: string | null;
   dirtyWorkflow: boolean;
@@ -754,6 +818,9 @@ interface WorkflowsScreenState {
   debugExecutionId: string | null;
   liveExecution: LiveExecutionState | null;
   pinnedTestOutput: WorkflowPinnedTestOutput | null;
+  pinnedTestOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>;
+  runModeMenuOpen: boolean;
+  nodeStepRunMenu: WorkflowNodeStepRunMenuState | null;
   outputEditor: WorkflowOutputEditorState | null;
   pinnedOutputOverwrite: WorkflowPinnedOutputOverwriteDialogState | null;
   workflowDeleteDialog: WorkflowDeleteDialogState | null;
@@ -778,13 +845,28 @@ interface WorkflowsScreenState {
   noticeMessage: string | null;
 }
 
+type WorkflowNodeStepRunMenuState = {
+  nodeId: string;
+  source: "hover" | "modal" | "action";
+};
+
+interface WorkflowsEditorProps extends ComponentProps {
+  workflowId: string;
+}
+
 export class WorkflowsScreen extends Component<
-  ComponentProps,
+  WorkflowsEditorProps,
   WorkflowsScreenState
 > {
-  private readonly workspaceStateClient = createWorkspaceStateClient();
+  private readonly settingsClient = createSettingsClient();
   private readonly workflowClient = createWorkflowClient();
-  private readonly logsClient = createLogsClient();
+  private readonly promptAssetsClient = createPromptAssetsClient();
+  private readonly skillAssetsClient = createSkillAssetsClient();
+  private readonly mcpAssetsClient = createMcpAssetsClient();
+  private readonly pluginAssetsClient = createPluginAssetsClient();
+  private readonly memoryAssetsClient = createMemoryAssetsClient();
+  private readonly governanceLifecycleClient =
+    createGovernanceLifecycleClient();
   private draggingNodeId: string | null = null;
   private dragPointerOffset: { x: number; y: number } | null = null;
   private connectionDragging = false;
@@ -798,28 +880,33 @@ export class WorkflowsScreen extends Component<
   private executionRefreshIntervalId: number | null = null;
   private outputEditorDraftText: string | null = null;
 
-  constructor(props: ComponentProps = {}) {
+  constructor(props: WorkflowsEditorProps) {
     super(props, {
-      currentProject: null,
-      workspaceState: null,
+      settingsSnapshot: null,
       workflows: [],
       assets: [],
+      promptAssets: [],
+      skillAssets: [],
+      mcpAssets: [],
+      pluginAssets: [],
+      memoryAssets: [],
       assetUsages: [],
       workflowVersions: [],
       executions: [],
-      serverLogs: [],
+      governanceLifecycle: null,
+      governanceFeedback: "",
+      governanceControlPending: false,
       workflowLogsFilter: WorkflowLogsFilter.Errors,
       executionHistoryFilter: ExecutionHistoryFilter.All,
       executionAutoRefreshEnabled: true,
       draftWorkflow: null,
       selection: { type: "workflow", id: null },
-      activeSidebarSection: SidebarSection.Workflows,
+      activeSidebarSection: SidebarSection.Nodes,
       compactView: CompactView.Canvas,
       desktopSidebarCollapsed: false,
       desktopInspectorCollapsed: false,
       isCompactViewport: readIsCompactViewport(),
       pendingAction: null,
-      refreshingLogs: false,
       loadingExecutionId: null,
       activeProviderTestNodeId: null,
       dirtyWorkflow: false,
@@ -846,6 +933,9 @@ export class WorkflowsScreen extends Component<
       executionNodeModal: null,
       liveExecution: null,
       pinnedTestOutput: null,
+      pinnedTestOutputs: [],
+      runModeMenuOpen: false,
+      nodeStepRunMenu: null,
       outputEditor: null,
       pinnedOutputOverwrite: null,
       workflowDeleteDialog: null,
@@ -874,6 +964,7 @@ export class WorkflowsScreen extends Component<
     window.addEventListener("mouseup", this.handleGlobalPointerUp);
     window.addEventListener("keydown", this.handleGlobalKeyDown);
     window.addEventListener("keyup", this.handleGlobalKeyUp);
+    window.addEventListener("click", this.handleRunMenusOutsideClick);
     window.addEventListener("popstate", this.handleWorkflowUrlStateChange);
     void this.hydrateState();
   }
@@ -886,6 +977,7 @@ export class WorkflowsScreen extends Component<
     window.removeEventListener("mouseup", this.handleGlobalPointerUp);
     window.removeEventListener("keydown", this.handleGlobalKeyDown);
     window.removeEventListener("keyup", this.handleGlobalKeyUp);
+    window.removeEventListener("click", this.handleRunMenusOutsideClick);
     window.removeEventListener("popstate", this.handleWorkflowUrlStateChange);
     this.cancelLiveExecutionStream();
     this.stopExecutionRefreshPolling();
@@ -958,7 +1050,7 @@ export class WorkflowsScreen extends Component<
       "div",
       {
         className:
-          "flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border-dark bg-[#141a21]/95 px-3 py-3 backdrop-blur xl:flex-nowrap xl:px-4",
+          "relative z-20 flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border-dark bg-[#141a21]/95 px-3 py-3 backdrop-blur xl:flex-nowrap xl:px-4",
       },
       [
         createElement(
@@ -974,11 +1066,7 @@ export class WorkflowsScreen extends Component<
               createElement(
                 "span",
                 { className: "truncate text-xs text-text-secondary" },
-                [
-                  this.state.currentProject
-                    ? `${this.state.currentProject.name} · ${this.state.currentProject.rootPath ?? "workflow-only project"}`
-                    : "Select a project from the global sidebar to load the workflow editor.",
-                ],
+                ["Workflow scope"],
               ),
             ]),
             currentWorkflow
@@ -1034,23 +1122,6 @@ export class WorkflowsScreen extends Component<
             createElement(Button, {
               variant: "secondary",
               size: "sm",
-              disabled:
-                this.state.currentProject === null ||
-                this.state.pendingAction !== null,
-              onClick: () => {
-                void this.handleCreateWorkflow();
-              },
-              children:
-                this.state.pendingAction === PendingAction.CreateWorkflow
-                  ? "Creating"
-                  : "New workflow",
-              dataset: {
-                testid: WorkflowScreenSelector.WorkflowCreate,
-              },
-            }),
-            createElement(Button, {
-              variant: "secondary",
-              size: "sm",
               disabled: currentWorkflow === null,
               onClick: () => this.openWorkflowEditHistory(),
               icon: "history_edu",
@@ -1077,25 +1148,7 @@ export class WorkflowsScreen extends Component<
                 testid: WorkflowScreenSelector.WorkflowSave,
               },
             }),
-            createElement(Button, {
-              variant: runControl.variant,
-              size: "sm",
-              disabled: runControl.disabled,
-              onClick: () => {
-                if (runControl.mode === "stop") {
-                  void this.handleStopWorkflowExecution();
-                  return;
-                }
-
-                void this.handleRunWorkflow();
-              },
-              icon: runControl.icon,
-              children: runControl.label,
-              title: runControl.title,
-              dataset: {
-                testid: WorkflowScreenSelector.WorkflowRun,
-              },
-            }),
+            this.renderWorkflowRunSelector(runControl),
             createElement(Button, {
               variant: "danger",
               size: "sm",
@@ -1118,22 +1171,227 @@ export class WorkflowsScreen extends Component<
     );
   }
 
-  private renderSurface(): HTMLElement {
-    if (this.state.currentProject === null) {
+  private renderGovernanceProvenance(
+    execution: WorkflowExecutionRecord,
+  ): HTMLElement {
+    const lifecycle = this.state.governanceLifecycle;
+    if (!execution.lifecycleId) {
       return createElement(
         "div",
         {
-          className: "flex flex-1 items-center justify-center p-6",
+          className:
+            "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-xs text-text-secondary",
         },
-        [
-          createElement(EmptyStatePanel, {
-            icon: "account_tree",
-            title: "No active project",
-            description:
-              "Open or create a project from the Projects screen. Workflow-only projects are supported, but the editor stays server-first and needs an active project ID.",
-          }),
-        ],
+        ["This historical run has no governance lifecycle."],
       );
+    }
+    if (!lifecycle || lifecycle.id !== execution.lifecycleId) {
+      return createElement(
+        "div",
+        {
+          className:
+            "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3 text-xs text-text-secondary",
+          "data-testid": WorkflowScreenSelector.PromptProvenance,
+        },
+        ["Loading governed prompt provenance…"],
+      );
+    }
+    return createElement(
+      "div",
+      {
+        className:
+          "rounded-lg border border-border-dark bg-[#11161d] px-3 py-3",
+        "data-testid": WorkflowScreenSelector.PromptProvenance,
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Governance and prompt provenance",
+        ]),
+        createElement("p", { className: "mt-1 text-xs text-text-secondary" }, [
+          `State: ${lifecycle.state} · ${selectGovernanceLifecycleControlState({ state: lifecycle.state, budgets: lifecycle.budgets, fingerprints: lifecycle.fingerprints, transitionCount: lifecycle.transitions.length, feedback: this.state.governanceFeedback, pending: this.state.governanceControlPending }).budgetSummary}`,
+        ]),
+        this.renderGovernanceControls(lifecycle),
+        ...lifecycle.promptExecutions.map((prompt) =>
+          createElement(
+            "div",
+            {
+              key: `${prompt.assetId}:${prompt.version}:${prompt.timestamp}`,
+              className:
+                "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
+            },
+            [
+              `Prompt ${prompt.assetId} v${prompt.version} · ${prompt.validation} · ${prompt.renderedFingerprint}`,
+              createElement("p", { className: "mt-1 break-all" }, [
+                JSON.stringify(redactLifecyclePromptBindings(prompt.bindings)),
+              ]),
+            ],
+          ),
+        ),
+        ...lifecycle.agentExecutions.flatMap((agent) =>
+          agent.skillId || agent.mcpAssetId || agent.pluginAssetId
+            ? [
+                createElement(
+                  "div",
+                  {
+                    key: `${agent.agentId}:${agent.skillId}:${agent.skillVersion}`,
+                    className:
+                      "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
+                  },
+                  [
+                    agent.skillId && agent.skillVersion
+                      ? `Skill ${agent.skillId} v${agent.skillVersion} · agent ${agent.agentId}`
+                      : `Agent ${agent.agentId}`,
+                    agent.artifactFingerprint && agent.skillId
+                      ? createElement("p", { className: "mt-1 break-all" }, [
+                          `Provenance: ${agent.artifactFingerprint}`,
+                        ])
+                      : "",
+                    agent.mcpAssetId &&
+                    agent.mcpServerId &&
+                    agent.mcpToolVersion
+                      ? createElement("p", { className: "mt-1 break-all" }, [
+                          `MCP: ${agent.mcpAssetId} · ${agent.mcpServerId} · v${agent.mcpToolVersion}${agent.responseFingerprint ? ` · Response: ${agent.responseFingerprint}` : ""}`,
+                        ])
+                      : "",
+                    agent.pluginAssetId &&
+                    agent.pluginVersion &&
+                    agent.pluginIsolation
+                      ? createElement("p", { className: "mt-1 break-all" }, [
+                          `Plugin: ${agent.pluginAssetId} · v${agent.pluginVersion} · ${agent.pluginIsolation}${agent.pluginFingerprint ? ` · Provenance: ${agent.pluginFingerprint}` : ""}${agent.pluginAuditAction ? ` · Audit: ${agent.pluginAuditAction}` : ""}`,
+                        ])
+                      : "",
+                  ],
+                ),
+              ]
+            : [],
+        ),
+        ...lifecycle.retrievalExecutions.map((retrieval) =>
+          createElement(
+            "div",
+            {
+              key: `${retrieval.assetId}:${retrieval.provenanceFingerprint}:${retrieval.timestamp}`,
+              className:
+                "mt-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-2 text-xs text-text-secondary",
+            },
+            [
+              `Memory ${retrieval.assetId} · ${retrieval.documentCount} retrieval${retrieval.documentCount === 1 ? "" : "s"} · ${retrieval.redacted ? "redacted" : "unredacted"}`,
+              createElement("p", { className: "mt-1 break-all" }, [
+                `Scope: ${retrieval.scope}${retrieval.workflowId ? ` · workflow ${retrieval.workflowId}` : ""} · Provenance: ${retrieval.provenanceFingerprint}`,
+              ]),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  private renderGovernanceControls(
+    lifecycle: GovernanceLifecycleTrace,
+  ): HTMLElement {
+    const awaitingApproval = lifecycle.state === "awaiting-user-approval";
+    const controlState = selectGovernanceLifecycleControlState({
+      state: lifecycle.state,
+      budgets: lifecycle.budgets,
+      fingerprints: lifecycle.fingerprints,
+      transitionCount: lifecycle.transitions.length,
+      feedback: this.state.governanceFeedback,
+      pending: this.state.governanceControlPending,
+    });
+    const disabled = controlState.controlsDisabled;
+    return createElement("div", { className: "mt-3 space-y-2" }, [
+      createElement("input", {
+        className: InspectorInputClassName,
+        value: this.state.governanceFeedback,
+        placeholder: "Decision reason or rejection feedback",
+        disabled,
+        onInput: (event: Event) => {
+          const target = event.target;
+          if (target instanceof HTMLInputElement) {
+            this.setState({ governanceFeedback: target.value });
+          }
+        },
+        "data-testid": WorkflowScreenSelector.GovernanceFeedback,
+      }),
+      createElement("div", { className: "flex flex-wrap gap-2" }, [
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled,
+          onClick: () => void this.handleGovernanceControl("approve"),
+          children: this.state.governanceControlPending ? "Saving…" : "Approve",
+          dataset: { testid: WorkflowScreenSelector.GovernanceApprove },
+        }),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          disabled,
+          onClick: () => void this.handleGovernanceControl("continue"),
+          children: "Continue",
+          dataset: { testid: WorkflowScreenSelector.GovernanceContinue },
+        }),
+        createElement(Button, {
+          variant: "danger",
+          size: "sm",
+          disabled: controlState.rejectDisabled,
+          onClick: () => void this.handleGovernanceControl("reject"),
+          children: "Reject",
+          dataset: { testid: WorkflowScreenSelector.GovernanceReject },
+        }),
+      ]),
+      awaitingApproval
+        ? ""
+        : createElement("p", { className: "text-xs text-text-secondary" }, [
+            "Controls are disabled because this lifecycle is not awaiting approval.",
+          ]),
+      createElement("p", { className: "text-xs text-text-secondary" }, [
+        `Fingerprints: ${controlState.fingerprintSummary} · History: ${controlState.historyLabel}`,
+      ]),
+    ]);
+  }
+
+  private async handleGovernanceControl(
+    action: "approve" | "continue" | "reject",
+  ): Promise<void> {
+    const lifecycle = this.state.governanceLifecycle;
+    if (!lifecycle || lifecycle.state !== "awaiting-user-approval") return;
+    const reason = this.state.governanceFeedback.trim();
+    this.setState({ governanceControlPending: true, errorMessage: null });
+    try {
+      const next =
+        action === "approve"
+          ? await this.governanceLifecycleClient.approve({
+              lifecycleId: lifecycle.id,
+              reason,
+            })
+          : action === "continue"
+            ? await this.governanceLifecycleClient.continue({
+                lifecycleId: lifecycle.id,
+                reason,
+              })
+            : await this.governanceLifecycleClient.reject({
+                lifecycleId: lifecycle.id,
+                feedback: reason,
+              });
+      this.setState({
+        governanceLifecycle: next,
+        governanceControlPending: false,
+        governanceFeedback: "",
+        noticeMessage: `Lifecycle ${action} recorded.`,
+      });
+    } catch (error) {
+      this.setState({
+        governanceControlPending: false,
+        errorMessage: readErrorMessage(
+          error,
+          "Could not record lifecycle decision.",
+        ),
+      });
+    }
+  }
+
+  private renderSurface(): HTMLElement {
+    if (this.state.settingsSnapshot === null && this.state.errorMessage) {
+      return this.renderConnectionRecovery();
     }
 
     return createElement(
@@ -1145,6 +1403,26 @@ export class WorkflowsScreen extends Component<
         this.renderActivityRail(),
         this.shouldShowSidebar() ? this.renderSidebarPanel() : "",
         this.shouldShowCanvas() ? this.renderCanvasPanel() : "",
+      ],
+    );
+  }
+
+  private renderConnectionRecovery(): HTMLElement {
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center",
+        "data-testid": "workflows-connection-recovery",
+      },
+      [
+        createElement(EmptyStatePanel, {
+          icon: "cloud_off",
+          title: "Workflow service unavailable",
+          description:
+            this.state.errorMessage ??
+            "The colocated workflow service is unavailable.",
+        }),
       ],
     );
   }
@@ -1176,13 +1454,6 @@ export class WorkflowsScreen extends Component<
               "flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
           },
           [
-            this.renderRailButton(
-              "list",
-              "Definitions",
-              this.state.activeSidebarSection === SidebarSection.Workflows,
-              () => this.showSidebarSection(SidebarSection.Workflows),
-              WorkflowScreenSelector.SectionWorkflows,
-            ),
             this.renderRailButton(
               "deployed_code",
               "Nodes",
@@ -1500,11 +1771,25 @@ export class WorkflowsScreen extends Component<
     }
 
     const context = this.readNodeDebugContext(node);
-    const text =
-      context?.outputValue === undefined
+    const pinnedOutput = urlState.pinnedOutputId
+      ? this.state.pinnedTestOutputs.find(
+          (output) =>
+            output.nodeId === node.id && output.id === urlState.pinnedOutputId,
+        )
+      : null;
+    if (urlState.pinnedOutputId && !pinnedOutput) {
+      return null;
+    }
+    const text = pinnedOutput
+      ? formatOutputSnapshot(pinnedOutput.outputSnapshot)
+      : context?.outputValue === undefined
         ? ""
         : formatOutputSnapshot(context.outputValue);
-    return { nodeId: node.id, text };
+    return {
+      nodeId: node.id,
+      pinnedOutputId: pinnedOutput?.id ?? null,
+      text,
+    };
   }
 
   private readUrlDeepEditor(
@@ -1636,6 +1921,7 @@ export class WorkflowsScreen extends Component<
           diffQuery: null,
           executionId: state.hasSelection ? urlState.executionId : null,
           editor: null,
+          pinnedOutputId: null,
           deepEditorTab: null,
           deepEditorOutputTab: null,
           regexPattern: null,
@@ -1684,11 +1970,7 @@ export class WorkflowsScreen extends Component<
           createElement(
             "p",
             { className: "mt-1 truncate text-xs text-text-secondary" },
-            [
-              this.state.currentProject?.name
-                ? `${this.state.currentProject.name} · ${sectionCount}`
-                : "No project loaded",
-            ],
+            [`Workflow scope · ${sectionCount}`],
           ),
         ]),
         !this.state.isCompactViewport
@@ -1705,10 +1987,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private readSidebarSectionTitle(section: SidebarSection): string {
-    if (section === SidebarSection.Workflows) {
-      return "Definitions";
-    }
-
     if (section === SidebarSection.Nodes) {
       return "Nodes";
     }
@@ -1721,10 +1999,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private readSidebarSectionCount(section: SidebarSection): string {
-    if (section === SidebarSection.Workflows) {
-      return `${this.state.workflows.length.toString()} workflows`;
-    }
-
     if (section === SidebarSection.Nodes) {
       return `${this.state.draftWorkflow?.nodes.length.toString() ?? "0"} nodes`;
     }
@@ -1757,145 +2031,7 @@ export class WorkflowsScreen extends Component<
       );
     }
 
-    return this.renderWorkflowListSection();
-  }
-
-  private renderWorkflowListSection(): HTMLElement {
-    return createElement(
-      "div",
-      {
-        className: "flex min-h-0 flex-1 flex-col",
-      },
-      [
-        createElement(
-          "div",
-          { className: "border-b border-border-dark px-3 py-3" },
-          [
-            createElement("label", { className: "flex flex-col gap-2" }, [
-              createElement(
-                "span",
-                {
-                  className:
-                    "text-[11px] font-medium tracking-[0.14em] text-text-secondary",
-                },
-                ["Active workflow"],
-              ),
-              createElement(
-                "select",
-                {
-                  className:
-                    "h-10 rounded-md border border-border-dark bg-[#0f151c] px-3 text-sm text-white focus:border-primary focus:outline-none",
-                  value: this.readCurrentWorkflowRecord()?.id ?? "",
-                  "data-testid": WorkflowScreenSelector.WorkflowSelect,
-                  onChange: (event: Event) => {
-                    const target = event.target;
-                    if (target instanceof HTMLSelectElement) {
-                      this.handleSelectWorkflow(target.value);
-                    }
-                  },
-                },
-                [
-                  this.state.workflows.length === 0
-                    ? createElement("option", { value: "" }, [
-                        "No workflows yet",
-                      ])
-                    : this.state.workflows.map((workflow) =>
-                        createElement(
-                          "option",
-                          {
-                            key: workflow.id,
-                            value: workflow.id,
-                          },
-                          [workflow.name],
-                        ),
-                      ),
-                ],
-              ),
-            ]),
-          ],
-        ),
-        this.state.workflows.length === 0
-          ? createElement(
-              "div",
-              { className: "flex flex-1 items-center justify-center p-4" },
-              [
-                createElement(EmptyStatePanel, {
-                  icon: "account_tree",
-                  title: "No workflow definitions",
-                  description:
-                    "Create the first workflow from the toolbar. Definitions persist in the server workspace and reload across browser contexts.",
-                }),
-              ],
-            )
-          : createElement(
-              "div",
-              { className: "min-h-0 flex-1 overflow-y-auto p-3" },
-              [
-                this.state.workflows
-                  .slice()
-                  .sort((left, right) =>
-                    right.updatedAt.localeCompare(left.updatedAt),
-                  )
-                  .map((workflow) =>
-                    createElement(
-                      "button",
-                      {
-                        type: "button",
-                        key: workflow.id,
-                        className: `mb-2 flex w-full flex-col gap-1.5 rounded-xl border px-3 py-3 text-left transition-colors ${workflow.id === this.readCurrentWorkflowRecord()?.id ? "border-primary/50 bg-primary/10 shadow-[0_10px_24px_rgba(37,99,235,0.16)]" : "border-border-dark bg-[#10161d] hover:border-slate-600 hover:bg-[#1a222c]"}`,
-                        onClick: () => this.handleSelectWorkflow(workflow.id),
-                      },
-                      [
-                        createElement(
-                          "div",
-                          {
-                            className:
-                              "flex items-center justify-between gap-3",
-                          },
-                          [
-                            createElement(
-                              "span",
-                              {
-                                className:
-                                  "truncate text-sm font-medium text-white",
-                              },
-                              [workflow.name],
-                            ),
-                            createElement(
-                              StatusBadge,
-                              {
-                                status:
-                                  workflow.status ===
-                                  WorkflowRecordStatus.Published
-                                    ? "success"
-                                    : workflow.status ===
-                                        WorkflowRecordStatus.Archived
-                                      ? "paused"
-                                      : "info",
-                              },
-                              [workflow.status],
-                            ),
-                          ],
-                        ),
-                        createElement(
-                          "span",
-                          { className: "truncate text-xs text-text-secondary" },
-                          [workflow.description || "No description yet"],
-                        ),
-                        createElement(
-                          "span",
-                          { className: "text-[11px] text-text-secondary" },
-                          [
-                            `${workflow.nodes.length} nodes · ${workflow.edges.length} connections · v${workflow.version}`,
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-      ],
-    );
+    return this.renderNodePaletteSection();
   }
 
   private renderNodePaletteSection(): HTMLElement {
@@ -1912,7 +2048,7 @@ export class WorkflowsScreen extends Component<
               "mb-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-sm leading-6 text-text-secondary",
           },
           [
-            "Add the MVP node set to the canvas. Asset-backed nodes create project-scoped assets server-side before they are placed.",
+            "Add the MVP node set to the canvas. Asset-backed nodes create reusable workflow assets server-side before they are placed.",
           ],
         ),
         readNodeKindsForPalette().map((kind) =>
@@ -1923,12 +2059,8 @@ export class WorkflowsScreen extends Component<
               key: kind,
               className:
                 "mb-2 flex w-full cursor-grab items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors active:cursor-grabbing hover:border-slate-600 hover:bg-[#1a222c]",
-              disabled:
-                this.state.currentProject === null ||
-                this.state.pendingAction !== null,
-              draggable:
-                this.state.currentProject !== null &&
-                this.state.pendingAction === null,
+              disabled: this.state.pendingAction !== null,
+              draggable: this.state.pendingAction === null,
               onClick: () => {
                 void this.handleAddNode(kind);
               },
@@ -1996,7 +2128,7 @@ export class WorkflowsScreen extends Component<
                   icon: "library_add",
                   title: "No reusable assets",
                   description:
-                    "Create project-scoped prompt, instruction or guardrail assets here before reusing them across workflow definitions.",
+                    "Create reusable prompt, instruction or guardrail assets here before reusing them across workflow definitions.",
                 })
               : groupAssetsByKind(this.state.assets).map((group) =>
                   createElement(
@@ -2063,12 +2195,11 @@ export class WorkflowsScreen extends Component<
                                   StatusBadge,
                                   {
                                     status:
-                                      asset.scope ===
-                                      WorkflowAssetScope.Workspace
+                                      asset.scope === WorkflowAssetScope.Global
                                         ? "info"
                                         : "warning",
                                   },
-                                  [readAssetScopeLabel(asset.scope)],
+                                  [readAssetScopeLabel()],
                                 ),
                               ],
                             ),
@@ -3329,8 +3460,7 @@ export class WorkflowsScreen extends Component<
 
     try {
       const parsed = JSON.parse(rawText) as WorkflowVersionImportSourceRecord;
-      const target = this.readCurrentWorkflowRecord();
-      if (!target) {
+      if (!this.readCurrentWorkflowRecord()) {
         return;
       }
       const selectedVersionId =
@@ -3338,8 +3468,6 @@ export class WorkflowsScreen extends Component<
       const importCandidates = readWorkflowVersionImportCandidates(parsed);
       const preview = await this.workflowClient.previewDefinitionVersionImport({
         exported: parsed,
-        targetWorkspaceId: target.workspaceId,
-        targetProjectId: target.projectId,
         ...(selectedVersionId ? { versionId: selectedVersionId } : {}),
       });
       const isTimelineImport = isWorkflowVersionTimelineImportSource(parsed);
@@ -3378,8 +3506,11 @@ export class WorkflowsScreen extends Component<
     selectedVersionId: string,
   ): Promise<void> {
     const dialog = this.state.versionActionDialog;
-    const target = this.readCurrentWorkflowRecord();
-    if (!dialog || dialog.kind !== "import" || !target) {
+    if (
+      !dialog ||
+      dialog.kind !== "import" ||
+      !this.readCurrentWorkflowRecord()
+    ) {
       return;
     }
 
@@ -3389,8 +3520,6 @@ export class WorkflowsScreen extends Component<
       ) as WorkflowVersionImportSourceRecord;
       const preview = await this.workflowClient.previewDefinitionVersionImport({
         exported: parsed,
-        targetWorkspaceId: target.workspaceId,
-        targetProjectId: target.projectId,
         versionId: selectedVersionId,
       });
       this.setState({
@@ -3604,7 +3733,7 @@ export class WorkflowsScreen extends Component<
         versionId,
         name: name.trim(),
       });
-      await this.reloadCatalog(cloned.projectId, this.state.workspaceState, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       this.clearWorkflowVersionActionUrlState();
@@ -3726,7 +3855,7 @@ export class WorkflowsScreen extends Component<
         workflowId: workflow.id,
         versionId,
       });
-      await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       this.clearWorkflowVersionActionUrlState();
@@ -3761,7 +3890,7 @@ export class WorkflowsScreen extends Component<
         versionId,
         part,
       });
-      await this.reloadCatalog(restored.projectId, this.state.workspaceState, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       this.clearWorkflowVersionActionUrlState();
@@ -3795,7 +3924,7 @@ export class WorkflowsScreen extends Component<
         ...(name.length > 0 ? { name } : {}),
         ...(selectedVersionId ? { versionId: selectedVersionId } : {}),
       });
-      await this.reloadCatalog(imported.projectId, this.state.workspaceState, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       this.clearWorkflowVersionActionUrlState();
@@ -3831,7 +3960,7 @@ export class WorkflowsScreen extends Component<
         workflowId: workflow.id,
         keepLatest,
       });
-      await this.reloadCatalog(workflow.projectId, this.state.workspaceState, {
+      await this.reloadCatalog({
         preserveLocalDraft: true,
       });
       this.setState({ noticeMessage: null, errorMessage: null });
@@ -4218,28 +4347,24 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private readActiveLogsRunId(): string | undefined {
-    if (this.state.liveExecution?.workflowRunId) {
-      return this.state.liveExecution.workflowRunId;
-    }
-
-    if (this.state.selection.type === "execution") {
-      return this.state.selection.id;
-    }
-
-    return undefined;
-  }
-
   private readScopedLogs(
     scope: WorkflowInspectorLogsScope,
-  ): ReadonlyArray<ServerLogEntry> {
-    const levelFiltered = this.state.serverLogs.filter((entry) =>
-      this.state.workflowLogsFilter === WorkflowLogsFilter.All
-        ? true
-        : entry.level === ServerLogLevel.Warn ||
-          entry.level === ServerLogLevel.Error ||
-          entry.level === ServerLogLevel.Fatal,
-    );
+  ): ReadonlyArray<WorkflowLogEntry> {
+    const levelFiltered = this.state.executions
+      .flatMap((execution) =>
+        execution.nodeRuns.map((nodeRun) => ({
+          id: nodeRun.id,
+          level: readWorkflowLogLevel(nodeRun.status),
+          message: `${nodeRun.nodeKind} ${nodeRun.status}`,
+          runId: execution.id,
+          timestamp: nodeRun.finishedAt ?? nodeRun.startedAt,
+        })),
+      )
+      .filter((entry) =>
+        this.state.workflowLogsFilter === WorkflowLogsFilter.All
+          ? true
+          : entry.level === "warn" || entry.level === "error",
+      );
 
     if (!scope.runId) {
       return levelFiltered;
@@ -4276,7 +4401,7 @@ export class WorkflowsScreen extends Component<
                 [
                   scope.runId
                     ? `Run scoped · ${scope.runId}`
-                    : "Latest relevant server logs",
+                    : "Workflow execution history",
                 ],
               ),
             ]),
@@ -4284,9 +4409,9 @@ export class WorkflowsScreen extends Component<
               variant: "ghost",
               size: "sm",
               onClick: () => {
-                void this.refreshServerLogs();
+                void this.refreshWorkflowLogs();
               },
-              children: this.state.refreshingLogs ? "Refreshing" : "Refresh",
+              children: "Refresh",
             }),
           ],
         ),
@@ -4297,11 +4422,7 @@ export class WorkflowsScreen extends Component<
                 className:
                   "mt-3 rounded-lg border border-dashed border-border-dark bg-[#0d1319] px-3 py-3 text-xs leading-6 text-text-secondary",
               },
-              [
-                this.state.refreshingLogs
-                  ? "Refreshing logs..."
-                  : scope.emptyMessage,
-              ],
+              [scope.emptyMessage],
             )
           : createElement("div", { className: "mt-3 flex flex-col gap-2" }, [
               logs.map((entry) =>
@@ -4320,7 +4441,7 @@ export class WorkflowsScreen extends Component<
                         createElement(
                           StatusBadge,
                           {
-                            status: readServerLogBadgeStatus(entry.level),
+                            status: readWorkflowLogBadgeStatus(entry.level),
                           },
                           [entry.level],
                         ),
@@ -4376,8 +4497,7 @@ export class WorkflowsScreen extends Component<
     return createElement(Button, {
       variant: "secondary",
       size: "sm",
-      disabled:
-        this.state.currentProject === null || this.state.pendingAction !== null,
+      disabled: this.state.pendingAction !== null,
       onClick: () => {
         void this.handleCreateAsset(kind);
       },
@@ -4745,6 +4865,161 @@ export class WorkflowsScreen extends Component<
     );
   }
 
+  private renderWorkflowRunSelector(
+    runControl: WorkflowRunControlState,
+  ): HTMLElement {
+    if (runControl.mode === "stop") {
+      return createElement(Button, {
+        variant: runControl.variant,
+        size: "sm",
+        disabled: runControl.disabled,
+        onClick: () => {
+          void this.handleStopWorkflowExecution();
+        },
+        icon: runControl.icon,
+        children: runControl.label,
+        title: runControl.title,
+        dataset: {
+          testid: WorkflowScreenSelector.WorkflowRun,
+        },
+      });
+    }
+
+    return createElement(
+      "div",
+      {
+        className: "relative",
+        "data-testid": WorkflowScreenSelector.WorkflowRunMenu,
+      },
+      [
+        createElement(Button, {
+          variant: runControl.variant,
+          size: "sm",
+          disabled: runControl.disabled,
+          onClick: () => {
+            this.setState({
+              runModeMenuOpen: !this.state.runModeMenuOpen,
+              nodeStepRunMenu: null,
+            });
+          },
+          icon: runControl.icon,
+          children: "Run",
+          title: "Choose normal or test execution",
+          dataset: {
+            testid: WorkflowScreenSelector.WorkflowRun,
+          },
+        }),
+        this.state.runModeMenuOpen
+          ? createElement(
+              "div",
+              {
+                className:
+                  "absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] py-1 shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+              },
+              [
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run normally",
+                  detail: "Execute every node",
+                  onClick: () => {
+                    this.setState({ runModeMenuOpen: false });
+                    void this.handleRunWorkflow("normal");
+                  },
+                }),
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run test",
+                  detail: "Use each node's pinned default output",
+                  onClick: () => {
+                    this.setState({ runModeMenuOpen: false });
+                    void this.handleRunWorkflow("test");
+                  },
+                }),
+              ],
+            )
+          : "",
+      ],
+    );
+  }
+
+  private renderWorkflowRunModeMenuItem(input: {
+    label: string;
+    detail: string;
+    onClick: () => void;
+    testId?: string;
+  }): HTMLElement {
+    return createElement(
+      "button",
+      {
+        type: "button",
+        ...(input.testId ? { "data-testid": input.testId } : {}),
+        className:
+          "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm text-slate-100 transition-colors hover:bg-white/10",
+        onClick: input.onClick,
+      },
+      [
+        createElement("span", { className: "font-medium" }, [input.label]),
+        createElement("span", { className: "text-xs text-slate-400" }, [
+          input.detail,
+        ]),
+      ],
+    );
+  }
+
+  private renderNodeStepRunSelector(input: {
+    nodeId: string;
+    source: "hover" | "modal" | "action";
+    trigger: HTMLElement;
+  }): HTMLElement {
+    const menuOpen =
+      this.state.nodeStepRunMenu?.nodeId === input.nodeId &&
+      this.state.nodeStepRunMenu.source === input.source;
+
+    return createElement(
+      "div",
+      {
+        className: "relative",
+        "data-testid": WorkflowScreenSelector.NodeStepRunMenu,
+      },
+      [
+        input.trigger,
+        menuOpen
+          ? createElement(
+              "div",
+              {
+                className:
+                  "absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] py-1 shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+              },
+              [
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run normally",
+                  detail: "Execute this node and its ancestors without pins",
+                  onClick: () => {
+                    void this.handleExecuteNodeStep(
+                      input.nodeId,
+                      input.source,
+                      "normal",
+                    );
+                  },
+                  testId: WorkflowScreenSelector.NodeStepRunMenuNormal,
+                }),
+                this.renderWorkflowRunModeMenuItem({
+                  label: "Run test",
+                  detail: "Use selected pinned outputs from upstream nodes",
+                  onClick: () => {
+                    void this.handleExecuteNodeStep(
+                      input.nodeId,
+                      input.source,
+                      "test",
+                    );
+                  },
+                  testId: WorkflowScreenSelector.NodeStepRunMenuTest,
+                }),
+              ],
+            )
+          : "",
+      ],
+    );
+  }
+
   private renderCanvasFooter(): HTMLElement {
     const viewport = this.state.draftWorkflow?.viewport;
     const footerLabel = this.readCanvasFooterLabel();
@@ -4778,7 +5053,11 @@ export class WorkflowsScreen extends Component<
     const nodeRunVisual = this.readNodeRunVisual(node.id);
     const workflowId = this.state.draftWorkflow?.id ?? "";
     const pinnedVisual = readWorkflowPinnedNodeVisualState({
-      pinnedOutput: this.state.pinnedTestOutput,
+      pinnedOutput:
+        this.state.pinnedTestOutputs.find(
+          (output) =>
+            output.workflowId === workflowId && output.nodeId === node.id,
+        ) ?? null,
       workflowId,
       nodeId: node.id,
     });
@@ -4920,16 +5199,20 @@ export class WorkflowsScreen extends Component<
           "div",
           {
             className:
-              "relative flex items-center overflow-hidden rounded-md border border-[#3d3d3d] bg-[#202020] shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
+              "relative flex items-center overflow-visible rounded-md border border-[#3d3d3d] bg-[#202020] shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
           },
           [
-            this.renderNodeHoverToolbarButton({
-              icon: runControl.icon,
-              title: runControl.title,
-              disabled: runControl.disabled,
-              onClick: () => {
-                void this.handleExecuteNodeStep(node.id, "hover");
-              },
+            this.renderNodeStepRunSelector({
+              nodeId: node.id,
+              source: "hover",
+              trigger: this.renderNodeHoverToolbarButton({
+                icon: runControl.icon,
+                title: "Choose normal or test step execution",
+                disabled: runControl.disabled,
+                onClick: () => {
+                  this.toggleNodeStepRunMenu(node.id, "hover");
+                },
+              }),
             }),
             this.renderNodeHoverToolbarButton({
               icon: "edit",
@@ -4969,12 +5252,9 @@ export class WorkflowsScreen extends Component<
     const outputValue = this.readWorkflowDebugOutputMap(
       this.readWorkflowDebugExecution(),
     ).get(node.id);
-    const pinAction = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
-      nextNodeId: node.id,
-      nextOutputSnapshot: outputValue,
-      hasOutput: outputValue !== undefined,
-    });
+    const pinnedOutputs = this.state.pinnedTestOutputs.filter(
+      (output) => output.nodeId === node.id,
+    );
 
     return createElement(
       "div",
@@ -4989,15 +5269,18 @@ export class WorkflowsScreen extends Component<
           this.setState({ nodeActionMenuId: null });
           this.openSelectionEditorModal({ type: "node", id: node.id });
         }),
-        this.renderNodeActionMenuItem(
-          "Execute step",
-          "play_arrow",
-          () => {
-            this.setState({ nodeActionMenuId: null });
-            void this.handleExecuteNodeStep(node.id, "hover");
-          },
-          this.readNodeHoverRunControlState(node.id).disabled,
-        ),
+        this.renderNodeStepRunSelector({
+          nodeId: node.id,
+          source: "action",
+          trigger: this.renderNodeActionMenuItem(
+            "Execute step",
+            "play_arrow",
+            () => {
+              this.toggleNodeStepRunMenu(node.id, "action");
+            },
+            this.readNodeHoverRunControlState(node.id).disabled,
+          ),
+        }),
         this.renderNodeActionMenuItem(
           "Rename",
           "drive_file_rename_outline",
@@ -5011,18 +5294,19 @@ export class WorkflowsScreen extends Component<
           this.handleDuplicateNode(node.id);
         }),
         this.renderNodeActionMenuItem(
-          pinAction === "unpin" ? "Unpin" : "Pin output",
+          "Pin output",
           "push_pin",
           () => {
             this.setState({ nodeActionMenuId: null });
             this.handleTogglePinnedTestOutputForNode(
               node.id,
               outputValue,
-              pinAction,
+              outputValue === undefined ? "disabled" : "pin",
             );
           },
-          pinAction === "disabled",
+          outputValue === undefined,
         ),
+        this.renderPinnedTestOutputDefaultSelector(node, pinnedOutputs),
         this.renderNodeActionMenuItem(
           "Deactivate",
           "power_settings_new",
@@ -5122,7 +5406,6 @@ export class WorkflowsScreen extends Component<
     return readWorkflowNodeHoverRunControlState({
       hasTargetNode:
         currentWorkflow?.nodes.some((node) => node.id === nodeId) ?? false,
-      hasCurrentProject: this.state.currentProject !== null,
       hasCurrentWorkflow: currentWorkflow !== null,
       hasDirtyWorkflow: this.state.dirtyWorkflow,
       dirtyAssetCount: this.state.dirtyAssetIds.length,
@@ -5645,14 +5928,19 @@ export class WorkflowsScreen extends Component<
                     ? (() => {
                         const stepAvailability =
                           this.readSelectedNodeStepExecutionAvailability();
-                        return createElement(Button, {
-                          variant: "primary",
-                          size: "sm",
-                          disabled: stepAvailability.disabled,
-                          onClick: () => {
-                            void this.handleExecuteSelectedNodeStep();
-                          },
-                          children: stepAvailability.label,
+                        const nodeId = this.state.selection.id;
+                        return this.renderNodeStepRunSelector({
+                          nodeId,
+                          source: "modal",
+                          trigger: createElement(Button, {
+                            variant: "primary",
+                            size: "sm",
+                            disabled: stepAvailability.disabled,
+                            onClick: () => {
+                              this.toggleNodeStepRunMenu(nodeId, "modal");
+                            },
+                            children: stepAvailability.label,
+                          }),
                         });
                       })()
                     : "",
@@ -5935,6 +6223,7 @@ export class WorkflowsScreen extends Component<
             ),
           ],
         ),
+        this.renderGovernanceProvenance(execution),
         createElement(
           "div",
           {
@@ -6835,6 +7124,7 @@ export class WorkflowsScreen extends Component<
   private renderWorkflowInspector(
     workflow: WorkflowDefinitionUpsertInput,
   ): HTMLElement {
+    const runtimeOverride = workflow.runtimeSettingsOverride ?? {};
     return createElement("div", { className: "flex flex-col gap-4" }, [
       this.renderInspectorField(
         "Workflow name",
@@ -6886,6 +7176,65 @@ export class WorkflowsScreen extends Component<
           });
         },
       ),
+      this.renderInspectorSelect(
+        "External provider calls",
+        runtimeOverride.externalCalls === undefined
+          ? "global"
+          : runtimeOverride.externalCalls
+            ? "enabled"
+            : "disabled",
+        ["global", "enabled", "disabled"],
+        (value) => {
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "externalCalls",
+              ),
+              ...(value === "global"
+                ? {}
+                : { externalCalls: value === "enabled" }),
+            },
+          }));
+        },
+      ),
+      this.renderInspectorField(
+        "Workflow max loops override",
+        runtimeOverride.maxLoops?.toString() ?? "",
+        (value) => {
+          const maxLoops = Number.parseInt(value, 10);
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "maxLoops",
+              ),
+              ...(Number.isSafeInteger(maxLoops) && maxLoops > 0
+                ? { maxLoops }
+                : {}),
+            },
+          }));
+        },
+      ),
+      this.renderInspectorField(
+        "Workflow notification webhook override",
+        runtimeOverride.webhookUrl ?? "",
+        (value) => {
+          const webhookUrl = value.trim();
+          this.patchDraftWorkflow((current) => ({
+            ...current,
+            runtimeSettingsOverride: {
+              ...omitRuntimeSetting(
+                current.runtimeSettingsOverride,
+                "webhookUrl",
+              ),
+              ...(webhookUrl.length > 0 ? { webhookUrl } : {}),
+            },
+          }));
+        },
+      ),
       this.renderInlineMetaGrid([
         { label: "Nodes", value: String(workflow.nodes.length) },
         { label: "Connections", value: String(workflow.edges.length) },
@@ -6893,7 +7242,6 @@ export class WorkflowsScreen extends Component<
           label: "Zoom",
           value: `${Math.round(workflow.viewport.zoom * 100)}%`,
         },
-        { label: "Workspace", value: workflow.workspaceId },
       ]),
     ]);
   }
@@ -7518,31 +7866,35 @@ export class WorkflowsScreen extends Component<
             this.renderNodeInspector(node),
           ],
         ),
-        this.renderWorkflowDebugDataPanel({
-          title: "OUTPUT",
-          tab: this.state.debugOutputTab,
-          onTabChange: (tab) => this.updateDebugOutputTab(tab),
-          value: context.outputValue,
-          statusTone: context.statusTone,
-          itemLabel: readWorkflowDebugItemLabel(context.outputValue),
-          emptyMessage: "Execute this step to inspect the current node output.",
-          pinned:
-            this.state.pinnedTestOutput?.workflowId ===
-              (context.workflow.id ?? "") &&
-            this.state.pinnedTestOutput?.nodeId === context.node.id,
-          selector: createElement(
-            "div",
-            { className: "flex items-center gap-1" },
-            [
-              createElement(IconButton, {
-                icon: "edit",
-                tooltip: "Edit output for test runs",
-                onClick: () => this.openOutputEditor(context),
-              }),
-              this.renderPinnedOutputControl(context),
-            ],
-          ),
-        }),
+        createElement("div", { className: "flex min-h-0 flex-col gap-3" }, [
+          this.renderWorkflowDebugDataPanel({
+            title: "OUTPUT",
+            tab: this.state.debugOutputTab,
+            onTabChange: (tab) => this.updateDebugOutputTab(tab),
+            value: context.outputValue,
+            statusTone: context.statusTone,
+            itemLabel: readWorkflowDebugItemLabel(context.outputValue),
+            emptyMessage:
+              "Execute this step to inspect the current node output.",
+            pinned:
+              this.state.pinnedTestOutput?.workflowId ===
+                (context.workflow.id ?? "") &&
+              this.state.pinnedTestOutput?.nodeId === context.node.id,
+            selector: createElement(
+              "div",
+              { className: "flex items-center gap-1" },
+              [
+                createElement(IconButton, {
+                  icon: "edit",
+                  tooltip: "Edit output for test runs",
+                  onClick: () => this.openOutputEditor(context),
+                }),
+                this.renderPinnedOutputControl(context),
+              ],
+            ),
+          }),
+          this.renderPinnedTestOutputsList(context),
+        ]),
       ],
     );
   }
@@ -7562,28 +7914,130 @@ export class WorkflowsScreen extends Component<
     this.setState({ debugInputSourceId });
   }
 
+  private renderPinnedTestOutputsList(
+    context: WorkflowNodeDebugContext,
+  ): HTMLElement {
+    const outputs = this.state.pinnedTestOutputs.filter(
+      (output) =>
+        output.workflowId === (context.workflow.id ?? "") &&
+        output.nodeId === context.node.id,
+    );
+    const defaultOutputId =
+      context.node.config.defaultPinnedTestOutputId ?? outputs[0]?.id ?? null;
+
+    return createElement(
+      "section",
+      {
+        className: "border-t border-border-dark bg-[#0f141a] px-3 py-3",
+        dataset: {
+          testid: "workflows-pinned-outputs-list",
+        },
+      },
+      [
+        createElement(
+          "div",
+          { className: "mb-2 flex items-center justify-between gap-2" },
+          [
+            createElement(
+              "p",
+              { className: "text-xs font-semibold text-slate-100" },
+              ["Pinned test outputs"],
+            ),
+            createElement(
+              "span",
+              { className: "text-[11px] text-text-secondary" },
+              [`${outputs.length.toString()} saved`],
+            ),
+          ],
+        ),
+        outputs.length === 0
+          ? createElement(
+              "p",
+              { className: "text-xs leading-5 text-text-secondary" },
+              ["Pin an execution output to create a reusable test response."],
+            )
+          : createElement(
+              "div",
+              { className: "flex flex-col gap-2" },
+              outputs.map((output) =>
+                this.renderPinnedTestOutputListItem({
+                  output,
+                  isDefault: output.id === defaultOutputId,
+                }),
+              ),
+            ),
+      ],
+    );
+  }
+
+  private renderPinnedTestOutputListItem(input: {
+    output: WorkflowPinnedTestOutputOption;
+    isDefault: boolean;
+  }): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className: `flex items-center gap-2 rounded-md border px-2 py-2 ${input.isDefault ? "border-primary/50 bg-primary/10" : "border-border-dark bg-[#111820]"}`,
+        key: input.output.id,
+      },
+      [
+        createElement(IconButton, {
+          icon: input.isDefault ? "star" : "star_outline",
+          tooltip: input.isDefault
+            ? "Selected for test runs"
+            : "Use for test runs",
+          className: input.isDefault ? "text-primary" : "text-slate-400",
+          onClick: () => {
+            void this.selectPinnedTestOutputDefault(
+              input.output.nodeId,
+              input.output.id,
+            );
+          },
+        }),
+        createElement("input", {
+          type: "text",
+          className:
+            "min-w-0 flex-1 border-0 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-500",
+          value: input.output.name,
+          onBlur: (event: Event) => {
+            if (event.target instanceof HTMLInputElement) {
+              void this.renamePinnedTestOutput(
+                input.output.id,
+                event.target.value,
+              );
+            }
+          },
+        }),
+        createElement(IconButton, {
+          icon: "edit",
+          tooltip: "Edit pinned output",
+          onClick: () => this.openPinnedTestOutputEditor(input.output),
+        }),
+        createElement(IconButton, {
+          icon: "delete",
+          tooltip: "Delete pinned output",
+          className: "text-rose-300 hover:text-rose-100",
+          onClick: () => {
+            void this.removePinnedTestOutput(input.output.id);
+          },
+        }),
+      ],
+    );
+  }
+
   private renderPinnedOutputControl(
     context: WorkflowNodeDebugContext,
   ): HTMLElement {
-    const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: readWorkflowPinnedTestOutputFromDefinition(
-        context.workflow,
-      ),
-      nextNodeId: context.node.id,
-      nextOutputSnapshot: context.outputValue,
-      hasOutput: context.outputValue !== undefined,
-    });
-    const active = action === "unpin";
-
     return createElement(IconButton, {
       icon: "push_pin",
-      tooltip: active ? "Unpin test output" : "Pin output as test response",
-      disabled: action === "disabled",
+      tooltip: "Pin output as a test response",
+      disabled: context.outputValue === undefined,
       "data-testid": WorkflowScreenSelector.OutputPinControl,
-      ...(active
-        ? { className: "border-primary/60 bg-primary/15 text-primary" }
-        : {}),
-      onClick: () => this.handleTogglePinnedTestOutput(context, action),
+      onClick: () =>
+        this.handleTogglePinnedTestOutput(
+          context,
+          context.outputValue === undefined ? "disabled" : "pin",
+        ),
     });
   }
 
@@ -7596,6 +8050,49 @@ export class WorkflowsScreen extends Component<
       context.outputValue,
       action,
       context.workflow.id ?? "",
+    );
+  }
+
+  private renderPinnedTestOutputDefaultSelector(
+    node: WorkflowNodeRecord,
+    pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+  ): HTMLElement | string {
+    if (pinnedOutputs.length === 0) {
+      return "";
+    }
+
+    const selectedOutputId =
+      node.config.defaultPinnedTestOutputId ?? pinnedOutputs[0]?.id ?? "";
+    return createElement(
+      "label",
+      {
+        className:
+          "mx-2 my-1 flex flex-col gap-1 border-t border-[#3d3d3d] px-1 pt-2 text-xs text-slate-300",
+      },
+      [
+        createElement("span", {}, ["Test default"]),
+        createElement(
+          "select",
+          {
+            className:
+              "rounded border border-[#4a4a4a] bg-[#151515] px-2 py-1 text-xs text-slate-100",
+            value: selectedOutputId,
+            onChange: (event: Event) => {
+              const select = event.target as HTMLSelectElement;
+              void this.selectPinnedTestOutputDefault(node.id, select.value);
+            },
+          },
+          pinnedOutputs.map((output, index) =>
+            createElement(
+              "option",
+              {
+                value: output.id,
+              },
+              [`Pinned output ${(index + 1).toString()}`],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -7695,31 +8192,177 @@ export class WorkflowsScreen extends Component<
     action: ReturnType<typeof readWorkflowPinnedOutputAction>,
     workflowId = this.state.draftWorkflow?.id ?? "",
   ): Promise<void> {
-    if (action === "disabled") {
+    if (action === "disabled" || outputValue === undefined) {
       return;
     }
 
-    if (action === "unpin") {
-      await this.updatePinnedTestOutput(null);
-      return;
-    }
-
-    if (action === "confirm-overwrite") {
-      this.setState({
-        pinnedOutputOverwrite: {
-          nodeId,
-          outputValue,
-          workflowId,
-        },
-      });
-      return;
-    }
-
-    await this.updatePinnedTestOutput({
+    await this.addPinnedTestOutput({
       workflowId,
       nodeId,
       outputSnapshot: outputValue,
     });
+  }
+
+  private async addPinnedTestOutput(
+    output: WorkflowPinnedTestOutput,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow) {
+      return;
+    }
+
+    const defaults = this.readPinnedTestOutputDefaultIds(workflow);
+    const outputCount = this.state.pinnedTestOutputs.filter(
+      (existing) =>
+        existing.workflowId === output.workflowId &&
+        existing.nodeId === output.nodeId,
+    ).length;
+    const nextOutput: WorkflowPinnedTestOutputOption = {
+      ...output,
+      id: crypto.randomUUID(),
+      name: `Pinned output ${(outputCount + 1).toString()}`,
+    };
+    const nextDefaults = {
+      ...defaults,
+      [output.nodeId]: nextOutput.id,
+    };
+    await this.persistPinnedTestOutputs(
+      workflow,
+      [...this.state.pinnedTestOutputs, nextOutput],
+      nextDefaults,
+    );
+  }
+
+  private async selectPinnedTestOutputDefault(
+    nodeId: string,
+    outputId: string,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (
+      !workflow ||
+      !this.state.pinnedTestOutputs.some(
+        (output) => output.nodeId === nodeId && output.id === outputId,
+      )
+    ) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs,
+      {
+        ...this.readPinnedTestOutputDefaultIds(workflow),
+        [nodeId]: outputId,
+      },
+    );
+  }
+
+  private async renamePinnedTestOutput(
+    outputId: string,
+    name: string,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    const normalizedName = name.trim();
+    const output = this.state.pinnedTestOutputs.find(
+      (candidate) => candidate.id === outputId,
+    );
+    if (!workflow || !output || normalizedName.length === 0) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs.map((candidate) =>
+        candidate.id === outputId
+          ? { ...candidate, name: normalizedName }
+          : candidate,
+      ),
+      this.readPinnedTestOutputDefaultIds(workflow),
+    );
+  }
+
+  private async updatePinnedTestOutputSnapshot(
+    outputId: string,
+    outputSnapshot: unknown,
+  ): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    if (
+      !workflow ||
+      !this.state.pinnedTestOutputs.some(
+        (candidate) => candidate.id === outputId,
+      )
+    ) {
+      return;
+    }
+
+    await this.persistPinnedTestOutputs(
+      workflow,
+      this.state.pinnedTestOutputs.map((candidate) =>
+        candidate.id === outputId
+          ? { ...candidate, outputSnapshot }
+          : candidate,
+      ),
+      this.readPinnedTestOutputDefaultIds(workflow),
+    );
+  }
+
+  private async removePinnedTestOutput(outputId: string): Promise<void> {
+    const workflow = this.state.draftWorkflow;
+    const output = this.state.pinnedTestOutputs.find(
+      (candidate) => candidate.id === outputId,
+    );
+    if (!workflow || !output) {
+      return;
+    }
+
+    const remainingOutputs = this.state.pinnedTestOutputs.filter(
+      (candidate) => candidate.id !== outputId,
+    );
+    const defaults = { ...this.readPinnedTestOutputDefaultIds(workflow) };
+    if (defaults[output.nodeId] === outputId) {
+      const replacement = remainingOutputs.find(
+        (candidate) => candidate.nodeId === output.nodeId,
+      );
+      if (replacement) {
+        defaults[output.nodeId] = replacement.id;
+      } else {
+        delete defaults[output.nodeId];
+      }
+    }
+
+    await this.persistPinnedTestOutputs(workflow, remainingOutputs, defaults);
+  }
+
+  private readPinnedTestOutputDefaultIds(
+    workflow: WorkflowDefinitionUpsertInput,
+  ): Readonly<Record<string, string>> {
+    return Object.fromEntries(
+      workflow.nodes.flatMap((node) =>
+        node.config.defaultPinnedTestOutputId
+          ? [[node.id, node.config.defaultPinnedTestOutputId]]
+          : [],
+      ),
+    );
+  }
+
+  private async persistPinnedTestOutputs(
+    workflow: WorkflowDefinitionUpsertInput,
+    pinnedOutputs: ReadonlyArray<WorkflowPinnedTestOutputOption>,
+    defaultOutputIdsByNodeId: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    const nextWorkflow = writeWorkflowPinnedTestOutputsToDefinition(
+      workflow,
+      pinnedOutputs,
+      defaultOutputIdsByNodeId,
+      new Date().toISOString(),
+    );
+    this.updateDraftWorkflow(nextWorkflow);
+    this.setState({
+      pinnedTestOutput:
+        readWorkflowPinnedTestOutputFromDefinition(nextWorkflow),
+      pinnedTestOutputs: pinnedOutputs,
+    });
+    await this.persistPinnedTestOutputWorkflow(nextWorkflow);
   }
 
   private async updatePinnedTestOutput(
@@ -7744,14 +8387,8 @@ export class WorkflowsScreen extends Component<
   private async persistPinnedTestOutputWorkflow(
     workflow: WorkflowDefinitionUpsertInput,
   ): Promise<void> {
-    const projectId = this.state.currentProject?.id;
-    if (!projectId) {
-      return;
-    }
-
     try {
       const saved = await this.workflowClient.upsertDefinition({
-        projectId,
         definition: workflow,
       });
       const draftWorkflow = stripDefinitionVersionFields(saved);
@@ -7761,6 +8398,7 @@ export class WorkflowsScreen extends Component<
         ),
         draftWorkflow,
         pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(saved),
+        pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(saved),
         dirtyWorkflow: false,
         errorMessage: null,
       });
@@ -7781,10 +8419,32 @@ export class WorkflowsScreen extends Component<
         ? ""
         : formatOutputSnapshot(context.outputValue);
     this.outputEditorDraftText = text;
-    this.writeWorkflowsUrlState({ editor: WorkflowsUrlEditor.OutputEditor });
+    this.writeWorkflowsUrlState({
+      editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: null,
+    });
     this.setState({
       outputEditor: {
         nodeId: context.node.id,
+        pinnedOutputId: null,
+        text,
+      },
+    });
+  }
+
+  private openPinnedTestOutputEditor(
+    output: WorkflowPinnedTestOutputOption,
+  ): void {
+    const text = formatOutputSnapshot(output.outputSnapshot);
+    this.outputEditorDraftText = text;
+    this.writeWorkflowsUrlState({
+      editor: WorkflowsUrlEditor.OutputEditor,
+      pinnedOutputId: output.id,
+    });
+    this.setState({
+      outputEditor: {
+        nodeId: output.nodeId,
+        pinnedOutputId: output.id,
         text,
       },
     });
@@ -7792,7 +8452,10 @@ export class WorkflowsScreen extends Component<
 
   private closeOutputEditor(): void {
     this.outputEditorDraftText = null;
-    this.writeWorkflowsUrlState({ editor: null }, "replace");
+    this.writeWorkflowsUrlState(
+      { editor: null, pinnedOutputId: null },
+      "replace",
+    );
     this.setState({ outputEditor: null });
   }
 
@@ -7808,19 +8471,23 @@ export class WorkflowsScreen extends Component<
     const outputSnapshot = parseWorkflowEditedOutputSnapshot(
       outputTextarea?.value ?? this.outputEditorDraftText ?? editor.text,
     );
-    const action = readWorkflowPinnedOutputAction({
-      currentPinnedOutput: this.state.pinnedTestOutput,
-      nextNodeId: editor.nodeId,
-      nextOutputSnapshot: outputSnapshot,
-      hasOutput: true,
-    });
-    await this.handleTogglePinnedTestOutputForNode(
-      editor.nodeId,
-      outputSnapshot,
-      action === "unpin" ? "pin" : action,
-    );
+    if (editor.pinnedOutputId) {
+      await this.updatePinnedTestOutputSnapshot(
+        editor.pinnedOutputId,
+        outputSnapshot,
+      );
+    } else {
+      await this.handleTogglePinnedTestOutputForNode(
+        editor.nodeId,
+        outputSnapshot,
+        "pin",
+      );
+    }
     this.outputEditorDraftText = null;
-    this.writeWorkflowsUrlState({ editor: null }, "replace");
+    this.writeWorkflowsUrlState(
+      { editor: null, pinnedOutputId: null },
+      "replace",
+    );
     this.setState({ outputEditor: null });
   }
 
@@ -8186,11 +8853,10 @@ export class WorkflowsScreen extends Component<
       ) ??
       inputSources[0] ??
       null;
-    const pinnedOutputValue =
-      this.state.pinnedTestOutput?.workflowId === (workflow.id ?? "") &&
-      this.state.pinnedTestOutput.nodeId === node.id
-        ? this.state.pinnedTestOutput.outputSnapshot
-        : undefined;
+    const pinnedOutputValue = readWorkflowTestRunSeedOutputs({
+      workflow,
+      workflowId: workflow.id ?? "",
+    })[node.id];
     const outputValue =
       execution !== null
         ? persistedRun?.outputSnapshot
@@ -8308,14 +8974,16 @@ export class WorkflowsScreen extends Component<
       }
     }
 
-    if (
-      this.state.pinnedTestOutput &&
-      this.state.pinnedTestOutput.workflowId === this.state.draftWorkflow?.id
-    ) {
-      entries.set(
-        this.state.pinnedTestOutput.nodeId,
-        this.state.pinnedTestOutput.outputSnapshot,
-      );
+    const workflow = this.state.draftWorkflow;
+    if (workflow?.id) {
+      for (const [nodeId, output] of Object.entries(
+        readWorkflowTestRunSeedOutputs({
+          workflow,
+          workflowId: workflow.id,
+        }),
+      )) {
+        entries.set(nodeId, output);
+      }
     }
 
     return entries;
@@ -8325,7 +8993,6 @@ export class WorkflowsScreen extends Component<
     const currentWorkflow = this.readCurrentWorkflowRecord();
     return readWorkflowStepExecutionAvailability({
       hasNodeSelection: this.state.selection.type === "node",
-      hasCurrentProject: this.state.currentProject !== null,
       hasCurrentWorkflow: currentWorkflow !== null,
       hasDirtyWorkflow: this.state.dirtyWorkflow,
       dirtyAssetCount: this.state.dirtyAssetIds.length,
@@ -8336,29 +9003,44 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private async handleExecuteSelectedNodeStep(): Promise<void> {
-    const selectedNode = this.readSelectedNode();
-    if (!selectedNode) {
+  private toggleNodeStepRunMenu(
+    nodeId: string,
+    source: "hover" | "modal" | "action",
+  ): void {
+    const current = this.state.nodeStepRunMenu;
+    if (current?.nodeId === nodeId && current.source === source) {
+      this.setState({ nodeStepRunMenu: null });
       return;
     }
 
-    await this.handleExecuteNodeStep(selectedNode.id, "modal");
+    this.openNodeStepRunMenu(nodeId, source);
+  }
+
+  private openNodeStepRunMenu(
+    nodeId: string,
+    source: "hover" | "modal" | "action",
+  ): void {
+    this.setState({
+      runModeMenuOpen: false,
+      nodeStepRunMenu: { nodeId, source },
+    });
   }
 
   private async handleExecuteNodeStep(
     nodeId: string,
-    source: "hover" | "modal",
+    source: "hover" | "modal" | "action",
+    mode: WorkflowStepRunMode,
   ): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
-    const projectId = this.state.currentProject?.id;
     const targetNode = currentWorkflow?.nodes.find(
       (node) => node.id === nodeId,
     );
-    const launchState = readWorkflowNodeStepLaunchState(source);
+    const launchState = readWorkflowNodeStepLaunchState(
+      source === "modal" ? "modal" : "hover",
+    );
     if (
       !targetNode ||
       !currentWorkflow ||
-      !projectId ||
       this.readNodeHoverRunControlState(nodeId).disabled
     ) {
       return;
@@ -8371,26 +9053,30 @@ export class WorkflowsScreen extends Component<
       errorMessage: null,
       noticeMessage: null,
       editorModalOpen: launchState.editorModalOpen,
+      nodeStepRunMenu: null,
+      nodeActionMenuId: null,
       selection: { type: "node", id: targetNode.id },
     });
     this.cancelLiveExecutionStream();
     this.liveExecutionAbortController = new AbortController();
+    const seedNodeOutputs = readWorkflowStepRunSeedOutputs({
+      mode,
+      workflow: currentWorkflow,
+      targetNodeId: targetNode.id,
+    });
 
     try {
       await this.workflowClient.streamNode({
         workflowId: currentWorkflow.id,
         nodeId: targetNode.id,
         inputSource: this.readSelectedNodeExecutionInputSource(),
-        seedNodeOutputs: this.readSelectedNodeSeedOutputs(
-          currentWorkflow.id,
-          targetNode.id,
-        ),
+        ...(seedNodeOutputs ? { seedNodeOutputs } : {}),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
           this.handleWorkflowRunStreamEvent(event);
         },
       });
-      await this.reloadCatalog(projectId);
+      await this.reloadCatalog();
       this.setState({
         pendingAction: null,
         liveExecution: null,
@@ -8412,23 +9098,8 @@ export class WorkflowsScreen extends Component<
       });
     } finally {
       this.cancelLiveExecutionStream();
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     }
-  }
-
-  private readSelectedNodeSeedOutputs(
-    workflowId: string,
-    targetNodeId: string,
-  ): Readonly<Record<string, unknown>> {
-    return readWorkflowStepSeedOutputs({
-      workflow: this.state.draftWorkflow ?? { nodes: [], edges: [] },
-      executionOutputs: this.readWorkflowDebugOutputMap(
-        this.readWorkflowDebugExecution(),
-      ),
-      pinnedOutput: this.state.pinnedTestOutput,
-      workflowId,
-      targetNodeId,
-    });
   }
 
   private readSelectedNodeExecutionInputSource(): WorkflowNodeExecutionInputSourceRecord {
@@ -8480,6 +9151,9 @@ export class WorkflowsScreen extends Component<
         readNodeInputPorts(node).length,
         node.outputPorts.length,
       ),
+      node.kind === WorkflowNodeKind.AssetPrompt
+        ? this.renderPromptAssetNodeConfig(node)
+        : "",
       compatibleAssetKind
         ? createElement(
             "div",
@@ -8560,6 +9234,199 @@ export class WorkflowsScreen extends Component<
         ? this.renderGuardrailAttachmentSection(node, guardrailAssets)
         : "",
     ]);
+  }
+
+  private renderPromptAssetNodeConfig(node: WorkflowNodeRecord): HTMLElement {
+    const reference = readPromptNodeConfig(node.config);
+    const asset = reference
+      ? (this.state.promptAssets.find(
+          (entry) => entry.id === reference.assetId,
+        ) ?? null)
+      : null;
+    const version = asset?.versions.find(
+      (entry) => entry.version === reference?.version,
+    );
+    const promptVariables = version?.variables ?? [];
+    const variables = promptVariables.map((variable) => variable.name);
+    const bindings = reference?.bindings ?? {};
+    const preview = version
+      ? renderPromptNodePreview({
+          template: version.template,
+          variables: promptVariables,
+          bindings,
+        })
+      : null;
+    const bindingText = JSON.stringify(bindings, null, 2);
+
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/[0.04] px-3 py-3",
+      },
+      [
+        createElement("div", {}, [
+          createElement("p", { className: "text-sm font-medium text-white" }, [
+            "Version-pinned Prompt Asset",
+          ]),
+          createElement(
+            "p",
+            { className: "mt-1 text-xs leading-5 text-text-secondary" },
+            [
+              "The runtime executes this exact immutable version. Bind every declared variable before saving.",
+            ],
+          ),
+        ]),
+        createElement(
+          "label",
+          { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+          [
+            "Prompt asset",
+            createElement(
+              "select",
+              {
+                className: InspectorSelectClassName,
+                value: asset?.id ?? "",
+                "data-testid": WorkflowScreenSelector.PromptAssetSelect,
+                onChange: (event: Event) => {
+                  const selected = this.state.promptAssets.find(
+                    (entry) =>
+                      entry.id === (event.target as HTMLSelectElement).value,
+                  );
+                  if (!selected) {
+                    return;
+                  }
+                  this.patchPromptNodeReference(
+                    node.id,
+                    selected.id,
+                    selected.activeVersion,
+                    {},
+                  );
+                },
+              },
+              [
+                createElement("option", { value: "" }, [
+                  "Select a prompt asset",
+                ]),
+                this.state.promptAssets
+                  .filter((entry) => entry.status === "enabled")
+                  .map((entry) =>
+                    createElement("option", { value: entry.id }, [entry.name]),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        asset
+          ? createElement(
+              "label",
+              { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+              [
+                "Pinned version",
+                createElement(
+                  "select",
+                  {
+                    className: InspectorSelectClassName,
+                    value: reference?.version.toString() ?? "",
+                    "data-testid":
+                      WorkflowScreenSelector.PromptAssetVersionSelect,
+                    onChange: (event: Event) => {
+                      const nextVersion = Number(
+                        (event.target as HTMLSelectElement).value,
+                      );
+                      if (Number.isInteger(nextVersion) && nextVersion > 0) {
+                        this.patchPromptNodeReference(
+                          node.id,
+                          asset.id,
+                          nextVersion,
+                          {},
+                        );
+                      }
+                    },
+                  },
+                  [
+                    asset.versions.map((entry) =>
+                      createElement(
+                        "option",
+                        { value: entry.version.toString() },
+                        [`v${entry.version.toString()}`],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : "",
+        asset && version
+          ? createElement(
+              "label",
+              { className: "flex flex-col gap-1.5 text-xs text-slate-300" },
+              [
+                `Bindings${variables.length > 0 ? ` (${variables.join(", ")})` : ""}`,
+                createElement("textarea", {
+                  className: `${InspectorTextAreaClassName} min-h-28 font-mono text-xs`,
+                  value: bindingText,
+                  "data-testid":
+                    WorkflowScreenSelector.PromptAssetBindingsInput,
+                  onInput: (event: Event) => {
+                    const parsed = readPromptNodeBindings(
+                      (event.target as HTMLTextAreaElement).value,
+                    );
+                    if (parsed) {
+                      this.patchPromptNodeReference(
+                        node.id,
+                        asset.id,
+                        version.version,
+                        parsed,
+                      );
+                    }
+                  },
+                }),
+              ],
+            )
+          : "",
+        preview
+          ? createElement("div", { className: "flex flex-col gap-2" }, [
+              createElement(
+                "p",
+                {
+                  className: preview.valid
+                    ? "text-xs text-emerald-300"
+                    : "text-xs text-rose-300",
+                  "data-testid": WorkflowScreenSelector.PromptAssetValidation,
+                },
+                [preview.valid ? "Bindings valid" : preview.errors.join(" · ")],
+              ),
+              createElement(
+                "pre",
+                {
+                  className:
+                    "max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-dark bg-[#0d1117] px-3 py-2 font-mono text-[11px] leading-5 text-slate-200",
+                  "data-testid": WorkflowScreenSelector.PromptAssetPreview,
+                },
+                [preview.value],
+              ),
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              "Select an enabled Prompt Asset to preview its pinned version.",
+            ]),
+      ],
+    );
+  }
+
+  private patchPromptNodeReference(
+    nodeId: string,
+    assetId: string,
+    version: number,
+    bindings: Readonly<Record<string, JsonValue>>,
+  ): void {
+    this.patchNode(nodeId, (current) => ({
+      ...current,
+      config: {
+        ...current.config,
+        ...createPromptNodeConfig({ assetId, version, bindings }),
+      },
+    }));
   }
 
   private renderNodeOutputContractSection(
@@ -10281,17 +11148,12 @@ export class WorkflowsScreen extends Component<
       this.renderInspectorSelect(
         "Scope",
         asset.scope,
-        [WorkflowAssetScope.Project, WorkflowAssetScope.Workspace],
+        [WorkflowAssetScope.Global],
         (value) => {
           const nextScope = readWorkflowAssetScope(value);
-          const nextProjectId =
-            value === WorkflowAssetScope.Project
-              ? this.state.currentProject?.id
-              : undefined;
           this.patchAsset(asset.id, (current) => ({
-            ...stripOptionalProjectId(current),
+            ...current,
             scope: nextScope,
-            ...(nextProjectId ? { projectId: nextProjectId } : {}),
           }));
         },
       ),
@@ -11955,7 +12817,8 @@ export class WorkflowsScreen extends Component<
 
   private renderAgentConfig(node: WorkflowNodeRecord): HTMLElement {
     const role = node.config.role ?? WorkflowNodeRole.Planner;
-    const provider = node.config.provider ?? createFallbackProviderSelection();
+    const provider =
+      node.config.provider ?? createUnconfiguredProviderSelection();
 
     return createElement(
       "div",
@@ -11995,13 +12858,236 @@ export class WorkflowsScreen extends Component<
           WorkflowScreenSelector.NodeRoleSelect,
         ),
         this.renderNodePromptField(node),
+        this.renderSkillAssetSelection(node),
+        this.renderMcpAssetSelection(node),
+        this.renderPluginAssetSelection(node),
+        this.renderMemorySourceSelection(node),
         this.renderProviderSelectionFields(node, provider),
       ],
     );
   }
 
+  private renderSkillAssetSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledSkills = selectEnabledSkillAssets(this.state.skillAssets);
+    const selectedAssetId = node.config.skillAsset?.assetId ?? "";
+    const selected = enabledSkills.find(
+      (skill) => skill.id === selectedAssetId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Pinned skill",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled skill assets can be selected. The version is pinned for governed execution.",
+        ]),
+        this.renderInspectorSelect(
+          "Skill asset",
+          selectedAssetId,
+          enabledSkills.map((skill) => skill.id),
+          (value) => {
+            const skill = enabledSkills.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!skill) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: {
+                ...current.config,
+                skillAsset: { assetId: skill.id, version: skill.version },
+              },
+            }));
+          },
+          enabledSkills.map((skill) => ({
+            value: skill.id,
+            label: `${skill.name} · v${skill.version}`,
+          })),
+          WorkflowScreenSelector.SkillAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Pinned: ${selected.id} v${node.config.skillAsset?.version ?? selected.version}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledSkills.length === 0
+                ? "No enabled Skill Assets are available."
+                : "Select an enabled Skill Asset for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderMcpAssetSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledConnections = selectEnabledMcpAssets(this.state.mcpAssets);
+    const selectedAssetId = node.config.mcpConnection?.assetId ?? "";
+    const selected = enabledConnections.find(
+      (connection) => connection.id === selectedAssetId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Pinned MCP connection",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled connections can be selected. Tool permissions and untrusted response validation remain server-governed.",
+        ]),
+        this.renderInspectorSelect(
+          "MCP connection",
+          selectedAssetId,
+          enabledConnections.map((connection) => connection.id),
+          (value) => {
+            const connection = enabledConnections.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!connection) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: {
+                ...current.config,
+                mcpConnection: {
+                  assetId: connection.id,
+                  serverId: connection.serverId,
+                  toolVersion: connection.toolVersion,
+                },
+              },
+            }));
+          },
+          enabledConnections.map((connection) => ({
+            value: connection.id,
+            label: `${connection.name} · ${connection.serverId} · v${connection.toolVersion}`,
+          })),
+          WorkflowScreenSelector.McpAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Pinned: ${selected.id} · ${node.config.mcpConnection?.serverId ?? selected.serverId} · v${node.config.mcpConnection?.toolVersion ?? selected.toolVersion}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledConnections.length === 0
+                ? "No enabled MCP connections are available."
+                : "Select an enabled MCP connection for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderPluginAssetSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledPlugins = selectEnabledPluginAssets(this.state.pluginAssets);
+    const selectedAssetId = node.config.pluginAsset?.assetId ?? "";
+    const selected = enabledPlugins.find(
+      (plugin) => plugin.id === selectedAssetId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Pinned server plugin",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled trusted manifests can be selected. Plugin code and secrets remain server-side.",
+        ]),
+        this.renderInspectorSelect(
+          "Server plugin",
+          selectedAssetId,
+          enabledPlugins.map((plugin) => plugin.id),
+          (value) => {
+            const plugin = enabledPlugins.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!plugin) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: {
+                ...current.config,
+                pluginAsset: { assetId: plugin.id, version: "1" },
+              },
+            }));
+          },
+          enabledPlugins.map((plugin) => ({
+            value: plugin.id,
+            label: `${plugin.name} · ${plugin.runtime}/${plugin.isolation}`,
+          })),
+          WorkflowScreenSelector.PluginAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Pinned: ${selected.id} v${node.config.pluginAsset?.version ?? "1"} · ${selected.runtime}/${selected.isolation}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledPlugins.length === 0
+                ? "No enabled server plugins are available."
+                : "Select an enabled trusted plugin for this agent.",
+            ]),
+      ],
+    );
+  }
+
+  private renderMemorySourceSelection(node: WorkflowNodeRecord): HTMLElement {
+    const enabledSources = selectEnabledMemoryAssets(this.state.memoryAssets);
+    const selectedSourceId = node.config.memorySourceId ?? "";
+    const selected = enabledSources.find(
+      (source) => source.id === selectedSourceId,
+    );
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-md border border-border-dark bg-[#161b22] px-3 py-3",
+      },
+      [
+        createElement("p", { className: "text-sm font-medium text-white" }, [
+          "Bounded memory source",
+        ]),
+        createElement("p", { className: "text-xs text-text-secondary" }, [
+          "Only enabled sources can be used. Retrieval remains tenant and workflow bounded.",
+        ]),
+        this.renderInspectorSelect(
+          "Memory source",
+          selectedSourceId,
+          enabledSources.map((source) => source.id),
+          (value) => {
+            if (!enabledSources.some((source) => source.id === value)) return;
+            this.patchNode(node.id, (current) => ({
+              ...current,
+              config: { ...current.config, memorySourceId: value },
+            }));
+          },
+          enabledSources.map((source) => ({
+            value: source.id,
+            label: `${source.name} · ${source.workflowId ?? "workflow"}`,
+          })),
+          WorkflowScreenSelector.MemoryAssetSelect,
+        ),
+        selected
+          ? createElement("p", { className: "text-xs text-text-secondary" }, [
+              `Bounded to ${selected.workflowId ?? "workflow"} · ${selected.retentionDays} day retention · ${selected.redactionEnabled ? "trace redaction on" : "trace redaction off"}`,
+            ])
+          : createElement("p", { className: "text-xs text-text-secondary" }, [
+              enabledSources.length === 0
+                ? "No enabled Memory & RAG sources are available."
+                : "Select an enabled memory source for retrieval.",
+            ]),
+      ],
+    );
+  }
+
   private renderProviderRunConfig(node: WorkflowNodeRecord): HTMLElement {
-    const provider = node.config.provider ?? createFallbackProviderSelection();
+    const provider =
+      node.config.provider ?? createUnconfiguredProviderSelection();
     const workflowId = this.state.draftWorkflow?.id ?? null;
     const workflowIsRunning = workflowId
       ? this.readWorkflowHasActiveExecution(workflowId)
@@ -12035,7 +13121,6 @@ export class WorkflowsScreen extends Component<
           disabled:
             this.state.pendingAction !== null ||
             workflowIsRunning ||
-            this.state.currentProject === null ||
             this.state.draftWorkflow === null ||
             this.state.dirtyWorkflow ||
             this.state.dirtyAssetIds.length > 0 ||
@@ -12128,6 +13213,17 @@ export class WorkflowsScreen extends Component<
         undefined,
         WorkflowScreenSelector.NodeVerbositySelect,
       ),
+      ...(providerOptions.length === 0
+        ? [
+            createElement(
+              "p",
+              { className: "text-sm text-text-secondary sm:col-span-2" },
+              [
+                "Configure a provider profile in Settings before testing or running this node.",
+              ],
+            ),
+          ]
+        : []),
     ]);
   }
 
@@ -12578,25 +13674,18 @@ export class WorkflowsScreen extends Component<
     });
 
     try {
-      const workspaceState = await this.workspaceStateClient.load();
-      const currentProject =
-        workspaceState.projects.find(
-          (project) => project.id === workspaceState.activeProjectId,
-        ) ?? null;
+      const settingsSnapshot = await this.settingsClient.load();
       this.setState({
-        workspaceState,
-        currentProject,
+        settingsSnapshot,
         pendingAction: null,
-        compactView: currentProject ? CompactView.Canvas : CompactView.Sidebar,
+        compactView: CompactView.Canvas,
       });
 
-      if (currentProject) {
-        await this.reloadCatalog(currentProject.id, workspaceState);
-        this.applyWorkflowsUrlState(
-          readWorkflowsUrlStateFromLocation(window.location),
-        );
-        await this.refreshServerLogs();
-      }
+      await this.reloadCatalog();
+      this.applyWorkflowsUrlState(
+        readWorkflowsUrlStateFromLocation(window.location),
+      );
+      await this.refreshWorkflowLogs();
     } catch (error) {
       this.setState({
         pendingAction: null,
@@ -12610,28 +13699,37 @@ export class WorkflowsScreen extends Component<
   }
 
   private async reloadCatalog(
-    projectId: string,
-    workspaceState = this.state.workspaceState,
     options: { preserveLocalDraft?: boolean } = {},
   ): Promise<void> {
-    const workspaceId = readWorkspaceId(
-      workspaceState,
-      this.state.workflows,
-      this.state.assets,
-    );
-    const [workflows, assets, assetUsages, executions] = await Promise.all([
-      this.workflowClient.listDefinitions({ projectId }),
-      this.workflowClient.listAssets({ projectId, workspaceId }),
-      this.workflowClient.listAssetUsages({ projectId }),
-      this.workflowClient.listExecutions({ projectId }),
+    const [
+      workflows,
+      assets,
+      assetUsages,
+      executions,
+      promptAssets,
+      skillAssets,
+      mcpAssets,
+      pluginAssets,
+      memoryAssets,
+    ] = await Promise.all([
+      this.workflowClient.listDefinitions(),
+      this.workflowClient.listAssets(),
+      this.workflowClient.listAssetUsages({}),
+      this.workflowClient.listExecutions(),
+      this.promptAssetsClient.list(),
+      this.skillAssetsClient.list(),
+      this.mcpAssetsClient.list(),
+      this.pluginAssetsClient.list(),
+      this.memoryAssetsClient.list(),
     ]);
-    const currentWorkflowId =
-      this.readCurrentWorkflowRecord()?.id ?? workflows[0]?.id ?? null;
-    const currentWorkflow = currentWorkflowId
-      ? (workflows.find((workflow) => workflow.id === currentWorkflowId) ??
-        workflows[0] ??
-        null)
-      : null;
+    const currentWorkflow = readWorkflowEditorTarget(
+      workflows,
+      this.props.workflowId,
+    );
+    if (!currentWorkflow) {
+      window.location.replace(ROUTES.WORKFLOWS);
+      return;
+    }
     const workflowVersions = currentWorkflow
       ? await this.workflowClient.listDefinitionVersions({
           workflowId: currentWorkflow.id,
@@ -12671,11 +13769,19 @@ export class WorkflowsScreen extends Component<
     this.setState({
       workflows,
       assets,
+      promptAssets,
+      skillAssets,
+      mcpAssets,
+      pluginAssets,
+      memoryAssets,
       assetUsages,
       workflowVersions,
       executions,
       draftWorkflow: draftState.draftWorkflow,
       pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(
+        draftState.draftWorkflow,
+      ),
+      pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(
         draftState.draftWorkflow,
       ),
       selection: nextSelection,
@@ -12684,14 +13790,15 @@ export class WorkflowsScreen extends Component<
       dirtyWorkflow: draftState.dirtyWorkflow,
       dirtyAssetIds: draftState.dirtyAssetIds,
     });
+    window.dispatchEvent(new Event("iteronix:workflows-changed"));
     this.applyWorkflowsUrlState(
       readWorkflowsUrlStateFromLocation(window.location),
     );
     this.syncExecutionRefreshPolling();
   }
 
-  private async reloadExecutionCatalog(projectId: string): Promise<void> {
-    const executions = await this.workflowClient.listExecutions({ projectId });
+  private async reloadExecutionCatalog(): Promise<void> {
+    const executions = await this.workflowClient.listExecutions();
     if (
       !shouldApplyWorkflowExecutionsRefresh(this.state.executions, executions)
     ) {
@@ -12717,49 +13824,38 @@ export class WorkflowsScreen extends Component<
     });
   }
 
-  private async reloadAssetCatalog(
-    projectId: string,
-    workspaceState = this.state.workspaceState,
-  ): Promise<void> {
-    const workspaceId = readWorkspaceId(
-      workspaceState,
-      this.state.workflows,
-      this.state.assets,
-    );
-    const [assets, assetUsages] = await Promise.all([
-      this.workflowClient.listAssets({ projectId, workspaceId }),
-      this.workflowClient.listAssetUsages({ projectId }),
+  private async reloadAssetCatalog(): Promise<void> {
+    const [
+      assets,
+      assetUsages,
+      promptAssets,
+      skillAssets,
+      mcpAssets,
+      pluginAssets,
+      memoryAssets,
+    ] = await Promise.all([
+      this.workflowClient.listAssets(),
+      this.workflowClient.listAssetUsages({}),
+      this.promptAssetsClient.list(),
+      this.skillAssetsClient.list(),
+      this.mcpAssetsClient.list(),
+      this.pluginAssetsClient.list(),
+      this.memoryAssetsClient.list(),
     ]);
 
     this.setState({
       assets,
       assetUsages,
+      promptAssets,
+      skillAssets,
+      mcpAssets,
+      pluginAssets,
+      memoryAssets,
     });
   }
 
-  private async refreshServerLogs(): Promise<void> {
-    this.setState({ refreshingLogs: true });
-
-    try {
-      const level =
-        this.state.workflowLogsFilter === WorkflowLogsFilter.Errors
-          ? ServerLogLevel.Warn
-          : undefined;
-      const runId = this.readActiveLogsRunId();
-      const logs = await this.logsClient.query({
-        ...(level ? { level } : {}),
-        ...(runId ? { runId } : {}),
-        limit: 80,
-      });
-      this.setState({
-        serverLogs: [...logs].reverse(),
-        refreshingLogs: false,
-      });
-    } catch {
-      this.setState({
-        refreshingLogs: false,
-      });
-    }
+  private async refreshWorkflowLogs(): Promise<void> {
+    await this.reloadExecutionCatalog();
   }
 
   private handleSelectWorkflow(workflowId: string): void {
@@ -12772,6 +13868,7 @@ export class WorkflowsScreen extends Component<
     this.setState({
       draftWorkflow: stripDefinitionVersionFields(workflow),
       pinnedTestOutput: readWorkflowPinnedTestOutputFromDefinition(workflow),
+      pinnedTestOutputs: readWorkflowPinnedTestOutputsFromDefinition(workflow),
       selection: { type: "workflow", id: workflow.id },
       loadingExecutionId: null,
       dirtyWorkflow: false,
@@ -12784,59 +13881,12 @@ export class WorkflowsScreen extends Component<
         : this.state.compactView,
       desktopSidebarCollapsed: false,
     });
-    void this.refreshServerLogs();
+    void this.refreshWorkflowLogs();
   }
 
-  private async handleCreateWorkflow(): Promise<void> {
-    if (!this.state.currentProject) {
-      return;
-    }
-
-    this.setState({
-      pendingAction: PendingAction.CreateWorkflow,
-      errorMessage: null,
-      noticeMessage: null,
-    });
-
-    try {
-      const created = await this.workflowClient.upsertDefinition({
-        projectId: this.state.currentProject.id,
-        definition: createEmptyWorkflowDefinition({
-          projectId: this.state.currentProject.id,
-          workspaceId: readWorkspaceId(
-            this.state.workspaceState,
-            this.state.workflows,
-            this.state.assets,
-          ),
-          name: `Workflow ${this.state.workflows.length + 1}`,
-        }),
-      });
-      await this.reloadCatalog(this.state.currentProject.id, undefined, {
-        preserveLocalDraft: false,
-      });
-      this.handleSelectWorkflow(created.id);
-      this.setState({
-        pendingAction: null,
-        noticeMessage: "Workflow definition created.",
-        errorMessage: null,
-        selection: { type: "workflow", id: created.id },
-      });
-    } catch (error) {
-      this.setState({
-        pendingAction: null,
-        errorMessage: readErrorMessage(
-          error,
-          "Could not create the workflow definition.",
-        ),
-        noticeMessage: null,
-      });
-    }
-  }
-
-  private async handleRunWorkflow(): Promise<void> {
+  private async handleRunWorkflow(mode: "normal" | "test"): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     if (
-      !this.state.currentProject ||
       !currentWorkflow ||
       this.state.dirtyWorkflow ||
       this.state.dirtyAssetIds.length > 0
@@ -12846,6 +13896,7 @@ export class WorkflowsScreen extends Component<
 
     this.setState({
       pendingAction: PendingAction.RunWorkflow,
+      runModeMenuOpen: false,
       liveExecution: createLiveExecutionState(currentWorkflow),
       debugExecutionId: null,
       selection: { type: "workflow", id: currentWorkflow.id },
@@ -12861,6 +13912,14 @@ export class WorkflowsScreen extends Component<
     try {
       await this.workflowClient.streamWorkflow({
         workflowId: currentWorkflow.id,
+        ...(mode === "test"
+          ? {
+              seedNodeOutputs: readWorkflowTestRunSeedOutputs({
+                workflow: currentWorkflow,
+                workflowId: currentWorkflow.id,
+              }),
+            }
+          : {}),
         signal: this.liveExecutionAbortController.signal,
         onEvent: (event) => {
           this.handleWorkflowRunStreamEvent(event);
@@ -12872,14 +13931,17 @@ export class WorkflowsScreen extends Component<
           "Workflow stream finished without a persisted execution.",
         );
       }
-      await this.reloadCatalog(this.state.currentProject.id, undefined, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       await this.handleSelectExecution(completedExecution.id);
       this.setState({
         pendingAction: null,
         liveExecution: null,
-        noticeMessage: "Workflow run persisted in execution history.",
+        noticeMessage:
+          mode === "test"
+            ? "Test run persisted in execution history."
+            : "Workflow run persisted in execution history.",
         errorMessage: null,
         selection: { type: "execution", id: completedExecution.id },
         debugExecutionId: completedExecution.id,
@@ -12896,7 +13958,7 @@ export class WorkflowsScreen extends Component<
       });
     } finally {
       this.cancelLiveExecutionStream();
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     }
   }
 
@@ -12943,9 +14005,7 @@ export class WorkflowsScreen extends Component<
         errorMessage: null,
         noticeMessage: null,
       });
-      if (this.state.currentProject) {
-        void this.reloadExecutionCatalog(this.state.currentProject.id);
-      }
+      void this.reloadExecutionCatalog();
     } catch (error) {
       this.cancelLiveExecutionStream();
       this.setState({
@@ -12961,7 +14021,6 @@ export class WorkflowsScreen extends Component<
   private async handleTestNodeProvider(nodeId: string): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
     if (
-      !this.state.currentProject ||
       !currentWorkflow ||
       this.state.dirtyWorkflow ||
       this.state.dirtyAssetIds.length > 0
@@ -12981,7 +14040,7 @@ export class WorkflowsScreen extends Component<
         workflowId: currentWorkflow.id,
         nodeId,
       });
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadCatalog();
       this.handleSelectWorkflow(result.definition.id);
       this.setState({
         pendingAction: null,
@@ -13001,12 +14060,12 @@ export class WorkflowsScreen extends Component<
         noticeMessage: null,
       });
     } finally {
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     }
   }
 
   private async handleSaveWorkflow(): Promise<void> {
-    if (!this.state.currentProject || !this.state.draftWorkflow) {
+    if (!this.state.draftWorkflow) {
       return;
     }
 
@@ -13022,13 +14081,11 @@ export class WorkflowsScreen extends Component<
       );
       for (const asset of dirtyAssets) {
         await this.workflowClient.upsertAsset({
-          projectId: this.state.currentProject.id,
           asset: stripAssetVersionFields(asset),
         });
       }
 
       const saved = await this.workflowClient.upsertDefinition({
-        projectId: this.state.currentProject.id,
         definition: {
           ...this.state.draftWorkflow,
           ...(this.state.nextVersionNote.trim().length > 0
@@ -13037,13 +14094,13 @@ export class WorkflowsScreen extends Component<
           ...readVersionTagsInput(this.state.nextVersionTags),
         },
       });
-      await this.reloadCatalog(this.state.currentProject.id, undefined, {
+      await this.reloadCatalog({
         preserveLocalDraft: false,
       });
       this.handleSelectWorkflow(saved.id);
       this.setState({
         pendingAction: null,
-        noticeMessage: "Workflow saved to the server workspace.",
+        noticeMessage: "Workflow saved to PostgreSQL.",
         errorMessage: null,
         nextVersionNote: "",
         nextVersionTags: "",
@@ -13055,22 +14112,39 @@ export class WorkflowsScreen extends Component<
         noticeMessage: null,
       });
     } finally {
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     }
   }
 
   private async handleDeleteWorkflow(): Promise<void> {
     const currentWorkflow = this.readCurrentWorkflowRecord();
-    if (!this.state.currentProject || !currentWorkflow) {
+    if (!currentWorkflow) {
       return;
     }
 
-    this.setState({
-      workflowDeleteDialog: {
-        workflowId: currentWorkflow.id,
-        workflowName: currentWorkflow.name,
-      },
-    });
+    try {
+      const dependencies =
+        await this.workflowClient.listExternalApiKeyDependencies({
+          workflowId: currentWorkflow.id,
+        });
+      this.setState({
+        workflowDeleteDialog: {
+          workflowId: currentWorkflow.id,
+          workflowName: currentWorkflow.name,
+          dependentApiKeyNames: dependencies.map(
+            (dependency) => dependency.name,
+          ),
+        },
+      });
+    } catch (error) {
+      this.setState({
+        errorMessage: readErrorMessage(
+          error,
+          "Could not inspect API key dependencies.",
+        ),
+        noticeMessage: null,
+      });
+    }
   }
 
   private renderWorkflowDeleteDialog(): HTMLElement | string {
@@ -13107,9 +14181,18 @@ export class WorkflowsScreen extends Component<
               "p",
               { className: "mt-2 text-xs leading-5 text-text-secondary" },
               [
-                `Delete ${dialog.workflowName}? This removes the workflow definition from the active workspace.`,
+                `Delete ${dialog.workflowName}? This removes the workflow definition from the workflow catalog.`,
               ],
             ),
+            dialog.dependentApiKeyNames.length > 0
+              ? createElement(
+                  "p",
+                  { className: "mt-2 text-xs leading-5 text-amber-200" },
+                  [
+                    `This will also revoke ${dialog.dependentApiKeyNames.length.toString()} dependent API key(s): ${dialog.dependentApiKeyNames.join(", ")}.`,
+                  ],
+                )
+              : "",
             createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
               createElement(
                 "button",
@@ -13144,10 +14227,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private async confirmDeleteWorkflow(workflowId: string): Promise<void> {
-    if (!this.state.currentProject) {
-      return;
-    }
-
     this.setState({
       pendingAction: PendingAction.DeleteWorkflow,
       workflowDeleteDialog: null,
@@ -13159,16 +14238,7 @@ export class WorkflowsScreen extends Component<
       await this.workflowClient.deleteDefinition({
         workflowId,
       });
-      await this.reloadCatalog(this.state.currentProject.id);
-      this.setState({
-        pendingAction: null,
-        noticeMessage: "Workflow deleted.",
-        errorMessage: null,
-        selection: {
-          type: "workflow",
-          id: this.state.workflows[0]?.id ?? null,
-        },
-      });
+      window.location.replace(ROUTES.WORKFLOWS);
     } catch (error) {
       this.setState({
         pendingAction: null,
@@ -13176,7 +14246,7 @@ export class WorkflowsScreen extends Component<
         noticeMessage: null,
       });
     } finally {
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     }
   }
 
@@ -13184,7 +14254,7 @@ export class WorkflowsScreen extends Component<
     kind: WorkflowNodeKindValue,
     position?: ConnectionPreviewPoint,
   ): Promise<void> {
-    if (!this.state.draftWorkflow || !this.state.currentProject) {
+    if (!this.state.draftWorkflow || false) {
       return;
     }
 
@@ -13244,10 +14314,6 @@ export class WorkflowsScreen extends Component<
     focusNodeId?: string,
     attachToNode = false,
   ): Promise<void> {
-    if (!this.state.currentProject) {
-      return;
-    }
-
     await this.createAssetForNode(kind, focusNodeId, attachToNode);
   }
 
@@ -13257,10 +14323,6 @@ export class WorkflowsScreen extends Component<
     attachToNode = false,
     suppressNotice = false,
   ): Promise<WorkflowAssetRecord | null> {
-    if (!this.state.currentProject) {
-      return null;
-    }
-
     this.setState({
       pendingAction: PendingAction.CreateAsset,
       errorMessage: null,
@@ -13269,18 +14331,11 @@ export class WorkflowsScreen extends Component<
 
     try {
       const asset = await this.workflowClient.upsertAsset({
-        projectId: this.state.currentProject.id,
         asset: createWorkflowAssetDraft({
           kind,
-          projectId: this.state.currentProject.id,
-          workspaceId: readWorkspaceId(
-            this.state.workspaceState,
-            this.state.workflows,
-            this.state.assets,
-          ),
         }),
       });
-      await this.reloadAssetCatalog(this.state.currentProject.id);
+      await this.reloadAssetCatalog();
       const nextDraftWorkflow =
         attachToNode && focusNodeId && this.state.draftWorkflow
           ? attachGuardrailToNode(
@@ -13356,6 +14411,11 @@ export class WorkflowsScreen extends Component<
       const hydratedExecution = await this.workflowClient.getExecution({
         executionId,
       });
+      const governanceLifecycle = hydratedExecution.lifecycleId
+        ? await this.governanceLifecycleClient.get(
+            hydratedExecution.lifecycleId,
+          )
+        : null;
       this.setState({
         executions: this.state.executions.map((entry) =>
           entry.id === executionId ? hydratedExecution : entry,
@@ -13363,8 +14423,9 @@ export class WorkflowsScreen extends Component<
         loadingExecutionId: null,
         selection: { type: "execution", id: executionId },
         debugExecutionId: executionId,
+        governanceLifecycle,
       });
-      void this.refreshServerLogs();
+      void this.refreshWorkflowLogs();
     } catch (error) {
       this.setState({
         loadingExecutionId: null,
@@ -13378,10 +14439,6 @@ export class WorkflowsScreen extends Component<
   }
 
   private async handleDeleteExecution(executionId: string): Promise<void> {
-    if (!this.state.currentProject) {
-      return;
-    }
-
     this.setState({
       pendingAction: PendingAction.DeleteExecution,
       errorMessage: null,
@@ -13390,7 +14447,7 @@ export class WorkflowsScreen extends Component<
 
     try {
       await this.workflowClient.deleteExecution({ executionId });
-      await this.reloadCatalog(this.state.currentProject.id);
+      await this.reloadCatalog();
       this.setState({
         pendingAction: null,
         loadingExecutionId:
@@ -14267,7 +15324,7 @@ export class WorkflowsScreen extends Component<
       config: {
         ...node.config,
         provider: {
-          ...(node.config.provider ?? createFallbackProviderSelection()),
+          ...(node.config.provider ?? createUnconfiguredProviderSelection()),
           ...providerPatch,
         },
       },
@@ -14383,29 +15440,23 @@ export class WorkflowsScreen extends Component<
   private readProviderProfileOptions(
     currentProviderId: string,
   ): ReadonlyArray<{ value: string; label: string }> {
-    const profiles = this.state.workspaceState?.settings.providerProfiles ?? [];
+    const profiles = this.state.settingsSnapshot?.providerProfiles ?? [];
     const profileOptions = profiles.map((profile) => ({
       value: profile.id,
       label: formatProviderProfileLabel(profile),
     }));
-    const fallbackExists = profileOptions.some(
-      (option) => option.value === currentProviderId,
-    );
-
-    if (currentProviderId.trim().length === 0 || fallbackExists) {
-      return profileOptions.length > 0
-        ? profileOptions
-        : [{ value: ProviderFallbackId, label: "Codex CLI" }];
+    if (
+      currentProviderId.trim().length === 0 ||
+      profileOptions.some((option) => option.value === currentProviderId)
+    ) {
+      return profileOptions;
     }
 
     return [
       ...profileOptions,
       {
         value: currentProviderId,
-        label:
-          currentProviderId === ProviderFallbackId
-            ? "Codex CLI"
-            : currentProviderId,
+        label: currentProviderId,
       },
     ];
   }
@@ -14455,7 +15506,7 @@ export class WorkflowsScreen extends Component<
     if (this.state.selection.type === "asset") {
       const asset = this.readSelectedAsset();
       return asset
-        ? `${readAssetKindLabel(asset.kind)} · ${readAssetScopeLabel(asset.scope)}`
+        ? `${readAssetKindLabel(asset.kind)} · ${readAssetScopeLabel()}`
         : "No asset selected";
     }
 
@@ -14711,6 +15762,35 @@ export class WorkflowsScreen extends Component<
       compactView: isCompactViewport
         ? CompactView.Canvas
         : this.state.compactView,
+    });
+  };
+
+  private readonly handleRunMenusOutsideClick = (event: MouseEvent): void => {
+    if (
+      (!this.state.runModeMenuOpen && this.state.nodeStepRunMenu === null) ||
+      !(event.target instanceof Element)
+    ) {
+      return;
+    }
+
+    const canvasMenuClick = Boolean(
+      event.target.closest(
+        `[data-testid="${WorkflowScreenSelector.WorkflowRunMenu}"]`,
+      ),
+    );
+    const stepMenuClick = Boolean(
+      event.target.closest(
+        `[data-testid="${WorkflowScreenSelector.NodeStepRunMenu}"]`,
+      ),
+    );
+
+    if (canvasMenuClick && stepMenuClick) {
+      return;
+    }
+
+    this.setState({
+      ...(canvasMenuClick ? {} : { runModeMenuOpen: false }),
+      ...(stepMenuClick ? {} : { nodeStepRunMenu: null }),
     });
   };
 
@@ -15190,15 +16270,11 @@ export class WorkflowsScreen extends Component<
     }
 
     this.executionRefreshIntervalId = window.setInterval(() => {
-      const projectId = this.state.currentProject?.id;
-      if (
-        !projectId ||
-        this.state.pendingAction === PendingAction.RunWorkflow
-      ) {
+      if (this.state.pendingAction === PendingAction.RunWorkflow) {
         return;
       }
 
-      void this.reloadExecutionCatalog(projectId);
+      void this.reloadExecutionCatalog();
     }, ExecutionRefreshIntervalMs);
   }
 
@@ -15888,16 +16964,6 @@ const readCanvasBackgroundStyle = (
   return `background-color:#11161d;background-image:radial-gradient(circle, rgba(120,132,145,0.22) 1px, transparent 1px);background-size:${gridSize}px ${gridSize}px;background-position:${offsetX}px ${offsetY}px;`;
 };
 
-const readWorkspaceId = (
-  workspaceState: WorkspaceStateSnapshot | null,
-  workflows: ReadonlyArray<WorkflowDefinitionRecord>,
-  assets: ReadonlyArray<WorkflowAssetRecord>,
-): string =>
-  workflows[0]?.workspaceId ??
-  assets[0]?.workspaceId ??
-  workspaceState?.activeProjectId ??
-  readDefaultWorkflowWorkspaceId();
-
 const resolveSelectionAfterReload = (
   selection: WorkflowSelection,
   workflow: WorkflowDefinitionRecord,
@@ -15936,9 +17002,9 @@ const resolveSelectionAfterReload = (
   };
 };
 
-const createFallbackProviderSelection =
+const createUnconfiguredProviderSelection =
   (): WorkflowProviderSelectionRecord => ({
-    providerId: ProviderFallbackId,
+    providerId: "",
     modelId: "",
     reasoningLevel: WorkflowReasoningLevel.Medium,
     temperature: 0.2,
@@ -15950,8 +17016,6 @@ const stripAssetVersionFields = (
   asset: WorkflowAssetRecord,
 ): WorkflowAssetUpsertInput => ({
   id: asset.id,
-  workspaceId: asset.workspaceId,
-  ...(asset.projectId ? { projectId: asset.projectId } : {}),
   kind: asset.kind,
   scope: asset.scope,
   name: asset.name,
@@ -15972,21 +17036,8 @@ const stripAssetVersionFields = (
   ...(asset.archivedAt ? { archivedAt: asset.archivedAt } : {}),
 });
 
-const stripOptionalProjectId = (
-  asset: WorkflowAssetRecord,
-): Omit<WorkflowAssetRecord, "projectId"> | WorkflowAssetRecord => {
-  if (asset.projectId) {
-    return asset;
-  }
-
-  const { projectId: _projectId, ...rest } = asset;
-  return rest;
-};
-
-const readWorkflowAssetScope = (value: string): WorkflowAssetScopeValue =>
-  value === WorkflowAssetScope.Workspace
-    ? WorkflowAssetScope.Workspace
-    : WorkflowAssetScope.Project;
+const readWorkflowAssetScope = (_value: string): WorkflowAssetScopeValue =>
+  WorkflowAssetScope.Global;
 
 const readWorkflowRecordStatus = (value: string): WorkflowRecordStatus =>
   value === WorkflowRecordStatus.Published
@@ -16474,15 +17525,23 @@ const toSidebarSection = (
   if (panel === WorkflowsUrlPanel.History) {
     return SidebarSection.History;
   }
-  if (panel === WorkflowsUrlPanel.Workflows) {
-    return SidebarSection.Workflows;
-  }
   return null;
 };
 
 const readIsCompactViewport = (): boolean =>
   typeof window !== "undefined" &&
   window.innerWidth <= COMPACT_VIEWPORT_MAX_WIDTH;
+
+const omitRuntimeSetting = (
+  override: WorkflowDefinitionUpsertInput["runtimeSettingsOverride"],
+  key: keyof NonNullable<
+    WorkflowDefinitionUpsertInput["runtimeSettingsOverride"]
+  >,
+): NonNullable<WorkflowDefinitionUpsertInput["runtimeSettingsOverride"]> => {
+  const current = override ?? {};
+  const { [key]: _removed, ...remaining } = current;
+  return remaining;
+};
 
 const readErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim().length > 0
@@ -17005,15 +18064,29 @@ const readGuardrailFindingBadgeStatus = (
   return "failed";
 };
 
-const readServerLogBadgeStatus = (
-  level: ServerLogLevel,
+const readWorkflowLogBadgeStatus = (
+  level: WorkflowLogLevel,
 ): "info" | "warning" | "failed" => {
-  if (level === ServerLogLevel.Warn) {
+  if (level === "warn") {
     return "warning";
   }
 
-  if (level === ServerLogLevel.Error || level === ServerLogLevel.Fatal) {
+  if (level === "error") {
     return "failed";
+  }
+
+  return "info";
+};
+
+const readWorkflowLogLevel = (
+  status: WorkflowNodeExecutionRecord["status"],
+): WorkflowLogLevel => {
+  if (status === "failed") {
+    return "error";
+  }
+
+  if (status === "awaiting_review") {
+    return "warn";
   }
 
   return "info";

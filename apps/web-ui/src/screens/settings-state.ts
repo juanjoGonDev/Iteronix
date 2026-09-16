@@ -22,7 +22,6 @@ export type ProviderProfileRecord = {
   providerKind: ProviderKind;
   modelId: string;
   endpointUrl: string;
-  apiKey: string;
   apiKeyEnvVar: string;
   command: string;
   promptMode: ProviderPromptMode;
@@ -31,7 +30,6 @@ export type ProviderProfileRecord = {
 };
 
 export type ProviderSyncRequest = {
-  projectId: string;
   profileId: string;
   providerId: ProviderKind;
   config: Record<string, unknown>;
@@ -42,7 +40,6 @@ const ProviderDefaults: Record<
   {
     name: string;
     endpointUrl: string;
-    apiKey: string;
     apiKeyEnvVar: string;
     command: string;
     promptMode: ProviderPromptMode;
@@ -51,7 +48,6 @@ const ProviderDefaults: Record<
   [ProviderKind.CodexCli]: {
     name: "Codex CLI",
     endpointUrl: "",
-    apiKey: "",
     apiKeyEnvVar: "",
     command: "codex",
     promptMode: ProviderPromptMode.Stdin,
@@ -59,7 +55,6 @@ const ProviderDefaults: Record<
   [ProviderKind.OpenAI]: {
     name: "OpenAI",
     endpointUrl: "https://api.openai.com/v1",
-    apiKey: "",
     apiKeyEnvVar: "OPENAI_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin,
@@ -67,7 +62,6 @@ const ProviderDefaults: Record<
   [ProviderKind.Anthropic]: {
     name: "Anthropic",
     endpointUrl: "https://api.anthropic.com",
-    apiKey: "",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
     command: "",
     promptMode: ProviderPromptMode.Stdin,
@@ -75,7 +69,6 @@ const ProviderDefaults: Record<
   [ProviderKind.Ollama]: {
     name: "Ollama",
     endpointUrl: "http://localhost:11434",
-    apiKey: "",
     apiKeyEnvVar: "",
     command: "",
     promptMode: ProviderPromptMode.Stdin,
@@ -83,7 +76,6 @@ const ProviderDefaults: Record<
   [ProviderKind.Custom]: {
     name: "Custom",
     endpointUrl: "",
-    apiKey: "",
     apiKeyEnvVar: "",
     command: "",
     promptMode: ProviderPromptMode.Stdin,
@@ -91,9 +83,7 @@ const ProviderDefaults: Record<
 };
 
 export const createDefaultProviderProfiles =
-  (): ReadonlyArray<ProviderProfileRecord> => [
-    createProviderProfile(ProviderKind.CodexCli),
-  ];
+  (): ReadonlyArray<ProviderProfileRecord> => [];
 
 export const createProviderProfile = (
   kind: ProviderKind,
@@ -107,7 +97,6 @@ export const createProviderProfile = (
     providerKind: kind,
     modelId: "",
     endpointUrl: defaults.endpointUrl,
-    apiKey: defaults.apiKey,
     apiKeyEnvVar: defaults.apiKeyEnvVar,
     command: defaults.command,
     promptMode: defaults.promptMode,
@@ -133,9 +122,6 @@ export const updateProviderProfile = (
       (nextKind === profile.providerKind
         ? profile.endpointUrl
         : defaults.endpointUrl),
-    apiKey:
-      patch.apiKey ??
-      (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
     apiKeyEnvVar:
       patch.apiKeyEnvVar ??
       (nextKind === profile.providerKind
@@ -162,9 +148,6 @@ export const updateProviderProfile = (
         (nextKind === profile.providerKind
           ? profile.endpointUrl
           : defaults.endpointUrl),
-      apiKey:
-        patch.apiKey ??
-        (nextKind === profile.providerKind ? profile.apiKey : defaults.apiKey),
       apiKeyEnvVar:
         patch.apiKeyEnvVar ??
         (nextKind === profile.providerKind
@@ -210,7 +193,6 @@ export const normalizeProviderProfiles = (
 
 export const createProviderSyncRequests = (
   profiles: ReadonlyArray<ProviderProfileRecord>,
-  projectId: string,
 ): ReadonlyArray<ProviderSyncRequest> =>
   profiles
     .filter(
@@ -221,7 +203,6 @@ export const createProviderSyncRequests = (
         profile.providerKind === ProviderKind.Custom,
     )
     .map((profile) => ({
-      projectId,
       profileId: profile.id,
       providerId: readRuntimeProviderId(profile.providerKind),
       config: createRuntimeProviderConfig(profile),
@@ -234,10 +215,6 @@ const createRuntimeProviderConfig = (
     const config: Record<string, unknown> = {
       endpointUrl: profile.endpointUrl,
     };
-
-    if (profile.apiKey.length > 0) {
-      config["apiKey"] = profile.apiKey;
-    }
 
     if (profile.apiKeyEnvVar.length > 0) {
       config["apiKeyEnvVar"] = profile.apiKeyEnvVar;
@@ -299,7 +276,6 @@ const normalizeProviderProfile = (
     providerKind,
     modelId: readString(value["modelId"]),
     endpointUrl: readString(value["endpointUrl"]) || defaults.endpointUrl,
-    apiKey: readString(value["apiKey"]) || defaults.apiKey,
     apiKeyEnvVar: readString(value["apiKeyEnvVar"]) || defaults.apiKeyEnvVar,
     command: readString(value["command"]) || defaults.command,
     promptMode: readPromptMode(value["promptMode"]) ?? defaults.promptMode,

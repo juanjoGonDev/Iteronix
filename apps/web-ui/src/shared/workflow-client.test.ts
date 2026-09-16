@@ -20,8 +20,6 @@ describe("workflow client parsers", () => {
       definitions: [
         {
           id: "workflow-1",
-          workspaceId: "workspace-1",
-          projectId: "project-1",
           name: "Workflow",
           description: "",
           status: "draft",
@@ -55,8 +53,12 @@ describe("workflow client parsers", () => {
     });
 
     expect(definitions).toHaveLength(1);
-    expect(definitions[0]?.workspaceId).toBe("workspace-1");
+    expect(definitions[0]).not.toHaveProperty("projectId");
     expect(definitions[0]?.tags).toEqual(["mvp"]);
+    expect(definitions[0]).toMatchObject({
+      status: "draft",
+      updatedAt: "2026-05-06T18:10:00.000Z",
+    });
   });
 
   it("parses workflow definition version list responses", () => {
@@ -65,13 +67,10 @@ describe("workflow client parsers", () => {
         {
           id: "version-1",
           workflowId: "workflow-1",
-          projectId: "project-1",
           version: 2,
           createdAt: "2026-05-06T18:10:00.000Z",
           snapshot: {
             id: "workflow-1",
-            workspaceId: "workspace-1",
-            projectId: "project-1",
             name: "Workflow v2",
             description: "",
             status: "draft",
@@ -186,8 +185,6 @@ describe("workflow client parsers", () => {
         status: "warning",
         schemaSupported: true,
         checksumValid: true,
-        workspaceMismatch: true,
-        projectMismatch: false,
         workflowIdCollision: true,
         recommendedIdMode: "regenerate_ids",
         suggestedName: "Imported workflow",
@@ -208,14 +205,12 @@ describe("workflow client parsers", () => {
   });
 
   it("parses workflow asset lists with optional contracts and guardrails", () => {
-    const assets = parseWorkflowAssetListResponse({
+    const response = {
       assets: [
         {
           id: "asset-1",
-          workspaceId: "workspace-1",
-          projectId: "project-1",
           kind: "prompt",
-          scope: "project",
+          scope: "global",
           name: "Prompt asset",
           slug: "prompt-asset",
           description: "",
@@ -242,10 +237,8 @@ describe("workflow client parsers", () => {
         },
         {
           id: "asset-2",
-          workspaceId: "workspace-1",
-          projectId: "project-1",
           kind: "guardrail",
-          scope: "project",
+          scope: "global",
           name: "Guardrail",
           slug: "guardrail",
           description: "",
@@ -270,11 +263,22 @@ describe("workflow client parsers", () => {
           updatedAt: "2026-05-06T18:10:00.000Z",
         },
       ],
-    });
+    };
+    const assets = parseWorkflowAssetListResponse(response);
+    const firstAsset = response.assets[0];
+    if (!firstAsset) {
+      throw new Error("Expected an asset fixture.");
+    }
 
     expect(assets).toHaveLength(2);
+    expect(assets.map((asset) => asset.scope)).toEqual(["global", "global"]);
     expect(assets[0]?.outputContract?.name).toBe("Prompt output");
     expect(assets[1]?.guardrail?.validations).toHaveLength(1);
+    expect(() =>
+      parseWorkflowAssetListResponse({
+        assets: [{ ...firstAsset, scope: "project" }],
+      }),
+    ).toThrow("workflowAssetRecord.scope");
   });
 
   it("parses workflow execution lists", () => {
@@ -282,8 +286,8 @@ describe("workflow client parsers", () => {
       executions: [
         {
           id: "execution-1",
+          lifecycleId: "ide:workflow-1:run-1",
           workflowId: "workflow-1",
-          projectId: "project-1",
           triggerKind: "manual",
           status: "completed",
           startedAt: "2026-05-06T18:00:00.000Z",
@@ -325,6 +329,7 @@ describe("workflow client parsers", () => {
     expect(executions).toHaveLength(1);
     expect(executions[0]?.totals.totalTokens).toBe(30);
     expect(executions[0]?.warningsCount).toBe(1);
+    expect(executions[0]?.lifecycleId).toBe("ide:workflow-1:run-1");
     expect(executions[0]?.nodeRuns[0]?.guardrailFindings[0]?.message).toBe(
       "Summary present.",
     );
@@ -334,8 +339,6 @@ describe("workflow client parsers", () => {
     const result = parseWorkflowNodeProviderTestResponse({
       definition: {
         id: "workflow-1",
-        workspaceId: "workspace-1",
-        projectId: "project-1",
         name: "Workflow",
         description: "",
         status: "draft",
@@ -396,7 +399,6 @@ describe("workflow client parsers", () => {
         execution: {
           id: "execution-1",
           workflowId: "workflow-1",
-          projectId: "project-1",
           triggerKind: "manual",
           status: "completed",
           startedAt: "2026-05-06T18:00:00.000Z",
@@ -430,7 +432,6 @@ const createWorkflowDefinitionVersionRecord = (
 ) => ({
   id,
   workflowId: "workflow-1",
-  projectId: "project-1",
   version,
   createdAt: "2026-05-06T18:10:00.000Z",
   snapshot: createWorkflowDefinitionRecord(),
@@ -438,8 +439,6 @@ const createWorkflowDefinitionVersionRecord = (
 
 const createWorkflowDefinitionRecord = () => ({
   id: "workflow-1",
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   name: "Workflow",
   description: "",
   status: "draft",

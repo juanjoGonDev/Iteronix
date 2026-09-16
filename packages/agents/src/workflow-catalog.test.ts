@@ -15,15 +15,107 @@ import {
 const BaseTime = "2026-05-06T18:00:00.000Z";
 
 describe("workflow catalog store", () => {
+  it("exposes one global asset catalog without a scope filter", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    store.upsertAsset({
+      kind: WorkflowAssetKind.Prompt,
+      scope: WorkflowAssetScope.Global,
+      name: "Global prompt",
+      slug: "global-prompt",
+      description: "Prompt",
+      body: "Plan",
+      language: "en",
+      tags: [],
+    });
+    store.upsertAsset({
+      kind: WorkflowAssetKind.Instruction,
+      scope: WorkflowAssetScope.Global,
+      name: "Global instruction",
+      slug: "global-instruction",
+      description: "Instruction",
+      body: "Execute",
+      language: "en",
+      tags: [],
+    });
+
+    expect(store.listAssets()).toHaveLength(2);
+  });
+
+  it("stores workflow catalog records without a legacy scope", () => {
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const workflow = store.upsertWorkflow(
+      createWorkflowInput({ name: "Scope-native workflow" }),
+    );
+
+    expect(workflow).not.toHaveProperty("projectId");
+    expect(store.listWorkflows()).toEqual([workflow]);
+  });
+
+  it("normalizes duplicate prompt text during workflow upsert and persistence reload", () => {
+    const duplicatePromptNode = createWorkflowNode({
+      id: "node-pinned-prompt",
+      label: "Pinned prompt",
+      config: {
+        prompt: "Legacy duplicate",
+        promptAsset: {
+          assetId: "prompt-asset",
+          version: 2,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const legacyPromptNode = createWorkflowNode({
+      id: "node-legacy-prompt",
+      label: "Legacy prompt",
+      config: { prompt: "Keep this legacy prompt" },
+    });
+    const store = createWorkflowCatalogStore({
+      now: () => new Date(BaseTime),
+    });
+
+    const workflow = store.upsertWorkflow(
+      createWorkflowInput({
+        name: "Prompt persistence",
+        nodes: [duplicatePromptNode, legacyPromptNode],
+      }),
+    );
+    const reloadedStore = createWorkflowCatalogStore({
+      definitions: [
+        {
+          ...workflow,
+          nodes: [duplicatePromptNode, legacyPromptNode],
+        },
+      ],
+      now: () => new Date(BaseTime),
+    });
+
+    expect(workflow.nodes[0]?.config.prompt).toBeUndefined();
+    expect(workflow.nodes[1]?.config.prompt).toBe("Keep this legacy prompt");
+    expect(
+      store.snapshot().definitions[0]?.nodes[0]?.config.prompt,
+    ).toBeUndefined();
+    expect(
+      reloadedStore.snapshot().definitions[0]?.nodes[0]?.config.prompt,
+    ).toBeUndefined();
+    expect(
+      reloadedStore.snapshot().definitions[0]?.nodes[1]?.config.prompt,
+    ).toBe("Keep this legacy prompt");
+  });
+
   it("derives asset usage records from workflow definitions", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     const promptAsset = store.upsertAsset({
-      workspaceId: "workspace-1",
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Planner prompt",
       slug: "planner-prompt",
       description: "Prompt",
@@ -33,9 +125,8 @@ describe("workflow catalog store", () => {
     });
 
     const guardrailAsset = store.upsertAsset({
-      workspaceId: "workspace-1",
       kind: WorkflowAssetKind.Guardrail,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Groundedness",
       slug: "groundedness",
       description: "Guard",
@@ -63,8 +154,6 @@ describe("workflow catalog store", () => {
     }
 
     const workflow = store.upsertWorkflow({
-      workspaceId: "workspace-1",
-      projectId: "project-1",
       name: "Example workflow",
       description: "Description",
       status: WorkflowRecordStatus.Draft,
@@ -137,9 +226,8 @@ describe("workflow catalog store", () => {
     });
 
     const asset = store.upsertAsset({
-      workspaceId: "workspace-1",
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Planner prompt",
       slug: "planner-prompt",
       description: "Prompt",
@@ -153,8 +241,6 @@ describe("workflow catalog store", () => {
     }
 
     store.upsertWorkflow({
-      workspaceId: "workspace-1",
-      projectId: "project-1",
       name: "Example workflow",
       description: "Description",
       status: WorkflowRecordStatus.Draft,
@@ -200,15 +286,14 @@ describe("workflow catalog store", () => {
     expect(() => store.deleteAsset(asset.id)).toThrowError(/referenced/i);
   });
 
-  it("filters project assets while keeping workspace-scoped assets available", () => {
+  it("lists all workflow assets in the global catalog", () => {
     const store = createWorkflowCatalogStore({
       now: () => new Date(BaseTime),
     });
 
     store.upsertAsset({
-      workspaceId: "workspace-1",
       kind: WorkflowAssetKind.Prompt,
-      scope: WorkflowAssetScope.Workspace,
+      scope: WorkflowAssetScope.Global,
       name: "Shared prompt",
       slug: "shared-prompt",
       description: "Prompt",
@@ -217,22 +302,18 @@ describe("workflow catalog store", () => {
       tags: [],
     });
     store.upsertAsset({
-      workspaceId: "workspace-1",
-      projectId: "project-1",
       kind: WorkflowAssetKind.Instruction,
-      scope: WorkflowAssetScope.Project,
-      name: "Project instruction",
-      slug: "project-instruction",
+      scope: WorkflowAssetScope.Global,
+      name: "Workflow instruction",
+      slug: "workflow-instruction",
       description: "Instruction",
-      body: "Project",
+      body: "Shared",
       language: "en",
       tags: [],
     });
     store.upsertAsset({
-      workspaceId: "workspace-1",
-      projectId: "project-2",
       kind: WorkflowAssetKind.Instruction,
-      scope: WorkflowAssetScope.Project,
+      scope: WorkflowAssetScope.Global,
       name: "Other instruction",
       slug: "other-instruction",
       description: "Instruction",
@@ -241,14 +322,12 @@ describe("workflow catalog store", () => {
       tags: [],
     });
 
-    const assets = store.listAssets({
-      workspaceId: "workspace-1",
-      projectId: "project-1",
-    });
+    const assets = store.listAssets();
 
     expect(assets.map((asset) => asset.name).sort()).toEqual([
-      "Project instruction",
+      "Other instruction",
       "Shared prompt",
+      "Workflow instruction",
     ]);
   });
 
@@ -259,7 +338,6 @@ describe("workflow catalog store", () => {
 
     const execution = store.upsertExecution({
       workflowId: "workflow-1",
-      projectId: "project-1",
       triggerKind: WorkflowTriggerKind.Manual,
       status: WorkflowExecutionStatus.Completed,
       startedAt: BaseTime,
@@ -278,21 +356,13 @@ describe("workflow catalog store", () => {
       nodeRuns: [],
     });
 
-    expect(
-      store.listExecutions({
-        projectId: "project-1",
-      }),
-    ).toHaveLength(1);
+    expect(store.listExecutions({})).toHaveLength(1);
     expect(store.getExecution(execution.id)?.id).toBe(execution.id);
 
     const removed = store.deleteExecution(execution.id);
 
     expect(removed?.id).toBe(execution.id);
-    expect(
-      store.listExecutions({
-        projectId: "project-1",
-      }),
-    ).toHaveLength(0);
+    expect(store.listExecutions({})).toHaveLength(0);
   });
 
   it("stores workflow definition versions and restores an older snapshot", () => {
@@ -363,7 +433,7 @@ describe("workflow catalog store", () => {
     expect(cloned?.id).not.toBe(created.id);
     expect(cloned?.name).toBe("Source workflow copy");
     expect(cloned?.version).toBe(1);
-    expect(store.listWorkflows({ projectId: "project-1" })).toHaveLength(2);
+    expect(store.listWorkflows()).toHaveLength(2);
     expect(
       cloned ? store.listWorkflowVersions({ workflowId: cloned.id }) : [],
     ).toHaveLength(1);
@@ -489,8 +559,6 @@ const createWorkflowInput = (input: {
   ...(input.id ? { id: input.id } : {}),
   ...(input.versionNote ? { versionNote: input.versionNote } : {}),
   ...(input.versionTags ? { versionTags: input.versionTags } : {}),
-  workspaceId: "workspace-1",
-  projectId: "project-1",
   name: input.name,
   description: "Description",
   status: WorkflowRecordStatus.Draft,
@@ -521,6 +589,7 @@ const createWorkflowInput = (input: {
 const createWorkflowNode = (input: {
   id: string;
   label: string;
+  config?: WorkflowDefinitionUpsertInput["nodes"][number]["config"];
 }): WorkflowDefinitionUpsertInput["nodes"][number] => ({
   id: input.id,
   kind: WorkflowNodeKind.AiAgent,
@@ -531,7 +600,7 @@ const createWorkflowNode = (input: {
   },
   width: 220,
   collapsed: false,
-  config: {},
+  config: input.config ?? {},
   inputPorts: [],
   outputPorts: [],
   attachedGuardrails: [],

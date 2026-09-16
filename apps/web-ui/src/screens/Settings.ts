@@ -9,8 +9,10 @@ import {
   type PageTabItem,
 } from "../components/PageScaffold.js";
 import {
+  SettingsCheckboxGroup,
+  type SettingsCheckboxGroupProps,
+  SettingsDateTimeField,
   SettingsNumberField,
-  SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
   SettingsToggleField,
@@ -20,17 +22,6 @@ import {
   createElement,
   type ComponentProps,
 } from "../shared/Component.js";
-import { ROUTES } from "../shared/constants.js";
-import {
-  type ProjectSessionState,
-  readProjectSession,
-} from "../shared/project-session.js";
-import {
-  DefaultServerConnection,
-  readServerConnection,
-  writeServerConnection,
-  type ServerConnection,
-} from "../shared/server-config.js";
 import {
   DefaultSettingsProfileId,
   createDefaultSettingsSnapshot,
@@ -41,15 +32,13 @@ import {
 } from "../shared/settings-storage.js";
 import {
   createSettingsClient,
+  type ExternalApiKeyRecord,
+  type ExternalWorkflowCredentialAudit,
+  type ExternalWorkflowOperation,
   type RuntimeProviderRecord,
 } from "../shared/settings-client.js";
-import {
-  createWorkspaceStateClient,
-  hydrateWorkspaceStateClients,
-} from "../shared/workspace-state-client.js";
-import { router } from "../shared/Router.js";
+import { createWorkflowClient } from "../shared/workflow-client.js";
 import { writeBrowserUrlState } from "../shared/url-state.js";
-import type { ProjectRecord } from "../shared/workbench-types.js";
 import {
   ProviderKind,
   ProviderPromptMode,
@@ -63,6 +52,20 @@ import {
   readSettingsUrlStateFromLocation,
   type SettingsUrlTab,
 } from "./settings-url-state.js";
+import {
+  IdeUserRole,
+  type IdeUserRole as IdeUserRoleValue,
+} from "../shared/ide-auth-client.js";
+import {
+  ExternalApiKeyScopeSelection,
+  ExternalWorkflowCredentialDefaultOperations,
+  ExternalWorkflowCredentialDefaultRateLimit,
+  dismissExternalWorkflowCredentialSecret,
+  readExternalWorkflowCredentialCreateInput,
+  showExternalWorkflowCredentialSecret,
+  type ExternalApiKeyScopeSelection as ExternalApiKeyScopeSelectionValue,
+  type ExternalWorkflowCredentialSecret,
+} from "./settings-api-access-state.js";
 
 type SettingsTab = SettingsUrlTab;
 
@@ -73,13 +76,22 @@ interface SettingsScreenState {
   selectedProviderId: string | null;
   workflowLimits: WorkflowLimitsSettings;
   notifications: NotificationsSettings;
-  serverConnection: ServerConnection;
-  currentProject: ProjectRecord | null;
-  projectSession: ProjectSessionState;
   runtimeProviders: ReadonlyArray<RuntimeProviderRecord>;
   isSaving: boolean;
   isTestingConnection: boolean;
   isTestingWebhook: boolean;
+  externalApiKeys: ReadonlyArray<ExternalApiKeyRecord>;
+  apiKeyName: string;
+  apiKeyScope: ExternalApiKeyScopeSelectionValue;
+  apiKeyWorkflowIds: ReadonlyArray<string>;
+  apiKeyOperations: ReadonlyArray<ExternalWorkflowOperation>;
+  apiKeyNeverExpires: boolean;
+  apiKeyExpiresAt: string;
+  apiKeyRateLimitPerMinute: number;
+  availableWorkflows: ReadonlyArray<{ id: string; name: string }>;
+  externalCredentialAudits: ReadonlyArray<ExternalWorkflowCredentialAudit>;
+  newExternalApiKey: ExternalWorkflowCredentialSecret | null;
+  isManagingExternalApiKeys: boolean;
 }
 
 const TabLabel: Record<SettingsTab, string> = {
@@ -102,13 +114,13 @@ const ProviderKindDescription: Record<ProviderKind, string> = {
   [ProviderKind.CodexCli]:
     "CLI provider registered in the current backend runtime.",
   [ProviderKind.OpenAI]:
-    "API-based profile persisted in the shared server workspace for future workflow selection.",
+    "API-based profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Anthropic]:
-    "API-based profile persisted in the shared server workspace for future workflow selection.",
+    "API-based profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Ollama]:
-    "Local inference profile persisted in the shared server workspace for future workflow selection.",
+    "Local inference profile persisted in PostgreSQL for future workflow selection.",
   [ProviderKind.Custom]:
-    "Custom OpenAI-compatible API profile persisted in the shared server workspace for future workflow selection.",
+    "Custom OpenAI-compatible API profile persisted in PostgreSQL for future workflow selection.",
 };
 
 const TestWebhookPayload = {
@@ -116,31 +128,65 @@ const TestWebhookPayload = {
   source: "settings-screen",
 } as const;
 
+const CredentialExpiryDefaultOffsetDays = 30;
+
+const AuthenticatedUserRoleProp = "authenticatedUserRole";
+
+const ExternalWorkflowCredentialOperationOptions: ReadonlyArray<{
+  value: ExternalWorkflowOperation;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "workflow.read",
+    label: "Read workflows",
+    description: "Inspect workflow definitions and metadata.",
+  },
+  {
+    value: "workflow.invoke",
+    label: "Invoke workflows",
+    description: "Start an approved workflow from an external system.",
+  },
+  {
+    value: "workflow.trigger",
+    label: "Trigger workflows",
+    description: "Submit an event to a workflow trigger.",
+  },
+  {
+    value: "run.status",
+    label: "Read run status",
+    description:
+      "Check whether a workflow run is pending, complete, or failed.",
+  },
+  {
+    value: "run.approve",
+    label: "Approve runs",
+    description: "Approve a workflow run waiting for a governed action.",
+  },
+  {
+    value: "run.trace",
+    label: "Read run traces",
+    description: "Inspect trace details for workflow runs.",
+  },
+];
+
 export class SettingsScreen extends Component<
   ComponentProps,
   SettingsScreenState
 > {
   private readonly settingsClient = createSettingsClient();
-  private readonly workspaceStateClient = createWorkspaceStateClient();
+  private readonly workflowClient = createWorkflowClient();
 
   constructor(props: ComponentProps = {}) {
-    const snapshot = {
-      ...createDefaultSettingsSnapshot(),
-      serverConnection: readServerConnection(),
-    };
+    const snapshot = createDefaultSettingsSnapshot();
     const urlState =
       typeof window === "undefined"
         ? null
         : readSettingsUrlStateFromLocation(window.location);
-    const urlSelectedProviderId =
-      urlState?.selectedProviderId &&
-      snapshot.providerProfiles.some(
-        (profile) => profile.id === urlState.selectedProviderId,
-      )
-        ? urlState.selectedProviderId
-        : null;
-    const selectedProviderId =
-      urlSelectedProviderId ?? snapshot.providerProfiles[0]?.id ?? null;
+    const selectedProviderId = resolveSettingsProviderSelection(
+      urlState?.selectedProviderId ?? null,
+      snapshot.providerProfiles,
+    );
 
     super(props, {
       activeTab: urlState?.activeTab ?? "provider",
@@ -149,23 +195,47 @@ export class SettingsScreen extends Component<
       selectedProviderId,
       workflowLimits: snapshot.workflowLimits,
       notifications: snapshot.notifications,
-      serverConnection: snapshot.serverConnection,
-      currentProject: null,
-      projectSession: readProjectSession(),
       runtimeProviders: [],
       isSaving: false,
       isTestingConnection: false,
       isTestingWebhook: false,
+      externalApiKeys: [],
+      apiKeyName: "",
+      apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+      apiKeyWorkflowIds: [],
+      apiKeyOperations: ExternalWorkflowCredentialDefaultOperations,
+      apiKeyNeverExpires: true,
+      apiKeyExpiresAt: "",
+      apiKeyRateLimitPerMinute: ExternalWorkflowCredentialDefaultRateLimit,
+      availableWorkflows: [],
+      externalCredentialAudits: [],
+      newExternalApiKey: null,
+      isManagingExternalApiKeys: false,
     });
   }
 
   override onMount(): void {
+    if (typeof window === "undefined") {
+      void this.hydrateRuntimeContext();
+      return;
+    }
     window.addEventListener("popstate", this.handleSettingsUrlStateChange);
+    window.addEventListener(
+      "iteronix:workflows-changed",
+      this.handleWorkflowCatalogChanged,
+    );
     void this.hydrateRuntimeContext();
   }
 
   override onUnmount(): void {
+    if (typeof window === "undefined") {
+      return;
+    }
     window.removeEventListener("popstate", this.handleSettingsUrlStateChange);
+    window.removeEventListener(
+      "iteronix:workflows-changed",
+      this.handleWorkflowCatalogChanged,
+    );
   }
 
   override render(): HTMLElement {
@@ -178,7 +248,7 @@ export class SettingsScreen extends Component<
         createElement(PageIntro, {
           title: "Settings",
           description:
-            "Configure provider profiles, workflow guardrails, notifications, and the server connection used by the web workbench.",
+            "Configure provider profiles, workflow guardrails, and notifications for every workflow.",
         }),
         createElement(PageTabs, {
           sticky: true,
@@ -208,6 +278,9 @@ export class SettingsScreen extends Component<
       onClick: () => {
         this.writeSettingsUrlState({ activeTab: tab }, "replace");
         this.setState({ activeTab: tab });
+        if (tab === "api") {
+          void this.refreshExternalApiKeyContext();
+        }
       },
     };
   }
@@ -233,7 +306,6 @@ export class SettingsScreen extends Component<
   }
 
   private renderGeneralTab(): HTMLElement {
-    const currentProject = this.state.currentProject;
     const runtimeProviders = this.state.runtimeProviders;
 
     return createElement("div", { className: "grid gap-6 lg:grid-cols-2" }, [
@@ -252,50 +324,31 @@ export class SettingsScreen extends Component<
                 createElement(
                   "h2",
                   { className: "text-lg font-semibold text-white" },
-                  ["Workspace context"],
+                  ["Workflow application"],
                 ),
                 createElement(
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Settings read the active project session so provider profiles can later be reused by workflows without hardcoding a single provider.",
+                    "Settings persist provider profiles in PostgreSQL so workflow execution can resolve them without additional setup.",
                   ],
                 ),
               ]),
-              createElement(
-                StatusBadge,
-                { status: currentProject ? "success" : "warning" },
-                [currentProject ? "project ready" : "project missing"],
-              ),
+              createElement(StatusBadge, { status: "success" }, [
+                "workflow scope ready",
+              ]),
             ],
           ),
           createElement("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2" }, [
-            renderReadOnlyCell(
-              "Project",
-              currentProject?.name ?? "No project selected",
-            ),
-            renderReadOnlyCell(
-              "Root path",
-              currentProject?.rootPath ??
-                this.state.projectSession.projectRootPath ??
-                "Workflow-only project",
-            ),
-            renderReadOnlyCell(
-              "Recent projects",
-              String(this.state.projectSession.recentProjects.length),
-            ),
+            renderReadOnlyCell("Scope", "Workflow application"),
+            renderReadOnlyCell("Storage", "PostgreSQL application state"),
+            renderReadOnlyCell("Runtime mode", "Workflow only"),
             renderReadOnlyCell(
               "Runtime providers",
               String(runtimeProviders.length),
             ),
           ]),
           createElement("div", { className: "mt-5 flex flex-wrap gap-3" }, [
-            createElement(Button, {
-              variant: "secondary",
-              size: "sm",
-              onClick: () => router.navigate(ROUTES.PROJECTS),
-              children: currentProject ? "Change project" : "Open project",
-            }),
             createElement(Button, {
               variant: "ghost",
               size: "sm",
@@ -328,7 +381,7 @@ export class SettingsScreen extends Component<
                   "p",
                   { className: "text-sm text-text-secondary" },
                   [
-                    "Provider profiles, workflow limits, notifications, server URL and auth token persist on the current server workspace.",
+                    "Provider profiles, workflow limits, and notifications persist in PostgreSQL. This browser automatically uses the colocated workflow service.",
                   ],
                 ),
               ]),
@@ -354,10 +407,6 @@ export class SettingsScreen extends Component<
               renderReadOnlyCell(
                 "External calls",
                 this.state.workflowLimits.externalCalls ? "Allowed" : "Blocked",
-              ),
-              renderReadOnlyCell(
-                "Workspace server",
-                this.state.serverConnection.serverUrl,
               ),
             ],
           ),
@@ -667,18 +716,7 @@ export class SettingsScreen extends Component<
                 onChange: (value: string) =>
                   this.handleProviderPromptModeChange(profile.id, value),
               })
-            : createElement(SettingsSecretField, {
-                label: "API key",
-                value: profile.apiKey,
-                placeholder: "Bearer token",
-                testId: "settings-provider-api-key",
-                onChange: (value: string) =>
-                  this.handleProviderProfileTextChange(
-                    profile.id,
-                    "apiKey",
-                    value,
-                  ),
-              }),
+            : "",
         ]),
         createElement(
           "div",
@@ -688,12 +726,10 @@ export class SettingsScreen extends Component<
           },
           [
             profile.providerKind === ProviderKind.CodexCli
-              ? this.state.currentProject
-                ? "This Codex CLI profile will be pushed to the current workspace backend on save so future flow work can resolve it server-side."
-                : "This Codex CLI profile is already persisted in the server workspace snapshot. Open a project if you also want to sync its CLI config to the backend runtime store on save."
+              ? "This Codex CLI profile will be pushed to the workflow backend on save so future workflow execution can resolve it server-side."
               : runtimeAvailable
-                ? "This API profile persists through the server workspace snapshot and syncs to the backend runtime store on save."
-                : "This provider profile persists through the server workspace snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
+                ? "This API profile persists through the server snapshot and syncs to the backend runtime store on save."
+                : "This provider profile persists through the server snapshot. Add a matching backend runtime adapter if you want workflow execution support.",
           ],
         ),
       ],
@@ -832,6 +868,14 @@ export class SettingsScreen extends Component<
   }
 
   private renderApiTab(): HTMLElement {
+    if (
+      !canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      return this.renderExternalApiAccessUnavailable();
+    }
+
     return createElement(
       "section",
       {
@@ -843,100 +887,451 @@ export class SettingsScreen extends Component<
           createElement(
             "h2",
             { className: "text-lg font-semibold text-white" },
-            ["API access"],
+            ["External API access"],
           ),
           createElement("p", { className: "text-sm text-text-secondary" }, [
-            "These values are part of the shared workspace snapshot so every client connected to the same server sees the same API target and token.",
+            "Create, rotate, or revoke workflow credentials for external automation. Each secret is shown once and is never persisted in plaintext.",
           ]),
         ]),
         createElement("div", { className: "grid gap-4 lg:grid-cols-2" }, [
           createElement(SettingsTextField, {
-            label: "Server URL",
-            value: this.state.serverConnection.serverUrl,
-            placeholder: DefaultServerConnection.serverUrl,
-            testId: "settings-server-url",
-            onChange: (value: string) =>
-              this.handleServerConnectionChange("serverUrl", value),
+            label: "Key name",
+            value: this.state.apiKeyName,
+            placeholder: "Deployment automation",
+            testId: "settings-external-api-key-name",
+            onChange: (apiKeyName: string) => this.setState({ apiKeyName }),
           }),
-          createElement(SettingsTextField, {
-            label: "Auth token",
-            value: this.state.serverConnection.authToken,
-            placeholder: DefaultServerConnection.authToken,
-            testId: "settings-auth-token",
-            onChange: (value: string) =>
-              this.handleServerConnectionChange("authToken", value),
+          createElement(SettingsSelectField, {
+            label: "Workflow access",
+            value: this.state.apiKeyScope,
+            testId: "settings-external-api-key-scope",
+            options: [
+              {
+                value: ExternalApiKeyScopeSelection.AllWorkflows,
+                label: "All workflows",
+              },
+              {
+                value: ExternalApiKeyScopeSelection.SelectedWorkflows,
+                label: "Selected workflows",
+              },
+            ],
+            onChange: (value: string) => {
+              const apiKeyScope =
+                value === ExternalApiKeyScopeSelection.SelectedWorkflows
+                  ? ExternalApiKeyScopeSelection.SelectedWorkflows
+                  : ExternalApiKeyScopeSelection.AllWorkflows;
+              this.setState({
+                apiKeyScope,
+                apiKeyWorkflowIds:
+                  apiKeyScope === ExternalApiKeyScopeSelection.AllWorkflows
+                    ? []
+                    : this.state.apiKeyWorkflowIds,
+              });
+            },
           }),
+          createElement(SettingsNumberField, {
+            label: "Requests per minute",
+            value: this.state.apiKeyRateLimitPerMinute,
+            testId: "settings-external-credential-rate-limit",
+            onChange: (value: string) => {
+              const rateLimitPerMinute = Number(value);
+              this.setState({
+                apiKeyRateLimitPerMinute:
+                  Number.isInteger(rateLimitPerMinute) &&
+                  rateLimitPerMinute >= 1 &&
+                  rateLimitPerMinute <= 600
+                    ? rateLimitPerMinute
+                    : ExternalWorkflowCredentialDefaultRateLimit,
+              });
+            },
+          }),
+          this.renderCredentialExpirySelector(),
         ]),
+        this.renderCredentialOperationSelector(),
+        this.state.apiKeyScope ===
+        ExternalApiKeyScopeSelection.SelectedWorkflows
+          ? this.renderWorkflowScopeSelector()
+          : "",
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          disabled:
+            this.state.isManagingExternalApiKeys ||
+            this.state.apiKeyName.trim().length === 0 ||
+            this.state.apiKeyOperations.length === 0 ||
+            (!this.state.apiKeyNeverExpires &&
+              this.state.apiKeyExpiresAt.length === 0) ||
+            (this.state.apiKeyScope ===
+              ExternalApiKeyScopeSelection.SelectedWorkflows &&
+              this.state.apiKeyWorkflowIds.length === 0),
+          onClick: () => void this.handleSubmitExternalApiKey(),
+          children: this.state.isManagingExternalApiKeys
+            ? "Creating"
+            : "Create credential",
+        }),
+        this.state.newExternalApiKey
+          ? this.renderNewExternalApiKeyPanel(this.state.newExternalApiKey)
+          : null,
         createElement(
           "div",
-          { className: "flex flex-wrap items-center gap-3" },
-          [
-            createElement(Button, {
-              variant: "secondary",
-              size: "sm",
-              disabled: this.state.isTestingConnection,
-              onClick: () => {
-                void this.handleTestConnection();
-              },
-              children: this.state.isTestingConnection
-                ? "Testing"
-                : "Check connection",
-            }),
+          { className: "flex flex-col gap-2" },
+          this.state.externalApiKeys.map((key) =>
             createElement(
-              StatusBadge,
-              {
-                status:
-                  this.state.runtimeProviders.length > 0
-                    ? "success"
-                    : "warning",
-              },
-              [
-                this.state.runtimeProviders.length > 0
-                  ? `${this.state.runtimeProviders.length} runtime provider${this.state.runtimeProviders.length === 1 ? "" : "s"}`
-                  : "No runtime providers loaded",
-              ],
-            ),
-          ],
-        ),
-        this.state.runtimeProviders.length > 0
-          ? createElement("div", { className: "grid gap-3 sm:grid-cols-2" }, [
-              this.state.runtimeProviders.map((provider) =>
-                createElement(
-                  "div",
-                  {
-                    key: provider.id,
-                    className:
-                      "rounded-lg border border-border-dark bg-background-dark/40 px-4 py-3",
-                  },
-                  [
-                    createElement(
-                      "p",
-                      { className: "text-sm font-semibold text-white" },
-                      [provider.displayName],
-                    ),
-                    createElement(
-                      "p",
-                      { className: "mt-1 text-xs text-text-secondary" },
-                      [
-                        `${provider.id} · ${provider.type} · auth ${provider.authType}`,
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ])
-          : createElement(
               "div",
               {
+                key: key.id,
                 className:
-                  "rounded-lg border border-dashed border-border-dark px-4 py-4 text-sm text-text-secondary",
+                  "flex items-center justify-between gap-4 rounded-lg border border-border-dark px-4 py-3",
               },
               [
-                "Use Check connection to validate the current server URL and auth token.",
+                createElement("div", {}, [
+                  createElement(
+                    "p",
+                    { className: "text-sm font-semibold text-white" },
+                    [key.name],
+                  ),
+                  createElement(
+                    "p",
+                    { className: "text-xs text-text-secondary" },
+                    [
+                      `${key.scope.kind === "all_workflows" ? "All workflows" : `${key.scope.workflowIds.length.toString()} selected workflow(s)`} · ${key.operations.join(", ")} · ${key.expiresAt ? `expires ${key.expiresAt}` : "never expires"} · ${key.rateLimitPerMinute.toString()} rpm · last used ${key.lastUsedAt ?? "never"}${key.revokedAt ? " · revoked" : ""}`,
+                    ],
+                  ),
+                ]),
+                createElement("div", { className: "flex shrink-0 gap-2" }, [
+                  createElement(Button, {
+                    variant: "secondary",
+                    size: "sm",
+                    disabled:
+                      Boolean(key.revokedAt) ||
+                      this.state.isManagingExternalApiKeys,
+                    onClick: () => void this.handleRotateExternalApiKey(key.id),
+                    children: "Rotate",
+                  }),
+                  createElement(Button, {
+                    variant: "danger",
+                    size: "sm",
+                    disabled:
+                      Boolean(key.revokedAt) ||
+                      this.state.isManagingExternalApiKeys,
+                    onClick: () => void this.handleRevokeExternalApiKey(key.id),
+                    children: key.revokedAt ? "Revoked" : "Revoke",
+                  }),
+                ]),
               ],
             ),
+          ),
+        ),
+        this.renderCredentialAudits(),
       ],
     );
+  }
+
+  private renderNewExternalApiKeyPanel(
+    secret: ExternalWorkflowCredentialSecret,
+  ): HTMLElement {
+    return createElement(
+      "div",
+      {
+        className: "rounded-lg border border-amber-500/50 bg-amber-500/10 p-4",
+      },
+      [
+        createElement("p", { className: "text-sm font-semibold text-white" }, [
+          "Copy this key now. It cannot be shown again.",
+        ]),
+        createElement(
+          "code",
+          {
+            className: "mt-2 block break-all text-xs text-amber-100",
+            "data-testid": "settings-new-external-api-key",
+          },
+          [secret.plaintextCredential],
+        ),
+        createElement(Button, {
+          variant: "secondary",
+          size: "sm",
+          onClick: () =>
+            void navigator.clipboard.writeText(secret.plaintextCredential),
+          children: "Copy key",
+        }),
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          onClick: () =>
+            this.setState({
+              newExternalApiKey: dismissExternalWorkflowCredentialSecret(
+                this.state.newExternalApiKey,
+              ),
+            }),
+          children: "Dismiss secret",
+        }),
+      ],
+    );
+  }
+
+  private renderExternalApiAccessUnavailable(): HTMLElement {
+    return createElement(
+      "section",
+      {
+        className:
+          "flex flex-col gap-2 rounded-2xl border border-[#202832] bg-[#171c22] p-6 md:p-7",
+        role: "status",
+        "data-testid": "settings-external-api-access-unavailable",
+      },
+      [
+        createElement("h2", { className: "text-lg font-semibold text-white" }, [
+          "External API access",
+        ]),
+        createElement("p", { className: "text-sm text-text-secondary" }, [
+          "Credential management is available to administrators. Ask an administrator to create, rotate, or revoke external workflow credentials.",
+        ]),
+      ],
+    );
+  }
+
+  private renderWorkflowScopeSelector(): HTMLElement {
+    const selectedWorkflowIds = new Set(this.state.apiKeyWorkflowIds);
+    return createElement("label", { className: "flex flex-col gap-2" }, [
+      createElement(
+        "span",
+        { className: "text-[13px] font-medium text-slate-100" },
+        ["Allowed workflows"],
+      ),
+      this.state.availableWorkflows.length === 0
+        ? createElement("p", { className: "text-sm text-text-secondary" }, [
+            "No workflows are available. Create one before making a limited key.",
+          ])
+        : createElement(
+            "select",
+            {
+              multiple: true,
+              size: Math.min(
+                Math.max(this.state.availableWorkflows.length, 3),
+                6,
+              ),
+              "data-testid": "settings-external-api-key-workflows",
+              className:
+                "min-h-28 w-full rounded-xl border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+              onChange: (event: Event) => {
+                const target = event.target;
+                if (target instanceof HTMLSelectElement) {
+                  this.setState({
+                    apiKeyWorkflowIds: Array.from(
+                      target.selectedOptions,
+                      (option) => option.value,
+                    ),
+                  });
+                }
+              },
+            },
+            this.state.availableWorkflows.map((workflow) =>
+              createElement(
+                "option",
+                {
+                  value: workflow.id,
+                  selected: selectedWorkflowIds.has(workflow.id),
+                },
+                [workflow.name],
+              ),
+            ),
+          ),
+      createElement("span", { className: "text-xs text-text-secondary" }, [
+        "Choose one or more workflows. This list refreshes when the workflow catalog changes.",
+      ]),
+    ]);
+  }
+
+  private renderCredentialOperationSelector(): HTMLElement {
+    return createElement<SettingsCheckboxGroupProps<ExternalWorkflowOperation>>(
+      SettingsCheckboxGroup,
+      {
+        label: "Allowed operations",
+        description: "Choose only the actions this credential needs.",
+        values: this.state.apiKeyOperations,
+        options: ExternalWorkflowCredentialOperationOptions,
+        testId: "settings-external-credential-operations",
+        onChange: (operation: ExternalWorkflowOperation, checked: boolean) => {
+          this.setState({
+            apiKeyOperations: checked
+              ? Array.from(new Set([...this.state.apiKeyOperations, operation]))
+              : this.state.apiKeyOperations.filter(
+                  (candidate) => candidate !== operation,
+                ),
+          });
+        },
+      },
+    );
+  }
+
+  private renderCredentialExpirySelector(): HTMLElement {
+    return createElement("fieldset", { className: "flex flex-col gap-3" }, [
+      createElement(
+        "legend",
+        { className: "text-[13px] font-medium text-slate-100" },
+        ["Credential expiry"],
+      ),
+      createElement(
+        "label",
+        {
+          className:
+            "flex min-h-11 items-center gap-3 rounded-lg border border-[#2b3644] bg-[#1a2129] px-3.5 py-2.5 text-sm text-white has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/70",
+        },
+        [
+          createElement("input", {
+            type: "checkbox",
+            checked: this.state.apiKeyNeverExpires,
+            "data-testid": "settings-external-credential-never-expires",
+            className:
+              "h-4 w-4 shrink-0 accent-primary focus-visible:outline-none",
+            onChange: (event: Event) => {
+              const target = event.target;
+              if (!(target instanceof HTMLInputElement)) {
+                return;
+              }
+
+              this.setState({
+                apiKeyNeverExpires: target.checked,
+                apiKeyExpiresAt: target.checked
+                  ? ""
+                  : this.state.apiKeyExpiresAt ||
+                    createDefaultCredentialExpiryDateTime(),
+              });
+            },
+          }),
+          "Never expires",
+        ],
+      ),
+      createElement(SettingsDateTimeField, {
+        label: "Date and time",
+        value: this.state.apiKeyExpiresAt,
+        disabled: this.state.apiKeyNeverExpires,
+        testId: "settings-external-credential-expiry",
+        onChange: (apiKeyExpiresAt: string) =>
+          this.setState({ apiKeyExpiresAt, apiKeyNeverExpires: false }),
+      }),
+      createElement("p", { className: "text-xs text-text-secondary" }, [
+        "Use the local date and time picker. The service records the exact expiry in UTC.",
+      ]),
+    ]);
+  }
+
+  private renderCredentialAudits(): HTMLElement {
+    return createElement("div", { className: "flex flex-col gap-2" }, [
+      createElement("h3", { className: "text-sm font-semibold text-white" }, [
+        "Credential audit history",
+      ]),
+      ...this.state.externalCredentialAudits.map((audit) =>
+        createElement(
+          "p",
+          {
+            key: `${audit.credentialId}-${audit.occurredAt}-${audit.eventKind}`,
+            className: "text-xs text-text-secondary",
+          },
+          [
+            `${audit.occurredAt} · ${audit.eventKind} · ${audit.result} · ${audit.actorKind}:${audit.actorId}${audit.operation ? ` · ${audit.operation}` : ""}`,
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  private async handleSubmitExternalApiKey(): Promise<void> {
+    await this.handleCreateExternalApiKey();
+  }
+
+  private async handleCreateExternalApiKey(): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      const created =
+        await this.settingsClient.createExternalWorkflowCredential(
+          readExternalWorkflowCredentialCreateInput({
+            name: this.state.apiKeyName,
+            scope: this.state.apiKeyScope,
+            workflowIds: this.state.apiKeyWorkflowIds,
+            operations: this.state.apiKeyOperations,
+            expiresAt: this.state.apiKeyNeverExpires
+              ? ""
+              : this.state.apiKeyExpiresAt,
+            rateLimitPerMinute: this.state.apiKeyRateLimitPerMinute,
+          }),
+        );
+      this.setState({
+        externalApiKeys: [...this.state.externalApiKeys, created.credential],
+        apiKeyName: "",
+        apiKeyScope: ExternalApiKeyScopeSelection.AllWorkflows,
+        apiKeyWorkflowIds: [],
+        apiKeyOperations: ExternalWorkflowCredentialDefaultOperations,
+        apiKeyNeverExpires: true,
+        apiKeyExpiresAt: "",
+        apiKeyRateLimitPerMinute: ExternalWorkflowCredentialDefaultRateLimit,
+        newExternalApiKey: showExternalWorkflowCredentialSecret({
+          credentialId: created.credential.id,
+          plaintextCredential: created.plaintextCredential,
+        }),
+        isManagingExternalApiKeys: false,
+      });
+    } catch (error) {
+      this.setState({
+        isManagingExternalApiKeys: false,
+      });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not create external workflow credential."),
+      );
+    }
+  }
+
+  private async handleRotateExternalApiKey(
+    credentialId: string,
+  ): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      const rotated =
+        await this.settingsClient.rotateExternalWorkflowCredential({
+          credentialId,
+        });
+      this.setState({
+        newExternalApiKey: showExternalWorkflowCredentialSecret({
+          credentialId,
+          plaintextCredential: rotated.plaintextCredential,
+        }),
+        isManagingExternalApiKeys: false,
+      });
+      if (
+        canManageExternalWorkflowCredentials(
+          readSettingsScreenUserRole(this.props),
+        )
+      ) {
+        await this.refreshExternalApiKeyContext();
+      }
+    } catch (error) {
+      this.setState({ isManagingExternalApiKeys: false });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not rotate external workflow credential."),
+      );
+    }
+  }
+
+  private async handleRevokeExternalApiKey(keyId: string): Promise<void> {
+    this.setState({ isManagingExternalApiKeys: true });
+    try {
+      await this.settingsClient.revokeExternalWorkflowCredential({
+        credentialId: keyId,
+      });
+      this.setState({
+        isManagingExternalApiKeys: false,
+      });
+      await this.refreshExternalApiKeyContext();
+    } catch (error) {
+      this.setState({
+        isManagingExternalApiKeys: false,
+      });
+      this.pushToast(
+        "error",
+        toErrorMessage(error, "Could not revoke external workflow credential."),
+      );
+    }
   }
 
   private renderSaveBar(): HTMLElement {
@@ -971,18 +1366,13 @@ export class SettingsScreen extends Component<
   }
 
   private async hydrateRuntimeContext(): Promise<void> {
-    let projectSession = readProjectSession();
-    let currentProject: ProjectRecord | null = null;
     let runtimeProviders: ReadonlyArray<RuntimeProviderRecord> =
       this.state.runtimeProviders;
     let message: string | null = null;
 
     try {
-      const workspaceState = await this.workspaceStateClient.load();
-      hydrateWorkspaceStateClients(workspaceState);
-      projectSession = readProjectSession();
-      hydrateSettingsSnapshot(workspaceState.settings);
-      const snapshot = workspaceState.settings;
+      const snapshot = await this.settingsClient.load();
+      hydrateSettingsSnapshot(snapshot);
       const urlState =
         typeof window === "undefined"
           ? null
@@ -997,41 +1387,61 @@ export class SettingsScreen extends Component<
         selectedProviderId,
         workflowLimits: snapshot.workflowLimits,
         notifications: snapshot.notifications,
-        serverConnection: snapshot.serverConnection,
       });
       const providerResponse = await this.settingsClient.listProviders();
       runtimeProviders = providerResponse.providers;
+      await this.refreshExternalApiKeyContext();
     } catch (error) {
       message = toErrorMessage(error, "Could not load runtime providers.");
     }
 
-    if (
-      projectSession.projectRootPath !== null ||
-      projectSession.projectName.length > 0
-    ) {
-      try {
-        currentProject = await this.settingsClient.openProject({
-          rootPath: projectSession.projectRootPath,
-          ...(projectSession.projectName
-            ? { name: projectSession.projectName }
-            : {}),
-        });
-      } catch (error) {
-        message = toErrorMessage(
-          error,
-          "Could not resolve the active project for settings.",
-        );
-      }
-    }
-
     this.setState({
-      projectSession,
-      currentProject,
       runtimeProviders,
     });
 
     if (message) {
       this.pushToast("error", message);
+    }
+  }
+
+  private async refreshExternalApiKeyContext(): Promise<void> {
+    if (
+      !canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const [externalApiKeys, availableWorkflows, externalCredentialAudits] =
+        await Promise.all([
+          this.settingsClient.listExternalWorkflowCredentials(),
+          this.workflowClient.listDefinitions(),
+          this.settingsClient.listExternalWorkflowCredentialAudits(),
+        ]);
+      const availableWorkflowIds = new Set(
+        availableWorkflows.map((workflow) => workflow.id),
+      );
+      this.setState({
+        externalApiKeys,
+        externalCredentialAudits,
+        availableWorkflows: availableWorkflows.map((workflow) => ({
+          id: workflow.id,
+          name: workflow.name,
+        })),
+        apiKeyWorkflowIds: this.state.apiKeyWorkflowIds.filter((workflowId) =>
+          availableWorkflowIds.has(workflowId),
+        ),
+      });
+    } catch (error) {
+      this.pushToast(
+        "error",
+        toErrorMessage(
+          error,
+          "Could not refresh workflows for credential access.",
+        ),
+      );
     }
   }
 
@@ -1066,13 +1476,7 @@ export class SettingsScreen extends Component<
 
   private handleProviderProfileTextChange(
     profileId: string,
-    key:
-      | "name"
-      | "modelId"
-      | "endpointUrl"
-      | "apiKey"
-      | "apiKeyEnvVar"
-      | "command",
+    key: "name" | "modelId" | "endpointUrl" | "apiKeyEnvVar" | "command",
     value: string,
   ): void {
     const nextProfiles = this.state.providerProfiles.map((profile) =>
@@ -1133,42 +1537,6 @@ export class SettingsScreen extends Component<
     });
   }
 
-  private handleServerConnectionChange(
-    key: keyof ServerConnection,
-    value: string,
-  ): void {
-    this.setState({
-      serverConnection: {
-        ...this.state.serverConnection,
-        [key]: value,
-      },
-    });
-  }
-
-  private async handleTestConnection(): Promise<void> {
-    this.setState({
-      isTestingConnection: true,
-    });
-
-    try {
-      writeServerConnection(this.state.serverConnection);
-      const response = await this.settingsClient.listProviders();
-      this.setState({
-        runtimeProviders: response.providers,
-      });
-      this.pushToast(
-        "success",
-        `Connection OK. Runtime exposes ${response.providers.length} provider${response.providers.length === 1 ? "" : "s"}.`,
-      );
-    } catch (error) {
-      this.pushToast("error", toErrorMessage(error, "Connection test failed."));
-    } finally {
-      this.setState({
-        isTestingConnection: false,
-      });
-    }
-  }
-
   private async handleTestWebhook(): Promise<void> {
     this.setState({
       isTestingWebhook: true,
@@ -1215,14 +1583,10 @@ export class SettingsScreen extends Component<
         providerProfiles: this.state.providerProfiles,
         workflowLimits: this.state.workflowLimits,
         notifications: this.state.notifications,
-        serverConnection: this.state.serverConnection,
       };
 
-      const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot,
-      });
-      hydrateWorkspaceStateClients(workspaceState);
-      const persistedSettings = workspaceState.settings;
+      const persistedSettings = await this.settingsClient.update(snapshot);
+      hydrateSettingsSnapshot(persistedSettings);
       const selectedProviderId = persistedSettings.providerProfiles.some(
         (profile) => profile.id === this.state.selectedProviderId,
       )
@@ -1234,31 +1598,26 @@ export class SettingsScreen extends Component<
         selectedProviderId,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection,
       });
 
       let syncedCount = 0;
-      if (this.state.currentProject) {
-        const syncRequests = createProviderSyncRequests(
-          this.state.providerProfiles,
-          this.state.currentProject.id,
-        );
+      const syncRequests = createProviderSyncRequests(
+        this.state.providerProfiles,
+      );
 
-        for (const request of syncRequests) {
-          await this.settingsClient.updateProviderSettings({
-            projectId: request.projectId,
-            profileId: request.profileId,
-            providerId: request.providerId,
-            config: request.config,
-          });
-          syncedCount += 1;
-        }
+      for (const request of syncRequests) {
+        await this.settingsClient.updateProviderSettings({
+          profileId: request.profileId,
+          providerId: request.providerId,
+          config: request.config,
+        });
+        syncedCount += 1;
       }
 
       const localOnlyCount = this.state.providerProfiles.length - syncedCount;
       this.pushToast(
         "success",
-        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in the workspace state, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`,
+        `Settings saved. ${this.state.providerProfiles.length} profile${this.state.providerProfiles.length === 1 ? "" : "s"} persisted in PostgreSQL, with ${syncedCount} runtime sync${syncedCount === 1 ? "" : "s"} and ${localOnlyCount} snapshot-only profile${localOnlyCount === 1 ? "" : "s"}.`,
       );
     } catch (error) {
       this.pushToast(
@@ -1283,11 +1642,8 @@ export class SettingsScreen extends Component<
     const snapshot = createDefaultSettingsSnapshot();
 
     try {
-      const workspaceState = await this.workspaceStateClient.update({
-        settings: snapshot,
-      });
-      hydrateWorkspaceStateClients(workspaceState);
-      const persistedSettings = workspaceState.settings;
+      const persistedSettings = await this.settingsClient.update(snapshot);
+      hydrateSettingsSnapshot(persistedSettings);
       this.setState({
         activeTab: "provider",
         profileId: persistedSettings.profileId,
@@ -1295,7 +1651,6 @@ export class SettingsScreen extends Component<
         selectedProviderId: persistedSettings.providerProfiles[0]?.id ?? null,
         workflowLimits: persistedSettings.workflowLimits,
         notifications: persistedSettings.notifications,
-        serverConnection: persistedSettings.serverConnection,
       });
       this.writeSettingsUrlState(
         {
@@ -1330,6 +1685,16 @@ export class SettingsScreen extends Component<
     });
   };
 
+  private readonly handleWorkflowCatalogChanged = (): void => {
+    if (
+      canManageExternalWorkflowCredentials(
+        readSettingsScreenUserRole(this.props),
+      )
+    ) {
+      void this.refreshExternalApiKeyContext();
+    }
+  };
+
   private writeSettingsUrlState(
     patch: Parameters<typeof applySettingsUrlPatch>[1],
     mode: "push" | "replace",
@@ -1360,6 +1725,36 @@ export class SettingsScreen extends Component<
     );
   }
 }
+
+const createDefaultCredentialExpiryDateTime = (): string => {
+  const value = new Date();
+  value.setDate(value.getDate() + CredentialExpiryDefaultOffsetDays);
+  return (
+    [
+      value.getFullYear().toString(),
+      (value.getMonth() + 1).toString().padStart(2, "0"),
+      value.getDate().toString().padStart(2, "0"),
+    ].join("-") +
+    "T" +
+    [
+      value.getHours().toString().padStart(2, "0"),
+      value.getMinutes().toString().padStart(2, "0"),
+    ].join(":")
+  );
+};
+
+export const canManageExternalWorkflowCredentials = (
+  role: IdeUserRoleValue,
+): boolean => role === IdeUserRole.Admin;
+
+const readSettingsScreenUserRole = (
+  props: ComponentProps,
+): IdeUserRoleValue => {
+  const role = props[AuthenticatedUserRoleProp];
+  return role === IdeUserRole.Admin || role === IdeUserRole.Member
+    ? role
+    : IdeUserRole.Member;
+};
 
 const renderReadOnlyCell = (label: string, value: string): HTMLElement =>
   createElement(

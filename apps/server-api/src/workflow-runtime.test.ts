@@ -1,7 +1,140 @@
 import { describe, expect, it, vi } from "vitest";
 import { createOpenAiCompatibleProvider } from "../../../packages/adapters/src/openai-compatible/provider";
+import {
+  WorkflowNodeKind,
+  WorkflowRecordStatus,
+  WorkflowTriggerKind,
+  type WorkflowDefinitionRecord,
+  type WorkflowNodeRecord,
+} from "../../../packages/shared/src/workflows";
+import {
+  createDefaultApplicationState,
+  type ApplicationState,
+} from "./application-state";
+import {
+  AssetKind,
+  AssetStatus,
+  type EditableAssetRecord,
+} from "./editable-assets";
+import {
+  createWorkflowRuntimeService,
+  resolveWorkflowPromptAssets,
+  resolveProviderApiKey,
+} from "./workflow-runtime";
 
 describe("workflow runtime provider adapters", () => {
+  it("resolves a persisted environment secret reference after restart without retaining the key", () => {
+    const environment = {
+      WORKFLOW_PROVIDER_KEY: "secret-token",
+    };
+
+    expect(
+      resolveProviderApiKey(
+        {
+          apiKeyEnvVar: "WORKFLOW_PROVIDER_KEY",
+        },
+        environment,
+      ),
+    ).toBe("secret-token");
+  });
+
+  it("materializes the immutable pinned prompt version and keeps execution provenance", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: { records: [createPromptAsset()] },
+    };
+
+    expect(resolveWorkflowPromptAssets(definition, state)).toMatchObject({
+      definition: { nodes: [{ config: { prompt: "Hello Ada" } }] },
+      provenance: [
+        {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+          validation: "passed",
+        },
+      ],
+    });
+  });
+
+  it("rejects a persisted binding that violates the pinned variable schema", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: 7 },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: { records: [createPromptAsset()] },
+    };
+
+    expect(() => resolveWorkflowPromptAssets(definition, state)).toThrow(
+      "Prompt bindings are invalid.",
+    );
+  });
+
+  it("rejects persisted templates with tokens outside their declared schema", () => {
+    const node = createProviderNode();
+    const definition = createWorkflowDefinition({
+      ...node,
+      config: {
+        ...node.config,
+        promptAsset: {
+          assetId: "prompt-1",
+          version: 1,
+          bindings: { name: "Ada" },
+        },
+      },
+    });
+    const state: ApplicationState = {
+      ...createDefaultApplicationState(),
+      editableAssets: {
+        records: [createPromptAsset("Hello {{name}} {{undeclared}}")],
+      },
+    };
+
+    expect(() => resolveWorkflowPromptAssets(definition, state)).toThrow(
+      "Prompt template contains undeclared variables.",
+    );
+  });
+
+  it("rejects the legacy Codex profile before attempting a CLI invocation in fresh state", async () => {
+    const node = createProviderNode();
+    const runtime = createWorkflowRuntimeService({
+      readApplicationState: createDefaultApplicationState,
+    });
+
+    const result = await runtime.testProviderNode({
+      workflow: createWorkflowDefinition(node),
+      node,
+      assets: [],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.message).toBe(
+      "Workflow provider profile codex-cli-default not found.",
+    );
+  });
+
   it("runs openai-compatible providers with bearer auth and maps usage", async () => {
     let invocationCount = 0;
     const calls: Array<{
@@ -111,4 +244,106 @@ describe("workflow runtime provider adapters", () => {
       vi.useRealTimers();
     }
   });
+});
+
+const createProviderNode = (): WorkflowNodeRecord => ({
+  id: "provider-node",
+  kind: WorkflowNodeKind.AiProviderRun,
+  label: "Provider",
+  position: { x: 0, y: 0 },
+  width: 320,
+  collapsed: false,
+  config: {
+    provider: {
+      providerId: "codex-cli-default",
+      modelId: "",
+      reasoningLevel: "medium",
+      temperature: 0.2,
+      verbosity: "medium",
+    },
+  },
+  inputPorts: [],
+  outputPorts: [],
+  attachedGuardrails: [],
+});
+
+const createWorkflowDefinition = (
+  node: WorkflowNodeRecord,
+): WorkflowDefinitionRecord => ({
+  id: "workflow",
+  name: "Workflow",
+  description: "Workflow runtime test",
+  status: WorkflowRecordStatus.Draft,
+  version: 1,
+  createdAt: "2026-07-13T00:00:00.000Z",
+  updatedAt: "2026-07-13T00:00:00.000Z",
+  trigger: {
+    kind: WorkflowTriggerKind.Manual,
+    enabled: true,
+    config: {},
+  },
+  viewport: { x: 0, y: 0, zoom: 1 },
+  nodes: [node],
+  edges: [],
+  executionPolicy: {
+    maxNodeRetries: 0,
+    allowManualCheckpointResume: false,
+  },
+  defaultContextPolicy: {
+    language: "en",
+    carryMessagesLimit: 1,
+    carryArtifactLimit: 1,
+  },
+  tags: [],
+});
+
+const createPromptAsset = (
+  template = "Hello {{name}}",
+): EditableAssetRecord => ({
+  id: "prompt-1",
+  kind: AssetKind.Prompt,
+  name: "Greeting",
+  status: AssetStatus.Enabled,
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema: createSchema("prompt.input"),
+  outputSchema: createSchema("prompt.output"),
+  limits: { executions: 1, timeoutMs: 1000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: "prompt-1",
+    registeredAt: "2026-07-18T00:00:00.000Z",
+  },
+  prompt: {
+    activeVersion: 1,
+    versions: [
+      {
+        version: 1,
+        template,
+        variables: [
+          {
+            name: "name",
+            required: true,
+            schema: {
+              id: "name",
+              version: 1,
+              schema: { type: "string" },
+            },
+          },
+        ],
+        provenance: {
+          source: "test",
+          artifactFingerprint: "prompt-1-v1",
+          registeredAt: "2026-07-18T00:00:00.000Z",
+        },
+        createdAt: "2026-07-18T00:00:00.000Z",
+      },
+    ],
+  },
+});
+
+const createSchema = (id: string) => ({
+  id,
+  version: 1,
+  schema: { type: "object" as const, additionalProperties: false },
 });

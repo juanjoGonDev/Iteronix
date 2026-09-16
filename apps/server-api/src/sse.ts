@@ -47,15 +47,22 @@ export const createSseStream = (res: ServerResponse): SseStream => {
   };
 };
 
+const escapeSseText = (value: string): string =>
+  value.replace(
+    /[<>&'\r\n\u2028\u2029]/gu,
+    (character) =>
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+
 const formatSseEvent = (event: SseEvent): string => {
   const lines: string[] = [];
 
   if (event.id) {
-    lines.push(`${SseField.Id}: ${event.id}`);
+    lines.push(`${SseField.Id}: ${escapeSseText(event.id)}`);
   }
 
-  lines.push(`${SseField.Event}: ${event.event}`);
-  lines.push(`${SseField.Data}: ${JSON.stringify(event.data)}`);
+  lines.push(`${SseField.Event}: ${escapeSseText(event.event)}`);
+  lines.push(`${SseField.Data}: ${escapeSseText(JSON.stringify(event.data))}`);
   lines.push("");
 
   return `${lines.join("\n")}\n`;

@@ -3097,7 +3097,7 @@
   - Use CSS group-hover and ocus-within instead of persisted hover state so the toolbar disappears naturally when leaving the node or toolbar area.
   - Keep the run action disabled for unsupported, dirty, or unsaved nodes; no dead UI is introduced for nodes that cannot run a provider smoke test.
 - Changes:
-  - Updated pps/web-ui/src/screens/Workflows.ts with a compact node hover toolbar, reusable toolbar button renderer, node-specific delete handling, and provider-test eligibility checks.
+  - Updated apps/web-ui/src/screens/Workflows.ts with a compact node hover toolbar, reusable toolbar button renderer, node-specific delete handling, and provider-test eligibility checks.
 - Commands:
   - pnpm lint PASS
   - pnpm typecheck PASS
@@ -3115,7 +3115,7 @@
 - Decisions:
   - Keep CSS-driven hover behavior, but wrap the toolbar in a transparent hover bridge that extends from the node to the toolbar.
 - Changes:
-  - Updated pps/web-ui/src/screens/Workflows.ts so the toolbar hit area spans the vertical gap between the node and the controls while preserving pointer event isolation for canvas dragging.
+  - Updated apps/web-ui/src/screens/Workflows.ts so the toolbar hit area spans the vertical gap between the node and the controls while preserving pointer event isolation for canvas dragging.
 - Commands:
   - pnpm lint PASS
   - pnpm typecheck PASS
@@ -3757,7 +3757,7 @@
   - Validate pinned test output persistence through the node modal and workflow definition API as the stable smoke path for the current UI.
   - Require same-node pinned output replacement to confirm when the next output differs, so historical/manual outputs do not silently unpin.
 - Changes
-  - Refreshed pps/web-ui/scripts/validate-workflows.ts for modal output editing, pin persistence after reload, and current history selection smoke coverage.
+  - Refreshed apps/web-ui/scripts/validate-workflows.ts for modal output editing, pin persistence after reload, and current history selection smoke coverage.
   - Added
     extOutputSnapshot comparison to pinned output action state and regression coverage in workflows-debug-state.test.ts.
 - Commands
@@ -4082,9 +4082,9 @@
   - Kept persisted version snapshots in the workflow catalog as the source of truth; browser validation exercises the restore flow while unit/API coverage exercises clone.
 - Changes
   - packages/agents/src/workflow-catalog.ts clones workflow definitions from version snapshots.
-  - pps/server-api/src/workflows.ts and pps/server-api/src/server.ts expose the clone-version API route.
-  - pps/web-ui/src/screens/Workflows.ts adds per-version Details, Restore, Clone and Download actions plus the details/diff modal.
-  - pps/web-ui/scripts/validate-workflows.ts covers version actions visibility, details modal rendering and restore flow in browser validation.
+  - apps/server-api/src/workflows.ts and apps/server-api/src/server.ts expose the clone-version API route.
+  - apps/web-ui/src/screens/Workflows.ts adds per-version Details, Restore, Clone and Download actions plus the details/diff modal.
+  - apps/web-ui/scripts/validate-workflows.ts covers version actions visibility, details modal rendering and restore flow in browser validation.
 - Commands
   - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-catalog.test.ts PASS.
   - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts PASS.
@@ -4173,9 +4173,9 @@
   - Route import and preview-import parsing through migrateWorkflowVersionExport so legacy single-version exports without explicit schema metadata can still be accepted safely.
 - Changes
   - packages/agents/src/workflow-versioning.ts now exports timeline bundles and migrates legacy single-version exports.
-  - packages/agents/src/workflow-catalog.ts, pps/server-api/src/workflows.ts, pps/server-api/src/server.ts, and client contracts expose timeline export.
-  - pps/web-ui/src/screens/Workflows.ts adds a compact Download timeline action in the version history panel.
-  - pps/web-ui/scripts/validate-workflows.ts validates the timeline download request in the browser workflow stub.
+  - packages/agents/src/workflow-catalog.ts, apps/server-api/src/workflows.ts, apps/server-api/src/server.ts, and client contracts expose timeline export.
+  - apps/web-ui/src/screens/Workflows.ts adds a compact Download timeline action in the version history panel.
+  - apps/web-ui/scripts/validate-workflows.ts validates the timeline download request in the browser workflow stub.
 - Commands
   - corepack pnpm@10.18.3 exec vitest run packages/agents/src/workflow-versioning.test.ts failed first, then PASS.
   - corepack pnpm@10.18.3 exec vitest run apps/server-api/src/workflows.test.ts failed first, then PASS.
@@ -4441,3 +4441,887 @@
   - Full root gates, commit, push and CI/CodeQL verification pending.
 - Next
   - Run format:check, quality, build and validate:workflows; commit/push with hooks enabled; verify CI/CodeQL.
+
+### 2026-07-13 13:36 (Europe/Madrid) — Workflow-only PostgreSQL cutover
+
+- Summary
+  - Started the approved destructive cutover on `refactor/workflow-only-postgres` after restoring process execution.
+- Decisions
+  - PostgreSQL is now the only workspace-state persistence adapter; no file-state fallback remains.
+  - The public server boundary now accepts only workflow plus provider/settings paths, and the browser shell registers only Workflows and Settings.
+  - A single internal workflow scope keeps the retained workflow editor usable without exposing project selection or project routes.
+- Changes
+  - Added `postgres-workspace-state.ts` with PostgreSQL table initialization, empty-state loading, and atomic JSONB upserts.
+  - Added `DATABASE_URL` configuration validation, PostgreSQL Docker Compose startup, reset documentation, and focused persistence/config tests.
+  - Removed file workspace persistence, the project selector sidebar footer, and product navigation for Overview, Projects, Explorer, Kanban, and History.
+- Commands
+  - `pnpm vitest run apps/server-api/src/config.test.ts apps/server-api/src/postgres-workspace-state.test.ts` PASS.
+  - `pnpm typecheck` PASS.
+  - `pnpm test` PASS (80 files, 370 tests).
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` PASS.
+  - `docker compose config` PASS.
+- Issues/Risks
+  - Deprecated implementation modules and project fields remain reachable internally only; their physical deletion requires a focused workflow-catalog scope-native follow-up.
+- Next
+  - Delete remaining project-centric modules and internal fields, then rerun the complete quality gate suite and Docker startup validation.
+
+### 2026-07-13 13:55 (Europe/Madrid) — Workflow-only PostgreSQL corrective hardening
+
+- Summary
+  - Hardened the PostgreSQL cutover against stale writes, persisted credential leakage, Docker credential exposure, and rejected log endpoint requests.
+- Decisions
+  - PostgreSQL state uses a serialized local save queue plus optimistic database revisions; a conflict fails instead of silently overwriting state.
+  - Persisted workspace JSON drops auth, token, password, secret, and API-key fields; client-side log forwarding is local only and workflow logs are derived from execution history.
+  - Compose requires operator-supplied credentials, keeps PostgreSQL private to the Compose network, and restarts recoverable services deliberately.
+- Changes
+  - Added PostgreSQL revision, redaction, configuration, and workflow-boundary coverage.
+  - Added startup failure cleanup for the PostgreSQL pool, production dependency pruning in Docker, and a constrained Docker build context.
+  - Removed the web logs client and its rejected `/logs/*` calls from the retained Workflows UI.
+- Commands
+  - `pnpm vitest run apps/server-api/src/config.test.ts apps/server-api/src/postgres-workspace-state.test.ts apps/server-api/src/workflow-boundary.test.ts` PASS.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` PASS (80 files, 373 tests).
+  - `docker compose config` PASS with explicit test-only environment variables.
+  - `docker compose build server-api` could not run because Docker Desktop's Linux engine pipe was unavailable.
+- Issues/Risks
+  - The destructive deletion of remaining project-centric implementation modules and `projectId` fields is still pending; the server boundary rejects their public routes but the internal code has not yet been removed.
+- Next
+  - Make the workflow catalog scope-native, delete the project-centric modules and tests, then repeat all quality gates and Docker engine validation.
+
+### 2026-07-13 14:24 (Europe/Madrid) — Workflow scope corrective hardening
+
+- Summary
+  - Closed the review defects in the scope-native workflow cutover without reintroducing project selection.
+- Decisions
+  - PostgreSQL `BIGINT` revisions accept safe integer strings returned by the driver and reject unsafe or invalid values.
+  - Workflows and provider settings use a single workflow workspace scope; no retained client, DTO, or API request needs `projectId`.
+- Changes
+  - Added a realistic string-revision persistence regression test and safe revision decoding.
+  - Removed project state guards and project-scoped asset choices from the Workflows UI; empty PostgreSQL state loads catalog and draft operations directly.
+  - Removed provider/settings project keys from server parsing, store records, workspace persistence decoding, settings client contracts, and runtime synchronization.
+- Commands
+  - `pnpm vitest run apps/server-api/src/postgres-workspace-state.test.ts apps/server-api/src/providers.test.ts apps/web-ui/src/shared/settings-client.test.ts apps/web-ui/src/screens/settings-state.test.ts apps/web-ui/src/shared/workflow-client.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` PASS (80 files, 375 tests).
+- Issues/Risks
+  - Fresh bounded review remains required before committing; the earlier receipt is absent.
+- Next
+  - Run the fresh review for the corrected staged vertical unit, then validate the receipt before the atomic commit.
+
+### 2026-07-13 14:37 (Europe/Madrid) — Workflow-only server catalog deletion
+
+- Summary
+  - Removed the project-centric server catalog; the remaining API server now owns only workflow execution, workflow persistence, and provider/settings routes.
+- Decisions
+  - Workflow execution correlation IDs remain runtime metadata; legacy session management and session routes were removed.
+  - Server startup requires only host/port, bearer authentication, and PostgreSQL; workspace root, command allowlist, and server log persistence configuration were removed with their consumers.
+- Changes
+  - Deleted project, files, git, Kanban, history, logs, quality-gates, sessions, sandbox, AI workbench, and server-log modules with their tests.
+  - Rebuilt `server.ts` around PostgreSQL workspace state, provider settings, and workflow endpoints; pruned legacy route/constants/config surface and deleted the obsolete evaluation integration test.
+  - Added source-inventory coverage for every deleted server module and test; updated workspace-state API coverage for settings-only state updates.
+- Commands
+  - `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts` RED before deletion.
+  - `pnpm vitest run apps/server-api/src/config.test.ts` RED before removing workspace-root configuration.
+  - `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts apps/server-api/src/config.test.ts apps/server-api/src/workspace-state-api.test.ts apps/server-api/src/workflow-boundary.test.ts` PASS (8 tests).
+  - `pnpm typecheck` PASS.
+- Issues/Risks
+  - Browser-side legacy screen/client removal and final full quality gates remain pending in the broader destructive cutover.
+- Next
+  - Remove the remaining browser legacy surface, then run the full suite and bounded review before atomic commits.
+
+### 2026-07-13 14:49 (Europe/Madrid) — Workflow-only browser catalog deletion
+
+- Summary
+  - Removed the obsolete browser catalog so the PWA retains only workflow authoring/execution and provider/settings configuration.
+- Decisions
+  - The workspace-state client now decodes only settings; workflow catalog requests derive the single workflow workspace scope from retained workflow data.
+  - Workflow execution/edit history remains inside the Workflows screen; the standalone History product surface was deleted.
+- Changes
+  - Deleted the Dashboard, Projects, Explorer, Kanban, standalone History, associated state/URL helpers, git/quality/log/workbench clients, obsolete components, and their browser validators.
+  - Pruned route constants and URL registry policy to `/workflows` and `/settings`, removed client log forwarding, and reduced the retained empty-state primitive to its only consumer contract.
+  - Updated settings/workflow emulation browser stubs to use workflow workspace state without project identifiers; added a failing-first source inventory test that prevents legacy module restoration.
+- Commands
+  - `pnpm vitest run apps/web-ui/src/workflow-only-source-inventory.test.ts` RED before deletion; PASS after deletion.
+  - `pnpm vitest run apps/web-ui/src/workflow-only-source-inventory.test.ts apps/web-ui/src/shared/url-state-registry.test.ts apps/web-ui/src/components/WorkbenchPanels.test.ts apps/web-ui/scripts/workflows-emulation-fixture.test.ts apps/web-ui/src/shared/settings-client.test.ts apps/web-ui/src/screens/settings-state.test.ts apps/web-ui/src/shared/workflow-client.test.ts apps/web-ui/src/screens/workflows-editor-state.test.ts` PASS (50 tests).
+  - `pnpm typecheck` PASS.
+  - `pnpm -C apps/web-ui build` PASS.
+  - `pnpm -C apps/web-ui validate:settings` PASS.
+  - `pnpm -C apps/web-ui validate:workflows` PASS after adding the missing timeline-version option synchronization in the validator.
+- Issues/Risks
+  - Root lint, full test/build gates, Docker runtime validation, review receipt, and atomic commits remain owned by the full cutover sequence.
+- Next
+  - Run the full quality gates and bounded review, then create the planned atomic commits.
+
+### 2026-07-13 15:00 (Europe/Madrid) — Workflow-only catalog and secret-reference hardening
+
+- Summary
+  - Completed the scope-native workflow catalog cutover and replaced durable provider API-key handling with environment-secret references.
+- Decisions
+  - Workflows, assets, imports, and previews now use one global catalog with no workspace identifier or request filter.
+  - Provider configuration retains only `apiKeyEnvVar`; plaintext API keys are removed from UI state and stripped from direct settings updates before persistence or runtime use.
+- Changes
+  - Removed workspace identifiers from shared records, catalog filtering, import-preview payloads, server execution lookup, retained UI state, fixtures, validators, and tests.
+  - Centralized workspace-state secret redaction so PostgreSQL persistence and direct update parsing preserve environment references while dropping raw credentials.
+- Commands
+  - RED: `pnpm vitest run packages/agents/src/workflow-catalog.test.ts apps/server-api/src/workflow-runtime.test.ts` failed before implementation.
+  - RED: `pnpm vitest run apps/server-api/src/workspace-state-api.test.ts` failed before direct-update redaction.
+  - PASS: focused secret/catalog regression suite (25 tests) and `pnpm typecheck`.
+- Issues/Risks
+  - Root lint, complete test/build suite, Docker runtime validation, bounded review receipt, and atomic commits remain required for the full cutover.
+- Next
+  - Run lint and the complete test suite, then hand the corrected review blockers back to the cutover sequence.
+
+### 2026-07-13 15:07 (Europe/Madrid) — Fresh-stack provider configuration
+
+- Summary
+  - Removed the unavailable implicit Codex CLI profile from fresh PostgreSQL and browser settings state.
+- Decisions
+  - A new workflow-only installation has no provider profile; execution requires a user-configured CLI executable or API provider with environment-backed credentials.
+- Changes
+  - Removed the server and browser Codex defaults, made the workflow editor render an explicit Settings configuration message, and reject empty Codex CLI commands before adapter construction.
+  - Documented the provider bootstrap requirement and recorded the completed scope in `PLAN.md`.
+- Commands
+  - RED: `pnpm vitest run apps/server-api/src/postgres-workspace-state.test.ts apps/web-ui/src/shared/settings-storage.test.ts` failed because both layers seeded Codex.
+  - PASS: `pnpm vitest run apps/server-api/src/workflow-runtime.test.ts apps/server-api/src/postgres-workspace-state.test.ts apps/web-ui/src/shared/settings-storage.test.ts` (13 tests), focused ESLint, and `pnpm typecheck`.
+- Issues/Risks
+  - Full gates and Docker Compose runtime verification remain owned by the parent cutover sequence.
+- Next
+  - Run focused lint/typecheck and return the provider correction for integrated review.
+
+### 2026-07-13 15:15 (Europe/Madrid) — Revision-conflict rollback for workflow persistence
+
+- Summary
+  - Made workflow catalog and provider mutations deterministic after a rejected PostgreSQL optimistic-revision write.
+- Decisions
+  - The persistence boundary rolls mutable in-memory stores back to the last committed workspace snapshot when PostgreSQL rejects a state revision; later saves cannot include rejected data.
+- Changes
+  - Added restore operations to provider and workflow catalog stores and invoked them from the server persistence failure path.
+  - Added failing-first regressions for workflow definition and provider selection conflicts, including a later-save assertion.
+- Commands
+  - RED: `pnpm vitest run apps/server-api/src/workspace-persistence.test.ts` failed before exporting and adding rollback behavior.
+  - PASS: `pnpm vitest run apps/server-api/src/workspace-persistence.test.ts` (2 tests).
+  - PASS: `pnpm lint -- apps/server-api/src/server.ts apps/server-api/src/providers.ts packages/agents/src/workflow-catalog.ts apps/server-api/src/workspace-persistence.test.ts`.
+  - PASS: `pnpm typecheck`.
+- Issues/Risks
+  - Full quality gates, bounded review, Docker runtime validation, and atomic commits remain owned by the parent cutover sequence.
+- Next
+  - Integrate this rollback correction into the review transaction and continue the cutover validation.
+
+### 2026-07-13 15:36 (Europe/Madrid) — Durable workflow SSE terminal events
+
+- Summary
+  - Corrected SSE execution reporting so a PostgreSQL progress-save failure cannot be reported as a completed workflow or node execution.
+- Decisions
+  - Terminal runtime events remain buffered until queued progress writes and the final workspace save complete successfully.
+- Changes
+  - Propagated save-scheduler failures through both workflow execution stream handlers and emitted `workflow_failed` from their failure boundary.
+  - Added HTTP SSE regressions for `/workflows/executions/stream` and `/workflows/executions/stream-node`; each injects a failing PostgreSQL state store and asserts failure without completion.
+- Commands
+  - RED then PASS: `pnpm vitest run apps/server-api/src/workflow-stream-persistence.test.ts` (2 tests).
+  - PASS: focused ESLint, `pnpm -C apps/server-api run build`, and `pnpm vitest run apps/server-api/src` (42 tests).
+- Issues/Risks
+  - Full quality gates, bounded review receipt, Docker runtime validation, and atomic commits remain owned by the parent cutover sequence.
+- Next
+  - Re-run the final 4R review over the corrected diff, then validate the staged receipt before committing.
+
+### 2026-07-13 15:47 (Europe/Madrid) — Persistence concurrency correction R3-001
+
+- Summary
+  - Closed R3-001: a failed queued PostgreSQL progress write now reports `workflow_failed` and never a false terminal completion.
+- Commands
+  - RED then PASS: `pnpm vitest run apps/server-api/src/workflow-stream-persistence.test.ts` (2 tests).
+  - Native receipt approved: `gentle-ai review validate --gate pre-commit --cwd D:\projects\Iteronix` returned `allow` for `review-c5e950263b53f654`.
+- Issues/Risks
+  - Docker Compose runtime remains unverified because the Docker Desktop Linux engine pipe is unavailable.
+- Next
+  - Preserve the approved reviewed content and create the atomic cutover commit.
+
+### 2026-07-13 20:21 (Europe/Madrid) — Docker delivery
+
+- Summary: Fixed the container build failure before starting the PostgreSQL workflow-only stack.
+- Decisions: Kept the root `postinstall` lifecycle active during installation; Docker copies its required `scripts/install-hooks.ts` before `pnpm install`. The final production prune skips scripts only after `tsx` is removed, because the TypeScript postinstall loader cannot run without that development dependency. Compose uses the native project name `iteronix`.
+- Changes: Added the Dockerfile copy layer, non-interactive production prune, and top-level Compose name.
+- Commands: Reproduced the original failure, then passed `docker compose build --no-cache server-api`. `iteronix-postgres-1` reached healthy status and an internal authenticated `POST /workspace/state/get` returned HTTP 200 from `iteronix-server-api-validation`.
+- Issues/Risks: The normal server-api service cannot bind host port 4000 while the local Iteronix watcher owns it; the watcher was preserved. Existing `.atl/skill-registry.md` remains user-owned and unstaged.
+- Next: Use a free host port (or stop the local watcher) for the normal published Compose server, then run full quality gates and native review validation before committing.
+
+### 2026-07-13 20:23 (Europe/Madrid) — Docker delivery validation
+
+- Summary: Validated the corrected production image and PostgreSQL-backed server in the native `iteronix` Compose network.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (54 files, 270 tests), `pnpm build`, and `git diff --check`.
+- Issues/Risks: Host port 4000 remains intentionally untouched because a local Iteronix watcher owns it; the server container was verified without publishing that port.
+- Next: Include the Docker delivery files in the next reviewed atomic commit after validating the scope-bound receipt.
+
+### 2026-07-13 20:54 (Europe/Madrid) — Root environment loading
+
+- Summary: Corrected local server startup so the compiled entrypoint reads the repository-root `.env`, independent of the `apps/server-api` working directory.
+- Decisions: Environment resolution walks upward from the executing source or compiled directory to the `pnpm-workspace.yaml` root, then loads only that root `.env`; it never reads the obsolete server-local file.
+- Changes: Added a failing-first source/compiled path regression and wired `src/index.ts` to the explicit root path resolver.
+- Commands: RED `pnpm vitest run apps/server-api/src/environment.test.ts`; PASS focused Vitest (5 tests), focused ESLint, `pnpm typecheck`, and a controlled 12-second `pnpm dev:server` probe.
+- Issues/Risks: The probe no longer reports `DATABASE_URL is required`; PostgreSQL now rejects the configured credentials, so the database password in the root URL must match the running PostgreSQL service.
+- Next: Align the root `DATABASE_URL` credentials with PostgreSQL, then commit this startup correction with its regression.
+
+### 2026-07-13 21:56 (Europe/Madrid) — Settings API boundary
+
+- Summary: Replaced the residual browser workspace-state API with typed settings-only endpoints.
+- Decisions: `/settings/get` and `/settings/update` remain behind the existing bearer authentication boundary; responses and persisted updates redact `AUTH_TOKEN` while the browser retains its configured connection locally.
+- Changes: Deleted `workspace-state-client.ts`, migrated Settings and Workflows to `SettingsClient`, removed `/workspace/state/*` routes, and updated browser validation stubs to assert settings-only payloads and environment-key references.
+- Commands: RED focused suite (8 expected failures); PASS focused suite (14 tests), focused lint, `pnpm typecheck`, `validate:workflows`, and `validate:settings`.
+- Issues/Risks: No production or validator request remains for `/workspace/state/get` or `/workspace/state/update`.
+- Next: Include this boundary replacement in the next scoped review and atomic commit.
+
+### 2026-07-13 22:18 (Europe/Madrid) — Browser authentication bootstrap and stale bundle correction
+
+- Summary: Prevented the browser from executing an obsolete workspace-state bundle or bootstrapping workflow settings before a local bearer token is configured.
+- Decisions: The server connection remains browser-local; an absent or rejected token routes Workflows to Settings recovery rather than issuing a protected deprecated request.
+- Changes: Cleans web build output before compilation, removes the baked development token, passes the local connection explicitly to the settings client, and adds bootstrap/authentication regressions.
+- Commands: RED reproduced the stale `/workspace/state/get` request and unauthenticated bootstrap failure; GREEN `pnpm typecheck`, 27 focused browser auth/settings/workflow tests, and a clean web build passed.
+- Issues/Risks: Browser validators were not run in this correction handoff; no secret values were recorded.
+- Next: Run browser validators and full gates, then review and commit the correction with the workflow-only cutover.
+
+### 2026-07-13 22:23 (Europe/Madrid) — Settings validator alignment
+
+- Summary: Aligned Settings browser validation with browser-local authentication and snapshot-only provider profiles.
+- Changes: The validator expects zero runtime provider-sync requests for a snapshot-only profile without a token, and requires Check connection before Save in the second tab.
+- Next: Run the updated Settings validator with the final browser correction gates.
+
+### 2026-07-15 13:00 (Europe/Madrid) — External workflow API access
+
+- Summary
+  - Added external workflow API keys with one-time secret delivery, scrypt hashes, scope checks, revocation, usage metadata, and PostgreSQL-backed workspace persistence.
+- Decisions
+  - Keys authorize only `/external/workflows/read` and `/external/workflows/invoke`; internal Settings/provider/workflow management remains behind the internal boundary. Selected-workflow keys are automatically revoked with their workflow in the same persisted state update.
+- Changes
+  - Added domain policy for all-workflows/selected-workflows scopes, dependency warnings, and revocation.
+  - Added Settings API Access management, copied one-time secret display, automatic colocated web connection, and workflow deletion dependency warnings.
+- Commands
+  - PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:settings`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks
+  - Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next
+  - Run native bounded review validation, then create the scoped atomic commit.
+
+### 2026-07-15 13:07 (Europe/Madrid) — API key workflow scope selector
+
+- Summary: Replaced free-form workflow IDs with a default-all selector and an explicit multi-select catalog for limited external API keys.
+- Decisions: The selector uses canonical workflow definitions, filters selections that disappear from the catalog, refreshes on API Access activation, and listens for workflow catalog reloads after create, edit, or deletion.
+- Changes: Added scope-selection domain state and regression tests; connected Settings to the workflow catalog; emitted catalog-change notifications from Workflows; aligned the Settings validator selector check and strict browser typing.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm -C apps/web-ui validate:settings`, `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged. The current high-risk review receipt must be refreshed because this selector changes the reviewed scope.
+- Next: Run the scoped native bounded review and commit the completed external workflow API access work unit.
+
+### 2026-07-15 13:16 (Europe/Madrid) — External API key in-place editing
+
+- Summary: Existing external workflow API keys can now be edited instead of replaced.
+- Decisions: Editing changes only a key's name and workflow scope; its secret hash, creation date, revocation state, and usage metadata remain unchanged. Names are unique after trim/case normalization, while an edited key may retain its own current name.
+- Changes: Added the protected `/settings/api-keys/update` endpoint, shared domain name-availability policy, Settings edit/cancel controls, and update client handling.
+- Commands: RED focused tests proved absent duplicate/update behavior. PASS focused tests, `pnpm lint`, `pnpm typecheck`, `pnpm test` (293), `pnpm build`, `validate:settings`, and `validate:workflows` (the first workflows validator attempt timed out on an existing version-import control; the immediate retry passed).
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged; the previous review receipt is invalidated and must be recreated before any commit.
+- Next: Run a fresh scoped bounded review and resolve the unstaged-file receipt scope before committing.
+
+### 2026-07-15 13:45 (Europe/Madrid) — Workflow-first catalog navigation
+
+- Summary: Replaced the workflow editor landing experience with a persisted workflow catalog and a one-workflow-per-route editor.
+- Decisions: `/workflows` owns creation and selection; `/workflows/:workflowId` owns editing. The catalog keeps the automatic browser-to-server connection and reads definitions and execution summaries through the existing PostgreSQL-backed workflow API.
+- Changes: Added deterministic catalog search/sort, empty and populated states, create-and-navigate behavior, dynamic-route remounting, missing/deleted-ID fallback, editor submenu removal, deep-link-safe bundle loading, and server/client/UI regression coverage.
+- Commands: PASS `pnpm lint`, `pnpm typecheck`, `pnpm test` (298), `pnpm build`, `pnpm -C apps/web-ui validate:settings`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run native bounded review validation, commit the catalog navigation work unit, and push the branch.
+
+### 2026-07-15 13:55 (Europe/Madrid) — Pre-push quality remediation
+
+- Summary: Resolved the pre-push formatting and dead-code failures exposed after the workflow catalog commit.
+- Decisions: Removed unused internal exports and the unused Card component rather than suppressing Knip findings; formatted the affected workflow catalog files with the repository formatter.
+- Changes: Kept behavior unchanged while removing seven unused exports/types/components and formatting the new catalog routing code.
+- Commands: PASS `pnpm format:check`, `pnpm deadcode`, `pnpm typecheck`, and `pnpm test`.
+- Issues/Risks: The unpublished branch has no remote tracking branch yet, so the pre-push receipt cannot derive the branch base until the initial branch publication completes. The user-owned `.atl/skill-registry.md` remains backed up for restoration as an unstaged change.
+- Next: Run the remaining build/browser gates, review and commit this quality-only correction, then publish the branch and restore the unstaged registry change.
+
+### 2026-07-15 14:00 (Europe/Madrid) — Catalog rename and deletion
+
+- Summary: Added workflow rename and confirmed deletion actions directly to the intermediate catalog.
+- Decisions: Rename persists the complete existing workflow definition with only its name changed; deletion requires an explicit catalog dialog and removes the workflow plus its catalog execution summary.
+- Changes: Added accessible catalog action controls and dialogs; extended browser validation through rename persistence and confirmed deletion to the empty state.
+- Commands: RED `validate:workflows` proved the catalog controls were absent. PASS `pnpm typecheck` and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full gates, bounded review, commit, and push the focused catalog-management slice.
+
+### 2026-07-15 14:33 (Europe/Madrid) — Workflow multi-output test runs
+
+- Summary: Replaced the workflow-wide single pinned output with multiple persisted snapshots per node and a selectable default for test execution.
+- Decisions: Normal runs never receive pinned data. The compact Run menu explicitly chooses normal or test execution; test execution forwards only each node's selected default snapshot and the runtime skips those seeded nodes.
+- Changes: Added pin collection/default persistence, test-run seed transport through client/API/SSE/runtime, node-level default selector, and browser validation for the Run menu and multiple persisted pins.
+- Commands: RED focused UI/runtime/API tests; PASS `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (301), `pnpm build`, `pnpm -C apps/web-ui validate:workflows`, and `git diff --check`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run the native bounded review, commit the focused workflow execution change, and push the branch.
+
+### 2026-07-15 14:43 (Europe/Madrid) — Workflow Run menu layering
+
+- Summary: Fixed the Run selector menu being hidden behind the workflow canvas.
+- Decisions: The toolbar owns the stacking layer above the canvas so dropdowns remain visible without introducing a second execution control.
+- Changes: Raised the toolbar stacking context and added a Puppeteer regression that verifies the opened Run menu is hit-testable above the canvas.
+- Commands: RED `pnpm -C apps/web-ui validate:workflows` failed with the menu obscured; GREEN rerun passed.
+- Issues/Risks: Existing multi-output workflow changes remain uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 14:55 (Europe/Madrid) — Persistent pinned test-output management
+
+- Summary: Made pinned node outputs a persistent, manageable test-fixture list rather than an execution-only affordance.
+- Decisions: Each node keeps multiple named fixtures but exactly one selected default for test runs. The list owns separate star, edit, rename and delete actions.
+- Changes: Persisted names in workflow node config, added a visible fixture list after execution/reload, supported individual JSON editing and safe default replacement on deletion, and made pinned-output editing URL-addressable.
+- Commands: RED unit tests for persisted names, URL fixture target, and browser list visibility; GREEN focused state/URL tests, `pnpm typecheck`, and `pnpm -C apps/web-ui validate:workflows`.
+- Issues/Risks: Existing multi-output workflow work remains uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 14:59 (Europe/Madrid) — Workflow Run menu dismissal
+
+- Summary: Made the normal/test Run selector close when the user clicks elsewhere.
+- Decisions: The outside-click listener ignores events originating within the selector, so its trigger and menu actions retain their intended behavior.
+- Changes: Added a selector root marker, a scoped window click listener with cleanup, and a browser regression that closes the menu through a canvas control click.
+- Commands: RED `pnpm -C apps/web-ui validate:workflows` timed out because the menu remained open; GREEN rerun passed after the listener was added.
+- Issues/Risks: Existing workflow changes remain uncommitted; the user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run full quality gates, then complete the existing bounded review before any commit.
+
+### 2026-07-15 15:41 (Europe/Madrid) — Workflow-only legacy subsystem audit
+
+- Summary: Audited the source tree after the workflow catalog cutover and removed unreachable multi-surface subsystems.
+- Decisions: The product retains only PostgreSQL-backed workflows, provider Settings, and external scoped workflow API keys. Desktop hosting, generic repository/workspace services, AI Workbench, RAG, MCP, memory, evaluation, Git/files/logs, and their documentation/spec artifacts are out of scope.
+- Changes: Deleted dead packages and adapters, legacy desktop launcher, non-workflow UI specs and documentation; rewired package exports, scripts, build inputs, CI browser validators, lockfile, README, PLAN, and source inventory regressions.
+- Commands: RED `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts`; GREEN focused inventory tests and `pnpm typecheck`.
+- Issues/Risks: `.atl/skill-registry.md` remains user-owned and unstaged. The Settings connection form still needs a dedicated follow-up to remove its obsolete token controls while preserving the existing colocated unauthenticated browser path.
+- Next: Run full gates, Docker configuration, native review, commit, and push the destructive cleanup.
+
+### 2026-07-15 16:06 (Europe/Madrid) — Workflow-only completion plan
+
+- Summary: User confirmed that limits and notifications remain in scope only as global defaults with explicit per-workflow overrides.
+- Decisions: Do not remove these controls; move them out of generic workspace Settings into a global workflow runtime policy plus workflow-level override model.
+- Changes: Began the final legacy-artifact cleanup with RED→GREEN source inventory coverage; removed the obsolete UI setup document and AI Workbench bootstrap workflow; removed desktop/obsolete Knip configuration and added `refactor/**` CI triggering.
+- Commands: RED/GREEN `pnpm vitest run apps/server-api/src/workflow-only-source-inventory.test.ts`.
+- Issues/Risks: The full completion work remains active: browser token controls, workspace-state naming, workflow policy overrides, Docker web delivery/runtime test, and bounded receipt sequencing are still pending.
+- Next: Implement the colocated token-free browser path before modifying workflow policy persistence.
+
+### 2026-07-15 16:40 (Europe/Madrid) — Colocated workflow delivery
+
+- Summary: Removed browser-managed backend credentials and replaced the final workbench-named UI primitive.
+- Decisions: The browser computes only the colocated backend origin (local development maps port 4000 to 4001) and never stores or sends the internal bearer token; external workflow API keys remain server-managed.
+- Changes: Added token-free browser/source regressions and browser validation updates; packaged the web UI into the server container with SPA deep-link fallback; Compose now uses the Postgres service hostname and supports a non-conflicting configurable host port; CI runs the Docker deep-link check.
+- Commands: RED/GREEN focused Vitest suites; `pnpm typecheck`; `pnpm -C apps/web-ui validate:settings`; `pnpm -C apps/web-ui validate:workflows`; `docker compose config --quiet`; Docker build/up/health/deep-link validation on port 4002.
+- Issues/Risks: Docker initially failed because the production image omitted `pnpm-workspace.yaml`, which the dotenv resolver requires; fixed by copying that manifest. The remaining structural workspace-state rename and global/per-workflow runtime policy overrides are still active.
+- Next: Finish the persisted global/default plus workflow-override execution policy, then rename the persistence model without losing PostgreSQL state.
+
+### 2026-07-15 16:46 (Europe/Madrid) — Workflow runtime overrides
+
+- Summary: Added a persisted workflow runtime override contract layered on existing global Settings defaults.
+- Decisions: Global limits and notifications remain the fallback; each workflow can override external-provider permission, loop limit, and notification webhook in its own editor. Runtime resolves the effective settings before provider invocation and blocks provider calls when the effective workflow policy disables external calls.
+- Changes: Added shared policy merge coverage, propagated overrides through workflow catalog clone/import/upsert paths and the web API codec, and added editor controls in the single-workflow inspector.
+- Commands: RED/GREEN `pnpm vitest run packages/shared/src/workflows.test.ts`; focused shared/editor/runtime tests; `pnpm typecheck`.
+- Issues/Risks: Notification delivery is still configured/persisted per workflow but does not yet dispatch runtime webhook events; this must be completed before the workflow policy work is considered done.
+- Next: Add notification dispatch using the resolved effective policy, then perform the PostgreSQL state terminology migration.
+
+### 2026-07-15 16:50 (Europe/Madrid) — Workflow runtime notifications
+
+- Summary: Completed execution notification delivery for resolved global and workflow-specific webhook settings.
+- Decisions: Notification delivery is best-effort and redacted: only event/status/workflow/execution identifiers leave the server; a webhook outage never changes workflow execution status.
+- Changes: Added a unit-tested notification dispatcher and called it after terminal workflow execution states. Per-workflow overrides now propagate through web codecs and workflow catalog upsert/clone/import paths.
+- Commands: RED/GREEN `pnpm vitest run apps/server-api/src/workflow-notifications.test.ts`; focused shared/runtime suites; `pnpm typecheck`.
+- Issues/Risks: The persistence implementation is still named workspace state despite now holding only application settings, workflows, providers, and API keys.
+- Next: Rename the persistence terminology and PostgreSQL key with a backward-compatible read migration.
+
+### 2026-07-15 16:55 (Europe/Madrid) — Application-state migration
+
+- Summary: Removed the server's active workspace-state terminology without discarding PostgreSQL persistence.
+- Decisions: The canonical JSONB key is now `application`; when it is absent the store reads the former `workspace` key and preserves its revision until the next normal save writes the canonical record.
+- Changes: Renamed state/store/persistence modules and identifiers to application terminology, migrated workflow asset scope from workspace to global, added legacy-key regression coverage, and extended source inventory coverage for removed filenames.
+- Commands: RED/GREEN PostgreSQL persistence tests; focused source inventories; `pnpm typecheck`.
+- Issues/Risks: Historical logs and explicit negative regression assertions retain the word `workspace` only to document/remediate the removed legacy surface; no active product route or state identifier uses it.
+- Next: Run complete validation, inspect remaining terminology/docs, then review, commit, and push.
+
+### 2026-07-15 17:00 (Europe/Madrid) — Workflow-only surface hardening
+
+- Summary: Closed the remaining reachable workflow-only regressions found by the final source audit.
+- Decisions: The colocated server exposes only the UI entry document and built `/dist/` assets; non-product metadata never becomes a generic static-file surface. Workflow assets are globally scoped and reject legacy project-scoped payloads at the browser boundary.
+- Changes: Added RED→GREEN static-file and asset-scope parsing regressions; removed the stale Stagehand multi-surface guide; eliminated active project/workspace/workbench wording from workflow execution, Settings, validators, and generic fixtures; protected the deletion in the source inventory.
+- Commands: RED/GREEN focused Vitest suites for static serving, workflow assets, debug execution, and source inventory.
+- Issues/Risks: Legacy `workspace` strings remain solely in the PostgreSQL migration fallback and explicit negative regression assertions. The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run clean full validation, Docker/browser runtime checks, native bounded review, commit, and push.
+
+### 2026-07-15 17:14 (Europe/Madrid) — Legacy asset-scope compatibility
+
+- Summary: Fixed the workflow editor load failure reported against an existing PostgreSQL database.
+- Decisions: Retain strict browser rejection of unsupported asset scopes, but normalize the only known persisted legacy value (`workspace`) to the workflow-only global scope while state is loaded server-side.
+- Changes: Added RED→GREEN PostgreSQL state parsing coverage and migrated legacy asset records before catalog hydration.
+- Commands: RED/GREEN `pnpm exec vitest run apps/server-api/src/postgres-application-state.test.ts`; `pnpm typecheck`; Docker runtime request against the existing legacy database verified the API returns `global`.
+- Issues/Risks: The legacy database row remains readable under its compatibility key until the next normal persistence write creates the canonical application record; no browser request now receives `workspace` assets.
+- Next: Run complete gates, commit, and push the compatibility fix.
+
+### 2026-07-15 18:18 (Europe/Madrid) — Step execution modes
+
+- Summary: Aligned node step execution with the canvas Run selector.
+- Decisions: Normal step runs omit `seedNodeOutputs`, so the runtime executes the selected node and required ancestors without pins. Test step runs pass only selected persisted pinned defaults for upstream nodes; cached results and the legacy one-pin field are excluded.
+- Changes: Added explicit inspector, hover, and node-settings menu state; shared Normal/Test menu rendering; outside-click dismissal; focused seed-selection regression coverage; updated the workflow-only plan.
+- Commands: RED/GREEN `pnpm exec vitest run apps/web-ui/src/screens/workflows-debug-state.test.ts`; focused Prettier and ESLint checks.
+- Issues/Risks: Browser validator updates and full quality gates are intentionally left to the parent integration pass. The user-owned `.atl/skill-registry.md` remains untouched and unstaged.
+- Next: Run the workflow browser validator and the complete integration gates before committing.
+
+### 2026-07-15 18:30 (Europe/Madrid) — Step execution mode validation
+
+- Summary: Completed browser and integration validation for the Execute step Normal/Test selector.
+- Decisions: The browser regression captures the selector and proves a normal run omits `seedNodeOutputs`, while a test run sends only the upstream selected default output.
+- Changes: Repaired the validator's JSON query decoding and removed stale history-output assertions that did not belong to the persisted-pin fixture.
+- Commands: `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 256 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Run bounded review, commit, and push the validated workflow UI change.
+
+### 2026-07-15 18:35 (Europe/Madrid) — Legacy step-test pin correction
+
+- Summary: Restored legacy pinned-output compatibility for Execute step Test mode after bounded review found a divergence from canvas Run.
+- Decisions: A legacy singular pin is normalized only for test execution; normal execution still omits all seed outputs and never uses a pin.
+- Changes: Reused the existing pin normalization path and added a legacy-only regression alongside the selected-default coverage.
+- Commands: RED/GREEN focused debug-state test (29 tests); `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 257 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Finalize the bounded correction receipt, commit, and push.
+
+### 2026-07-15 18:40 (Europe/Madrid) — Canvas parity for legacy pins
+
+- Summary: Aligned Execute step Test mode with the canvas Run test-mode contract after post-commit review detected a legacy-pin divergence.
+- Decisions: Test execution accepts only explicit modern pinned-output defaults. A legacy singular pin has no selected default, so neither canvas nor Execute step sends it as a seed.
+- Changes: Replaced legacy-only seed reuse with an explicit no-seed parity regression while retaining normal no-pin and modern selected-default behavior.
+- Commands: RED/GREEN focused workflow debug-state tests; `pnpm -C apps/web-ui validate:workflows`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (48 files, 257 tests); `pnpm build`.
+- Issues/Risks: The user-owned `.atl/skill-registry.md` remains intentionally unstaged.
+- Next: Finalize the bounded correction receipt, amend the unpushed commit, and push.
+
+### 2026-07-16 20:03 (Europe/Madrid) — Product plan replacement
+
+- Summary: Replaced the obsolete workflow-only closure plan with the authoritative Iteronix AI workflow product roadmap.
+- Decisions: The product is an n8n-like AI workflow editor with governed finite execution, reusable/nested and parallel workflows, validation/repair, extensibility, external APIs, and cross-platform delivery; Kanban and repository-workbench/Monaco/Git/task-management surfaces are explicitly excluded.
+- Changes: Updated `PLAN.md` only and recorded the unresolved higher-precedence `AGENTS.md` conflict; preserved the workflow-only implementation as a migration baseline.
+- Commands: Documentation audit only; no code, configuration, tests, or quality gates run.
+- Issues/Risks: `AGENTS.md` still mandates the older repository-orchestration scope and requires a separately authorized reconciliation. Existing uncommitted non-document work and `.atl/skill-registry.md` were untouched.
+- Next: Approve the governance reconciliation, then begin Phase 0 migration inventory before product implementation.
+
+### 2026-07-16 20:53 (Europe/Madrid) — Product charter scope reconciliation
+
+- Summary: Reconciled the governing agent instructions with the approved Iteronix AI workflow product charter.
+- Decisions: Kanban, task/project-management, and repository-workbench surfaces are explicitly excluded; this includes repository browsing, Monaco editing, Git operations, file management, and coding-agent task surfaces.
+- Changes: Updated `AGENTS.md` project scope, architecture wording, workflow node list, and removed the Kanban/Git requirements.
+- Commands: Documentation audit only; no code, configuration, tests, or quality gates run.
+- Issues/Risks: Existing uncommitted web UI work and the user-owned `.atl/skill-registry.md` were untouched.
+- Next: Begin the approved Phase 0 migration inventory before implementation.
+
+### 2026-07-16 21:29 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Started RED → GREEN coverage for schema-versioned full-application export/import.
+- Decisions: The contract must retain metadata hashes while redacting plaintext secrets; legacy workspace envelopes and workspace asset scopes remain import-compatible.
+- Changes: Added the representative legacy state fixture and failing export/import regression tests.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (RED: module `./application-export` missing).
+- Issues/Risks: Fixture intentionally exercises legacy envelope compatibility before canonical PostgreSQL application writes.
+- Next: Implement the runtime-validated checksum contract and prove reload persistence.
+
+### 2026-07-16 21:31 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Completed the GREEN implementation of the application import/export contract and migration documentation.
+- Decisions: Canonical application exports use schema version 1 and SHA-256 canonical-JSON checksums; external API-key hashes are retained as metadata while plaintext secret fields are removed. Legacy workspace envelopes and asset scopes remain one-way compatible.
+- Changes: Added `application-export.ts`, legacy fixture, and regression tests; updated application parsing, migration contract, PostgreSQL documentation, OpenSpec terminology, AGENTS.md browser-test governance, and Phase 0 plan checkboxes.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (GREEN: 3 tests passed).
+- Issues/Risks: No HTTP bulk-transfer endpoint, Playwright installation, graph semantics, governance lifecycle, plugins, or desktop work was introduced; these remain later phases.
+- Next: Run full mandatory quality gates and investigate any failure without masking it.
+
+### 2026-07-16 21:34 (Europe/Madrid) — Phase 0 application migration
+
+- Summary: Phase 0 verification completed successfully.
+- Decisions: Imports now reject structurally malformed application bodies before checksum acceptance, preserving atomic revision-safe persistence.
+- Changes: Added malformed-body regression coverage; no Phase 1 graph or governance surfaces were changed.
+- Commands: `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (RED then GREEN); `pnpm lint` (pass); `pnpm typecheck` (pass); `pnpm test` (pass: 49 files, 260 tests); `pnpm build` (pass).
+- Issues/Risks: Full-state transfer is a server contract only in Phase 0; HTTP bulk-transfer endpoints and Playwright runner changes remain deliberately deferred.
+- Next: Begin Phase 1 only after accepting this migration contract as the compatibility boundary.
+
+### 2026-07-16 21:48 (Europe/Madrid) — Phase 0 bounded review correction
+
+- Summary: Applied only the corroborated correction findings for review lineage `review-77be6816db650648`.
+- Decisions: Direct legacy workspace envelopes are import-compatible; nested import data is structurally validated before normalization; redaction covers access/refresh/webhook tokens and client secrets while retaining `secretHash`; rollback requires a verified pre-migration export or database backup because the single-row revision store has no history restore.
+- Changes: Updated application import validation, redaction, fixture-store regression coverage, migration rollback documentation, and review validation/evidence artifacts.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/application-export.test.ts` (3 expected failures); GREEN focused test; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No new review cycle, endpoint, graph, governance, Playwright runner, or unrelated scope was introduced.
+- Next: Parent may submit the supplied validation/evidence files to the existing review lineage finalization.
+
+### 2026-07-16 22:10 (Europe/Madrid) — Phase 0 recovery correction
+
+- Summary: Applied only RES-001 and REL-01 for recovery lineage `review-phase0-recovery-20260716`.
+- Decisions: Every imported workflow catalog entity needs minimal identity fields before permissive application parsing; empty definition records are malformed even when the outer export checksum remains otherwise valid.
+- Changes: Added minimal strict workflow definition/version/asset/usage/execution validators and the checksum-valid empty-definition regression; wrote recovery validation and evidence artifacts.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/application-export.test.ts`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No PLAN.md update, review cycle, migration-policy change, or Phase 1 feature was introduced.
+- Next: Parent may finalize the existing recovery lineage with the supplied JSON artifacts.
+
+### 2026-07-16 22:24 (Europe/Madrid) — Phase 0 complete entity validation
+
+- Summary: Corrected the post-commit Phase 0 import gap by validating complete required workflow catalog record shapes before normalization or persistence.
+- Decisions: Import now requires all mandatory definition, version, asset, asset-usage, and execution fields from the shared workflow contracts. Legacy workspace fixture entities are typed and complete, while legacy asset scope remains normalized to `global`.
+- Changes: Replaced the partial fixture; strengthened application import validators; added deep export/import/PostgreSQL reload preservation and malformed record regressions; updated the directly related migration checklist.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/application-export.test.ts`; `pnpm lint`; `pnpm typecheck`; `pnpm test` (49 files, 260 tests); `pnpm build` — all passed.
+- Issues/Risks: No Phase 1 behavior, endpoints, staging, commit, or push was introduced.
+- Next: Finalize the existing review authority with this correction evidence.
+
+### 2026-07-16 22:40 (Europe/Madrid) — Phase 0 import validation
+
+- Summary: Completed fail-closed validation for persisted nested workflow records during application import.
+- Decisions: Reused shared workflow enums/contracts as runtime validation targets; no reusable shared runtime validators existed.
+- Changes: Validated node config and ports, edge mappings, output contracts, guardrails, version and asset optionals, runtime overrides, node execution records, alerts, findings, and usage data. Expanded the legacy fixture and round-trip assertions with nested workflow data and malformed-family cases.
+- Commands: pnpm --filter @iteronix/server-api test -- application-export.test.ts; pnpm lint; pnpm typecheck; pnpm test; pnpm build.
+- Issues/Risks: No Phase 1 behavior added; the test-first baseline execution was blocked by shell policy from temporarily restoring the pre-fix file.
+- Next: Run the existing review validation against the current Phase 0 correction scope.
+
+### 2026-07-17 09:44 (Europe/Madrid) — Phase 1 canonical workflow contracts
+
+- Summary: Added the pure domain contract for canonical workflow graphs and a legacy adapter that preserves the Phase 0 persisted representation.
+- Decisions: Graph topology, typed ports, deterministic stage planning, merge policies, retry classification, reusable workflow pinning, recursion rejection, and scoped external invocation are domain rules; the existing runtime stays authoritative behind an adapter.
+- Changes: Added domain graph contracts/tests, legacy workflow adapter/tests, and exported both public contract surfaces; checked the finished Phase 1 contract checklist items without marking runtime migration complete.
+- Commands: RED focused Vitest tests for each missing module; GREEN `pnpm exec vitest run packages/domain/src/workflow-contracts.test.ts packages/agents/src/canonical-workflow-adapter.test.ts` (8 tests); `pnpm typecheck` (pass).
+- Issues/Risks: Server persistence/reload execution of a parallel nested graph remains the unfinished Phase 1 integration boundary; no Phase 0 import/export data shape changed.
+- Next: Wire the adapter into the existing runtime and add server integration coverage before marking the migration task and Phase 1 acceptance criteria complete.
+
+### 2026-07-17 09:54 (Europe/Madrid) — Phase 1 bounded contract correction
+
+- Summary: Applied corroborated graph-contract review fixes without changing Phase 0 persisted records or the plan scope.
+- Changes: Execution plans now chunk ready nodes by concurrency limit; external invocation requires enabled published webhook/API workflows and a verified non-revoked scoped key; single-cardinality ports and reusable physical ports are validated; legacy event and unsupported node kinds reject; adapter concurrency default no longer derives from retries.
+- Commands: RED focused contract/adapter tests; GREEN focused Vitest (8 tests), `pnpm lint`, `pnpm typecheck`, and `git diff --check` all passed.
+- Next: Parent can validate this bounded correction against the active review lineage.
+
+### 2026-07-17 10:27 (Europe/Madrid) — Phase 1 runtime adapter boundary
+
+- Summary: Wired the canonical adapter into the existing server runtime as a pre-execution guard without introducing another executor.
+- Decisions: Fully canonical persisted graphs are validated and deterministically planned before execution; legacy workflow records without an explicit trigger node retain their existing runtime path and receive a deterministic compatibility plan so Phase 0 data and stream behavior are not rejected.
+- Changes: Added canonical runtime guard coverage and invoked it for whole-workflow and single-node runtime requests; expanded adapter coverage for current persisted node kinds.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts`; GREEN focused Vitest; `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: Persisted legacy schemas do not yet encode workflow-invocation nodes or configurable canonical concurrency, so version-pinned nested-workflow execution remains a later migration rather than a completed Phase 1 acceptance item.
+- Next: Design the additive persisted workflow-invocation representation and execute it through the existing runtime before checking the Phase 1 integration acceptance box.
+
+### 2026-07-17 10:31 (Europe/Madrid) — Phase 1 pinned workflow invocation
+
+- Summary: Added the minimal persisted invocation pin and execution-policy concurrency representation, then routed pinned child definitions through the existing runtime recursively.
+- Decisions: A workflow invocation stores only `{ workflowId, workflowVersion }`; the server resolves exactly that immutable definition-version snapshot, never the current workflow record. The canonical execution plan bounds deterministic stages while the existing runtime remains the only executor.
+- Changes: Added `workflow.invocation`, invocation config validation, optional `maxConcurrency`, canonical adaptation, version-snapshot resolution, and a persistence/reload acceptance test proving version 1 is selected over version 2.
+- Commands: RED focused canonical-runtime test; GREEN `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts packages/agents/src/canonical-workflow-adapter.test.ts apps/server-api/src/application-export.test.ts apps/server-api/src/workflow-stream-persistence.test.ts` (4 files, 9 tests); `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: The legacy runtime still invokes nodes sequentially; the persisted plan establishes bounded deterministic fan-out stages but physical parallel dispatch requires a dedicated later runtime scheduling change.
+- Next: Parent should run full gates/review and decide whether bounded deterministic staging is sufficient for this Phase 1 slice before marking remaining plan items.
+
+### 2026-07-17 10:36 (Europe/Madrid) — Phase 1 frozen review correction
+
+- Summary: Applied the frozen canonical-runtime corrections without adding another executor.
+- Decisions: The runtime consumes canonical plan stages whenever a persisted definition is canonical-compatible and retains the legacy topological fallback otherwise; merge nodes now use canonical `ObjectByNodeId` output semantics; every resolved pinned child snapshot is validated before recursive execution.
+- Changes: Added canonical-plan dispatch ordering, pinned-child validation, canonical merge output, and distinct v1/v2 fixture assertions.
+- Commands: `pnpm exec vitest run apps/server-api/src/canonical-workflow-runtime.test.ts packages/agents/src/canonical-workflow-adapter.test.ts apps/server-api/src/workflow-stream-persistence.test.ts` (pass: 3 files, 6 tests); `pnpm lint`; `pnpm typecheck`.
+- Issues/Risks: Stage order and concurrency bounds are consumed deterministically, but independent node operations remain serial within a stage to preserve the existing mutable envelope/tracing semantics.
+- Next: Parent may submit this focused correction evidence to the frozen review lineage.
+
+### 2026-07-17 10:51 (Europe/Madrid) — Phase 1 safe stage scheduler
+
+- Summary: Replaced the canonical runtime's serial stage path with a bounded concurrent scheduler that commits local node results deterministically after every stage.
+- Decisions: Sibling nodes receive immutable snapshots of envelope/output state; their node runs, outputs, citations, guardrails, and envelope artifacts are merged by node id only after the whole stage finishes. Legacy graphs without a trigger-node remain sequential for Phase 0 compatibility.
+- Changes: Passed canonical execution plans into the runtime, added stage-local execution/aggregation, preserved selected-node sequential semantics, validated canonical pinned children before parent node events, and added overlap, deterministic ordering, persistence/reload, exact v1 pin, and invalid-child acceptance coverage.
+- Commands: RED focused Vitest caught legacy selected-node and legacy stream compatibility regressions; GREEN focused Vitest; `pnpm typecheck`; `pnpm lint`; `pnpm test`; `pnpm build`; `git diff --check`.
+- Issues/Risks: Stage lifecycle events and provider delta events may arrive in physical completion order while persisted node runs remain canonical-id deterministic; downstream consumers must use node-run order for deterministic audit results.
+- Next: Run fresh bounded review and delivery validation; do not mark Phase 1 complete until parent verifies every Phase 1 acceptance item.
+
+### 2026-07-17 10:57 (Europe/Madrid) — Phase 1 frozen scheduler correction
+
+- Summary: Corrected the bounded scheduler and pinning boundaries under the frozen review scope.
+- Decisions: Version-record metadata must equal its immutable snapshot; pinned runtime calls resolve against that snapshot and propagate its canonical plan/settings. Top-level legacy definitions retain the pre-existing runtime fallback without a synthetic alphabetical plan.
+- Changes: Added recursive canonical validation of every pinned reference, metadata enforcement in export/import validation and runtime, snapshot-based provider policy resolution, complete stage outcome aggregation before terminal status, and focused regression tests.
+- Commands: RED focused Vitest; GREEN focused Vitest, typecheck, lint, full test, build, and diff check.
+- Issues/Risks: Live event emission remains physically concurrent; persisted audit ordering is canonical-node deterministic.
+- Next: Parent runs the frozen review validator and delivery receipt workflow.
+
+### 2026-07-17 11:11 (Europe/Madrid) — Phase 2 governance lifecycle
+
+- Summary: Added a persisted finite governance lifecycle around bounded runtime passes without replacing the Phase 1 workflow executor.
+- Decisions: Lifecycle transitions are immutable audit entries with actor, timestamp, reason, scope/evidence fingerprints and accumulated budgets. Retryable failures may return only to planning once with before/after evidence; all successful bounded passes stop at user approval.
+- Changes: Added pure domain lifecycle contracts and exhaustive transition tests; added fail-closed lifecycle deserialization to application state; added a persistence-backed server adapter and attached external workflow invocation to the governed bounded-pass boundary.
+- Commands: RED focused domain/server tests; GREEN `pnpm exec vitest run packages/domain/src/governance-lifecycle.test.ts apps/server-api/src/governance-lifecycle-persistence.test.ts apps/server-api/src/governance-lifecycle-service.test.ts`; `pnpm typecheck`.
+- Issues/Risks: UI and typed HTTP approval controls remain a later Phase 2 surface; the server adapter exposes the explicit control operations but no new public routes were added in this slice.
+- Next: Run complete gates and inspect external workflow regression coverage before review/delivery.
+
+### 2026-07-17 12:25 (Europe/Madrid) — Phase 2 frozen governance review correction
+
+- Summary: Hardened lifecycle provenance, deserialization, and mutation serialization under the frozen review scope.
+- Decisions: User controls derive their actor identity from authenticated server context, never request payload actor fields. Persisted lifecycle records replay their complete transition history fail-closed before use. Lifecycle begin/transition mutations run through the persistence save queue so concurrent bounded-pass attempts cannot double-spend execution budget.
+- Changes: Added replay validation for transition IDs, state, fingerprints, budgets, actor/reason/timestamp/failure evidence; added atomic lifecycle mutation persistence; added a concurrent bounded-pass regression; classified external runtime failures into retryable repair versus terminal failure.
+- Commands: RED focused lifecycle parser test; GREEN `pnpm exec vitest run packages/domain/src/governance-lifecycle.test.ts apps/server-api/src/governance-lifecycle-service.test.ts apps/server-api/src/governance-lifecycle-api.test.ts`; `pnpm typecheck`.
+- Issues/Risks: UI visibility remains Phase 6 work; no UI checklist item was changed.
+- Next: Parent validates the frozen review receipt and runs full gates before delivery.
+
+### 2026-07-17 12:39 (Europe/Madrid) — Phase 2 final frozen review correction
+
+- Summary: Required bearer authentication for lifecycle controls and made external lifecycle IDs collision-resistant.
+- Decisions: Governance endpoints reject Origin/Host-only requests even when the general colocated UI shortcut would allow them. External lifecycle IDs use UUID entropy and domain creation rejects duplicate IDs before persistence.
+- Changes: Added bearer-forgery and concurrent external invocation regressions; concurrent invokes retain three distinct lifecycle records including the original invocation.
+- Commands: RED focused API forgery test; GREEN `pnpm exec vitest run apps/server-api/src/governance-lifecycle-api.test.ts apps/server-api/src/external-api-keys.test.ts packages/domain/src/governance-lifecycle.test.ts`; `pnpm typecheck`.
+- Issues/Risks: Public begin still accepts workflow/fingerprint/budget values as an explicit advanced API surface; server derivation needs a dedicated API contract change rather than an implicit review-scope rewrite.
+- Next: Parent validates frozen receipt and delivery gates.
+
+### 2026-07-17 12:42 (Europe/Madrid) — Phase 2 retryable lifecycle resume
+
+- Summary: Added the bounded resume boundary for persisted retryable external lifecycle records.
+- Decisions: Resume derives the workflow from the persisted lifecycle workflow id, accepts only `Planning` records whose last audit entry is retryable auto-repair, and invokes exactly one existing runtime bounded pass.
+- Changes: External invocation now returns its lifecycle id; authenticated lifecycle resume route rejects all non-retryable or non-repair states.
+- Issues/Risks: Current workflow catalog resume resolves the persisted workflow id against its current definition; exact version pinning requires a dedicated persisted version-reference extension.
+
+### 2026-07-17 12:56 (Europe/Madrid) — Governance persistence dependency boundary
+
+- Summary: Removed the server/service dependency cycle reported by the pre-push dependency gate.
+- Decisions: The lifecycle service now depends on a narrow neutral persistence port instead of the server-owned `ApplicationPersistence` contract.
+- Changes: Added `governance-lifecycle-persistence-port.ts` and redirected the service type dependency.
+- Commands: `pnpm deps:check`; `pnpm lint`; `pnpm typecheck`; focused governance/external Vitest suites — all passed.
+- Next: Parent can rerun the delivery hooks without weakening dependency rules.
+
+### 2026-07-17 12:16 (Europe/Madrid) — Phase 2 governance lifecycle API
+
+- Summary: Added authenticated typed lifecycle read and user-control endpoints without introducing UI behavior.
+- Decisions: Lifecycle responses return persisted state, fingerprints, consumed budgets, and immutable transition history. Approve, Continue, and Reject-with-feedback are routed only through the persisted lifecycle service; begin rejects an approved workflow fingerprint unless scope or evidence changed.
+- Changes: Added `/governance/lifecycles/get`, `/begin`, `/approve`, `/continue`, and `/reject` routes plus API acceptance coverage.
+- Commands: RED then GREEN `pnpm exec vitest run apps/server-api/src/governance-lifecycle-api.test.ts` (2 tests).
+- Issues/Risks: UI lifecycle controls remain intentionally unchecked; no Phase 0/1 representation changed.
+- Next: Parent should run full quality gates and review this server/API addition with the complete Phase 2 scope.
+
+### 2026-07-17 12:48 (Europe/Madrid) — Phase 2 retry/resume scope binding
+
+- Summary: Completed the persisted retryable external-invocation resume path with immutable workflow scope validation and execution persistence.
+- Decisions: A resume accepts only a planning lifecycle whose latest transition is retryable auto-repair and whose persisted scope/evidence fingerprints exactly match the current workflow id, version, and update fingerprint. The resume uses the same catalog-backed execution path as the external invocation.
+- Changes: Added deterministic timeout fixture coverage for external failure, persisted reload, authenticated single resume, audit query, execution-record persistence, duplicate resume rejection, changed workflow scope rejection, and terminal failure rejection. Resume now rejects changed workflow scope/evidence before dispatch and persists successful retry executions through the application boundary.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/external-api-keys.test.ts` (changed-scope resume accepted); GREEN `pnpm exec vitest run apps/server-api/src/external-api-keys.test.ts apps/server-api/src/governance-lifecycle-service.test.ts apps/server-api/src/governance-lifecycle-api.test.ts apps/server-api/src/governance-lifecycle-persistence.test.ts packages/domain/src/governance-lifecycle.test.ts` (5 files, 22 tests); `pnpm typecheck`; `pnpm lint`.
+- Issues/Risks: Resume binds the current immutable version/fingerprint tuple and rejects catalog drift; a separately persisted workflow snapshot is unnecessary while that tuple continues to identify an immutable catalog version.
+- Next: Parent should run full Phase 2 gates, bounded review, then stage and deliver the complete Phase 2 scope.
+- Follow-up: A second retryable failure after the sole repair allowance now transitions to terminal `Failed` rather than attempting an exhausted auto-repair transition; the service regression proves no lifecycle can remain `Executing` after that bound is spent.
+
+### 2026-07-18 18:00 (Europe/Madrid) — Phase 3 validation and repair
+
+- Summary: Added Phase 3 domain contracts and persisted governed repair integration.
+- Decisions: JSON Schema validation supports the required deterministic core subset; errors never include rejected values. Guardrails evaluate tools, sensitive data, provider capabilities, node count, and parallelism. Repair proposals are immutable evidence records and only create the existing lifecycle `AutoRepair` transition while execution and repair budget are available.
+- Changes: Added `packages/domain/src/governance-validation.ts` plus strict TDD tests; extended `GovernanceLifecycleService` with `proposeBoundedRepair`; added reproducible evaluation contracts/reports and governed repair tests; updated Phase 3 plan checkboxes.
+- Commands: RED tests for domain and service; targeted Vitest tests; typecheck; lint; Prettier.
+- Issues/Risks: No UI or public HTTP proposal endpoint was added; Phase 3 is deliberately domain/server-adapter scoped. Approved lifecycle repair attempts fail before any persisted mutation.
+- Next: Run complete quality gates and native bounded review, then commit and push without bypassing hooks.
+
+### 2026-07-18 20:00 (Europe/Madrid) — Phase 4 agent/tool governance
+
+- Summary: Added provider-agnostic agent/tool, skill, memory/RAG, MCP, and plugin contracts with governed server execution.
+- Decisions: Agent execution provenance is immutable lifecycle data; MCP output is validated before persistence; plugins are server-only and process-isolated.
+- Changes: Added domain contracts/tests, governed server service/tests, restart-safe agent execution parsing, and Phase 4 plan completion.
+- Commands: Strict RED/GREEN tests and typecheck passed; full gates/review/delivery pending.
+- Next: Run full gates, bounded review, commit, and push.
+
+### 2026-07-18 20:45 (Europe/Madrid) — Phase 4 editable asset CRUD work unit
+
+- Summary: Added authenticated server CRUD acceptance coverage and restart-safe persistence verification for the Phase 4 editable asset catalog.
+- Decisions: Assets are persisted inside the versioned application-state JSONB document; missing or malformed legacy catalog data resolves to an empty safe catalog. Phase 4 remains incomplete until governed runtime integration and IDE delivery exist.
+- Changes: Added HTTP integration tests for authenticated list/upsert/delete, malformed and missing asset rejection, in-memory restart reload, and PostgreSQL JSONB parsing; corrected Phase 4 plan status to show only work unit 1 complete.
+- Commands: RED `pnpm exec vitest run apps/server-api/src/editable-assets-api.test.ts`; GREEN focused asset/PostgreSQL Vitest suites; `pnpm typecheck`.
+- Issues/Risks: CRUD records do not yet execute through governance or have an IDE surface.
+- Next: Run full quality gates, bounded review, commit, and push this work unit.
+
+### 2026-07-18 20:20 (Europe/Madrid) — Prompt assets decision
+
+- Summary: Prompts are specified as reusable, independently versioned Assets rather than workflow-owned text.
+- Decisions: Workflow nodes pin a prompt asset version and declare explicit variable bindings; historical runs retain provenance through the pinned version.
+- Next: Implement prompt asset persistence, APIs, and IDE editor in the relevant Phase 4 work unit.
+
+### 2026-07-18 22:10 (Europe/Madrid) — PostgreSQL migration infrastructure
+
+- Summary: Replaced runtime application-state table creation with versioned PostgreSQL schema migration infrastructure.
+- Decisions: Every DB schema change requires a new immutable forward-only SQL migration. `schema_migrations` stores SHA-256 checksums and migrations run transactionally under a PostgreSQL advisory lock. Server startup verifies, but never applies, pending migrations.
+- Changes: Added migration ledger/executor, bootstrap `app_state` migration, `db:migrate`, `db:verify`, isolated `TEST_DATABASE_URL` validation, clean-schema backup/restore integration coverage, Docker migration asset packaging, and operator documentation.
+- Commands: RED focused migration test; GREEN focused migration/state/config Vitest suites and `pnpm typecheck`.
+- Issues/Risks: Live PostgreSQL backup/restore integration requires an explicitly configured `TEST_DATABASE_URL`; it is skipped by the normal unit suite when unavailable and run through `pnpm test:db` in CI.
+- Next: Configure a disposable PostgreSQL test database in CI and execute `pnpm test:db` there.
+
+### 2026-07-18 23:10 (Europe/Madrid) — Prompt asset usage safety
+
+- Summary: Added persisted workflow-reference discovery and safe deletion for reusable Prompt Assets.
+- Decisions: Usage is derived from persisted version-pinned `node.config.promptAsset` references on every query and delete request; a server-computed fingerprint and explicit impact confirmation are required before deleting a used prompt. Workflows are never cascaded or mutated.
+- Changes: Added authenticated `/assets/usage`, deterministic usage summaries, stale/forged impact rejection, catalog counts/direct workflow-node links, and URL-addressable responsive delete confirmation with Escape handling.
+- Commands: RED/GREEN focused server and web Vitest suites; `pnpm typecheck`.
+- Issues/Risks: Prompt runtime resolution and governance provenance remain separate incomplete Phase 4 work.
+- Next: Run full quality gates and bounded review before delivery.
+
+### 2026-07-18 23:50 (Europe/Madrid) — Prompt asset runtime provenance
+
+- Summary: Connected version-pinned Prompt Assets to the workflow runtime and governed external invocation lifecycle.
+- Decisions: Prompt resolution uses the exact persisted version and explicit bindings; disabled, missing, or invalid prompt references fail before provider execution. Rendered prompt text is transient while asset/version/bindings/fingerprint/validation provenance is persisted.
+- Changes: Added deterministic domain rendering and fingerprinting, runtime materialization of prompt-backed nodes, execution-level prompt provenance, and lifecycle prompt execution audit records.
+- Commands: RED/GREEN focused prompt, lifecycle, and runtime Vitest suites; full format, lint, typecheck, test, build, and dependency gates passed.
+- Issues/Risks: Prompt catalog/editor UI and broader Phase 4 asset runtime integration remain incomplete.
+- Next: Run native bounded review, then commit and push this scoped runtime slice.
+
+### 2026-07-19 01:40 (Europe/Madrid) — Governed IDE prompt inspection
+
+- Summary: Linked regular IDE workflow runs to persisted Phase 2 governance lifecycle records and exposed prompt provenance in the workflow execution inspector.
+- Decisions: Browser inspection uses the HttpOnly IDE session only for lifecycle reads; external bearer authentication remains unchanged. The persisted execution lifecycle ID is the reload-stable join key.
+- Changes: Governed direct/SSE workflow runs, lifecycle-aware execution persistence, lifecycle client, inspector governance/prompt evidence, and integration/parser coverage.
+- Commands: Full format, lint, typecheck, test, build, and dependency checks passed.
+- Issues/Risks: Phase 4 remains incomplete; broader asset execution and Playwright acceptance coverage remain pending.
+- Next: Run bounded review, commit, and push the integrated Prompt Asset IDE slice.
+
+### 2026-07-19 18:30 (Europe/Madrid) — Asset contract enforcement acceptance
+
+- Summary: Added domain contract tests that run each port (AgentPort, ToolPort) against a fake implementation and reject undeclared capability or permission use, fulfilling the first unchecked Phase 4 acceptance criterion.
+- Decisions: `enforceAssetCapabilities` and `enforceAssetPermissions` are domain-pure validation functions that throw deterministic errors on undeclared values. Fake AgentPort and ToolPort implementations enforce the contract inside their `invoke` handlers.
+- Changes:
+  - `packages/domain/src/agent-tool-contracts.ts` — Added `enforceAssetCapabilities` and `enforceAssetPermissions` enforcement functions
+  - `packages/domain/src/agent-tool-contracts.test.ts` — Added contract tests: AgentPort/ToolPort fakes, capability/permission enforcement, and deterministic error assertions
+  - `PLAN.md` — Checked Phase 4 acceptance criterion for contract tests
+- Commands: RED/GREEN contract enforcement tests; full lint, typecheck, test (357/357), and build passed.
+- Issues/Risks: Acceptance criteria for integration/provenance, permission-denial/plugin/MCP paths remain unchecked.
+- Next: Continue Phase 4 with runtime asset integration enforcement or provenance acceptance coverage.
+
+### 2026-07-19 18:47 (Europe/Madrid) — Phase 4 provenance integration test
+
+- Summary: Added integration test proving agent/tool/plugin provenance is visible through lifecycle API and secrets are never exposed.
+- Decisions: New test in `governance-lifecycle-api.test.ts` covers both visibility (agentId, pluginId, skillId, toolId, fingerprints in API response) and redaction (secret binding values hidden, `[redacted]` present, raw values persisted). No implementation changes needed — `toUiSafeGovernanceLifecycle` already passes agentExecutions through spread.
+- Changes:
+  - `apps/server-api/src/governance-lifecycle-api.test.ts` — Added integration test with 2 agent executions (plugin + tool), prompt execution with secret bindings, lifecycle GET API assertions for provenance visibility and redaction
+  - `PLAN.md` — Checked line 132 acceptance criterion
+- Commands: `pnpm vitest run apps/server-api/src/governance-lifecycle-api.test.ts` (6/6), `pnpm test` (358/359), `pnpm lint`, `pnpm typecheck`, `pnpm build` — all green.
+- Issues/Risks: Remaining Phase 4 items unchecked: runtime asset integration, skills, memory/RAG, MCP, plugins, and permission-denial/plugin-failure acceptance criterion.
+- Next: Commit and push this test-only change, then continue with remaining Phase 4 implementation.
+
+### 2026-07-21 (Europe/Madrid) — Phase 4 version-pinned Skill Assets
+
+- Summary: Delivered Skills as versioned reusable assets from authenticated IDE editing through governed AiAgent execution.
+- Decisions: AiAgent nodes store immutable `{ assetId, version }` Skill pins and use the legacy `skillId` only as a Phase 0-compatible fallback. Disabled, missing, mismatched, and unauthorized Skill Assets fail before invocation; lifecycle traces preserve executed skill version and provenance.
+- Changes: Added immutable Skill Asset snapshots, governed pinned resolution, authenticated `/assets/skills` catalog/editor deep links, enabled-only node selector, and governed inspector provenance.
+- Commands: Strict RED/GREEN focused tests, full quality gates, native review, hooks, commit, and push.
+- Issues/Risks: Phase 4 remains incomplete: memory/RAG, MCP, plugins, and reference assets are separate work units.
+- Next: Implement the next bounded Phase 4 runtime integration slice without expanding into generic asset UI.
+
+### 2026-07-22 (Europe/Madrid) — Phase 4 reference asset acceptance
+
+- Summary: Added an acceptance workflow that runs the pinned reference Skill and process-isolated reference Plugin together through governance.
+- Decisions: The Skill carries the pinned MCP connection and workflow-bounded Memory source; lifecycle evidence remains metadata-only for retrieval and is parsed by the IDE inspector without recovered content.
+- Changes: Added runtime integration coverage for Skill, Plugin, MCP, and RAG evidence plus UI lifecycle-client acceptance coverage.
+- Commands: Focused server runtime suite passed (9/9); focused UI lifecycle-client suite passed (5/5).
+- Issues/Risks: Full quality gates and native review remain required before delivery.
+- Next: Run all gates and review the bounded acceptance-only change.
+
+### 2026-07-22 (Europe/Madrid) — Phase 2 governed lifecycle IDE controls
+
+- Summary: Completed the bounded UI/API acceptance slice for persisted lifecycle inspection and explicit user decisions.
+- Decisions: IDE sessions may read and control only lifecycle GET/Approve/Continue/Reject from a trusted or colocated origin; all control responses use the browser-safe lifecycle projection and external bearer access remains unchanged.
+- Changes: Added credentialed lifecycle client controls, inline inspector state/budget/fingerprint/history evidence, explicit feedback-required rejection, pending/error/disabled behavior, and server/UI regressions for session authorization, forged origin rejection, and secret redaction.
+- Commands: RED/GREEN focused UI-state and lifecycle-client tests; `pnpm format:check`, `pnpm typecheck`, and focused Vitest suites (46 tests) passed.
+- Issues/Risks: Playwright infrastructure remains unavailable; UI-state coverage is deterministic component-state coverage rather than browser E2E.
+- Next: Run full quality gates and native review before delivery.
+
+### 2026-07-22 (Europe/Madrid) — Phase 4 Prompt Assets completion
+
+- Summary: Completed Prompt Assets as reusable, immutable-versioned workflow assets across the domain, runtime, persistence compatibility adapters, and URL-addressable IDE editor.
+- Decisions: Prompt variable definitions are typed schemas carried from the selected immutable version into deterministic runtime validation. Nodes with `promptAsset` never retain duplicated workflow-owned prompt text; legacy prompt-only workflows remain readable through the Phase 0 adapters.
+- Changes: Added typed binding validation, immutable-version editor restoration and serialization, catalog/reload normalization, and import/export normalization for pinned prompt nodes; added regression coverage for schema rejection, selected-version reload, persistence, and legacy compatibility.
+- Commands: Strict RED/GREEN focused domain, workflow catalog/versioning, server runtime, and web client suites; full quality gates and native review are pending the delivery owner.
+- Issues/Risks: Phase 4 remains incomplete overall; the remaining roadmap work is external API/operations and product delivery phases, not Prompt Asset implementation.
+- Next: Run the complete quality gates, native bounded review, commit, and push this bounded Prompt Asset completion slice.
+
+### 2026-07-27 13:12 (Europe/Madrid) — Workflow browser validation CI recovery
+
+- Summary: Repaired the credentialed workflow browser validator and the grouped Assets Playwright journey after CI run 30257625741 failed.
+- Decisions: Validator assertions now wait for DOM readiness rather than internal stub mutation; its SSE stub flushes deterministic events so the required Executing state remains observable. The grouped Assets control remains a real expandable navigation group, and E2E waits for authenticated asset responses without weakening authorization checks.
+- Changes: Added credentialed exact-origin CORS and /assets/list stub handling, asset/guardrail interaction waits, durable SSE delivery, NavigationGroupItem DOM ownership, and authenticated E2E coverage for Assets expansion plus idempotent admin bootstrap handling. Updated the plan baseline to record Docker-backed Playwright coverage.
+- Commands: RED pnpm -C apps/web-ui validate:workflows; GREEN repeated validator runs; full format, lint, typecheck, Vitest, build, dependency checks; CI-parity Docker Playwright coverage passed across desktop/tablet/mobile.
+- Issues/Risks: None known; external GitHub CI verification remains required after push.
+- Next: Run fresh native review, stage/commit/push, then verify the GitHub CI run.
+
+### 2026-07-27 13:43 (Europe/Madrid) — Workflow browser validation CI verified
+
+- Summary: Completed the browser-validator CI recovery with GitHub CI green.
+- Decisions: Retention cleanup validation waits for the rendered version-card count after the API stub assertion, proving the UI catalog reload completed before import input is written.
+- Changes: `apps/web-ui/scripts/validate-workflows.ts` now waits for one rendered retained version before importing; `PLAN.md` records the verified CI baseline.
+- Commands: Repeated workflow validator, full format/lint/typecheck/Vitest/build/dependency gates, Docker CI-parity Playwright (desktop/tablet/mobile), native reliability review, hooks, and GitHub CI run `30262692814` all passed.
+- Issues/Risks: None known.
+- Next: Continue the next bounded roadmap item from the verified baseline.
+
+### 2026-07-27 14:07 (Europe/Madrid) — Phase 4 Memory/RAG runtime wiring
+
+- Summary: Completed the bounded Memory/RAG runtime wiring slice and verified it in GitHub CI.
+- Decisions: Governed runs resolve the selected persisted MemorySource at execution time; only enabled, opt-in, workflow-matching sources can supply tenant, workflow, source, and retention scope.
+- Changes: Added the shared resolver to IDE, resume, and external callbacks plus real API regressions for seven-day retained retrieval provenance and non-opt-in rejection. Marked the Phase 4 Memory/RAG roadmap item complete.
+- Commands: Strict RED/GREEN focused API tests, full quality gates, native reliability review, hooks, and GitHub CI run 30264347063 passed.
+- Issues/Risks: None known.
+- Next: Implement the next Phase 4 item: MCP client/server runtime integration behind capability and permission controls.
+
+### 2026-07-27 14:49 (Europe/Madrid) — Phase 4 MCP production transport
+
+- Summary: Completed the bounded MCP client/server runtime integration and verified it in GitHub CI.
+- Decisions: MCP endpoints, tokens, and server/tool allowlists are server-only MCP_SERVERS configuration. Calls reject remote HTTP, redirects, unknown servers/tools, missing MCP asset capability/permission, stale pins, forged result identity/provenance, and timeouts before persistence.
+- Changes: Added configured HTTP transport with persisted timeout propagation across explicit and skillId MCP bindings, strict untrusted-result parsing, and real API/runtime regressions. Marked the Phase 4 MCP roadmap item complete.
+- Commands: Strict RED/GREEN tests, full quality gates, four-lens native review, hooks, and GitHub CI run 30267283347 passed.
+- Issues/Risks: No live third-party MCP interoperability fixture; the controlled JSON HTTP contract remains server-side and fail-closed.
+- Next: Implement the remaining Phase 4 item: server-side plugin runtime loading, lifecycle, isolation strategy, and audit events.
+
+### 2026-07-27 15:40 (Europe/Madrid) — Phase 4 server plugin runtime lifecycle
+
+- Summary: Completed the remaining Phase 4 server-side plugin runtime loading, lifecycle, isolation, and audit-event item; GitHub CI run 30271023298 is green.
+- Decisions: Plugin Assets execute only through version-pinned, allowlisted, enabled server/process-isolation snapshots. Plugin-provenanced Skills cannot fall back to the standalone Skill MCP provider. Each workflow/request gets immutable registration snapshots, and editable-asset audit/upsert/delete mutations are serialized against the latest persisted catalog.
+- Changes: Removed legacy Plugin Asset-to-Skill dispatch; added direct snapshot runtime binding, standalone Skill separation, lifecycle refresh/concurrency regressions, and atomic audit event preservation across concurrent plugin executions and asset edits. Marked the Phase 4 plugin runtime roadmap item complete.
+- Commands: Strict RED/GREEN focused tests; full format/lint/typecheck/Vitest/build/dependency gates; Docker CI-parity Playwright (desktop/tablet/mobile); four-lens native review; hooks; GitHub CI run 30271023298 all passed.
+- Issues/Risks: None known. The existing non-blocking pnpm.onlyBuiltDependencies configuration warning remains.
+- Next: Begin the next ready roadmap item after the completed Phase 4 baseline.
+
+### 2026-07-28 (Europe/Madrid) — Live execution refresh SDD closure
+
+- Summary: Resolved the bounded native-review and verification-evidence blocker for `fix-workflow-live-execution-refresh`; the OpenSpec change is now archived.
+- Decisions: The verification report begins with the strict `gentle-ai.verify-result/v1` fenced YAML envelope and must be rebound to native review authority after any revision. The dispatcher is authoritative for phase routing.
+- Changes: Added the canonical `workflows-execution-debug` specification, archived the completed change with its verification and archive reports, and updated the plan baseline.
+- Commands: `gentle-ai review validate --gate post-apply`, `gentle-ai sdd-status`, and `gentle-ai sdd-continue` passed; the dispatcher now reports no active changes and `next_recommended: sdd-new`.
+- Issues/Risks: None known.
+- Next: Begin SDD discovery/proposal for the selected Phase 5 item: secret-backed external workflow credentials with rotation, revocation, scopes, rate limits, and audit events.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 secret-backed credential proposal
+
+- Summary: Completed SDD discovery and proposal for administrator-managed, secret-backed external workflow credentials.
+- Decisions: Credentials combine explicit operation scopes; expiry is configurable including never-expire; regeneration invalidates the prior secret immediately; durable shared limits default to 60 requests/minute and remain configurable from 1 to 600; redacted immutable credential audits are administrator-only for 365 days.
+- Changes: Created `openspec/changes/secret-backed-external-workflow-credentials/proposal.md` and persisted the proposal in Engram.
+- Commands: `gentle-ai sdd-status` reports proposal complete and `next_recommended: spec`; Prettier validation passed.
+- Issues/Risks: Existing bearer key compatibility, atomic audit/rate-limit persistence, and future endpoint scope registration require explicit specification.
+- Next: Create the delta specifications for `external-workflow-credentials`.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential specification
+
+- Summary: Completed the SDD specification for `external-workflow-credentials`.
+- Decisions: The new capability requires server-only verifier storage, administrator-only lifecycle and audit access, combinable explicit operation scopes, immediate rotation invalidation, durable replica-shared limiting, and legacy bearer-key migration.
+- Changes: Added six requirements and twelve testable scenarios for lifecycle, authorization, expiry/rotation, rate limits, audit retention, and migration in the active OpenSpec change.
+- Commands: `gentle-ai sdd-status` reports specifications complete and `next_recommended: design`; Prettier validation passed after enforcing the 650-word artifact budget.
+- Issues/Risks: Future endpoints remain unauthorized until their explicit operation scopes are published; design must preserve atomic audit and rate-limit mutation semantics.
+- Next: Create the technical design for the secret-backed external credential change.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential design
+
+- Summary: Completed the technical design for secret-backed external workflow credentials.
+- Decisions: A server-only secret-store port retains local scrypt compatibility; PostgreSQL transactions and row locks own credential lifecycle, redacted audit, and shared rate limits; read/invoke remain the only published external operations.
+- Changes: Added design decisions, flow, real file plan, contracts, RED-first tests, migration/rollback, and N/A threat-matrix rationale in the active change.
+- Commands: `gentle-ai sdd-status` reports design complete and `next_recommended: tasks`; Prettier passed with the design constrained to 797 words.
+- Issues/Risks: The process-local application-state save queue cannot guard credential mutations across replicas; implementation must use the designed repository transaction boundary.
+- Next: Break the design into implementation tasks with a review workload forecast.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 external credential task plan
+
+- Summary: Completed the 15-task TDD implementation plan and review workload forecast for secret-backed external workflow credentials.
+- Decisions: The estimated 950–1,300 line scope is split into foundation, server enforcement, and Settings work units; `ask-on-risk` requires a chain strategy before implementation.
+- Changes: Added concrete RED/GREEN/REFACTOR tasks, focused tests, runtime harnesses, and rollback boundaries in `tasks.md`.
+- Commands: `gentle-ai sdd-status` reports apply ready; task artifact is 469 words and Prettier passes.
+- Issues/Risks: High review-budget risk; do not start apply until the user selects stacked-to-main, feature-branch-chain, or a size exception.
+- Next: Obtain the chained-PR delivery decision, then apply the selected first work unit.
+
+### 2026-07-28 (Europe/Madrid) — Phase 5 single-PR delivery exception
+
+- Summary: Accepted the user's instruction to deliver the entire secret-backed credential change in one PR on the current branch.
+- Decisions: `exception-ok` / `size-exception` replaces chained delivery; the 950–1,300 line high-risk forecast and three internal rollbackable work units remain explicit.
+- Changes: Updated the review workload forecast and required apply guard lines in `tasks.md`.
+- Commands: `gentle-ai sdd-continue` now reports apply ready; Prettier validation passed.
+- Issues/Risks: The PR exceeds the normal 400-line review budget by explicit user-approved exception.
+- Next: Start the approved single-PR apply phase with Task 1.1 RED tests.
+
+### 2026-07-28 16:00 (Europe/Madrid) — IDE auth wire-format repair
+
+- Summary: Repaired the typed web IDE-session parser to match the existing server admin wire value.
+- Decisions: The UI canonical role is "admin" (with "member" unchanged); it stays strict and continues to drop bearer fields from the redacted view.
+- Changes: Updated apps/web-ui/src/shared/ide-auth-client.ts and added RED/GREEN regressions in apps/web-ui/src/shared/ide-auth-client.test.ts.
+- Commands: RED focused Vitest failed; GREEN pnpm vitest run apps/web-ui/src/shared/ide-auth-client.test.ts, pnpm typecheck, web build, and desktop Playwright 3/3 passed.
+- Issues/Risks: Full-repository lint/test/build gates remain owned by the parent verification task.
+- Next: Include this narrow fix in the parent final verification.

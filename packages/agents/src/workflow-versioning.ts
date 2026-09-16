@@ -97,10 +97,8 @@ type WorkflowVersionImportIdMode = "keep_ids" | "regenerate_ids";
 
 type WorkflowVersionImportMessageCode =
   | "checksum_mismatch"
-  | "project_mismatch"
   | "unsupported_schema_version"
-  | "workflow_id_collision"
-  | "workspace_mismatch";
+  | "workflow_id_collision";
 
 type WorkflowVersionImportMessage = {
   code: WorkflowVersionImportMessageCode;
@@ -112,8 +110,6 @@ export type WorkflowVersionImportPreviewRecord = {
   status: "valid" | "warning" | "invalid";
   schemaSupported: boolean;
   checksumValid: boolean;
-  workspaceMismatch: boolean;
-  projectMismatch: boolean;
   workflowIdCollision: boolean;
   recommendedIdMode: WorkflowVersionImportIdMode;
   suggestedName: string;
@@ -363,8 +359,6 @@ export const migrateWorkflowVersionImportSource = (
 
 export const previewWorkflowVersionImport = (input: {
   exported: WorkflowVersionImportCandidate;
-  targetWorkspaceId: string;
-  targetProjectId: string;
   existingWorkflowIds: ReadonlyArray<string>;
 }): WorkflowVersionImportPreviewRecord => {
   const schemaSupported =
@@ -376,24 +370,16 @@ export const previewWorkflowVersionImport = (input: {
   const workflowIdCollision = input.existingWorkflowIds.includes(
     input.exported.snapshot.id,
   );
-  const workspaceMismatch =
-    input.exported.snapshot.workspaceId !== input.targetWorkspaceId;
-  const projectMismatch =
-    input.exported.snapshot.projectId !== input.targetProjectId;
   const messages = createWorkflowVersionImportMessages({
     schemaSupported,
     checksumValid,
     workflowIdCollision,
-    workspaceMismatch,
-    projectMismatch,
   });
 
   return {
     status: readWorkflowVersionImportStatus(messages),
     schemaSupported,
     checksumValid,
-    workspaceMismatch,
-    projectMismatch,
     workflowIdCollision,
     recommendedIdMode: workflowIdCollision ? "regenerate_ids" : "keep_ids",
     suggestedName: input.exported.snapshot.name,
@@ -411,7 +397,6 @@ export const importWorkflowVersionSnapshot = (
   return {
     id: exported.versionId,
     workflowId: exported.workflowId,
-    projectId: exported.snapshot.projectId,
     version: exported.version,
     createdAt: exported.createdAt,
     snapshot: exported.snapshot,
@@ -561,7 +546,14 @@ const readWorkflowVersionExportSnapshot = (
     throw new Error("Workflow version export snapshot must be an object");
   }
 
-  return value as WorkflowDefinitionRecord;
+  const snapshot = value as WorkflowDefinitionRecord;
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map((node) => ({
+      ...node,
+      config: removeDuplicatePinnedPromptText(node.config),
+    })),
+  };
 };
 
 const prepareWorkflowVersionExportNode = (
@@ -580,9 +572,20 @@ const prepareWorkflowVersionExportNodeConfig = (
     ? config
     : removeWorkflowVersionPinnedOutput(config);
 
+  const normalizedPrompt = removeDuplicatePinnedPromptText(withoutPinned);
   return options.redactSecrets
-    ? redactWorkflowVersionSecrets(withoutPinned)
-    : withoutPinned;
+    ? redactWorkflowVersionSecrets(normalizedPrompt)
+    : normalizedPrompt;
+};
+
+const removeDuplicatePinnedPromptText = (
+  config: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (!isWorkflowVersionPlainRecord(config["promptAsset"])) {
+    return config;
+  }
+  const { prompt: _prompt, ...pinnedConfig } = config;
+  return pinnedConfig;
 };
 
 const removeWorkflowVersionPinnedOutput = (
@@ -713,8 +716,6 @@ const createWorkflowVersionImportMessages = (input: {
   schemaSupported: boolean;
   checksumValid: boolean;
   workflowIdCollision: boolean;
-  workspaceMismatch: boolean;
-  projectMismatch: boolean;
 }): ReadonlyArray<WorkflowVersionImportMessage> => {
   const messages: Array<WorkflowVersionImportMessage> = [];
 
@@ -739,22 +740,6 @@ const createWorkflowVersionImportMessages = (input: {
       code: "workflow_id_collision",
       severity: "warning",
       message: "Snapshot workflow id already exists and will be regenerated.",
-    });
-  }
-
-  if (input.workspaceMismatch) {
-    messages.push({
-      code: "workspace_mismatch",
-      severity: "warning",
-      message: "Snapshot workspace differs from the current workspace.",
-    });
-  }
-
-  if (input.projectMismatch) {
-    messages.push({
-      code: "project_mismatch",
-      severity: "warning",
-      message: "Snapshot project differs from the current project.",
     });
   }
 
@@ -1003,8 +988,6 @@ const formatSummaryPart = (
 const normalizeWorkflowForChecksum = (
   workflow: WorkflowDefinitionRecord,
 ): unknown => ({
-  workspaceId: workflow.workspaceId,
-  projectId: workflow.projectId,
   name: workflow.name,
   description: workflow.description,
   status: workflow.status,

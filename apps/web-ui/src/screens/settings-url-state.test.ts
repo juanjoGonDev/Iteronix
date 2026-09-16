@@ -26,7 +26,7 @@ describe("settings url state", () => {
 
   it("applies patches on the settings route", () => {
     expect(
-      applySettingsUrlPatch("http://localhost/projects", {
+      applySettingsUrlPatch("http://localhost/workflows", {
         activeTab: "api",
         selectedProviderId: null,
       }),

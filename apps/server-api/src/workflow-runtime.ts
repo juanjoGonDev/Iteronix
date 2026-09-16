@@ -1,6 +1,7 @@
 import {
   createWorkflowRuntime,
   WorkflowRuntimeEvent,
+  type GovernedNodeExecutionRequest,
   type WorkflowProviderRunRequest,
   type WorkflowProviderRunResult,
 } from "../../../packages/agents/src/workflow-runtime";
@@ -10,6 +11,12 @@ import {
   LLMEventType,
   type LLMEvent,
 } from "../../../packages/domain/src/llm/events";
+import {
+  resolvePinnedPrompt,
+  type PromptAsset,
+  type ResolvedPinnedPrompt,
+} from "../../../packages/domain/src/prompt-assets";
+import { resolveWorkflowRuntimeSettings } from "../../../packages/shared/src/workflows";
 import type {
   LLMProviderPort,
   LLMRunResult,
@@ -20,26 +27,33 @@ import type {
   WorkflowExecutionRecord,
   WorkflowNodeExecutionInputSourceRecord,
 } from "../../../packages/shared/src/workflows";
-import type { WorkspaceState } from "./workspace-state";
+import type { ApplicationState } from "./application-state";
+import { createCanonicalWorkflowRuntimeGuard } from "./canonical-workflow-runtime";
+import { AssetKind } from "./editable-assets";
+import { dispatchWorkflowNotification } from "./workflow-notifications";
 
 const SmokeTestPrompt = "Reply with OK.";
 
-type ProviderProfile = {
+export type ProviderProfile = {
   id: string;
   providerKind: string;
   modelId: string;
   command: string;
   endpointUrl: string;
   promptMode: "stdin" | "arg";
-  apiKey: string;
+  apiKeyEnvVar: string;
 };
 
 export type WorkflowRuntimeService = {
   runWorkflow: (input: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
   }) => Promise<WorkflowExecutionRecord>;
   runNode: (input: {
     definition: WorkflowDefinitionRecord;
@@ -62,34 +76,100 @@ export type WorkflowRuntimeService = {
 };
 
 export const createWorkflowRuntimeService = (input: {
-  readWorkspaceState: () => WorkspaceState;
+  readApplicationState: () => ApplicationState;
   now?: () => Date;
 }): WorkflowRuntimeService => {
   const now = input.now ?? (() => new Date());
+  const canonicalWorkflowRuntimeGuard = createCanonicalWorkflowRuntimeGuard({
+    readDefinitionVersions: () =>
+      input.readApplicationState().workflows.definitionVersions ?? [],
+  });
   const runtime = createWorkflowRuntime({
     now,
-    runProviderNode: async (request) =>
-      executeProviderNode(
+    resolveWorkflowInvocation: (invocation) => {
+      const definition = input
+        .readApplicationState()
+        .workflows.definitionVersions?.find(
+          (record) =>
+            record.workflowId === invocation.workflowId &&
+            record.version === invocation.workflowVersion,
+        )?.snapshot;
+      if (!definition) {
+        return undefined;
+      }
+      const executionPlan = canonicalWorkflowRuntimeGuard.prepare(definition);
+      return {
+        definition,
+        ...(executionPlan ? { executionPlan } : {}),
+      };
+    },
+    runProviderNode: async (request) => {
+      const applicationState = input.readApplicationState();
+      const runtimeSettings = resolveWorkflowRuntimeSettings(
+        {
+          ...applicationState.settings.workflowLimits,
+          ...applicationState.settings.notifications,
+        },
+        request.definition.runtimeSettingsOverride,
+      );
+      if (!runtimeSettings.externalCalls) {
+        throw new Error(
+          "External provider calls are disabled for this workflow.",
+        );
+      }
+
+      return executeProviderNode(
         request,
         resolveProviderProfile(
-          input.readWorkspaceState(),
+          applicationState,
           request.node.config.provider?.providerId,
         ),
-      ),
+      );
+    },
   });
 
   const runWorkflow = async (request: {
     definition: WorkflowDefinitionRecord;
     assets: ReadonlyArray<WorkflowAssetRecord>;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
-  }): Promise<WorkflowExecutionRecord> =>
-    runtime.runDefinition({
-      definition: request.definition,
+    runGovernedNode?: (
+      request: GovernedNodeExecutionRequest,
+    ) => Promise<WorkflowProviderRunResult>;
+  }): Promise<WorkflowExecutionRecord> => {
+    const resolved = resolveWorkflowPromptAssets(
+      request.definition,
+      input.readApplicationState(),
+    );
+    const executionPlan = canonicalWorkflowRuntimeGuard.prepare(
+      resolved.definition,
+    );
+    const execution = await runtime.runDefinition({
+      definition: resolved.definition,
       assets: request.assets,
+      ...(executionPlan ? { executionPlan } : {}),
+      ...(request.seedNodeOutputs
+        ? { seedNodeOutputs: request.seedNodeOutputs }
+        : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+      ...(request.runGovernedNode
+        ? { runGovernedNode: request.runGovernedNode }
+        : {}),
     });
+    await notifyWorkflowExecution(
+      input.readApplicationState(),
+      resolved.definition,
+      execution,
+    );
+    return {
+      ...execution,
+      ...(resolved.provenance.length
+        ? { promptProvenance: resolved.provenance }
+        : {}),
+    };
+  };
 
   const runNode = async (request: {
     definition: WorkflowDefinitionRecord;
@@ -99,18 +179,23 @@ export const createWorkflowRuntimeService = (input: {
     seedNodeOutputs?: Readonly<Record<string, unknown>>;
     signal?: AbortSignal;
     onEvent?: (event: WorkflowRuntimeEvent) => void;
-  }): Promise<WorkflowExecutionRecord> =>
-    runtime.runNode({
-      definition: request.definition,
-      assets: request.assets,
-      nodeId: request.nodeId,
-      inputSource: request.inputSource,
-      ...(request.seedNodeOutputs
-        ? { seedNodeOutputs: request.seedNodeOutputs }
-        : {}),
-      ...(request.signal ? { signal: request.signal } : {}),
-      ...(request.onEvent ? { onEvent: request.onEvent } : {}),
+  }): Promise<WorkflowExecutionRecord> => {
+    const resolved = resolveWorkflowPromptAssets(
+      request.definition,
+      input.readApplicationState(),
+    );
+    const execution = await runCanonicalWorkflowNode({
+      request: { ...request, definition: resolved.definition },
+      canonicalWorkflowRuntimeGuard,
+      runtime,
     });
+    return {
+      ...execution,
+      ...(resolved.provenance.length
+        ? { promptProvenance: resolved.provenance }
+        : {}),
+    };
+  };
 
   const testProviderNode = async (request: {
     workflow: WorkflowDefinitionRecord;
@@ -124,14 +209,14 @@ export const createWorkflowRuntimeService = (input: {
     const testedAt = now().toISOString();
     try {
       const profile = resolveProviderProfile(
-        input.readWorkspaceState(),
+        input.readApplicationState(),
         request.node.config.provider?.providerId,
       );
       await executeProviderNode(
         {
           workflowId: request.workflow.id,
+          definition: request.workflow,
           workflowRunId: `provider-test-${request.node.id}`,
-          projectId: request.workflow.projectId,
           node: request.node,
           provider: request.node.config.provider ?? {
             providerId: profile.id,
@@ -183,7 +268,77 @@ export const createWorkflowRuntimeService = (input: {
   };
 };
 
-const executeProviderNode = async (
+export const resolveWorkflowPromptAssets = (
+  definition: WorkflowDefinitionRecord,
+  state: Pick<ApplicationState, "editableAssets">,
+): {
+  definition: WorkflowDefinitionRecord;
+  provenance: ReadonlyArray<ResolvedPinnedPrompt["provenance"]>;
+} => {
+  const assets: ReadonlyArray<PromptAsset> = state.editableAssets.records
+    .filter((asset) => asset.kind === AssetKind.Prompt && asset.prompt)
+    .map((asset) => ({
+      id: asset.id,
+      status: asset.status,
+      versions:
+        asset.prompt?.versions.map((version) => ({
+          version: version.version,
+          template: version.template,
+          variables: version.variables.map((variable) => ({
+            name: variable.name,
+            required: variable.required,
+            schema: variable.schema,
+          })),
+        })) ?? [],
+    }));
+  const resolvedPrompts: ResolvedPinnedPrompt[] = [];
+  const nodes = definition.nodes.map((node) => {
+    if (!node.config.promptAsset) {
+      return node;
+    }
+    const resolved = resolvePinnedPrompt({
+      reference: node.config.promptAsset,
+      assets,
+    });
+    resolvedPrompts.push(resolved);
+    return { ...node, config: { ...node.config, prompt: resolved.rendered } };
+  });
+  return {
+    definition: { ...definition, nodes },
+    provenance: resolvedPrompts.map((resolved) => resolved.provenance),
+  };
+};
+
+const runCanonicalWorkflowNode = (input: {
+  request: {
+    definition: WorkflowDefinitionRecord;
+    assets: ReadonlyArray<WorkflowAssetRecord>;
+    nodeId: string;
+    inputSource: WorkflowNodeExecutionInputSourceRecord;
+    seedNodeOutputs?: Readonly<Record<string, unknown>>;
+    signal?: AbortSignal;
+    onEvent?: (event: WorkflowRuntimeEvent) => void;
+  };
+  canonicalWorkflowRuntimeGuard: ReturnType<
+    typeof createCanonicalWorkflowRuntimeGuard
+  >;
+  runtime: ReturnType<typeof createWorkflowRuntime>;
+}): Promise<WorkflowExecutionRecord> => {
+  input.canonicalWorkflowRuntimeGuard.prepare(input.request.definition);
+  return input.runtime.runNode({
+    definition: input.request.definition,
+    assets: input.request.assets,
+    nodeId: input.request.nodeId,
+    inputSource: input.request.inputSource,
+    ...(input.request.seedNodeOutputs
+      ? { seedNodeOutputs: input.request.seedNodeOutputs }
+      : {}),
+    ...(input.request.signal ? { signal: input.request.signal } : {}),
+    ...(input.request.onEvent ? { onEvent: input.request.onEvent } : {}),
+  });
+};
+
+export const executeProviderNode = async (
   request: WorkflowProviderRunRequest,
   profile: ProviderProfile,
 ): Promise<WorkflowProviderRunResult> => {
@@ -199,6 +354,11 @@ const executeProviderNode = async (
 
 const createProvider = (profile: ProviderProfile): LLMProviderPort => {
   if (profile.providerKind === "codex-cli") {
+    if (profile.command.length === 0) {
+      throw new Error(
+        `Workflow provider profile ${profile.id} is missing a CLI command.`,
+      );
+    }
     return createCodexCliProvider({
       command: profile.command,
       promptMode: profile.promptMode,
@@ -226,7 +386,7 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
     if (
       (profile.providerKind === "openai" ||
         profile.providerKind === "custom") &&
-      profile.apiKey.length === 0
+      resolveProviderApiKey(profile).length === 0
     ) {
       throw new Error(
         `Workflow provider profile ${profile.id} is missing a bearer API key.`,
@@ -235,7 +395,7 @@ const createProvider = (profile: ProviderProfile): LLMProviderPort => {
 
     return createOpenAiCompatibleProvider({
       baseUrl: profile.endpointUrl,
-      apiKey: profile.apiKey,
+      apiKey: resolveProviderApiKey(profile),
       models: profile.modelId
         ? [
             {
@@ -313,11 +473,43 @@ const collectProviderEvents = async (
   };
 };
 
-const resolveProviderProfile = (
-  workspaceState: WorkspaceState,
+const notifyWorkflowExecution = async (
+  applicationState: ApplicationState,
+  workflow: WorkflowDefinitionRecord,
+  execution: WorkflowExecutionRecord,
+): Promise<void> => {
+  if (
+    execution.status !== "completed" &&
+    execution.status !== "failed" &&
+    execution.status !== "canceled"
+  ) {
+    return;
+  }
+
+  const runtimeSettings = resolveWorkflowRuntimeSettings(
+    {
+      ...applicationState.settings.workflowLimits,
+      ...applicationState.settings.notifications,
+    },
+    workflow.runtimeSettingsOverride,
+  );
+  try {
+    await dispatchWorkflowNotification({
+      webhookUrl: runtimeSettings.webhookUrl,
+      workflowId: workflow.id,
+      executionId: execution.id,
+      status: execution.status,
+    });
+  } catch {
+    return;
+  }
+};
+
+export const resolveProviderProfile = (
+  applicationState: ApplicationState,
   profileId: string | undefined,
 ): ProviderProfile => {
-  const profiles = workspaceState.settings.providerProfiles
+  const profiles = applicationState.settings.providerProfiles
     .map(readProviderProfile)
     .filter((profile): profile is ProviderProfile => profile !== null);
   const profile = profiles.find((candidate) => candidate.id === profileId);
@@ -347,10 +539,10 @@ const readProviderProfile = (value: unknown): ProviderProfile | null => {
     id,
     providerKind,
     modelId: readString(value["modelId"]),
-    command: readString(value["command"]) || "codex",
+    command: readString(value["command"]),
     endpointUrl: readString(value["endpointUrl"]),
     promptMode,
-    apiKey: readProviderApiKey(value),
+    apiKeyEnvVar: readString(value["apiKeyEnvVar"]),
   };
 };
 
@@ -360,16 +552,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const readString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-const readProviderApiKey = (value: Record<string, unknown>): string => {
-  const explicitApiKey = readString(value["apiKey"]);
-  if (explicitApiKey.length > 0) {
-    return explicitApiKey;
-  }
-
-  const envKey = readString(value["apiKeyEnvVar"]);
+export const resolveProviderApiKey = (
+  value: { apiKeyEnvVar: string },
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string => {
+  const envKey = value.apiKeyEnvVar;
   if (envKey.length > 0) {
-    return readString(process.env[envKey]);
+    return readString(environment[envKey]);
   }
 
-  return readString(process.env["OPENAI_API_KEY"]);
+  return readString(environment["OPENAI_API_KEY"]);
 };
