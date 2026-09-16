@@ -1519,10 +1519,7 @@ async function handleStubRequest(
     return;
   }
 
-  if (
-    request.method === "POST" &&
-    requestUrl.pathname === RequestPath.AuthMe
-  ) {
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.AuthMe) {
     writeJson(response, 200, {
       user: createValidationAdminUser(),
     });
