@@ -15,6 +15,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Postgres backs the forward-only migration ledger and the isolated
+    # integration suites. Without this service those suites silently skip,
+    # which previously let a migration-ordering defect reach review.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: iteronix_ci
+          POSTGRES_USER: iteronix_ci
+          POSTGRES_PASSWORD: iteronix_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iteronix_ci -d iteronix_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Integration tests must never point at DATABASE_URL, so the test URL is
+      # a dedicated second database that the steps below create.
+      DATABASE_URL: postgresql://iteronix_ci:iteronix_ci_password@127.0.0.1:5432/iteronix_ci
+      TEST_DATABASE_URL: postgresql://iteronix_ci:iteronix_ci_password@127.0.0.1:5432/iteronix_ci_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -25,11 +47,22 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Create isolated integration database
+        env:
+          PGPASSWORD: iteronix_ci_password
+        run: psql "host=127.0.0.1 port=5432 user=iteronix_ci dbname=iteronix_ci" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE iteronix_ci_test'
+      - name: Apply and verify forward-only migrations
+        run: |
+          pnpm db:migrate
+          pnpm db:verify
       - run: pnpm -C apps/web-ui exec puppeteer browsers install chrome
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm lint
       - run: pnpm typecheck
+      # TEST_DATABASE_URL is set at job level, so the PostgreSQL migration
+      # integration suite runs here instead of self-skipping.
       - run: pnpm test
+      - run: pnpm test:db
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:settings
       - run: pnpm -C apps/web-ui validate:workflows
@@ -41,6 +74,8 @@ jobs:
           ITERONIX_ADMIN_EMAIL: iteronix_ci_admin@iteronix.test
           ITERONIX_ADMIN_PASSWORD: iteronix-ci-admin-password
           ITERONIX_HTTP_PORT: 4001
+          # The job's Postgres service container already binds host 5432.
+          POSTGRES_HOST_PORT: 5433
           # The browser serves the UI on 4000 and calls the API published on 4001.
           IDE_UI_ORIGINS: http://127.0.0.1:4000,http://localhost:4000
           ITERONIX_E2E_BASE_URL: http://127.0.0.1:4000
