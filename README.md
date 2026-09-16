@@ -28,6 +28,11 @@ programmatic callers that authorize with `Authorization: Bearer <token>`. `IDE_U
 lists the browser origins allowed to use a session; add your own host and port there when it
 differs from `http://localhost:4000`.
 
+Plugin registration is allowlisted by the server. Besides the built-in `reference.echo`
+plugin, operators can trust additional process-isolated plugins with
+`ITERONIX_TRUSTED_PLUGIN_IDS` (comma-separated registry keys); the Workflows assets
+screen only ever offers keys from that server-owned list.
+
 To run without Docker, set `DATABASE_URL` in `.env` and start PostgreSQL plus `pnpm dev`.
 Configure a runnable provider in Settings before executing a workflow.
 
