@@ -8,7 +8,14 @@ const Administrator = {
   password: process.env["ITERONIX_ADMIN_PASSWORD"] ?? "admin",
 } as const;
 const SessionCookieName = "iteronix_session";
-const TrustedPluginKey = "reference.echo";
+// The CI stack trusts this throwaway key via ITERONIX_TRUSTED_PLUGIN_IDS (see
+// .github/workflows/ci.yml), so the journey never mutates or deletes the
+// seeded reference.echo plugin that other specs and workflows depend on.
+// It doubles as the end-to-end proof of the operator allowlist wiring:
+// ci.yml -> compose.yaml -> server config -> /assets/list -> this select.
+const TrustedPluginKey = "e2e.assets.demo";
+const ReferencePluginKey = "reference.echo";
+const PluginName = "E2E demo plugin";
 
 test("drives the full trusted plugin journey: register, toggle, edit, delete", async ({
   page,
@@ -18,18 +25,26 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await setIdeSessionCookie(context, sessionToken);
   const assetResponses = observeSuccessfulApiResponses(page, "/assets/");
 
+  const row = page.getByTestId(`plugin-assets-row-${TrustedPluginKey}`);
   await page.goto("/assets/plugins");
   await expect(page.getByTestId("plugin-assets-root")).toBeVisible();
-  // A fresh workspace is never a dead end: the empty state offers the action.
+  await expect(row).toBeHidden();
+  // The toolbar offers registration whether the workspace is empty or not.
   await expect(page.getByTestId("plugin-assets-create")).toBeVisible();
 
   await page.getByTestId("plugin-assets-create").click();
   await expect(page.getByTestId("plugin-assets-editor")).toBeVisible();
   const trustedKey = page.getByTestId("plugin-assets-trusted-key");
+  // The select is fed by the server's allowlist: the built-in plugin plus the
+  // operator-configured key are the only registrable choices.
+  await expect(
+    trustedKey.locator(`option[value="${ReferencePluginKey}"]`),
+  ).toHaveCount(1);
   await expect(
     trustedKey.locator(`option[value="${TrustedPluginKey}"]`),
   ).toHaveCount(1);
-  await page.getByTestId("plugin-assets-name").fill("CI echo plugin");
+  await trustedKey.selectOption(TrustedPluginKey);
+  await page.getByTestId("plugin-assets-name").fill(PluginName);
   await page
     .getByTestId("plugin-assets-input-schema")
     .fill('{ "type": "object", "required": ["message"] }');
@@ -45,9 +60,8 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await expect(page.getByTestId("plugin-assets-save")).toBeEnabled();
   await page.getByTestId("plugin-assets-save").click();
 
-  const row = page.getByTestId(`plugin-assets-row-${TrustedPluginKey}`);
   await expect(row).toBeVisible();
-  await expect(row).toContainText("CI echo plugin");
+  await expect(row).toContainText(PluginName);
   await expect(row).toContainText("Enabled");
   await expect(row).toContainText("cap:tool-calls");
   await expect(row).toContainText("Last audit: registered");
@@ -60,21 +74,16 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await page.getByTestId(`plugin-assets-toggle-${TrustedPluginKey}`).click();
   await expect(row).toContainText("Disabled");
 
-  await page
-    .getByTestId(`plugin-assets-row-${TrustedPluginKey}`)
-    .getByRole("button", { name: /Edit/ })
-    .click();
+  await row.getByRole("button", { name: /Edit/ }).click();
   const editor = page.getByTestId("plugin-assets-editor");
   await expect(editor).toBeVisible();
-  await expect(page.getByTestId("plugin-assets-name")).toHaveValue(
-    "CI echo plugin",
+  await expect(page.getByTestId("plugin-assets-name")).toHaveValue(PluginName);
+  await expect(page.getByTestId("plugin-assets-output-schema")).toHaveValue(
+    /"type":\s*"object"/,
   );
-  await expect(page.getByTestId("plugin-assets-output-schema")).toContainText(
-    '"type": "object"',
-  );
-  await page.getByTestId("plugin-assets-name").fill("CI echo plugin (renamed)");
+  await page.getByTestId("plugin-assets-name").fill(`${PluginName} (renamed)`);
   await page.getByTestId("plugin-assets-save").click();
-  await expect(row).toContainText("CI echo plugin (renamed)");
+  await expect(row).toContainText(`${PluginName} (renamed)`);
   await expect(row).toContainText("Last audit: updated");
   await page.getByTestId("plugin-assets-editor-close").click();
   await expect(page.getByTestId("plugin-assets-editor")).toBeHidden();
@@ -93,10 +102,14 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   expect(assetResponses.unauthorized).toEqual([]);
   expect(assetResponses.successful.length).toBeGreaterThanOrEqual(4);
 
-  // The delete really persisted server-side: a reload shows the empty state.
+  // The delete really persisted server-side, and the journey left every other
+  // asset untouched: a reload shows no demo row but keeps the reference plugin.
   await page.reload();
   await expect(page.getByTestId("plugin-assets-root")).toBeVisible();
   await expect(row).toBeHidden();
+  await expect(
+    page.getByTestId(`plugin-assets-row-${ReferencePluginKey}`),
+  ).toBeVisible();
 });
 
 type ObservedResponses = {
