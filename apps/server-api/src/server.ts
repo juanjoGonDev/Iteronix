@@ -24,6 +24,7 @@ import {
   loadConfig,
   readAdminCredentials,
   readIdeUiOrigins,
+  readTrustedPluginIds,
   type ServerConfig,
 } from "./config";
 import {
@@ -208,7 +209,6 @@ const SensitivePromptBindingKeyFragments = [
   "secret",
   "token",
 ] as const;
-const ReferencePluginId = "reference.echo";
 const AuthRoutePaths = new Set<string>([
   RoutePath.AuthBootstrapAdmin,
   RoutePath.AuthRegister,
@@ -406,7 +406,7 @@ export const createApiServer = (input: {
   const pluginRegistry =
     input.pluginRegistry ??
     createTrustedPluginRegistry({
-      allowedPluginIds: [ReferencePluginId],
+      allowedPluginIds: readTrustedPluginIds(input.config),
       host: createChildProcessReferencePluginHost(),
     });
   const createGovernedServiceSnapshot = (): GovernedAgentToolService => {
@@ -769,6 +769,7 @@ const handleRequest = async (
     }
     respondJson(res, HttpStatus.Ok, {
       assets: applicationPersistence.read().editableAssets.records,
+      pluginRegistry: { trustedKeys: pluginRegistry.trustedKeys() },
     });
     return;
   }
