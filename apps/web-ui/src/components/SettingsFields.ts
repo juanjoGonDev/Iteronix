@@ -150,6 +150,25 @@ export interface SettingsCheckboxGroupProps<
   onChange: (value: TValue, checked: boolean) => void;
 }
 
+/**
+ * Live commit wiring for text-style controls (inputs and textareas).
+ *
+ * Typing, pasting, and automation (Playwright's `fill`, for example) update
+ * the element and fire `input`; `change` only arrives once the field loses
+ * focus. Listening to `change` alone would freeze validation and save-gating
+ * until the next interaction, so every keystroke commits through both events
+ * (the handler is idempotent, whichever arrives second is a no-op).
+ */
+const readLiveCommitHandlers = (commit: (value: string) => void) => {
+  const handler = (event: Event): void => {
+    const target = event.target as { value?: unknown } | null;
+    if (target && typeof target.value === "string") {
+      commit(target.value);
+    }
+  };
+  return { onChange: handler, onInput: handler };
+};
+
 class SettingsField extends Component<SettingsFieldProps> {
   override render(): HTMLElement {
     const { label, children, className = "" } = this.props;
@@ -190,12 +209,7 @@ export class SettingsTextField extends Component<SettingsTextFieldProps> {
         placeholder,
         "data-testid": testId,
         className: readSettingsInputClassName(),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -213,12 +227,7 @@ export class SettingsNumberField extends Component<SettingsNumberFieldProps> {
         disabled,
         "data-testid": testId,
         className: `${readSettingsInputClassName()} disabled:opacity-50`,
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -236,12 +245,7 @@ export class SettingsDateTimeField extends Component<SettingsDateTimeFieldProps>
         disabled,
         "data-testid": testId,
         className: `${readSettingsInputClassName()} disabled:cursor-not-allowed disabled:opacity-50`,
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -304,12 +308,7 @@ export class SettingsSecretField extends Component<SettingsSecretFieldProps> {
         placeholder,
         "data-testid": testId,
         className: readSettingsInputClassName(),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
       createElement("span", { className: "text-xs text-text-secondary" }, [
         "The browser keeps this key only in memory for the current session.",
@@ -340,12 +339,7 @@ export class SettingsTextareaField extends Component<SettingsTextareaFieldProps>
           spellcheck: "false",
           "data-testid": testId,
           className: `${readSettingsInputClassName()} font-mono leading-6`,
-          onChange: (event: Event) => {
-            const target = event.target;
-            if (target instanceof HTMLTextAreaElement) {
-              onChange(target.value);
-            }
-          },
+          ...readLiveCommitHandlers(onChange),
         }),
         hint
           ? createElement(
@@ -393,12 +387,7 @@ export class SettingsJsonField extends Component<
               ? ""
               : "border-rose-500/60 focus:border-rose-400 focus:ring-rose-400",
           ),
-          onChange: (event: Event) => {
-            const target = event.target;
-            if (target instanceof HTMLTextAreaElement) {
-              onChange(target.value);
-            }
-          },
+          ...readLiveCommitHandlers(onChange),
         }),
         createElement(
           "span",

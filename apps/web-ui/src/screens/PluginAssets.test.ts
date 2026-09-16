@@ -223,9 +223,15 @@ const click = (element: FakeElement): void => {
   element.fire("click");
 };
 
-const changeField = (element: FakeElement, value: string): void => {
+/**
+ * Mirrors what real typing (and Playwright's `fill`) does: the element value
+ * changes and only an `input` event fires — `change` waits for blur. JSON
+ * contract validation must already react on this event, or the save gate
+ * stays frozen one interaction behind the user.
+ */
+const typeField = (element: FakeElement, value: string): void => {
   element.value = value;
-  element.fire("change", { target: element });
+  element.fire("input", { target: element });
 };
 
 beforeEach(() => {
@@ -328,7 +334,7 @@ describe("plugin assets screen", () => {
       const editor = requireTestId(root, "plugin-assets-editor");
       const input = requireTestId(editor, "plugin-assets-input-schema");
 
-      changeField(input, "{ not json");
+      typeField(input, "{ not json");
       root = await reroot(mounted);
       const invalidState = requireTestId(
         root,
@@ -338,15 +344,19 @@ describe("plugin assets screen", () => {
       expect(root instanceof FakeElement).toBe(true);
       expect(mounted.screen.state.draft.inputSchemaJson).toBe("{ not json");
       const disabledSave = requireTestId(root, "plugin-assets-save");
+      expect(disabledSave.getAttribute("disabled")).not.toBeNull();
       expect(disabledSave.getAttribute("title") ?? "").not.toHaveLength(0);
 
-      changeField(input, '{ "type": "string" }');
+      typeField(input, '{ "type": "string" }');
       root = await reroot(mounted);
       const validState = requireTestId(
         root,
         "plugin-assets-input-schema-state",
       );
       expect(collectText(validState)).toContain("Valid JSON object");
+      expect(
+        requireTestId(root, "plugin-assets-save").getAttribute("disabled"),
+      ).toBeNull();
       click(requireTestId(root, "plugin-assets-save"));
       await mounted.environment.flushAll();
 

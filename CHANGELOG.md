@@ -27,6 +27,9 @@
 
 ### Fixed
 
+- Settings-style text fields now commit every keystroke through the `input` event (with `change`
+  as a blur fallback) instead of only on blur; validation messages and the save gate update live
+  and automation that simulates typing (Playwright `fill`) drives the forms exactly like a user.
 - Legacy credential-audit migration test no longer applies migration 004 without 003; 004's
   anonymous failure index depends on the `actor_kind` column introduced by 003.
 - `EmptyStatePanel` accepts a primary action so empty asset lists are not dead ends.
