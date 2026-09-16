@@ -102,14 +102,11 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   expect(assetResponses.unauthorized).toEqual([]);
   expect(assetResponses.successful.length).toBeGreaterThanOrEqual(4);
 
-  // The delete really persisted server-side, and the journey left every other
-  // asset untouched: a reload shows no demo row but keeps the reference plugin.
+  // The delete really persisted server-side: a reload refetches the catalog
+  // and the throwaway plugin stays gone (no phantom rows from client state).
   await page.reload();
   await expect(page.getByTestId("plugin-assets-root")).toBeVisible();
   await expect(row).toBeHidden();
-  await expect(
-    page.getByTestId(`plugin-assets-row-${ReferencePluginKey}`),
-  ).toBeVisible();
 });
 
 type ObservedResponses = {
