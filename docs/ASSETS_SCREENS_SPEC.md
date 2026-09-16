@@ -100,8 +100,10 @@ integration tests, which let a real migration-ordering bug stay hidden.
   - [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` green. (`pnpm deadcode`
         cannot run in the low-memory sandbox — its parser requests a 6 GiB buffer; the
         exported surface was kept manually minimal and CI does not gate on it.)
-  - [ ] CI (with the new Postgres service) green: `db:migrate`, `db:verify`, `test:db`,
-        unit suites, Puppeteer validators, Playwright matrix — pending first run.
+  - [x] CI (with the new Postgres service) green: `db:migrate`, `db:verify`, `test:db`,
+        unit suites, Puppeteer validators, Playwright matrix — all 19 steps passed on
+        PR #32 head `799f6a5` (run 35152027530), including the trusted-plugin journey
+        across desktop/tablet/mobile.
 
 ## Post-MVP additions landed with this change
 
