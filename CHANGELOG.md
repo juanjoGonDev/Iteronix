@@ -6,8 +6,8 @@
 
 - Workflow canvas: node palette entries can now be **dragged onto the canvas** and land at the
   drop point. The `dragover` gate used to read payload data the spec only exposes at drop time
-  (and Blink never started the drag from a `<button>` in the first place), so every drag was
-  cancelled; the palette now announces its in-flight kind and accepts the drop at the cursor.
+  and the drag handlers themselves were never bound), so every drag was cancelled; the palette
+  now announces its in-flight kind and accepts the drop at the cursor.
   Clicking a palette entry still works as before.
 - Web UI rendering coalesces `setState` into **one re-render per frame**. Previously a single
   user interaction that fired both `input` and `change` (native value setters, automation)
@@ -46,9 +46,10 @@
 
 ### Fixed
 
-- The Nodes palette entries are `button`-role divs instead of `<button>` elements because Blink
-  ignores `draggable` on buttons, so palette drags never started in Chrome/Edge. Dragging now
-  works in every engine, and the click/keyboard paths are unchanged.
+- Palette drags never started because the drag handlers were silently dead: the element factory's
+  event map only bound the lowercase `onDragstart`, and `draggable: true` serialized as a bare
+  attribute, which the enumerated `draggable` keyword parses as `auto`. Palette entries are
+  button-role divs with `draggable="true"` now that `onDragStart`/`onDragEnd` exist in the map.
 
 - The collapsed application rail no longer squeezes the brand tile and the collapse
   toggle side by side: they stack vertically, every entry becomes a uniform centered

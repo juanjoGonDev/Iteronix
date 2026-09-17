@@ -421,7 +421,7 @@ it("binds camelCase drag handlers used by the node palette", () => {
   });
   try {
     createElement("div", {
-      draggable: true,
+      draggable: "true",
       onDragStart: () => undefined,
       onDragEnd: () => undefined,
     });
@@ -437,8 +437,8 @@ it("binds camelCase drag handlers used by the node palette", () => {
   }
   expect(recorded).toContain("listener:dragstart");
   expect(recorded).toContain("listener:dragend");
-  // `draggable` is an enumerated boolean: the empty attribute string means
-  // `auto`, so the literal "true" is what makes divs drag sources.
+  // `draggable` must arrive as the literal attribute value: a bare
+  // attribute means `auto`, which never makes a div a drag source.
   expect(recorded).toContain("attr:draggable=true");
 });
 

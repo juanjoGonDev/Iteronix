@@ -2058,7 +2058,10 @@ export class WorkflowsScreen extends Component<
               "aria-disabled": String(paletteDisabled),
               key: kind,
               className: `mb-2 flex w-full cursor-grab items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors active:cursor-grabbing hover:border-slate-600 hover:bg-[#1a222c] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${paletteDisabled ? "pointer-events-none opacity-60" : ""}`,
-              draggable: !paletteDisabled,
+              // String, not boolean: the element factory serializes `true`
+              // as the bare attribute, which `draggable` parses as `auto`
+              // (i.e. not draggable for divs).
+              draggable: paletteDisabled ? "false" : "true",
               onClick: () => {
                 if (paletteDisabled) {
                   return;
