@@ -2539,29 +2539,38 @@ async function setTextAreaValueByTestId(
   testId: string,
   value: string,
 ): Promise<void> {
-  const updated = await page.evaluate(
-    (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(
-        `[data-testid="${payload.testId}"]`,
-      );
-      if (!(element instanceof HTMLTextAreaElement)) {
-        return false;
-      }
-      element.value = payload.value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      element.dispatchEvent(new Event("blur", { bubbles: true }));
-      return true;
-    },
+  // Coalesce-write-verify: the screen re-renders inside requestAnimationFrame
+  // and replaceChildren() swaps the DOM under a just-written textarea (the
+  // async definition refresh right after an import could wipe the paste).
+  // Polling re-writes until the value survives on the live element keeps the
+  // helper deterministic without loosening any assertion.
+  await waitForCondition(
+    () =>
+      page.evaluate(
+        (payload: { testId: string; value: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${payload.testId}"]`,
+          );
+          if (!(element instanceof HTMLTextAreaElement)) {
+            return false;
+          }
+          if (element.value === payload.value) {
+            return true;
+          }
+          element.value = payload.value;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          element.dispatchEvent(new Event("blur", { bubbles: true }));
+          return false;
+        },
+        { testId, value },
+      ),
+    `Could not set textarea ${testId}.`,
     {
-      testId,
-      value,
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
-
-  if (!updated) {
-    throw new Error(`Could not set textarea ${testId}.`);
-  }
 }
 
 async function setInputValueByTestId(
@@ -2569,28 +2578,32 @@ async function setInputValueByTestId(
   testId: string,
   value: string,
 ): Promise<void> {
-  const updated = await page.evaluate(
-    (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(
-        `[data-testid="${payload.testId}"]`,
-      );
-      if (!(element instanceof HTMLInputElement)) {
-        return false;
-      }
-      element.value = payload.value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    },
+  // Same mount race as the textarea helper: poll until the input exists, then
+  // write once (the value may legitimately be reformatted by the app, so no
+  // strict read-back here).
+  await waitForCondition(
+    () =>
+      page.evaluate(
+        (payload: { testId: string; value: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${payload.testId}"]`,
+          );
+          if (!(element instanceof HTMLInputElement)) {
+            return false;
+          }
+          element.value = payload.value;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        },
+        { testId, value },
+      ),
+    `Could not set input ${testId}.`,
     {
-      testId,
-      value,
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
-
-  if (!updated) {
-    throw new Error(`Could not set input ${testId}.`);
-  }
 }
 
 async function selectValueByTestId(
