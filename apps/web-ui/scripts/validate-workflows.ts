@@ -1341,6 +1341,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
     await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
     await assertPinnedOutputListHasName(page);
