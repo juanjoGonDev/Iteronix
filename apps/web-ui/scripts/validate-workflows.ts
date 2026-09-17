@@ -622,9 +622,11 @@ async function validateWorkflowsScreen(): Promise<void> {
     );
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
     await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}input`);
+    await waitForTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
     await clickByTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
     await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
+    await waitForTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
     await clickByTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
     await waitForUrlSearchParam(page, "outputTab", "table");
     await page.reload({
@@ -632,6 +634,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     });
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
     await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
+    await waitForTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}json`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
     await waitForUrlSearchParam(page, "outputTab", "table");
     await captureBrowserValidationScreenshot({
