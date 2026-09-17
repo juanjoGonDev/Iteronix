@@ -5,8 +5,10 @@
 ### Added
 
 - Workflow canvas: node palette entries can now be **dragged onto the canvas** and land at the
-  drop point (previously the browser cancelled every drag because the `dragover` gate relied on
-  payload data the spec only exposes at drop time). Clicking a palette entry still works as before.
+  drop point. The `dragover` gate used to read payload data the spec only exposes at drop time
+  (and Blink never started the drag from a `<button>` in the first place), so every drag was
+  cancelled; the palette now announces its in-flight kind and accepts the drop at the cursor.
+  Clicking a palette entry still works as before.
 - Web UI rendering coalesces `setState` into **one re-render per frame**. Previously a single
   user interaction that fired both `input` and `change` (native value setters, automation)
   produced two replacement renders per event, which raced with text insertion and dragged

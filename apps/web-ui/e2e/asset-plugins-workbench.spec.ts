@@ -54,8 +54,12 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
   await expect(
     trustedKey.locator(`option[value="${TrustedPluginKey}"]`),
   ).toHaveCount(1);
+  // Fill the name first: the key select only auto-names when the field is
+  // empty, so its re-render can never touch a value that was already typed.
+  const nameInput = page.getByTestId("plugin-assets-name");
+  await nameInput.fill(PluginName);
   await trustedKey.selectOption(TrustedPluginKey);
-  await page.getByTestId("plugin-assets-name").fill(PluginName);
+  await expect(nameInput).toHaveValue(PluginName);
   await page
     .getByTestId("plugin-assets-input-schema")
     .fill('{ "type": "object", "required": ["message"] }');

@@ -2078,6 +2078,9 @@ export class WorkflowsScreen extends Component<
               },
               onDragStart: (event: Event) =>
                 this.handleNodePaletteDragStart(event as DragEvent, kind),
+              onDragEnd: () => {
+                this.handleNodePaletteDragEnd();
+              },
               dataset: {
                 testid: `${WorkflowScreenSelector.NodePalettePrefix}${kind}`,
               },
@@ -14633,25 +14636,43 @@ export class WorkflowsScreen extends Component<
     });
   }
 
+  /**
+   * Kind of the palette entry that currently owns a drag, if any. Browsers
+   * only expose `dataTransfer` payloads at drop time (and synthetic drags
+   * from automation may expose none at all), so the canvas remembers its own
+   * drag while it is in flight and uses the payload only as the primary hint.
+   */
+  private paletteDragKind: WorkflowNodeKindValue | null = null;
+
   private handleCanvasDragOver(event: DragEvent): void {
-    if (!this.state.draftWorkflow || !event.dataTransfer) {
+    if (!this.state.draftWorkflow) {
       return;
     }
 
-    if (!allowsWorkflowNodePaletteDrop(event.dataTransfer)) {
+    const payloadAccepted =
+      this.paletteDragKind !== null ||
+      (event.dataTransfer !== null &&
+        allowsWorkflowNodePaletteDrop(event.dataTransfer));
+    if (!payloadAccepted) {
       return;
     }
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
   }
 
   private async handleCanvasDrop(event: DragEvent): Promise<void> {
-    if (!this.state.draftWorkflow || !event.dataTransfer) {
+    if (!this.state.draftWorkflow) {
       return;
     }
 
-    const kind = this.readDraggedNodeKind(event.dataTransfer);
+    const kind =
+      (event.dataTransfer === null
+        ? null
+        : this.readDraggedNodeKind(event.dataTransfer)) ?? this.paletteDragKind;
+    this.paletteDragKind = null;
     if (kind === null) {
       return;
     }
@@ -14669,6 +14690,7 @@ export class WorkflowsScreen extends Component<
     event: DragEvent,
     kind: WorkflowNodeKindValue,
   ): void {
+    this.paletteDragKind = kind;
     if (!event.dataTransfer) {
       return;
     }
@@ -14676,6 +14698,10 @@ export class WorkflowsScreen extends Component<
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(WorkflowNodePaletteDragMimeType, kind);
     event.dataTransfer.setData("text/plain", readNodeKindLabel(kind));
+  }
+
+  private handleNodePaletteDragEnd(): void {
+    this.paletteDragKind = null;
   }
 
   private readDraggedNodeKind(
