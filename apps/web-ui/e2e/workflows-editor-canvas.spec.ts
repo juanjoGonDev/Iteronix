@@ -42,12 +42,14 @@ test("drag from the node palette places a node that stays where it was dropped a
   ).toHaveCount(0);
 
   // HTML5 drag from palette to an open canvas spot places the node there.
+  // The drop lands mid-left so the success toast (fixed bottom-right, z-50)
+  // never covers the card while we interact with its hover toolbar.
   await page
     .getByTestId("workflows-node-palette-trigger.manual")
     .dragTo(canvas, {
       targetPosition: {
-        x: (canvasBox?.width ?? 800) - 140,
-        y: 380,
+        x: 260,
+        y: 220,
       },
     });
   await expect(nodeCards).toHaveCount(nodesBefore + 1);
@@ -127,6 +129,10 @@ test("drag from the node palette places a node that stays where it was dropped a
 
   await page.getByTestId("workflows-save").click();
   await expect(page.getByText("saved", { exact: true })).toBeVisible();
+  // Let the success toast dismiss so it cannot intercept the toolbar clicks.
+  await expect(page.getByTestId("toast-success")).toHaveCount(0, {
+    timeout: 15000,
+  });
 
   // The node "..." menu opens on click and STAYS open without hover juggling:
   // visibility is state-driven, so the re-render that follows the click can
@@ -134,7 +140,14 @@ test("drag from the node palette places a node that stays where it was dropped a
   const menuCard = nodeCards.last();
   const menuCardTestId = await menuCard.getAttribute("data-testid");
   const menuNodeId = (menuCardTestId ?? "").replace("workflows-node-card-", "");
-  await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
+  // The trigger itself lives in the opacity-gated hover strip; the hover
+  // Playwright performs for a normal click races the toolbar's own render, so
+  // the opening click is force-dispatched while every click INSIDE the opened
+  // menu below stays a real hit-tested click. That is exactly the path the
+  // user hit: moving the pointer to a menu option must not close the menu.
+  await page
+    .getByTestId(`workflows-node-action-trigger-${menuNodeId}`)
+    .click({ force: true });
   const menuSurface = menuCard.locator("[data-node-hover-toolbar]");
   const duplicateItem = menuSurface.getByText("Duplicate", { exact: true });
   await expect(duplicateItem).toBeVisible();
@@ -149,7 +162,18 @@ test("drag from the node palette places a node that stays where it was dropped a
     )
     .toBe("1");
 
-  // Clicking the empty canvas closes it again.
+  // And the option itself is clickable while the pointer travels to it: the
+  // pin holds the menu open until the action lands, then the menu closes and
+  // the node is duplicated.
+  await duplicateItem.click();
+  await expect(nodeCards).toHaveCount(nodesBefore + 2);
+  await expect(duplicateItem).toHaveCount(0);
+
+  // Re-open and verify clicking the empty canvas closes the menu again.
+  await page
+    .getByTestId(`workflows-node-action-trigger-${menuNodeId}`)
+    .click({ force: true });
+  await expect(duplicateItem).toBeVisible();
   await canvas.click({ position: { x: 12, y: 12 } });
   await expect(duplicateItem).toHaveCount(0);
 });
