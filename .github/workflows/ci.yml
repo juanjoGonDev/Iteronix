@@ -65,7 +65,18 @@ jobs:
       - run: pnpm test:db
       - run: pnpm build
       - run: pnpm -C apps/web-ui validate:settings
-      - run: pnpm -C apps/web-ui validate:workflows
+      # The raw step log can be hard to browse; echo the failure tail as check
+      # annotations so the diagnosis is one click away from the checks panel.
+      - name: Validate workflows screen
+        run: |
+          set +e
+          pnpm -C apps/web-ui validate:workflows 2>&1 | tee /tmp/validate-workflows.log
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ "$code" -ne 0 ]; then
+            tail -12 /tmp/validate-workflows.log | sed 's/^/::error::/' || true
+            exit "$code"
+          fi
       - name: Validate Docker workflow UI and browser acceptance coverage
         env:
           POSTGRES_DB: iteronix_ci
