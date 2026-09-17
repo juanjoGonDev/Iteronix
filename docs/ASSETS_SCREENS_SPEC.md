@@ -242,6 +242,8 @@ Checklist:
 - [x] Node modal tabbed: Configuration/Input/Output, single status chip, tab kept across prev/next
 - [x] `readWorkflowNodeEditorTab` sanitizer + 2 unit tests; full suite 683 green
 - [x] Puppeteer validator journeys routed through the tabs (all previous assertions preserved)
-- [x] CI green on the pushed head (Playwright matrix + validate:workflows) - Run 35221180445, head `94b271a`: validate:workflows passed after adapting the tab
-      clicks to wait for panel mounts; the canvas regression spec hovers the card (the
-      strip is pointer-gated) and pins it by testid so Duplicate stays deterministic.
+- [x] CI green on the pushed head (Playwright matrix + validate:workflows) - Run 35222715429, head `b39e303`
+      (final): validate:workflows passed after adapting the tab clicks to wait for panel
+      mounts and hardening the validator's text setters against re-render-wiped writes (a
+      pre-existing race exposed while iterating); the canvas regression spec hovers the
+      card (the strip is pointer-gated) and pins it by testid so Duplicate stays deterministic.
