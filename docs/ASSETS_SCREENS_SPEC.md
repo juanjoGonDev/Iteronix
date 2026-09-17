@@ -156,3 +156,45 @@ Checklist:
 - [x] `Navigation.test.ts` updated + collapsed-tile/ring coverage added; local
       `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` green
 - [x] CI green on the pushed head (`7604268`, run 35194277409: 19/19 steps, 3m36s)
+
+---
+
+## Follow-up addendum (2026-09-17): canvas drag-and-place & tidy-up layout
+
+Review feedback on the workflow editor: the Nodes panel should open straight into the
+palette, nodes should arrive by dragging (not only clicking), a dragged node must stay
+where it is dropped (persisted), and the canvas needs n8n's "Tidy up" re-organization.
+
+Root cause of the broken palette drag: `handleCanvasDragOver` validated the drag by
+reading `dataTransfer.getData(custom mime)` — which browsers deliberately keep empty
+until the drop — so `preventDefault()` never ran and the browser cancelled every drag.
+
+Decisions:
+
+- The dragover gate trusts the readable `types` list (`allowsWorkflowNodePaletteDrop`);
+  the payload is only parsed at drop time. Pure helpers live in
+  `workflows-editor-state.ts` so they are unit-testable without a browser.
+- A drop places the node at the cursor (existing `handleAddNode(kind, position)` path);
+  click-to-add keeps its deterministic grid slot.
+- Dragging a node writes into the draft via `moveWorkflowNode`, marks the workflow
+  unsaved, and the position travels with the saved definition — reload keeps it.
+- `autoLayoutWorkflowDefinition`: longest-path layering left-to-right with a pass cap
+  (cycles converge), per-layer vertical centering, orphaned nodes parked after the
+  deepest layer, deterministic. Exposed as a "Tidy up" toolbar button
+  (`workflows-canvas-tidy-layout`) which also fits the viewport afterwards, like n8n.
+- The intro card above the palette is removed; the existing canvas hint row already
+  teaches the gesture.
+- New Playwright journey `workflows-editor-canvas.spec.ts` (desktop-only; compact
+  viewports skip) covers drag-place → drag-move → save → reload → tidy → no overlap →
+  save, so CI verifies the real browser behavior.
+
+Checklist:
+
+- [x] Palette drag accepted in `dragover` via the types list; foreign drags (text/files) still rejected
+- [x] Dropped nodes land at the cursor; invalid payloads fall back to the grid slot
+- [x] Intro card removed from the Nodes panel
+- [x] Dragged positions persist through save and reload (unit + e2e coverage)
+- [x] Tidy-up: layered, centered, cycle-safe, idempotent, undoable via edit history (it is a meaningful change)
+- [x] Tidy-up button disabled while the canvas has <2 nodes; followed by fit-viewport
+- [x] `workflows-editor-state.test.ts` +6 unit tests; typecheck/lint/test/build green locally
+- [ ] CI green on the pushed head (Playwright matrix incl. the new canvas journey)

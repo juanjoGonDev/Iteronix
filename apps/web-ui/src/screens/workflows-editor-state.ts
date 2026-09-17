@@ -2093,6 +2093,147 @@ export const readNodeKindsForPalette = (): ReadonlyArray<WorkflowNodeKind> => [
   WorkflowNodeKind.TerminalResponse,
 ];
 
+/**
+ * Drag-and-drop protocol shared by the node palette and the canvas.
+ *
+ * Browsers do not expose `dataTransfer.getData()` payloads for custom MIME
+ * types during `dragover` (only the `types` list is readable until the drop
+ * lands), so gating the `preventDefault()` on the payload itself would make
+ * the browser cancel every palette drag. The dragover check therefore trusts
+ * the type list, and the drop re-reads the payload.
+ */
+export const WorkflowNodePaletteDragMimeType =
+  "application/x-iteronix-workflow-node";
+
+export const readWorkflowNodeKindDropValue = (
+  value: string,
+): WorkflowNodeKind | null =>
+  readNodeKindsForPalette().find((kind) => kind === value) ?? null;
+
+export const allowsWorkflowNodePaletteDrop = (
+  dataTransfer: Pick<DataTransfer, "types"> &
+    Partial<Pick<DataTransfer, "getData">>,
+): boolean => {
+  if (
+    Array.from(dataTransfer.types ?? []).includes(
+      WorkflowNodePaletteDragMimeType,
+    )
+  ) {
+    return true;
+  }
+  const value = dataTransfer.getData?.(WorkflowNodePaletteDragMimeType);
+  return (
+    typeof value === "string" && readWorkflowNodeKindDropValue(value) !== null
+  );
+};
+
+const WorkflowAutoLayoutOriginX = 64;
+const WorkflowAutoLayoutOriginY = 64;
+
+/**
+ * n8n-style "Tidy up": layer the graph left to right along its edges
+ * (longest-path relaxation, bounded by the node count so a cycle still
+ * converges), center every layer vertically around the tallest one, and
+ * park unreached nodes after the deepest layer. Pure and deterministic —
+ * the same definition always yields the same layout.
+ */
+export const autoLayoutWorkflowDefinition = (
+  definition: WorkflowDefinitionRecord | WorkflowDefinitionUpsertInput,
+): WorkflowDefinitionUpsertInput => {
+  const outgoing = new Map<string, string[]>();
+  for (const node of definition.nodes) {
+    outgoing.set(node.id, []);
+  }
+  for (const edge of definition.edges) {
+    const targets = outgoing.get(edge.sourceNodeId);
+    if (targets && outgoing.has(edge.targetNodeId)) {
+      targets.push(edge.targetNodeId);
+    }
+  }
+
+  const layerOf = new Map<string, number>();
+  for (const node of definition.nodes) {
+    if (!definition.edges.some((edge) => edge.targetNodeId === node.id)) {
+      layerOf.set(node.id, 0);
+    }
+  }
+  const hasRoot = definition.nodes.some(
+    (node) => !definition.edges.some((edge) => edge.targetNodeId === node.id),
+  );
+  if (!hasRoot && definition.nodes.length > 0) {
+    const [firstNode] = definition.nodes;
+    if (firstNode) {
+      layerOf.set(firstNode.id, 0);
+    }
+  }
+
+  for (let pass = 0; pass < definition.nodes.length; pass += 1) {
+    let settled = true;
+    for (const node of definition.nodes) {
+      const sourceLayer = layerOf.get(node.id);
+      if (sourceLayer === undefined) {
+        continue;
+      }
+      for (const target of outgoing.get(node.id) ?? []) {
+        if ((layerOf.get(target) ?? -1) < sourceLayer + 1) {
+          layerOf.set(target, sourceLayer + 1);
+          settled = false;
+        }
+      }
+    }
+    if (settled) {
+      break;
+    }
+  }
+
+  let deepestLayer = 0;
+  for (const layer of layerOf.values()) {
+    deepestLayer = Math.max(deepestLayer, layer);
+  }
+  for (const node of definition.nodes) {
+    if (!layerOf.has(node.id)) {
+      layerOf.set(node.id, deepestLayer + 1);
+    }
+  }
+
+  const rowsByLayer = new Map<number, string[]>();
+  for (const node of definition.nodes) {
+    const layer = layerOf.get(node.id) ?? 0;
+    const rows = rowsByLayer.get(layer) ?? [];
+    rows.push(node.id);
+    rowsByLayer.set(layer, rows);
+  }
+
+  let tallestColumn = 1;
+  for (const rows of rowsByLayer.values()) {
+    tallestColumn = Math.max(tallestColumn, rows.length);
+  }
+  const middleY =
+    WorkflowAutoLayoutOriginY +
+    ((tallestColumn - 1) * DefaultNodeGridRowHeight) / 2;
+
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const [layer, rows] of rowsByLayer) {
+    rows.forEach((nodeId, index) => {
+      positions.set(nodeId, {
+        x: WorkflowAutoLayoutOriginX + layer * DefaultNodeGridColumnWidth,
+        y:
+          middleY -
+          ((rows.length - 1) * DefaultNodeGridRowHeight) / 2 +
+          index * DefaultNodeGridRowHeight,
+      });
+    });
+  }
+
+  return {
+    ...stripDefinitionVersionFields(definition),
+    nodes: definition.nodes.map((node) => ({
+      ...node,
+      position: positions.get(node.id) ?? node.position,
+    })),
+  };
+};
+
 const createPort = (
   id: string,
   name: string,

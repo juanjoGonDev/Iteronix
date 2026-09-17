@@ -4,6 +4,13 @@
 
 ### Added
 
+- Workflow canvas: node palette entries can now be **dragged onto the canvas** and land at the
+  drop point (previously the browser cancelled every drag because the `dragover` gate relied on
+  payload data the spec only exposes at drop time). Clicking a palette entry still works as before.
+- Workflow canvas: a **Tidy up** toolbar button re-lays the whole graph into n8n-style left-to-right
+  layers (longest-path layering, cycle-safe, columns centered), then fits the viewport; the layout
+  is saved with the workflow, so nodes stay organized after a reload.
+
 - Assets screens now share one workbench layer (`AssetWorkbench`): consistent intro headers,
   status-badged rows, editor dialogs, empty states with primary actions, and explained
   disabled controls for Prompts, Skills, Memory & RAG, MCP, and Server plugins.
@@ -21,6 +28,9 @@
   plugin screen, workbench primitives, and the plugin client.
 
 ### Changed
+
+- The Nodes palette panel drops its explanatory intro card; the draggable node list is what the
+  panel shows from now on (the existing canvas hint already teaches the gesture).
 
 - Settings-style reusable form primitives gained `SettingsTextareaField` and
   `SettingsJsonField` (monospace editor with live contract validation) reused across asset forms.

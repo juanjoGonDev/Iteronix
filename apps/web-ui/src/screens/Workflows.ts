@@ -161,6 +161,10 @@ import {
   readNodeKindsForPalette,
   readWorkflowNodeSelectableOutputPaths,
   readWorkflowConnectedUpstreamNodeIds,
+  readWorkflowNodeKindDropValue,
+  allowsWorkflowNodePaletteDrop,
+  autoLayoutWorkflowDefinition,
+  WorkflowNodePaletteDragMimeType,
   removeWorkflowEdge,
   removeWorkflowNode,
   removeJsonSchemaProperty,
@@ -226,6 +230,7 @@ const WorkflowScreenSelector = {
   NodeStepRunMenuNormal: "workflows-node-step-run-normal",
   NodeStepRunMenuTest: "workflows-node-step-run-test",
   CanvasZoomOut: "workflows-canvas-zoom-out",
+  CanvasTidyLayout: "workflows-canvas-tidy-layout",
   CanvasFitView: "workflows-canvas-fit-view",
   CanvasResetView: "workflows-canvas-reset-view",
   CanvasZoomIn: "workflows-canvas-zoom-in",
@@ -423,7 +428,6 @@ const PortLabelSingleOutputMinimum = 2;
 const EdgeDirectionArrowSize = 7;
 const EdgeDeleteOffset = 34;
 const EdgeDeleteWideOffset = 58;
-const WorkflowNodePaletteDragMimeType = "application/x-iteronix-workflow-node";
 const LatestResponseSourcePath = "$";
 const LatestResponseSourceLabel = "Latest response";
 const AccumulatedOutputsSourcePath = "accumulated:$";
@@ -2041,16 +2045,6 @@ export class WorkflowsScreen extends Component<
         className: "min-h-0 flex-1 overflow-y-auto p-3",
       },
       [
-        createElement(
-          "div",
-          {
-            className:
-              "mb-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-sm leading-6 text-text-secondary",
-          },
-          [
-            "Add the MVP node set to the canvas. Asset-backed nodes create reusable workflow assets server-side before they are placed.",
-          ],
-        ),
         readNodeKindsForPalette().map((kind) =>
           createElement(
             "button",
@@ -4815,6 +4809,19 @@ export class WorkflowsScreen extends Component<
               "flex items-center gap-1 rounded-xl border border-border-dark bg-[#0d1319] p-1",
           },
           [
+            createElement(IconButton, {
+              icon: "grid_view",
+              tooltip: "Tidy up layout",
+              disabled:
+                this.state.draftWorkflow === null ||
+                this.state.draftWorkflow.nodes.length < 2,
+              onClick: () => this.handleTidyLayout(),
+              className:
+                "h-9 w-9 rounded-lg border border-transparent hover:border-border-dark hover:bg-[#1b2330]",
+              dataset: {
+                testid: WorkflowScreenSelector.CanvasTidyLayout,
+              },
+            }),
             createElement(IconButton, {
               icon: "fit_screen",
               tooltip: "Fit workflow",
@@ -14613,7 +14620,7 @@ export class WorkflowsScreen extends Component<
       return;
     }
 
-    if (this.readDraggedNodeKind(event.dataTransfer) === null) {
+    if (!allowsWorkflowNodePaletteDrop(event.dataTransfer)) {
       return;
     }
 
@@ -15084,6 +15091,16 @@ export class WorkflowsScreen extends Component<
         zoom: 1,
       }),
     );
+  }
+
+  private handleTidyLayout(): void {
+    const workflow = this.state.draftWorkflow;
+    if (!workflow || workflow.nodes.length === 0) {
+      return;
+    }
+
+    this.updateDraftWorkflow(autoLayoutWorkflowDefinition(workflow));
+    this.handleFitViewport();
   }
 
   private handleFitViewport(): void {
@@ -16359,11 +16376,6 @@ const readNodePaletteDescription = (kind: WorkflowNodeKindValue): string => {
 
   return "Logic helper node for the workflow graph.";
 };
-
-const readWorkflowNodeKindDropValue = (
-  value: string,
-): WorkflowNodeKindValue | null =>
-  readNodeKindsForPalette().find((kind) => kind === value) ?? null;
 
 const readNodeInputPorts = (
   node: WorkflowNodeRecord,
