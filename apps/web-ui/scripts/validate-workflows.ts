@@ -113,6 +113,7 @@ const WorkflowSelector = {
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  NodeModalTabPrefix: "workflows-node-modal-tab-",
   DebugInputTabPrefix: "workflows-debug-input-tab-",
   DebugOutputTabPrefix: "workflows-debug-output-tab-",
   DebugInputSource: "workflows-debug-input-source",
@@ -614,19 +615,23 @@ async function validateWorkflowsScreen(): Promise<void> {
       suffix: "workflows-url-node-editor-reload",
       artifactName: "workflows",
     });
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPageText(
       page,
       "Execute this step to inspect the current node output.",
     );
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}input`);
     await clickByTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await clickByTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
     await waitForUrlSearchParam(page, "outputTab", "table");
     await page.reload({
       waitUntil: "networkidle0",
     });
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
     await waitForUrlSearchParam(page, "outputTab", "table");
     await captureBrowserValidationScreenshot({
@@ -664,6 +669,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       );
     }
     await waitForMissingTestId(page, WorkflowSelector.OutputEditorTextarea);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPinnedDefinitionOutput(
       stubServer.state,
       ValidationText.EditedPinnedOutputNeedle,
@@ -745,6 +751,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForNodeCardText(page, "push_pin");
     await doubleClickByTestId(page, reloadedResponseCardTestId);
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
     await clickButtonByTitle(page, "Close editor");
@@ -1291,6 +1298,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       waitUntil: "networkidle0",
     });
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -1330,6 +1338,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
     await assertPinnedOutputListHasName(page);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);

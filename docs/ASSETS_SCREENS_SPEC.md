@@ -199,4 +199,47 @@ Checklist:
 - [x] Tidy-up: layered, centered, cycle-safe, idempotent, undoable via edit history (it is a meaningful change)
 - [x] Tidy-up button disabled while the canvas has <2 nodes; followed by fit-viewport
 - [x] `workflows-editor-state.test.ts` +6 unit tests; typecheck/lint/test/build green locally
-- [ ] CI green on the pushed head (Playwright matrix incl. the new canvas journey)
+- [x] CI green on the pushed head (Playwright matrix incl. the new canvas journey) - run 35207018438, head e05d40a
+
+---
+
+## Follow-up addendum (2026-09-17): node menu visibility & tabbed node modal
+
+Two issues reported from the canvas: the node "..." menu only appeared after
+wiggling the mouse and vanished when trying to click an item; the node editor
+modal crammed config + INPUT + OUTPUT into three columns.
+
+Root cause of the menu bug: the hover toolbar (which contains the menu) was
+visible only through `group-hover:opacity-100`, and every `setState` replaces
+the DOM subtree under the cursor - `:hover` is only re-established on the next
+mouse move, so the just-opened menu was invisible/un-clickable until the user
+moved. Fix: while `nodeActionMenuId` (or the node's run submenu) is set, the
+toolbar pins itself visible and above (z-40) via state, not hover; outside
+clicks close it, Escape closes it first (before the modal-close semantics),
+and the trigger got `workflows-node-action-trigger-<nodeId>` for tests.
+
+Node modal restructure (`renderNodeDebugEditor`):
+
+- Tabs: Configuration | Input | Output (`workflows-node-modal-tab-<tab>`),
+  n8n-style; only the active panel is mounted (no 1.5-screen-wide grids).
+- The centered 860px Configuration column keeps the existing inspector cards;
+  the duplicate label/kind/status block was removed in favor of one status
+  chip in the tab bar.
+- Opening the modal always starts on Configuration; prev/next node stepping
+  keeps the current tab so debugging a run does not lose context.
+- `readWorkflowNodeEditorTab` (state module) sanitizes the tab value.
+- Puppeteer validator drives the journey through the tabs (the debug panels
+  are only mounted when their tab is active), keeping every prior assertion.
+- Playwright canvas journey gained the menu regression: click the "..."
+  trigger -> menu visible + toolbar computed opacity is exactly "1" without
+  moving the mouse -> click empty canvas -> menu gone.
+
+Checklist:
+
+- [x] Menu opens on click without moving the mouse; pinned while open (state-driven visibility)
+- [x] Outside click and Escape close the menu; item clicks keep closing their actions
+- [x] Disabled menu items carry explanations (Deactivate, Pin output without run)
+- [x] Node modal tabbed: Configuration/Input/Output, single status chip, tab kept across prev/next
+- [x] `readWorkflowNodeEditorTab` sanitizer + 2 unit tests; full suite 683 green
+- [x] Puppeteer validator journeys routed through the tabs (all previous assertions preserved)
+- [ ] CI green on the pushed head (Playwright matrix + validate:workflows)

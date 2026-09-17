@@ -4,6 +4,11 @@
 
 ### Added
 
+- Workflow node cards: the "..." (Node settings) menu now opens on click and stays open until an
+  item is chosen, Escape is pressed or the canvas is clicked - previously it flickered because the
+  hover toolbar was only visible via CSS `:hover`, which the framework's re-render kept dropping
+  (the "you must wiggle the mouse for the menu to show, and it vanishes when you click an item"
+  bug). The menu is closed on outside clicks and the toolbar pins above the node while open.
 - Workflow canvas: node palette entries can now be **dragged onto the canvas** and land at the
   drop point. The `dragover` gate used to read payload data the spec only exposes at drop time
   and the drag handlers themselves were never bound), so every drag was cancelled; the palette
@@ -34,6 +39,14 @@
   plugin screen, workbench primitives, and the plugin client.
 
 ### Changed
+
+- The workflow node editor modal is tabbed like modern flow builders: **Configuration**, **Input**
+  and **Output** each own the full dialog instead of the previous cramped three-column grid, and
+  the duplicated node title/kind/status block was replaced by a single status chip next to the
+  tabs. Prev/next node navigation keeps the selected tab so stepping through a run stays in the
+  debug view.
+- Disabled node menu entries now explain themselves: "Deactivate" (unsupported by the runtime) and
+  a not-yet-runnable "Pin output" carry tooltips with the reason and the way forward.
 
 - The Nodes palette panel drops its explanatory intro card; the draggable node list is what the
   panel shows from now on (the existing canvas hint already teaches the gesture).

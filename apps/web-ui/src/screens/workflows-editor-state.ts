@@ -2102,6 +2102,18 @@ export const readNodeKindsForPalette = (): ReadonlyArray<WorkflowNodeKind> => [
  * the browser cancel every palette drag. The dragover check therefore trusts
  * the type list, and the drop re-reads the payload.
  */
+export type WorkflowNodeEditorTab = "configure" | "input" | "output";
+
+/**
+ * Node editor modal tab sanitizer: unknown or missing values fall back to the
+ * Configuration tab so restored URL/session state can never strand the modal
+ * on a tab with no content.
+ */
+export const readWorkflowNodeEditorTab = (
+  value: unknown,
+): WorkflowNodeEditorTab =>
+  value === "input" || value === "output" ? value : "configure";
+
 export const WorkflowNodePaletteDragMimeType =
   "application/x-iteronix-workflow-node";
 

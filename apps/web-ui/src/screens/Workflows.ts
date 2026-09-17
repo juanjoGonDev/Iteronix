@@ -164,7 +164,9 @@ import {
   readWorkflowNodeKindDropValue,
   allowsWorkflowNodePaletteDrop,
   autoLayoutWorkflowDefinition,
+  readWorkflowNodeEditorTab,
   WorkflowNodePaletteDragMimeType,
+  type WorkflowNodeEditorTab,
   removeWorkflowEdge,
   removeWorkflowNode,
   removeJsonSchemaProperty,
@@ -213,6 +215,8 @@ const WorkflowScreenSelector = {
   SidebarRail: "workflows-sidebar-rail",
   SidebarPanel: "workflows-sidebar-panel",
   InspectorPanel: "workflows-inspector-panel",
+  NodeModalTabPrefix: "workflows-node-modal-tab-",
+  NodeActionMenuTriggerPrefix: "workflows-node-action-trigger-",
   WorkflowSave: "workflows-save",
   WorkflowEditHistoryOpen: "workflows-edit-history-open",
   WorkflowEditHistoryModal: "workflows-edit-history-modal",
@@ -837,6 +841,7 @@ interface WorkflowsScreenState {
   nextVersionNote: string;
   nextVersionTags: string;
   nodeActionMenuId: string | null;
+  nodeEditorTab: WorkflowNodeEditorTab;
   workflowEditHistory: ReadonlyArray<
     WorkflowEditHistoryEntry<WorkflowDefinitionUpsertInput>
   >;
@@ -952,6 +957,7 @@ export class WorkflowsScreen extends Component<
       nextVersionNote: "",
       nextVersionTags: "",
       nodeActionMenuId: null,
+      nodeEditorTab: "configure",
       workflowEditHistory: [],
       workflowEditHistoryFuture: [],
       workflowEditHistoryOpen: false,
@@ -5216,12 +5222,25 @@ export class WorkflowsScreen extends Component<
 
   private renderNodeHoverToolbar(node: WorkflowNodeRecord): HTMLElement {
     const runControl = this.readNodeHoverRunControlState(node.id);
+    // While one of this node's menus is open, pin the toolbar visible with
+    // state instead of :hover. Re-renders replace the DOM subtree under the
+    // cursor, and a replaced element only regains :hover on the next mouse
+    // move - hover-only popups flicker shut mid-click because of it (the
+    // "menu appears/hides as you move" bug users reported).
+    const menuPinned =
+      this.state.nodeActionMenuId === node.id ||
+      (this.state.nodeStepRunMenu !== null &&
+        this.state.nodeStepRunMenu.nodeId === node.id &&
+        this.state.nodeStepRunMenu.source !== "modal");
+    const visibilityClassName = menuPinned
+      ? "pointer-events-auto z-40 opacity-100"
+      : "pointer-events-none z-20 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100";
 
     return createElement(
       "div",
       {
-        className:
-          "pointer-events-none absolute -top-12 left-1/2 z-20 flex h-12 w-32 -translate-x-1/2 items-start justify-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+        className: `absolute -top-12 left-1/2 flex h-12 w-32 -translate-x-1/2 items-start justify-center ${visibilityClassName}`,
+        dataset: { nodeHoverToolbar: "true" },
         onPointerDown: (event: Event) => event.stopPropagation(),
         onMouseDown: (event: Event) => event.stopPropagation(),
       },
@@ -5260,6 +5279,7 @@ export class WorkflowsScreen extends Component<
             this.renderNodeHoverToolbarButton({
               icon: "more_horiz",
               title: "Node settings",
+              testId: `${WorkflowScreenSelector.NodeActionMenuTriggerPrefix}${node.id}`,
               onClick: () => this.toggleNodeActionMenu(node.id),
             }),
             this.renderNodeActionMenu(node),
@@ -5336,6 +5356,10 @@ export class WorkflowsScreen extends Component<
             );
           },
           outputValue === undefined,
+          "default",
+          outputValue === undefined
+            ? "Run or execute this step first so there is an output to pin."
+            : undefined,
         ),
         this.renderPinnedTestOutputDefaultSelector(node, pinnedOutputs),
         this.renderNodeActionMenuItem(
@@ -5343,6 +5367,9 @@ export class WorkflowsScreen extends Component<
           "power_settings_new",
           undefined,
           true,
+          "default",
+          "Not available yet: the workflow runtime executes every node. " +
+            "Use a condition branch to skip a step instead.",
         ),
         this.renderNodeActionMenuItem(
           "Delete",
@@ -5364,12 +5391,14 @@ export class WorkflowsScreen extends Component<
     onClick: (() => void) | undefined,
     disabled = false,
     tone: "default" | "danger" = "default",
+    hint?: string,
   ): HTMLElement {
     return createElement(
       "button",
       {
         type: "button",
         disabled,
+        ...(hint ? { title: hint } : {}),
         className: `flex w-full items-center justify-between gap-3 px-3 py-2 text-xs ${disabled ? "cursor-not-allowed text-slate-500" : tone === "danger" ? "text-rose-100 hover:bg-rose-950/50" : "text-slate-200 hover:bg-[#2c2c2c] hover:text-white"}`,
         onClick: (event: Event) => {
           event.preventDefault();
@@ -5396,6 +5425,7 @@ export class WorkflowsScreen extends Component<
     onClick: () => void;
     disabled?: boolean;
     tone?: "default" | "danger";
+    testId?: string;
   }): HTMLElement {
     const disabled = input.disabled ?? false;
     const tone = input.tone ?? "default";
@@ -5406,6 +5436,7 @@ export class WorkflowsScreen extends Component<
         type: "button",
         title: input.title,
         disabled,
+        ...(input.testId ? { dataset: { testid: input.testId } } : {}),
         className: `flex h-7 w-7 items-center justify-center border-r border-[#333] text-slate-200 last:border-r-0 ${disabled ? "cursor-not-allowed opacity-45" : tone === "danger" ? "hover:bg-rose-950/70 hover:text-rose-100" : "hover:bg-[#2c2c2c] hover:text-white"}`,
         onPointerDown: (event: Event) => event.stopPropagation(),
         onMouseDown: (event: Event) => event.stopPropagation(),
@@ -5888,6 +5919,11 @@ export class WorkflowsScreen extends Component<
     }
     this.setState({
       ...(selection ? { selection } : {}),
+      // Fresh opens land on the Configuration tab (prev/next navigation keeps
+      // the current tab so debug context is not lost while stepping nodes).
+      ...(selection?.type === "node"
+        ? { nodeEditorTab: "configure" as const }
+        : {}),
       debugExecutionId,
       editorModalOpen: true,
     });
@@ -7837,95 +7873,147 @@ export class WorkflowsScreen extends Component<
       return this.renderNodeInspector(node);
     }
 
+    // n8n-style editor tabs: configuration, last input and last output each
+    // get their own space instead of three columns competing for attention.
+    const tab = readWorkflowNodeEditorTab(this.state.nodeEditorTab);
+    const tabDefinitions: ReadonlyArray<
+      readonly [WorkflowNodeEditorTab, string]
+    > = [
+      ["configure", "Configuration"],
+      ["input", "Input"],
+      ["output", "Output"],
+    ];
+
     return createElement(
       "div",
       {
         className:
-          "grid min-h-[640px] gap-0 overflow-hidden rounded-lg border border-border-dark bg-[#0f141a] xl:grid-cols-[minmax(280px,0.9fr)_minmax(420px,1.15fr)_minmax(280px,0.9fr)]",
+          "flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-border-dark bg-[#0f141a]",
       },
       [
-        this.renderWorkflowDebugDataPanel({
-          title: "INPUT",
-          tab: this.state.debugInputTab,
-          onTabChange: (tab) => this.updateDebugInputTab(tab),
-          value: context.selectedInputSource?.value,
-          statusTone: context.statusTone,
-          itemLabel: context.selectedInputSource
-            ? readWorkflowDebugItemLabel(context.selectedInputSource.value)
-            : "0 items",
-          emptyMessage: "Run the workflow or connect an upstream node first.",
-          selector: this.renderWorkflowDebugInputSelector(context),
-        }),
         createElement(
           "div",
           {
             className:
-              "min-h-0 overflow-y-auto border-y border-border-dark bg-[#11161d] p-4 xl:border-x xl:border-y-0",
+              "flex items-center justify-between gap-3 border-b border-border-dark bg-[#11161d] px-3",
           },
           [
             createElement(
               "div",
               {
-                className:
-                  "mb-3 flex flex-wrap items-center justify-between gap-2",
+                className: "flex items-center gap-1",
+                role: "tablist",
               },
               [
-                createElement("div", { className: "min-w-0" }, [
+                tabDefinitions.map(([tabValue, label]) =>
                   createElement(
-                    "p",
-                    { className: "truncate text-sm font-semibold text-white" },
-                    [node.label],
+                    "button",
+                    {
+                      type: "button",
+                      role: "tab",
+                      "aria-selected": String(tab === tabValue),
+                      className: `border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+                        tab === tabValue
+                          ? "border-primary text-white"
+                          : "border-transparent text-text-secondary hover:text-slate-200"
+                      }`,
+                      dataset: {
+                        testid: `${WorkflowScreenSelector.NodeModalTabPrefix}${tabValue}`,
+                      },
+                      onClick: () => {
+                        this.setState({
+                          nodeEditorTab: readWorkflowNodeEditorTab(tabValue),
+                        });
+                      },
+                    },
+                    [label],
                   ),
-                  createElement(
-                    "p",
-                    { className: "mt-1 text-xs text-text-secondary" },
-                    [
-                      `${readNodeKindLabel(node.kind)} · ${context.statusLabel}`,
-                    ],
-                  ),
-                ]),
-                createElement(
-                  StatusBadge,
-                  {
-                    status: readWorkflowDebugBadgeStatus(context.statusTone),
-                    pulse: context.statusTone === "running",
-                  },
-                  [context.statusLabel],
                 ),
               ],
             ),
-            this.renderNodeInspector(node),
+            createElement(
+              StatusBadge,
+              {
+                status: readWorkflowDebugBadgeStatus(context.statusTone),
+                pulse: context.statusTone === "running",
+              },
+              [context.statusLabel],
+            ),
           ],
         ),
-        createElement("div", { className: "flex min-h-0 flex-col gap-3" }, [
-          this.renderWorkflowDebugDataPanel({
-            title: "OUTPUT",
-            tab: this.state.debugOutputTab,
-            onTabChange: (tab) => this.updateDebugOutputTab(tab),
-            value: context.outputValue,
-            statusTone: context.statusTone,
-            itemLabel: readWorkflowDebugItemLabel(context.outputValue),
-            emptyMessage:
-              "Execute this step to inspect the current node output.",
-            pinned:
-              this.state.pinnedTestOutput?.workflowId ===
-                (context.workflow.id ?? "") &&
-              this.state.pinnedTestOutput?.nodeId === context.node.id,
-            selector: createElement(
+        tab === "configure"
+          ? createElement(
               "div",
-              { className: "flex items-center gap-1" },
+              {
+                className: "min-h-0 flex-1 overflow-y-auto bg-[#11161d] p-4",
+              },
               [
-                createElement(IconButton, {
-                  icon: "edit",
-                  tooltip: "Edit output for test runs",
-                  onClick: () => this.openOutputEditor(context),
-                }),
-                this.renderPinnedOutputControl(context),
+                createElement(
+                  "div",
+                  { className: "mx-auto w-full max-w-[860px]" },
+                  [this.renderNodeInspector(node)],
+                ),
               ],
-            ),
-          }),
-          this.renderPinnedTestOutputsList(context),
-        ]),
+            )
+          : tab === "input"
+            ? createElement(
+                "div",
+                { className: "min-h-0 flex-1 overflow-y-auto" },
+                [
+                  this.renderWorkflowDebugDataPanel({
+                    title: "INPUT",
+                    tab: this.state.debugInputTab,
+                    onTabChange: (panelTab) =>
+                      this.updateDebugInputTab(panelTab),
+                    value: context.selectedInputSource?.value,
+                    statusTone: context.statusTone,
+                    itemLabel: context.selectedInputSource
+                      ? readWorkflowDebugItemLabel(
+                          context.selectedInputSource.value,
+                        )
+                      : "0 items",
+                    emptyMessage:
+                      "Run the workflow or connect an upstream node first.",
+                    selector: this.renderWorkflowDebugInputSelector(context),
+                  }),
+                ],
+              )
+            : createElement(
+                "div",
+                {
+                  className: "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                },
+                [
+                  this.renderWorkflowDebugDataPanel({
+                    title: "OUTPUT",
+                    tab: this.state.debugOutputTab,
+                    onTabChange: (panelTab) =>
+                      this.updateDebugOutputTab(panelTab),
+                    value: context.outputValue,
+                    statusTone: context.statusTone,
+                    itemLabel: readWorkflowDebugItemLabel(context.outputValue),
+                    emptyMessage:
+                      "Execute this step to inspect the current node output.",
+                    pinned:
+                      this.state.pinnedTestOutput?.workflowId ===
+                        (context.workflow.id ?? "") &&
+                      this.state.pinnedTestOutput?.nodeId === context.node.id,
+                    selector: createElement(
+                      "div",
+                      { className: "flex items-center gap-1" },
+                      [
+                        createElement(IconButton, {
+                          icon: "edit",
+                          tooltip: "Edit output for test runs",
+                          onClick: () => this.openOutputEditor(context),
+                        }),
+                        this.renderPinnedOutputControl(context),
+                      ],
+                    ),
+                  }),
+                  this.renderPinnedTestOutputsList(context),
+                ],
+              ),
       ],
     );
   }
@@ -15831,9 +15919,15 @@ export class WorkflowsScreen extends Component<
 
   private readonly handleRunMenusOutsideClick = (event: MouseEvent): void => {
     if (
-      (!this.state.runModeMenuOpen && this.state.nodeStepRunMenu === null) ||
+      (!this.state.runModeMenuOpen &&
+        this.state.nodeStepRunMenu === null &&
+        this.state.nodeActionMenuId === null) ||
       !(event.target instanceof Element)
     ) {
+      return;
+    }
+
+    if (event.target.closest("[data-node-hover-toolbar]")) {
       return;
     }
 
@@ -15855,6 +15949,7 @@ export class WorkflowsScreen extends Component<
     this.setState({
       ...(canvasMenuClick ? {} : { runModeMenuOpen: false }),
       ...(stepMenuClick ? {} : { nodeStepRunMenu: null }),
+      nodeActionMenuId: null,
     });
   };
 
@@ -15964,6 +16059,17 @@ export class WorkflowsScreen extends Component<
   };
 
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      if (this.state.nodeStepRunMenu !== null) {
+        this.setState({ nodeStepRunMenu: null });
+        return;
+      }
+      if (this.state.nodeActionMenuId !== null) {
+        this.setState({ nodeActionMenuId: null });
+        return;
+      }
+    }
+
     if (this.state.editorModalOpen && event.key === "Escape") {
       event.preventDefault();
       this.closeSelectionEditorModal();

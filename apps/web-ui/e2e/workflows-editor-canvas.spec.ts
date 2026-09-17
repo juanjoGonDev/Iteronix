@@ -127,6 +127,31 @@ test("drag from the node palette places a node that stays where it was dropped a
 
   await page.getByTestId("workflows-save").click();
   await expect(page.getByText("saved", { exact: true })).toBeVisible();
+
+  // The node "..." menu opens on click and STAYS open without hover juggling:
+  // visibility is state-driven, so the re-render that follows the click can
+  // no longer flicker the popup away before the pointer reaches an item.
+  const menuCard = nodeCards.last();
+  const menuCardTestId = await menuCard.getAttribute("data-testid");
+  const menuNodeId = (menuCardTestId ?? "").replace("workflows-node-card-", "");
+  await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
+  const menuSurface = menuCard.locator("[data-node-hover-toolbar]");
+  const duplicateItem = menuSurface.getByText("Duplicate", { exact: true });
+  await expect(duplicateItem).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        return menuSurface.evaluate(
+          (element) => getComputedStyle(element).opacity,
+        );
+      },
+      { timeout: 2000 },
+    )
+    .toBe("1");
+
+  // Clicking the empty canvas closes it again.
+  await canvas.click({ position: { x: 12, y: 12 } });
+  await expect(duplicateItem).toHaveCount(0);
 });
 
 const createIdeSession = async (): Promise<string> => {
