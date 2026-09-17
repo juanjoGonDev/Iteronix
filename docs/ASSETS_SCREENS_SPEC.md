@@ -155,4 +155,4 @@ Checklist:
 - [x] Workflow editor rail flattened; `aria-pressed` on rail buttons
 - [x] `Navigation.test.ts` updated + collapsed-tile/ring coverage added; local
       `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` green
-- [ ] CI green on the pushed head (Playwright matrix + Docker validators still passing)
+- [x] CI green on the pushed head (`7604268`, run 35194277409: 19/19 steps, 3m36s)
