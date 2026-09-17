@@ -40,6 +40,8 @@
 
 ### Changed
 
+- CI surfaces a `validate:workflows` failure as check annotations (last log lines echoed as `::error::`), so diagnosing a red browser validation no longer requires the raw Actions log.
+
 - The workflow node editor modal is tabbed like modern flow builders: **Configuration**, **Input**
   and **Output** each own the full dialog instead of the previous cramped three-column grid, and
   the duplicated node title/kind/status block was replaced by a single status chip next to the
