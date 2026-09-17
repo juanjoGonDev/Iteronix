@@ -1,5 +1,4 @@
 import { Component, createElement, ComponentProps } from "../shared/Component";
-import { css } from "../shared/tokens";
 
 interface NavigationItemProps extends ComponentProps {
   icon: string;
@@ -69,15 +68,17 @@ class NavigationItem extends Component<NavigationItemProps> {
       collapsed = false,
     } = this.props;
 
-    const baseClasses = css.navItem.default;
-    const activeClasses = active ? css.navItem.active : "";
-    const finalClasses = `${baseClasses} ${activeClasses} ${className}`;
+    const finalClasses = `${readNavigationEntryClassName({
+      active,
+      collapsed,
+    })} ${className}`.trim();
 
     return createElement(
       "a",
       {
         href,
         className: finalClasses,
+        title: collapsed ? label : undefined,
         onClick: onClick
           ? (e: Event) => {
               e.preventDefault();
@@ -97,7 +98,7 @@ class NavigationItem extends Component<NavigationItemProps> {
           createElement(
             "span",
             {
-              className: "text-sm font-medium",
+              className: "flex-1 text-left text-sm font-medium",
             },
             [label],
           ),
@@ -138,7 +139,10 @@ class NavigationGroupItem extends Component<
         "button",
         {
           type: "button",
-          className: readNavigationGroupToggleClassName(group.active ?? false),
+          className: readNavigationGroupToggleClassName(
+            group.active ?? false,
+            collapsed,
+          ),
           onClick: () => this.setState({ expanded: !expanded }),
           "aria-expanded": String(expanded),
           "aria-controls": groupId,
@@ -184,7 +188,6 @@ class NavigationGroupItem extends Component<
               key: `group-${index}`,
               ...item,
               collapsed,
-              className: collapsed ? "justify-center" : "",
             }).render(),
           ),
         ),
@@ -261,79 +264,85 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
         className: readSidebarRootClassName(className),
       },
       [
-        // Brand
+        // Brand. Expanded: single row (tile, name/version, toggle pushed right).
+        // Collapsed: stacked column — the narrow rail must never squeeze two
+        // tiles side by side, which read as a broken overlay before.
         createElement(
           "div",
           {
             className: collapsed
-              ? "p-3 flex flex-col gap-1"
-              : "p-4 flex flex-col gap-1",
+              ? "flex flex-col items-center gap-2 px-2 py-3"
+              : "flex items-center gap-3 px-4 py-4",
           },
           [
             createElement(
               "div",
               {
-                className: `flex items-center ${collapsed ? "justify-center" : "gap-3 px-2"}`,
+                className:
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-br from-primary to-blue-600 text-white shadow-lg shadow-primary/20",
               },
               [
                 createElement(
-                  "div",
-                  {
-                    className:
-                      "w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20 shrink-0",
-                  },
-                  [
-                    createElement(
-                      "span",
-                      { className: "material-symbols-outlined text-[20px]" },
-                      [brand.icon],
-                    ),
-                  ],
+                  "span",
+                  { className: "material-symbols-outlined text-[20px]" },
+                  [brand.icon],
                 ),
-                !collapsed &&
-                  createElement("div", { className: "flex flex-col" }, [
-                    createElement(
-                      "span",
-                      {
-                        className:
-                          "font-bold text-lg tracking-tight leading-none text-white",
-                      },
-                      [brand.name],
-                    ),
-                    brand.version &&
-                      createElement(
-                        "span",
-                        {
-                          className:
-                            "text-xs text-text-secondary font-mono mt-0.5",
-                        },
-                        [brand.version],
-                      ),
-                  ]),
-                onToggle &&
-                  createElement(
-                    "button",
-                    {
-                      onClick: onToggle,
-                      className: `${collapsed ? "" : "ml-auto"} p-1 rounded hover:bg-surface-dark-hover text-text-secondary hover:text-white transition-all duration-300`,
-                      title: collapsed ? "Expand sidebar" : "Collapse sidebar",
-                      "data-testid": "app-sidebar-toggle",
-                    },
-                    [
-                      createElement(
-                        "span",
-                        {
-                          className:
-                            "material-symbols-outlined text-[18px] transition-all duration-300",
-                        },
-                        [collapsed ? "arrow_forward_ios" : "arrow_back_ios"],
-                      ),
-                    ],
-                  ),
               ],
             ),
+            !collapsed &&
+              createElement("div", { className: "flex min-w-0 flex-col" }, [
+                createElement(
+                  "span",
+                  {
+                    className:
+                      "truncate font-bold text-lg leading-none tracking-tight text-white",
+                  },
+                  [brand.name],
+                ),
+                brand.version &&
+                  createElement(
+                    "span",
+                    {
+                      className:
+                        "mt-0.5 font-mono text-xs leading-none text-text-secondary",
+                    },
+                    [brand.version],
+                  ),
+              ]),
+            onToggle &&
+              createElement(
+                "button",
+                {
+                  type: "button",
+                  onClick: onToggle,
+                  className: `flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-dark-hover hover:text-white ${
+                    collapsed ? "" : "ml-auto"
+                  }`,
+                  title: collapsed ? "Expand sidebar" : "Collapse sidebar",
+                  "aria-label": collapsed
+                    ? "Expand sidebar"
+                    : "Collapse sidebar",
+                  "aria-expanded": String(!collapsed),
+                  "data-testid": "app-sidebar-toggle",
+                },
+                [
+                  createElement(
+                    "span",
+                    {
+                      className: "material-symbols-outlined text-[18px]",
+                      "aria-hidden": "true",
+                    },
+                    [collapsed ? "chevron_right" : "chevron_left"],
+                  ),
+                ],
+              ),
           ],
         ),
+        collapsed &&
+          createElement("div", {
+            className: "mx-3 border-t border-border-dark/60",
+            "aria-hidden": "true",
+          }),
 
         createElement(
           "nav",
@@ -356,7 +365,6 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
                   key: `nav-${index}`,
                   ...item,
                   collapsed,
-                  className: collapsed ? "justify-center" : "",
                 });
                 return navItem.render();
               },
@@ -376,11 +384,44 @@ export class Sidebar extends Component<SidebarProps, SidebarState> {
 export const readSidebarRootClassName = (className: string): string =>
   `flex h-full min-h-0 flex-col overflow-hidden ${className}`.trim();
 
+/**
+ * The navigation column centers a uniform stack of 40px tiles when collapsed,
+ * matching the icon-rail pattern n8n/Dify users already know; expanded mode
+ * keeps full-width rows with an indent-safe rhythm.
+ */
 export const readSidebarNavigationClassName = (collapsed: boolean): string =>
-  `min-h-0 flex-1 overflow-y-auto overscroll-contain ${collapsed ? "py-4 px-1" : "py-6 px-3"} flex flex-col gap-1`;
+  `flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain ${
+    collapsed ? "px-2 py-3" : "px-3 py-4"
+  }`;
 
-export const readNavigationGroupToggleClassName = (active: boolean): string =>
-  `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${active ? "bg-primary/15 text-white" : "text-text-secondary hover:bg-surface-dark-hover hover:text-white"}`;
+/**
+ * Single source of truth for a nav row (plain item or group header). Active
+ * rows use a soft fill plus an inset ring so highlight and geometry never
+ * shift between states; collapsed rows become identical centered squares.
+ */
+export const readNavigationEntryClassName = (input: {
+  active: boolean;
+  collapsed: boolean;
+}): string => {
+  const tone = input.active
+    ? "bg-primary/12 text-white ring-1 ring-inset ring-primary/25"
+    : "text-text-secondary hover:bg-surface-dark-hover hover:text-white";
+  const shape = input.collapsed
+    ? "mx-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]"
+    : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5";
+  return `${shape} ${tone} transition-colors`;
+};
+
+export const readNavigationGroupToggleClassName = (
+  active: boolean,
+  collapsed = false,
+): string =>
+  [
+    readNavigationEntryClassName({ active, collapsed }),
+    collapsed ? "" : "text-left",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
 export const readNavigationGroupItemsClassName = (collapsed: boolean): string =>
   `flex flex-col gap-1 ${collapsed ? "items-center" : "pl-4"}`;

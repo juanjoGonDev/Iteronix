@@ -1442,7 +1442,7 @@ export class WorkflowsScreen extends Component<
           "div",
           {
             className:
-              "mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-border-dark bg-[#171d25] text-sm font-semibold text-white",
+              "mb-2 flex h-10 w-10 items-center justify-center rounded-[10px] border border-border-dark bg-[#171d25] text-sm font-semibold text-white",
             title: currentWorkflow?.name ?? "Workflow editor",
           },
           [currentWorkflow?.name.slice(0, 2).toUpperCase() ?? "WF"],
@@ -1450,8 +1450,7 @@ export class WorkflowsScreen extends Component<
         createElement(
           "div",
           {
-            className:
-              "flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
+            className: "flex w-full flex-col items-center gap-1",
           },
           [
             this.renderRailButton(
@@ -1481,8 +1480,7 @@ export class WorkflowsScreen extends Component<
           ? createElement(
               "div",
               {
-                className:
-                  "mt-auto flex w-full flex-col gap-1 rounded-lg border border-border-dark bg-[#151b22] p-1",
+                className: "mt-auto flex w-full flex-col items-center gap-1",
               },
               [
                 this.renderRailButton(
@@ -1544,7 +1542,9 @@ export class WorkflowsScreen extends Component<
         type: "button",
         title,
         ...(testId ? { "data-testid": testId } : {}),
-        className: `flex h-10 items-center justify-center overflow-hidden rounded-md border leading-none transition-colors ${active ? "border-slate-600 bg-[#202833] text-white" : "border-transparent text-text-secondary hover:border-border-dark hover:bg-[#1b222b] hover:text-white"}`,
+        "aria-label": title,
+        "aria-pressed": String(active),
+        className: `flex h-10 w-10 items-center justify-center overflow-hidden rounded-[10px] leading-none transition-colors ${active ? "bg-primary/12 text-white ring-1 ring-inset ring-primary/25" : "text-text-secondary hover:bg-surface-dark-hover hover:text-white"}`,
         onClick,
       },
       [

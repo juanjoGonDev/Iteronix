@@ -121,3 +121,38 @@ integration tests, which let a real migration-ordering bug stay hidden.
 - Trigger/schedule/webhook breadth (PLAN Phase 6+), provider chain changes, and any
   editing of the mature Workflows screen behavior beyond shared-primitive compatibility.
 - Kanban/Projects/History/Explorer surfaces (charter exclusions).
+
+---
+
+## Follow-up addendum (2026-09-17): shell, collapsed rail & editor polish
+
+Raised on review after the assets work ("no se ve tan profesional y limpio como n8n;
+el menú colapsado se ve mal"). Scope is limited to the app shell chrome and the
+workflow editor's own rail; already-validated screens stay untouched.
+
+Decisions:
+
+- Collapsed rail: the brand tile and the collapse toggle stack vertically (never
+  side-by-side in the 72px column). Every entry — group headers, plain items and
+  group children — becomes a uniform centered 40px tile with a `title` tooltip,
+  mirroring the n8n/Dify icon-rail pattern users already know.
+- Active state: soft `bg-primary/12` fill plus an inset `ring-1` instead of a
+  `border`; borders changed box size and made rows visibly jump between states.
+- Top bar: the breadcrumb is the single location label; a bold title identical to
+  the last crumb (the "Workflow editor › Workflow editor" duplication) is suppressed.
+- Editor activity rail: flattened from nested bordered boxes into a plain column of
+  tiles sharing the sidebar's hover/active semantics, with `aria-pressed` state.
+- `css.navItem` in `shared/tokens.ts` is retired; `readNavigationEntryClassName` is
+  the single owner of nav-row classes.
+
+Checklist:
+
+- [x] `readNavigationEntryClassName` drives items and group toggles in both modes
+- [x] Brand + toggle stacked when collapsed; chevron icon with `aria-label`/`aria-expanded`
+- [x] Tooltips on every collapsed entry (items, groups, toggle)
+- [x] Ring-based active highlight; no layout-shifting borders left in nav tokens
+- [x] Header dedupes the title against the trailing breadcrumb label
+- [x] Workflow editor rail flattened; `aria-pressed` on rail buttons
+- [x] `Navigation.test.ts` updated + collapsed-tile/ring coverage added; local
+      `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` green
+- [ ] CI green on the pushed head (Playwright matrix + Docker validators still passing)
