@@ -140,14 +140,14 @@ test("drag from the node palette places a node that stays where it was dropped a
   const menuCard = nodeCards.last();
   const menuCardTestId = await menuCard.getAttribute("data-testid");
   const menuNodeId = (menuCardTestId ?? "").replace("workflows-node-card-", "");
-  // The trigger itself lives in the opacity-gated hover strip; the hover
-  // Playwright performs for a normal click races the toolbar's own render, so
-  // the opening click is force-dispatched while every click INSIDE the opened
-  // menu below stays a real hit-tested click. That is exactly the path the
-  // user hit: moving the pointer to a menu option must not close the menu.
-  await page
-    .getByTestId(`workflows-node-action-trigger-${menuNodeId}`)
-    .click({ force: true });
+  // The hover strip is pointer-events-gated until the CARD is hovered (the
+  // strip floats above the card box, so a real pointer always arrives via the
+  // card). Hover the card first, then click the trigger like a user would;
+  // every click INSIDE the opened menu below stays a real hit-tested click.
+  // That is exactly the path the user hit: moving the pointer to a menu
+  // option must not close the menu.
+  await menuCard.hover();
+  await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
   const menuSurface = menuCard.locator("[data-node-hover-toolbar]");
   const duplicateItem = menuSurface.getByText("Duplicate", { exact: true });
   await expect(duplicateItem).toBeVisible();
@@ -170,9 +170,8 @@ test("drag from the node palette places a node that stays where it was dropped a
   await expect(duplicateItem).toHaveCount(0);
 
   // Re-open and verify clicking the empty canvas closes the menu again.
-  await page
-    .getByTestId(`workflows-node-action-trigger-${menuNodeId}`)
-    .click({ force: true });
+  await menuCard.hover();
+  await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
   await expect(duplicateItem).toBeVisible();
   await canvas.click({ position: { x: 12, y: 12 } });
   await expect(duplicateItem).toHaveCount(0);
