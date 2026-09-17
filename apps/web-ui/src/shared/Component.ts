@@ -23,21 +23,9 @@ export class Component<
   }
 
   // State management
-  private renderQueued = false;
-
   setState(newState: Partial<TState>): void {
     this.state = { ...this.state, ...newState };
-    // One re-render per frame no matter how many events landed on the same
-    // tick (a native `fill` fires `input` and `change`, for example). Without
-    // coalescing, a second replaceRenderedElement can swap the DOM between an
-    // automation's text selection and its insertion, and the typed text lands
-    // next to the old value instead of replacing it.
-    if (this.renderQueued) {
-      return;
-    }
-    this.renderQueued = true;
     requestAnimationFrame(() => {
-      this.renderQueued = false;
       this.replaceRenderedElement();
     });
   }
