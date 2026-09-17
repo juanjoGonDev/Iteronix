@@ -137,16 +137,29 @@ test("drag from the node palette places a node that stays where it was dropped a
   // The node "..." menu opens on click and STAYS open without hover juggling:
   // visibility is state-driven, so the re-render that follows the click can
   // no longer flicker the popup away before the pointer reaches an item.
-  const menuCard = nodeCards.last();
-  const menuCardTestId = await menuCard.getAttribute("data-testid");
-  const menuNodeId = (menuCardTestId ?? "").replace("workflows-node-card-", "");
+  const menuNodeId = await nodeCards
+    .last()
+    .evaluate((element) =>
+      (element.getAttribute("data-testid") ?? "").replace(
+        "workflows-node-card-",
+        "",
+      ),
+    );
+  // Pin the card by its testid: after "Duplicate" adds another node, the
+  // positional last() would track the NEW copy while the trigger under test
+  // still belongs to this one, and its hover strip would stay pointer-gated.
+  const menuCard = page.locator(
+    `[data-testid="workflows-node-card-${menuNodeId}"]`,
+  );
   // The hover strip is pointer-events-gated until the CARD is hovered (the
   // strip floats above the card box, so a real pointer always arrives via the
   // card). Hover the card first, then click the trigger like a user would;
   // every click INSIDE the opened menu below stays a real hit-tested click.
   // That is exactly the path the user hit: moving the pointer to a menu
   // option must not close the menu.
-  await menuCard.hover();
+  // Hover the top-left corner: after "Duplicate" the copy covers the card
+  // center (48px offset), so a center hover would land on the new card.
+  await menuCard.hover({ position: { x: 12, y: 12 } });
   await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
   const menuSurface = menuCard.locator("[data-node-hover-toolbar]");
   const duplicateItem = menuSurface.getByText("Duplicate", { exact: true });
@@ -170,7 +183,7 @@ test("drag from the node palette places a node that stays where it was dropped a
   await expect(duplicateItem).toHaveCount(0);
 
   // Re-open and verify clicking the empty canvas closes the menu again.
-  await menuCard.hover();
+  await menuCard.hover({ position: { x: 12, y: 12 } });
   await page.getByTestId(`workflows-node-action-trigger-${menuNodeId}`).click();
   await expect(duplicateItem).toBeVisible();
   await canvas.click({ position: { x: 12, y: 12 } });
