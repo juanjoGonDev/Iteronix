@@ -89,6 +89,12 @@ type EventHandlerConfig = {
   options?: AddEventListenerOptions;
 };
 
+const EnumerableBooleanAttributes = new Set([
+  "draggable",
+  "contenteditable",
+  "spellcheck",
+]);
+
 const EventHandlerMap: Record<string, EventHandlerConfig> = {
   onClick: { event: "click" },
   onDblClick: { event: "dblclick" },
@@ -106,6 +112,8 @@ const EventHandlerMap: Record<string, EventHandlerConfig> = {
   onPointerUp: { event: "pointerup" },
   onPointerMove: { event: "pointermove" },
   onDragstart: { event: "dragstart" },
+  onDragStart: { event: "dragstart" },
+  onDragEnd: { event: "dragend" },
   onDragOver: { event: "dragover" },
   onDrop: { event: "drop" },
   onMouseEnter: { event: "mouseenter" },
@@ -176,7 +184,13 @@ export function createElement<TProps extends ComponentProps = ComponentProps>(
     } else if (key === "checked") {
       Reflect.set(element, "checked", Boolean(value));
     } else if (typeof value === "boolean") {
-      if (value) {
+      // Enumerated booleans (draggable, contenteditable, spellcheck) treat an
+      // empty attribute value as invalid and fall back to `auto`, so they
+      // need the literal "true"/"false" strings; everything else stays a
+      // bare boolean attribute.
+      if (EnumerableBooleanAttributes.has(key)) {
+        element.setAttribute(key, value ? "true" : "false");
+      } else if (value) {
         element.setAttribute(key, "");
       }
     } else {

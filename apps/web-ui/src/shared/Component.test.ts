@@ -405,6 +405,43 @@ class TestChildComponent extends Component<{ children?: unknown }> {
   }
 }
 
+it("binds camelCase drag handlers used by the node palette", () => {
+  const recorded: string[] = [];
+  const originalDocument = globalThis.document;
+  const fakeElement = createFakeElement(recorded);
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => fakeElement,
+      createTextNode: (value: string) => ({
+        nodeType: 3,
+        textContent: value,
+      }),
+    },
+  });
+  try {
+    createElement("div", {
+      draggable: true,
+      onDragStart: () => undefined,
+      onDragEnd: () => undefined,
+    });
+  } finally {
+    if (originalDocument === undefined) {
+      Reflect.deleteProperty(globalThis, "document");
+    } else {
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: originalDocument,
+      });
+    }
+  }
+  expect(recorded).toContain("listener:dragstart");
+  expect(recorded).toContain("listener:dragend");
+  // `draggable` is an enumerated boolean: the empty attribute string means
+  // `auto`, so the literal "true" is what makes divs drag sources.
+  expect(recorded).toContain("attr:draggable=true");
+});
+
 const createFakeElement = (
   recorded: string[],
   elementName = "html:element",
