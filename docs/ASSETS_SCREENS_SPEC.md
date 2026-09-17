@@ -191,6 +191,8 @@ Decisions:
 Checklist:
 
 - [x] Palette drag accepted in `dragover` via the types list; foreign drags (text/files) still rejected
+- [x] Palette entries moved from `<button>` to `role=button` divs (Blink ignores `draggable` on buttons)
+- [x] `Component.setState` coalesces renders to one per frame; asset e2e journey is self-cleaning across retries
 - [x] Dropped nodes land at the cursor; invalid payloads fall back to the grid slot
 - [x] Intro card removed from the Nodes panel
 - [x] Dragged positions persist through save and reload (unit + e2e coverage)

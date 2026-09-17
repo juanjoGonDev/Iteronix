@@ -2045,17 +2045,35 @@ export class WorkflowsScreen extends Component<
         className: "min-h-0 flex-1 overflow-y-auto p-3",
       },
       [
-        readNodeKindsForPalette().map((kind) =>
-          createElement(
-            "button",
+        readNodeKindsForPalette().map((kind) => {
+          const paletteDisabled = this.state.pendingAction !== null;
+          // Blink ignores `draggable` on <button>, so palette entries are
+          // button-role divs: dragging to the canvas and click-to-add both
+          // work, and Enter/Space keep the keyboard path alive.
+          return createElement(
+            "div",
             {
-              type: "button",
+              role: "button",
+              tabIndex: paletteDisabled ? -1 : 0,
+              "aria-disabled": String(paletteDisabled),
               key: kind,
-              className:
-                "mb-2 flex w-full cursor-grab items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors active:cursor-grabbing hover:border-slate-600 hover:bg-[#1a222c]",
-              disabled: this.state.pendingAction !== null,
-              draggable: this.state.pendingAction === null,
+              className: `mb-2 flex w-full cursor-grab items-center gap-3 rounded-xl border border-border-dark bg-[#10161d] px-3 py-3 text-left transition-colors active:cursor-grabbing hover:border-slate-600 hover:bg-[#1a222c] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${paletteDisabled ? "pointer-events-none opacity-60" : ""}`,
+              draggable: !paletteDisabled,
               onClick: () => {
+                if (paletteDisabled) {
+                  return;
+                }
+                void this.handleAddNode(kind);
+              },
+              onKeyDown: (event: Event) => {
+                const keyboardEvent = event as KeyboardEvent;
+                if (
+                  paletteDisabled ||
+                  (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ")
+                ) {
+                  return;
+                }
+                keyboardEvent.preventDefault();
                 void this.handleAddNode(kind);
               },
               onDragStart: (event: Event) =>
@@ -2089,8 +2107,8 @@ export class WorkflowsScreen extends Component<
                 ],
               ),
             ],
-          ),
-        ),
+          );
+        }),
       ],
     );
   }

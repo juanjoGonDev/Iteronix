@@ -23,6 +23,17 @@ test("drives the full trusted plugin journey: register, toggle, edit, delete", a
 }) => {
   const sessionToken = await createIdeSession();
   await setIdeSessionCookie(context, sessionToken);
+  // Best-effort cleanup of leftovers from an earlier failed attempt, so the
+  // journey always starts empty and ends empty even across retries and
+  // viewports sharing one stack.
+  await fetch(`${ApiUrl}/assets/delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: `${SessionCookieName}=${sessionToken}`,
+    },
+    body: JSON.stringify({ assetId: TrustedPluginKey }),
+  }).catch(() => undefined);
   const assetResponses = observeSuccessfulApiResponses(page, "/assets/");
 
   const row = page.getByTestId(`plugin-assets-row-${TrustedPluginKey}`);

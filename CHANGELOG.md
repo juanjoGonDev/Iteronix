@@ -7,6 +7,10 @@
 - Workflow canvas: node palette entries can now be **dragged onto the canvas** and land at the
   drop point (previously the browser cancelled every drag because the `dragover` gate relied on
   payload data the spec only exposes at drop time). Clicking a palette entry still works as before.
+- Web UI rendering coalesces `setState` into **one re-render per frame**. Previously a single
+  user interaction that fired both `input` and `change` (native value setters, automation)
+  produced two replacement renders per event, which raced with text insertion and dragged
+  nodes; now the whole editor, canvas drags included, commits once per frame.
 - Workflow canvas: a **Tidy up** toolbar button re-lays the whole graph into n8n-style left-to-right
   layers (longest-path layering, cycle-safe, columns centered), then fits the viewport; the layout
   is saved with the workflow, so nodes stay organized after a reload.
@@ -39,6 +43,10 @@
   bordered containers, so both rails read as one system.
 
 ### Fixed
+
+- The Nodes palette entries are `button`-role divs instead of `<button>` elements because Blink
+  ignores `draggable` on buttons, so palette drags never started in Chrome/Edge. Dragging now
+  works in every engine, and the click/keyboard paths are unchanged.
 
 - The collapsed application rail no longer squeezes the brand tile and the collapse
   toggle side by side: they stack vertically, every entry becomes a uniform centered
