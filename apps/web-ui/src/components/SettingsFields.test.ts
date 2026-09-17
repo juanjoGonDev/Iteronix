@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  readJsonContractState,
   readSettingsToggleKnobClassName,
   readSettingsToggleTrackClassName,
   SettingsNumberField,
   SettingsCheckboxGroup,
   SettingsDateTimeField,
+  SettingsJsonField,
   SettingsSecretField,
   SettingsSelectField,
   SettingsTextField,
@@ -41,6 +43,32 @@ describe("SettingsFields", () => {
     expect(recorded).toContain("attr:data-testid=settings-provider-model");
     expect(recorded).toContain("attr:data-testid=settings-max-loops");
     expect(recorded).toContain("attr:data-testid=settings-provider-api-key");
+    // Text-style controls commit on `input` (live validation, automation-safe
+    // fills) and keep `change` as the blur fallback.
+    expect(recorded.filter((entry) => entry === "listener:input")).toHaveLength(
+      3,
+    );
+    expect(
+      recorded.filter((entry) => entry === "listener:change"),
+    ).toHaveLength(3);
+  });
+
+  it("keeps JSON contract fields live-validated on input events", () => {
+    const recorded = renderWithFakeDocument(() => {
+      new SettingsJsonField({
+        label: "Input JSON contract",
+        value: "{ broken",
+        placeholder: '{ "type": "object" }',
+        testId: "asset-input-schema",
+        hint: null,
+        contractState: readJsonContractState("{ broken", { required: false }),
+        onChange: () => undefined,
+      }).render();
+    });
+
+    expect(recorded).toContain("listener:input");
+    expect(recorded).toContain("listener:change");
+    expect(recorded).toContain("attr:aria-invalid=true");
   });
 
   it("keeps select and toggle field semantics unchanged", () => {

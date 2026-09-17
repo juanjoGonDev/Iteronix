@@ -55,6 +55,12 @@ export class Header extends Component<HeaderProps> {
       className = "",
     } = this.props;
 
+    // The n8n-style top bar names the location once: when the breadcrumb
+    // already ends on the current screen, a bold title next to it would
+    // render the same words twice.
+    const lastCrumb = breadcrumbs[breadcrumbs.length - 1]?.label ?? null;
+    const showTitle = title !== null && title !== lastCrumb;
+
     return createElement(
       "header",
       {
@@ -65,7 +71,7 @@ export class Header extends Component<HeaderProps> {
         createElement("div", { className: "flex items-center gap-2 text-sm" }, [
           breadcrumbs.length > 0 &&
             createElement(Breadcrumb, { items: breadcrumbs }),
-          title &&
+          showTitle &&
             createElement("div", { className: "flex items-center gap-2" }, [
               createElement(
                 "span",

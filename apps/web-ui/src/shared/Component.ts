@@ -106,6 +106,8 @@ const EventHandlerMap: Record<string, EventHandlerConfig> = {
   onPointerUp: { event: "pointerup" },
   onPointerMove: { event: "pointermove" },
   onDragstart: { event: "dragstart" },
+  onDragStart: { event: "dragstart" },
+  onDragEnd: { event: "dragend" },
   onDragOver: { event: "dragover" },
   onDrop: { event: "drop" },
   onMouseEnter: { event: "mouseenter" },

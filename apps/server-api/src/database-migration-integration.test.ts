@@ -24,6 +24,8 @@ const RateLimitPerMinute = 1;
 const CredentialMigrationId = "002_external_workflow_credentials";
 const CredentialAuditActorMigrationId =
   "003_external_workflow_credential_audit_actors";
+const CredentialAuditFailureBoundMigrationId =
+  "004_external_workflow_credential_anonymous_failure_bound";
 const LegacyAuditCredentialId = "credential-legacy-audit";
 const LegacyAuditEventKind = "authorize";
 const LegacyAuditResult = "authorized";
@@ -89,8 +91,13 @@ describe.skipIf(!testDatabaseUrl)("database migration integration", () => {
     );
     const credentialPool = createSchemaPool(config.connectionString, schema);
     const catalog = readDatabaseMigrationCatalog();
+    // The pre-actor legacy state is every migration before 003. 004 cannot be
+    // applied without 003 because its anonymous failure index references the
+    // actor_kind column, so the simulated legacy catalog must stop at 002.
     const legacyCatalog = catalog.filter(
-      (migration) => migration.id !== CredentialAuditActorMigrationId,
+      (migration) =>
+        migration.id !== CredentialAuditActorMigrationId &&
+        migration.id !== CredentialAuditFailureBoundMigrationId,
     );
 
     await administrator.query(`CREATE SCHEMA ${schema}`);

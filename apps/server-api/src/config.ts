@@ -21,6 +21,13 @@ export type ServerConfig = {
   admin?: ServerAdminCredentials;
   /** Browser origins allowed to carry an IDE session for internal API routes. */
   ideUiOrigins?: ReadonlyArray<string>;
+  /**
+   * Additional plugin registry keys the server trusts for registration. The
+   * built-in reference plugin is always trusted; these keys only extend the
+   * allowlist so operators can register process-isolated plugins without code
+   * changes. The browser may never widen this set.
+   */
+  trustedPluginIds?: ReadonlyArray<string>;
 };
 
 export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
@@ -46,7 +53,35 @@ export const loadConfig = (env: NodeJS.ProcessEnv): ServerConfig => {
     mcpServers,
     admin: parseAdminCredentials(env),
     ideUiOrigins: parseIdeUiOrigins(env, port),
+    trustedPluginIds: parseTrustedPluginIds(env),
   };
+};
+
+export const readTrustedPluginIds = (
+  config: ServerConfig,
+): ReadonlyArray<string> => [
+  ...new Set([ReferencePluginKey, ...(config.trustedPluginIds ?? [])]),
+];
+
+export const ReferencePluginKey = "reference.echo";
+const TrustedPluginKeyPattern = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+
+const parseTrustedPluginIds = (
+  env: NodeJS.ProcessEnv,
+): ReadonlyArray<string> => {
+  const configured = (env[EnvKey.TrustedPluginIds] ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const invalid = configured.filter(
+    (entry) => !TrustedPluginKeyPattern.test(entry),
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `${EnvKey.TrustedPluginIds} contains invalid plugin keys: ${invalid.join(", ")}. Use dot-separated lowercase alphanumeric segments.`,
+    );
+  }
+  return [...new Set(configured)];
 };
 
 export const readAdminCredentials = (

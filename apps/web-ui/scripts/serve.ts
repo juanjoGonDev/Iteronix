@@ -1,7 +1,59 @@
 import express from "express";
+import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync } from "fs";
+
+// API surfaces owned by the server process (see apps/server-api/src/constants.ts).
+// The SPA also uses /workflows/:id and /assets/<family> as browser routes, so only
+// these exact API shapes are proxied; everything else keeps falling through to
+// index.html. This lets the dev server behave like the colocated Docker deployment
+// (same-origin UI + API) for any host, not just localhost.
+const BackendPort = Number(process.env["ITERONIX_BACKEND_PORT"] ?? "4001");
+const ApiRoutePattern =
+  /^\/(assets\/(list|upsert|delete|usage)|auth\/|external\/|governance\/|memory\/documents\/|providers\/|settings\/|workflows\/(assets|definitions|executions|providers)\/)/;
+
+const isApiRequest = (request: express.Request): boolean =>
+  ApiRoutePattern.test(request.path);
+
+const proxyApiRequest = (
+  request: express.Request,
+  response: express.Response,
+): void => {
+  const upstream = http.request(
+    {
+      host: "127.0.0.1",
+      port: BackendPort,
+      method: request.method,
+      path: request.originalUrl,
+      headers: {
+        ...request.headers,
+        // The dev proxy stands in for the colocated deployment origin, which the
+        // backend already trusts for IDE session cookies by default.
+        origin: `http://localhost:${port.toString()}`,
+      },
+    },
+    (upstreamResponse) => {
+      response.writeHead(
+        upstreamResponse.statusCode ?? 502,
+        upstreamResponse.headers,
+      );
+      upstreamResponse.pipe(response);
+    },
+  );
+  upstream.on("error", () => {
+    if (!response.headersSent) {
+      response.status(502).json({
+        error: {
+          message: `Backend is not reachable on 127.0.0.1:${BackendPort.toString()}. Start it with "pnpm dev:server" (PostgreSQL and .env DATABASE_URL must be configured).`,
+        },
+      });
+      return;
+    }
+    response.destroy();
+  });
+  request.pipe(upstream);
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,6 +107,17 @@ app.use(
         res.setHeader("Content-Type", "application/javascript");
         return res.sendFile(fullPath);
       }
+    }
+    next();
+  },
+);
+
+// Proxy API traffic to the backend before static/SPA handling.
+app.use(
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (isApiRequest(req)) {
+      proxyApiRequest(req, res);
+      return;
     }
     next();
   },

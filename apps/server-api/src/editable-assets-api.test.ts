@@ -6,6 +6,7 @@ import {
   type ApplicationStateStore,
 } from "./application-state";
 import type { EditableAssetRecord } from "./editable-assets";
+import type { ServerConfig } from "./config";
 import { createProviderStore } from "./providers";
 import { createApiServer, createApplicationPersistence } from "./server";
 import { createWorkflowCatalogStore } from "../../../packages/agents/src/workflow-catalog";
@@ -220,11 +221,86 @@ describe("editable assets API", () => {
         .status,
     ).toBe(403);
   });
+
+  it("lists the server-owned trusted plugin keys with the asset catalog", async () => {
+    const testServer = createTestServer(
+      createMemoryStore(createDefaultApplicationState()),
+    );
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const listed = await request(url, "/assets/list", {});
+    expect(listed.status).toBe(200);
+    expect(listed.body["pluginRegistry"]).toEqual({
+      trustedKeys: ["reference.echo"],
+    });
+  });
+
+  it("rejects plugin registrations outside the trusted registry", async () => {
+    const testServer = createTestServer(
+      createMemoryStore(createDefaultApplicationState()),
+    );
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const rejected = await request(
+      url,
+      "/assets/upsert",
+      createPluginAsset("untrusted.custom"),
+    );
+    expect(rejected.status).toBe(400);
+    expect(JSON.stringify(rejected.body)).toContain("not trusted");
+    expect((await request(url, "/assets/list", {})).body["assets"]).toEqual([]);
+  });
+
+  it("accepts plugin keys the operator added to the trusted registry", async () => {
+    const testServer = createTestServer(
+      createMemoryStore(createDefaultApplicationState()),
+      createDefaultApplicationState(),
+      { trustedPluginIds: ["acme.knowledge"] },
+    );
+    servers.push(testServer.server);
+    const url = await listen(testServer.server);
+
+    const upserted = await request(
+      url,
+      "/assets/upsert",
+      createPluginAsset("acme.knowledge"),
+    );
+    expect(upserted.status).toBe(200);
+    expect(upserted.body["asset"]).toMatchObject({
+      id: "acme.knowledge",
+      kind: "plugin",
+    });
+    const listed = await request(url, "/assets/list", {});
+    expect(listed.body["pluginRegistry"]).toEqual({
+      trustedKeys: ["reference.echo", "acme.knowledge"],
+    });
+  });
+});
+
+const createPluginAsset = (id: string): EditableAssetRecord => ({
+  id,
+  kind: "plugin",
+  name: `Plugin ${id}`,
+  status: "enabled",
+  capabilities: ["tool-calls"],
+  permissions: ["tool.invoke"],
+  inputSchema: schema(`${id}.input`),
+  outputSchema: schema(`${id}.output`),
+  limits: { executions: 1, timeoutMs: 1000 },
+  provenance: {
+    source: "test",
+    artifactFingerprint: `${id}-fingerprint`,
+    registeredAt: "2026-09-16T00:00:00.000Z",
+  },
+  plugin: { runtime: "server", isolation: "process", auditEvents: [] },
 });
 
 const createTestServer = (
   stateStore: ApplicationStateStore,
   initialState = createDefaultApplicationState(),
+  extraConfig: Partial<ServerConfig> = {},
 ) => {
   const providerStore = createProviderStore();
   const workflowCatalog = createWorkflowCatalogStore(initialState.workflows);
@@ -241,6 +317,7 @@ const createTestServer = (
         host: "127.0.0.1",
         authToken: AuthToken,
         databaseUrl: "postgresql://test",
+        ...extraConfig,
       },
       providerStore,
       workflowRuntime: createWorkflowRuntimeService({

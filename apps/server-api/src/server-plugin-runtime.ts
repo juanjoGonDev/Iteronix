@@ -31,6 +31,8 @@ export type TrustedPluginRegistry = {
     assets: ReadonlyArray<EditableAssetRecord>,
   ) => TrustedPluginRegistrySnapshot;
   isAllowed: (assetId: string) => boolean;
+  /** The server-owned allowlist, exposed read-only so asset forms never guess. */
+  trustedKeys: () => ReadonlyArray<string>;
   invoke: (
     input: ServerPluginBinding & { input: JsonValue },
   ) => Promise<JsonValue>;
@@ -78,6 +80,7 @@ export const createTrustedPluginRegistry = (input: {
         readRunnablePlugins(assets, allowlist),
       ),
     isAllowed: (assetId) => allowlist.has(assetId),
+    trustedKeys: () => [...allowlist],
     invoke: (request) =>
       invokeTrustedPlugin(input.host, allowlist, plugins, request),
   };

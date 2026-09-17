@@ -1,6 +1,21 @@
 import { Button } from "../components/Button.js";
 import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
+  AssetConfirmDialog,
+  AssetEditorDialog,
+  AssetRow,
+  AssetRowList,
+} from "../components/AssetWorkbench.js";
+import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack,
+} from "../components/PageScaffold.js";
+import {
+  SettingsTextField,
+  SettingsTextareaField,
+} from "../components/SettingsFields.js";
+import {
   Component,
   createElement,
   type ComponentProps,
@@ -26,6 +41,9 @@ const PromptAssetsSelector = {
   Root: "prompt-assets-root",
   Create: "prompt-assets-create",
   Reload: "prompt-assets-reload",
+  List: "prompt-assets-list",
+  Error: "prompt-assets-error",
+  Retry: "prompt-assets-retry",
   RowPrefix: "prompt-assets-row-",
   Editor: "prompt-assets-editor",
   EditorName: "prompt-assets-editor-name",
@@ -44,14 +62,16 @@ type PromptAssetsState = {
   prompts: ReadonlyArray<PromptAssetSummary>;
   loading: boolean;
   errorMessage: string | null;
+  noticeMessage: string | null;
   url: PromptAssetsUrlState;
   draftName: string;
   draftTemplate: string;
   draftVariables: string;
   usageByPromptId: Readonly<Record<string, PromptAssetUsageSummary>>;
+  busy: boolean;
 };
 
-export type PromptAssetsEditorDraft = {
+type PromptAssetsEditorDraft = {
   draftName: string;
   draftTemplate: string;
   draftVariables: string;
@@ -86,11 +106,13 @@ export class PromptAssetsScreen extends Component<
       prompts: [],
       loading: true,
       errorMessage: null,
+      noticeMessage: null,
       url,
       draftName: "",
       draftTemplate: "",
       draftVariables: "",
       usageByPromptId: {},
+      busy: false,
     });
   }
 
@@ -109,16 +131,19 @@ export class PromptAssetsScreen extends Component<
     return createElement(
       "main",
       {
-        className:
-          "min-h-full bg-[#11161d] px-4 py-5 text-white sm:px-6 lg:px-8",
+        className: "min-h-full text-white",
         "data-testid": PromptAssetsSelector.Root,
       },
       [
         createElement(
-          "div",
-          { className: "mx-auto flex max-w-6xl flex-col gap-5" },
+          PageFrame,
+          { className: "max-w-[1380px] gap-7 pb-28 md:pb-10" },
           [
-            this.renderToolbar(),
+            createElement(PageNoticeStack, {
+              errorMessage: this.state.errorMessage,
+              noticeMessage: this.state.noticeMessage,
+            }),
+            this.renderIntro(),
             this.renderContent(),
             this.renderEditor(),
             this.renderDeleteConfirmation(),
@@ -128,62 +153,46 @@ export class PromptAssetsScreen extends Component<
     );
   }
 
-  private renderToolbar(): HTMLElement {
-    return createElement(
-      "section",
-      {
-        className:
-          "flex flex-col gap-4 border-b border-border-dark pb-5 sm:flex-row sm:items-end sm:justify-between",
-      },
-      [
-        createElement("div", { className: "min-w-0" }, [
-          createElement(
-            "h1",
-            { className: "text-xl font-semibold tracking-tight text-white" },
-            ["Prompt assets"],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            ["Reusable, version-pinned prompt templates for workflows."],
-          ),
-        ]),
-        createElement("div", { className: "flex flex-wrap gap-2" }, [
-          createElement(Button, {
-            variant: "ghost",
-            size: "sm",
-            icon: "refresh",
-            children: "Reload",
-            onClick: () => {
-              void this.loadPrompts();
-            },
-            dataset: { testid: PromptAssetsSelector.Reload },
-          }),
-          createElement(Button, {
-            variant: "primary",
-            size: "sm",
-            icon: "add",
-            children: "Create prompt",
-            onClick: () =>
-              this.openEditor({
-                mode: PromptAssetsUrlMode.Create,
-                promptId: null,
-                version: null,
-              }),
-            dataset: { testid: PromptAssetsSelector.Create },
-          }),
-        ]),
-      ],
-    );
+  private renderIntro(): HTMLElement {
+    return createElement(PageIntro, {
+      title: "Prompt assets",
+      description: `Reusable, version-pinned prompt templates for workflows. ${this.state.prompts.length} available.`,
+      actions: createElement("div", { className: "flex flex-wrap gap-2" }, [
+        createElement(Button, {
+          variant: "ghost",
+          size: "sm",
+          icon: "refresh",
+          children: "Reload",
+          onClick: () => {
+            void this.loadPrompts();
+          },
+          dataset: { testid: PromptAssetsSelector.Reload },
+        }),
+        createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          icon: "add",
+          children: "Create prompt",
+          onClick: () =>
+            this.openEditor({
+              mode: PromptAssetsUrlMode.Create,
+              promptId: null,
+              version: null,
+            }),
+          dataset: { testid: PromptAssetsSelector.Create },
+        }),
+      ]),
+    });
   }
 
   private renderContent(): HTMLElement {
     if (this.state.loading) {
       return createElement(
-        "p",
+        "section",
         {
           className:
-            "border border-border-dark bg-[#151b22] px-4 py-8 text-sm text-text-secondary",
+            "rounded-2xl border border-[#202832] bg-[#171c22] px-6 py-10 text-sm text-text-secondary",
+          "aria-busy": "true",
         },
         ["Loading prompt assets…"],
       );
@@ -191,12 +200,34 @@ export class PromptAssetsScreen extends Component<
 
     if (this.state.errorMessage) {
       return createElement(
-        "div",
-        { className: "border border-rose-500/40 bg-rose-500/10 px-4 py-4" },
+        "section",
+        {
+          className:
+            "flex flex-col items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between",
+          role: "alert",
+          "data-testid": PromptAssetsSelector.Error,
+        },
         [
-          createElement("p", { className: "text-sm text-rose-100" }, [
-            this.state.errorMessage,
+          createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+            createElement(
+              "p",
+              { className: "text-sm font-semibold text-rose-100" },
+              ["Could not load prompt assets"],
+            ),
+            createElement("p", { className: "text-sm text-rose-100/80" }, [
+              this.state.errorMessage,
+            ]),
           ]),
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            icon: "refresh",
+            children: "Retry",
+            onClick: () => {
+              void this.loadPrompts();
+            },
+            dataset: { testid: PromptAssetsSelector.Retry },
+          }),
         ],
       );
     }
@@ -207,65 +238,67 @@ export class PromptAssetsScreen extends Component<
         title: "No prompt assets yet",
         description:
           "Create a reusable prompt, then pin a version from a workflow node.",
+        action: createElement(Button, {
+          variant: "primary",
+          size: "sm",
+          icon: "add",
+          children: "Create prompt",
+          onClick: () =>
+            this.openEditor({
+              mode: PromptAssetsUrlMode.Create,
+              promptId: null,
+              version: null,
+            }),
+        }),
       });
     }
 
-    return createElement(
-      "section",
-      { className: "divide-y divide-border-dark border border-border-dark" },
-      this.state.prompts.map((prompt) => this.renderPromptRow(prompt)),
-    );
+    return createElement(AssetRowList, {
+      testId: PromptAssetsSelector.List,
+      rows: this.state.prompts.map((prompt) => this.renderPromptRow(prompt)),
+    });
   }
 
   private renderPromptRow(prompt: PromptAssetSummary): HTMLElement {
-    return createElement(
-      "article",
-      {
-        className:
-          "flex flex-col gap-3 bg-[#11161d] px-4 py-4 sm:flex-row sm:items-center sm:justify-between",
-        "data-testid": `${PromptAssetsSelector.RowPrefix}${prompt.id}`,
-      },
-      [
-        createElement("div", { className: "min-w-0" }, [
-          createElement(
-            "p",
-            { className: "truncate text-sm font-semibold text-white" },
-            [prompt.name],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            [`Version ${prompt.activeVersion} · ${prompt.status}`],
-          ),
-          this.renderUsageSummary(prompt),
-          this.renderUsageLinks(prompt),
-        ]),
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
+    return createElement(AssetRow, {
+      testId: `${PromptAssetsSelector.RowPrefix}${prompt.id}`,
+      icon: "chat",
+      title: prompt.name,
+      subtitle: prompt.id,
+      status: prompt.status,
+      meta: [
+        `Version ${prompt.activeVersion} · ${prompt.versions.length} immutable versions`,
+      ],
+      chips: prompt.variables.map(
+        (variable) => `${variable.name}:${variable.schema.schema.type}`,
+      ),
+      extra: createElement("div", {}, [
+        this.renderUsageSummary(prompt),
+        this.renderUsageLinks(prompt),
+      ]),
+      actions: [
+        {
+          label: "Open editor",
           icon: "edit",
-          children: "Open editor",
+          variant: "secondary",
           onClick: () =>
             this.openEditor({
               mode: PromptAssetsUrlMode.Edit,
               promptId: prompt.id,
               version: prompt.activeVersion,
             }),
-        }),
-        createElement(Button, {
-          variant: "danger",
-          size: "sm",
+        },
+        {
+          label: "Delete",
           icon: "delete",
-          children: "Delete",
+          variant: "danger",
+          testId: `${PromptAssetsSelector.DeletePrefix}${prompt.id}`,
           onClick: () => {
             this.openDeleteConfirmation(prompt);
           },
-          dataset: {
-            testid: `${PromptAssetsSelector.DeletePrefix}${prompt.id}`,
-          },
-        }),
+        },
       ],
-    );
+    });
   }
 
   private renderUsageSummary(prompt: PromptAssetSummary): HTMLElement {
@@ -321,91 +354,51 @@ export class PromptAssetsScreen extends Component<
     const usage = this.state.usageByPromptId[prompt.id];
     const hasUsages = (usage?.nodeCount ?? 0) > 0;
     return createElement(
-      "section",
+      AssetConfirmDialog,
       {
-        className:
-          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
-        role: "dialog",
-        "aria-modal": "true",
-        "aria-labelledby": "prompt-assets-delete-title",
-        "data-testid": PromptAssetsSelector.DeleteDialog,
+        testId: PromptAssetsSelector.DeleteDialog,
+        title: hasUsages
+          ? "Delete prompt with workflow impact"
+          : "Delete prompt asset",
+        message: hasUsages
+          ? `This deletes ${prompt.name} without changing ${usage?.workflowCount ?? 0} workflow(s) or ${usage?.nodeCount ?? 0} node(s).`
+          : "This prompt is not referenced by any persisted workflow node.",
+        confirmLabel: "Delete prompt",
+        confirmTestId: PromptAssetsSelector.DeleteConfirm,
+        confirmDisabled: this.state.busy,
+        onConfirm: () => void this.deletePrompt(prompt, usage),
+        cancelLabel: "Cancel",
+        cancelTestId: PromptAssetsSelector.DeleteCancel,
+        onCancel: () => this.closeDeleteConfirmation(),
       },
       [
-        createElement(
-          "div",
-          {
-            className:
-              "w-full max-w-xl border border-rose-500/40 bg-[#151b22] p-5 shadow-2xl",
-          },
-          [
-            createElement(
-              "h2",
+        hasUsages && usage
+          ? createElement(
+              "ul",
               {
-                id: "prompt-assets-delete-title",
-                className: "text-base font-semibold text-white",
+                className:
+                  "max-h-48 space-y-2 overflow-auto border-y border-border-dark py-3 text-sm",
               },
-              [
-                hasUsages
-                  ? "Delete prompt with workflow impact"
-                  : "Delete prompt asset",
-              ],
-            ),
-            createElement(
-              "p",
-              { className: "mt-2 text-sm text-text-secondary" },
-              [
-                hasUsages
-                  ? `This deletes ${prompt.name} without changing ${usage?.workflowCount ?? 0} workflow(s) or ${usage?.nodeCount ?? 0} node(s).`
-                  : "This prompt is not referenced by any persisted workflow node.",
-              ],
-            ),
-            ...(hasUsages && usage
-              ? [
+              usage.usages.map((item) =>
+                createElement("li", {}, [
                   createElement(
-                    "ul",
+                    "a",
                     {
+                      href: createWorkflowNodeHref(
+                        item.workflowId,
+                        item.nodeId,
+                      ),
                       className:
-                        "mt-4 max-h-48 space-y-2 overflow-auto border-y border-border-dark py-3 text-sm",
+                        "text-primary underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-primary",
                     },
-                    usage.usages.map((item) =>
-                      createElement("li", {}, [
-                        createElement(
-                          "a",
-                          {
-                            href: createWorkflowNodeHref(
-                              item.workflowId,
-                              item.nodeId,
-                            ),
-                            className:
-                              "text-primary underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-primary",
-                          },
-                          [
-                            `${item.workflowName} / ${item.nodeLabel} · v${item.promptVersion}`,
-                          ],
-                        ),
-                      ]),
-                    ),
+                    [
+                      `${item.workflowName} / ${item.nodeLabel} · v${item.promptVersion}`,
+                    ],
                   ),
-                ]
-              : []),
-            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
-              createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                children: "Cancel",
-                onClick: () => this.closeDeleteConfirmation(),
-                dataset: { testid: PromptAssetsSelector.DeleteCancel },
-              }),
-              createElement(Button, {
-                variant: "danger",
-                size: "sm",
-                children: "Delete prompt",
-                onClick: () => void this.deletePrompt(prompt, usage),
-                dataset: { testid: PromptAssetsSelector.DeleteConfirm },
-              }),
-            ]),
-          ],
-        ),
+                ]),
+              ),
+            )
+          : null,
       ],
     );
   }
@@ -418,109 +411,62 @@ export class PromptAssetsScreen extends Component<
       return "";
     }
 
-    const title =
-      this.state.url.mode === PromptAssetsUrlMode.Create
+    const isCreate = this.state.url.mode === PromptAssetsUrlMode.Create;
+    const saveDisabled =
+      this.state.busy ||
+      this.state.draftName.trim().length === 0 ||
+      this.state.draftTemplate.trim().length === 0;
+    return createElement(AssetEditorDialog, {
+      testId: PromptAssetsSelector.Editor,
+      title: isCreate
         ? "Create prompt asset"
-        : `Edit prompt ${this.state.url.promptId ?? ""}`;
-    return createElement(
-      "section",
-      {
-        className:
-          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
-        "data-testid": PromptAssetsSelector.Editor,
+        : `Edit prompt ${this.state.url.promptId ?? ""}`,
+      description:
+        "Prompt content is versioned. Saving always creates a new immutable version; workflow nodes pin versions explicitly.",
+      closeTestId: PromptAssetsSelector.EditorClose,
+      onClose: () =>
+        this.openEditor({
+          mode: PromptAssetsUrlMode.Catalog,
+          promptId: null,
+          version: null,
+        }),
+      save: {
+        label: "Save version",
+        testId: PromptAssetsSelector.EditorSave,
+        disabled: saveDisabled,
+        disabledReason: "Name and template are required to save a version.",
+        onClick: () => {
+          void this.savePrompt();
+        },
       },
-      [
-        createElement(
-          "div",
-          {
-            className:
-              "w-full max-w-2xl border border-border-dark bg-[#151b22] p-5 shadow-2xl",
-          },
-          [
-            createElement(
-              "h2",
-              { className: "text-base font-semibold text-white" },
-              [title],
-            ),
-            createElement(
-              "p",
-              { className: "mt-1 text-sm text-text-secondary" },
-              [
-                "Prompt content is versioned. Saving always creates a new immutable version.",
-              ],
-            ),
-            createElement(
-              "label",
-              { className: "mt-4 block text-sm text-text-secondary" },
-              [
-                "Name",
-                createElement("input", {
-                  value: this.state.draftName,
-                  className:
-                    "mt-1 h-10 w-full border border-border-dark bg-[#0f151c] px-3 text-sm text-white outline-none focus:border-primary",
-                  "data-testid": PromptAssetsSelector.EditorName,
-                  onInput: (event: Event) => this.updateDraftName(event),
-                }),
-              ],
-            ),
-            createElement(
-              "label",
-              { className: "mt-4 block text-sm text-text-secondary" },
-              [
-                "Variables (name:type:required or name:type:optional, one per line)",
-                createElement("textarea", {
-                  value: this.state.draftVariables,
-                  className:
-                    "mt-1 min-h-24 w-full border border-border-dark bg-[#0f151c] px-3 py-2 font-mono text-sm text-white outline-none focus:border-primary",
-                  "data-testid": PromptAssetsSelector.EditorVariables,
-                  onInput: (event: Event) => this.updateDraftVariables(event),
-                }),
-              ],
-            ),
-            createElement(
-              "label",
-              { className: "mt-4 block text-sm text-text-secondary" },
-              [
-                "Template",
-                createElement("textarea", {
-                  value: this.state.draftTemplate,
-                  className:
-                    "mt-1 min-h-40 w-full border border-border-dark bg-[#0f151c] px-3 py-2 font-mono text-sm text-white outline-none focus:border-primary",
-                  "data-testid": PromptAssetsSelector.EditorTemplate,
-                  onInput: (event: Event) => this.updateDraftTemplate(event),
-                }),
-              ],
-            ),
-            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
-              createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                children: "Close",
-                onClick: () =>
-                  this.openEditor({
-                    mode: PromptAssetsUrlMode.Catalog,
-                    promptId: null,
-                    version: null,
-                  }),
-                dataset: { testid: PromptAssetsSelector.EditorClose },
-              }),
-              createElement(Button, {
-                variant: "primary",
-                size: "sm",
-                disabled:
-                  this.state.draftName.trim().length === 0 ||
-                  this.state.draftTemplate.trim().length === 0,
-                children: "Save version",
-                onClick: () => {
-                  void this.savePrompt();
-                },
-                dataset: { testid: PromptAssetsSelector.EditorSave },
-              }),
-            ]),
-          ],
-        ),
-      ],
-    );
+      children: createElement("div", { className: "grid gap-4" }, [
+        createElement(SettingsTextField, {
+          label: "Name",
+          value: this.state.draftName,
+          placeholder: "Support triage instruction",
+          testId: PromptAssetsSelector.EditorName,
+          onChange: (value: string) => this.setState({ draftName: value }),
+        }),
+        createElement(SettingsTextareaField, {
+          label:
+            "Variables (name:type:required or name:type:optional, one per line)",
+          value: this.state.draftVariables,
+          placeholder: "issue:object:required",
+          testId: PromptAssetsSelector.EditorVariables,
+          hint: "Workflow node bindings must satisfy these typed variables before the prompt can run.",
+          onChange: (value: string) => this.setState({ draftVariables: value }),
+        }),
+        createElement(SettingsTextareaField, {
+          label: "Template",
+          value: this.state.draftTemplate,
+          placeholder: "Triage the issue {{issue}} and answer in {{language}}.",
+          testId: PromptAssetsSelector.EditorTemplate,
+          rows: 10,
+          hint: "Use {{variable}} placeholders; unknown placeholders are rejected at run time.",
+          onChange: (value: string) => this.setState({ draftTemplate: value }),
+        }),
+      ]),
+    });
   }
 
   private async loadPrompts(): Promise<void> {
@@ -589,28 +535,11 @@ export class PromptAssetsScreen extends Component<
     }
   };
 
-  private updateDraftName(event: Event): void {
-    if (event.target instanceof HTMLInputElement) {
-      this.setState({ draftName: event.target.value });
-    }
-  }
-
-  private updateDraftTemplate(event: Event): void {
-    if (event.target instanceof HTMLTextAreaElement) {
-      this.setState({ draftTemplate: event.target.value });
-    }
-  }
-
-  private updateDraftVariables(event: Event): void {
-    if (event.target instanceof HTMLTextAreaElement) {
-      this.setState({ draftVariables: event.target.value });
-    }
-  }
-
   private async savePrompt(): Promise<void> {
     const name = this.state.draftName.trim();
     const template = this.state.draftTemplate.trim();
     if (!name || !template) return;
+    this.setState({ busy: true });
     const selected = this.state.url.promptId
       ? this.state.prompts.find(
           (prompt) => prompt.id === this.state.url.promptId,
@@ -643,6 +572,8 @@ export class PromptAssetsScreen extends Component<
           ...this.state.prompts.filter((prompt) => prompt.id !== asset.id),
           asset,
         ],
+        busy: false,
+        noticeMessage: `Prompt "${asset.name}" saved as version ${asset.activeVersion}.`,
       });
       this.openEditor({
         mode: PromptAssetsUrlMode.Edit,
@@ -650,7 +581,7 @@ export class PromptAssetsScreen extends Component<
         version: asset.activeVersion,
       });
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({ busy: false, errorMessage: readErrorMessage(error) });
     }
   }
 
@@ -686,6 +617,7 @@ export class PromptAssetsScreen extends Component<
     prompt: PromptAssetSummary,
     usage: PromptAssetUsageSummary | undefined,
   ): Promise<void> {
+    this.setState({ busy: true });
     try {
       await this.client.delete({
         assetId: prompt.id,
@@ -697,12 +629,14 @@ export class PromptAssetsScreen extends Component<
         prompts: this.state.prompts.filter(
           (candidate) => candidate.id !== prompt.id,
         ),
+        busy: false,
+        noticeMessage: `Prompt "${prompt.name}" deleted.`,
       });
       if (this.state.url.promptId === prompt.id) {
         this.closeDeleteConfirmation();
       }
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({ busy: false, errorMessage: readErrorMessage(error) });
     }
   }
 }

@@ -132,4 +132,29 @@ describe("server configuration", () => {
       }).mcpServers,
     ).toHaveLength(1);
   });
+
+  it("parses operator-added trusted plugin keys and always trusts the reference plugin", () => {
+    expect(
+      loadConfig({
+        DATABASE_URL: requiredEnvironment.DATABASE_URL,
+        ITERONIX_TRUSTED_PLUGIN_IDS:
+          " acme.knowledge, reference.echo ,acme.knowledge ",
+      }).trustedPluginIds,
+    ).toEqual(["acme.knowledge", "reference.echo"]);
+
+    expect(
+      loadConfig({
+        DATABASE_URL: requiredEnvironment.DATABASE_URL,
+      }).trustedPluginIds,
+    ).toEqual([]);
+
+    expect(() =>
+      loadConfig({
+        ...requiredEnvironment,
+        ITERONIX_TRUSTED_PLUGIN_IDS: "My Plugin,ok-key",
+      }),
+    ).toThrow(
+      "ITERONIX_TRUSTED_PLUGIN_IDS contains invalid plugin keys: My Plugin",
+    );
+  });
 });

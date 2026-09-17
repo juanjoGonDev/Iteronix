@@ -57,6 +57,74 @@ interface SettingsSecretFieldProps extends ComponentProps {
   onChange: (value: string) => void;
 }
 
+interface SettingsTextareaFieldProps extends ComponentProps {
+  label: string;
+  value: string;
+  placeholder: string;
+  testId: string;
+  rows?: number;
+  hint?: string | null;
+  onChange: (value: string) => void;
+}
+
+export interface JsonContractState {
+  valid: boolean;
+  message: string;
+}
+
+/**
+ * Single owner of the "JSON contract field" rule shared by every asset form:
+ * the text must parse, be an object, and (optionally) satisfy a schema check.
+ */
+export const readJsonContractState = (
+  value: string,
+  input: {
+    required: boolean;
+    /** Returns an error message or null for an additional structural check. */
+    validate?: (parsed: Record<string, unknown>) => string | null;
+  },
+): JsonContractState => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return input.required
+      ? { valid: false, message: "Required: paste a JSON object." }
+      : {
+          valid: true,
+          message: "Empty: the server keeps its default contract.",
+        };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    return {
+      valid: false,
+      message: `Invalid JSON: ${error instanceof Error ? error.message : "could not parse"}`,
+    };
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { valid: false, message: "Must be a JSON object." };
+  }
+  const schemaError = input.validate?.(parsed as Record<string, unknown>);
+  return schemaError
+    ? { valid: false, message: schemaError }
+    : { valid: true, message: "Valid JSON object." };
+};
+
+/** Structural check for the versioned JSON-schema contracts the server accepts. */
+export const readSchemaContractError = (
+  parsed: Record<string, unknown>,
+): string | null => {
+  const type = parsed["type"];
+  return type === "array" ||
+    type === "boolean" ||
+    type === "number" ||
+    type === "object" ||
+    type === "string"
+    ? null
+    : 'A root "type" of array, boolean, number, object, or string is required.';
+};
+
 interface SettingsToggleFieldProps extends ComponentProps {
   label: string;
   description: string;
@@ -81,6 +149,25 @@ export interface SettingsCheckboxGroupProps<
   testId: string;
   onChange: (value: TValue, checked: boolean) => void;
 }
+
+/**
+ * Live commit wiring for text-style controls (inputs and textareas).
+ *
+ * Typing, pasting, and automation (Playwright's `fill`, for example) update
+ * the element and fire `input`; `change` only arrives once the field loses
+ * focus. Listening to `change` alone would freeze validation and save-gating
+ * until the next interaction, so every keystroke commits through both events
+ * (the handler is idempotent, whichever arrives second is a no-op).
+ */
+const readLiveCommitHandlers = (commit: (value: string) => void) => {
+  const handler = (event: Event): void => {
+    const target = event.target as { value?: unknown } | null;
+    if (target && typeof target.value === "string") {
+      commit(target.value);
+    }
+  };
+  return { onChange: handler, onInput: handler };
+};
 
 class SettingsField extends Component<SettingsFieldProps> {
   override render(): HTMLElement {
@@ -122,12 +209,7 @@ export class SettingsTextField extends Component<SettingsTextFieldProps> {
         placeholder,
         "data-testid": testId,
         className: readSettingsInputClassName(),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -145,12 +227,7 @@ export class SettingsNumberField extends Component<SettingsNumberFieldProps> {
         disabled,
         "data-testid": testId,
         className: `${readSettingsInputClassName()} disabled:opacity-50`,
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -168,12 +245,7 @@ export class SettingsDateTimeField extends Component<SettingsDateTimeFieldProps>
         disabled,
         "data-testid": testId,
         className: `${readSettingsInputClassName()} disabled:cursor-not-allowed disabled:opacity-50`,
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
     });
   }
@@ -236,17 +308,109 @@ export class SettingsSecretField extends Component<SettingsSecretFieldProps> {
         placeholder,
         "data-testid": testId,
         className: readSettingsInputClassName(),
-        onChange: (event: Event) => {
-          const target = event.target;
-          if (target instanceof HTMLInputElement) {
-            onChange(target.value);
-          }
-        },
+        ...readLiveCommitHandlers(onChange),
       }),
       createElement("span", { className: "text-xs text-text-secondary" }, [
         "The browser keeps this key only in memory for the current session.",
       ]),
     ]);
+  }
+}
+
+export class SettingsTextareaField extends Component<SettingsTextareaFieldProps> {
+  override render(): HTMLElement {
+    const {
+      label,
+      value,
+      placeholder,
+      testId,
+      rows = 4,
+      hint = null,
+      onChange,
+    } = this.props;
+
+    return createElement(SettingsField, {
+      label,
+      children: createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("textarea", {
+          value,
+          rows,
+          placeholder,
+          spellcheck: "false",
+          "data-testid": testId,
+          className: `${readSettingsInputClassName()} font-mono leading-6`,
+          ...readLiveCommitHandlers(onChange),
+        }),
+        hint
+          ? createElement(
+              "span",
+              { className: "text-xs text-text-secondary" },
+              [hint],
+            )
+          : "",
+      ]),
+    });
+  }
+}
+
+export class SettingsJsonField extends Component<
+  SettingsTextareaFieldProps & {
+    contractState: JsonContractState;
+  }
+> {
+  override render(): HTMLElement {
+    const {
+      label,
+      value,
+      placeholder,
+      testId,
+      rows = 6,
+      hint = null,
+      contractState,
+      onChange,
+    } = this.props;
+
+    return createElement(SettingsField, {
+      label,
+      children: createElement("div", { className: "flex flex-col gap-1" }, [
+        createElement("textarea", {
+          value,
+          rows,
+          placeholder,
+          spellcheck: "false",
+          "data-testid": testId,
+          "aria-invalid": String(!contractState.valid),
+          className: joinClasses(
+            readSettingsInputClassName(),
+            "font-mono leading-6",
+            contractState.valid
+              ? ""
+              : "border-rose-500/60 focus:border-rose-400 focus:ring-rose-400",
+          ),
+          ...readLiveCommitHandlers(onChange),
+        }),
+        createElement(
+          "span",
+          {
+            className: joinClasses(
+              "text-xs",
+              contractState.valid ? "text-emerald-400" : "text-rose-300",
+            ),
+            role: "status",
+            "aria-live": "polite",
+            "data-testid": `${testId}-state`,
+          },
+          [contractState.message],
+        ),
+        hint
+          ? createElement(
+              "span",
+              { className: "text-xs text-text-secondary" },
+              [hint],
+            )
+          : "",
+      ]),
+    });
   }
 }
 

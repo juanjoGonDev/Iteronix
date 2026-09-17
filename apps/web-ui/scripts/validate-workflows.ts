@@ -113,6 +113,7 @@ const WorkflowSelector = {
   DeepEditorOutputTabVisual: "workflows-deep-editor-output-tab-visual",
   DeepEditorOutputTabJson: "workflows-deep-editor-output-tab-json",
   OutputEditorTextarea: "workflows-output-editor-textarea",
+  NodeModalTabPrefix: "workflows-node-modal-tab-",
   DebugInputTabPrefix: "workflows-debug-input-tab-",
   DebugOutputTabPrefix: "workflows-debug-output-tab-",
   DebugInputSource: "workflows-debug-input-source",
@@ -614,19 +615,26 @@ async function validateWorkflowsScreen(): Promise<void> {
       suffix: "workflows-url-node-editor-reload",
       artifactName: "workflows",
     });
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPageText(
       page,
       "Execute this step to inspect the current node output.",
     );
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}input`);
+    await waitForTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
     await clickByTestId(page, `${WorkflowSelector.DebugInputTabPrefix}schema`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
+    await waitForTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
     await clickByTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}table`);
     await waitForUrlSearchParam(page, "outputTab", "table");
     await page.reload({
       waitUntil: "networkidle0",
     });
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
+    await waitForTestId(page, `${WorkflowSelector.DebugOutputTabPrefix}json`);
     await waitForUrlSearchParam(page, "inputTab", "schema");
     await waitForUrlSearchParam(page, "outputTab", "table");
     await captureBrowserValidationScreenshot({
@@ -664,6 +672,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       );
     }
     await waitForMissingTestId(page, WorkflowSelector.OutputEditorTextarea);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPinnedDefinitionOutput(
       stubServer.state,
       ValidationText.EditedPinnedOutputNeedle,
@@ -745,6 +754,7 @@ async function validateWorkflowsScreen(): Promise<void> {
     await waitForNodeCardText(page, "push_pin");
     await doubleClickByTestId(page, reloadedResponseCardTestId);
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForPageText(page, ValidationText.EditedPinnedOutputNeedle);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
     await clickButtonByTitle(page, "Close editor");
@@ -1291,6 +1301,7 @@ async function validateWorkflowsScreen(): Promise<void> {
       waitUntil: "networkidle0",
     });
     await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await captureBrowserValidationScreenshot({
       page,
       directory: screenshotDirectory,
@@ -1330,6 +1341,8 @@ async function validateWorkflowsScreen(): Promise<void> {
       "Response",
     );
     await doubleClickByTestId(page, historyPinnedResponseCardTestId);
+    await waitForTestId(page, WorkflowSelector.InspectorPanel);
+    await clickByTestId(page, `${WorkflowSelector.NodeModalTabPrefix}output`);
     await waitForTestId(page, WorkflowSelector.PinnedOutputsList);
     await assertPinnedOutputListHasName(page);
     await waitForMissingPageText(page, ValidationText.LegacyProviderError);
@@ -1519,10 +1532,7 @@ async function handleStubRequest(
     return;
   }
 
-  if (
-    request.method === "POST" &&
-    requestUrl.pathname === RequestPath.AuthMe
-  ) {
+  if (request.method === "POST" && requestUrl.pathname === RequestPath.AuthMe) {
     writeJson(response, 200, {
       user: createValidationAdminUser(),
     });
@@ -2529,29 +2539,38 @@ async function setTextAreaValueByTestId(
   testId: string,
   value: string,
 ): Promise<void> {
-  const updated = await page.evaluate(
-    (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(
-        `[data-testid="${payload.testId}"]`,
-      );
-      if (!(element instanceof HTMLTextAreaElement)) {
-        return false;
-      }
-      element.value = payload.value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      element.dispatchEvent(new Event("blur", { bubbles: true }));
-      return true;
-    },
+  // Coalesce-write-verify: the screen re-renders inside requestAnimationFrame
+  // and replaceChildren() swaps the DOM under a just-written textarea (the
+  // async definition refresh right after an import could wipe the paste).
+  // Polling re-writes until the value survives on the live element keeps the
+  // helper deterministic without loosening any assertion.
+  await waitForCondition(
+    () =>
+      page.evaluate(
+        (payload: { testId: string; value: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${payload.testId}"]`,
+          );
+          if (!(element instanceof HTMLTextAreaElement)) {
+            return false;
+          }
+          if (element.value === payload.value) {
+            return true;
+          }
+          element.value = payload.value;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          element.dispatchEvent(new Event("blur", { bubbles: true }));
+          return false;
+        },
+        { testId, value },
+      ),
+    `Could not set textarea ${testId}.`,
     {
-      testId,
-      value,
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
-
-  if (!updated) {
-    throw new Error(`Could not set textarea ${testId}.`);
-  }
 }
 
 async function setInputValueByTestId(
@@ -2559,28 +2578,32 @@ async function setInputValueByTestId(
   testId: string,
   value: string,
 ): Promise<void> {
-  const updated = await page.evaluate(
-    (payload: { testId: string; value: string }) => {
-      const element = document.querySelector(
-        `[data-testid="${payload.testId}"]`,
-      );
-      if (!(element instanceof HTMLInputElement)) {
-        return false;
-      }
-      element.value = payload.value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    },
+  // Same mount race as the textarea helper: poll until the input exists, then
+  // write once (the value may legitimately be reformatted by the app, so no
+  // strict read-back here).
+  await waitForCondition(
+    () =>
+      page.evaluate(
+        (payload: { testId: string; value: string }) => {
+          const element = document.querySelector(
+            `[data-testid="${payload.testId}"]`,
+          );
+          if (!(element instanceof HTMLInputElement)) {
+            return false;
+          }
+          element.value = payload.value;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        },
+        { testId, value },
+      ),
+    `Could not set input ${testId}.`,
     {
-      testId,
-      value,
+      timeoutMs: ValidationConfig.UiPollingTimeoutMs,
+      intervalMs: ValidationConfig.UiPollingIntervalMs,
     },
   );
-
-  if (!updated) {
-    throw new Error(`Could not set input ${testId}.`);
-  }
 }
 
 async function selectValueByTestId(

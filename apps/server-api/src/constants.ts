@@ -97,6 +97,7 @@ export const EnvKey = {
   IdeUiOrigins: "IDE_UI_ORIGINS",
   AdminEmail: "ITERONIX_ADMIN_EMAIL",
   AdminPassword: "ITERONIX_ADMIN_PASSWORD",
+  TrustedPluginIds: "ITERONIX_TRUSTED_PLUGIN_IDS",
 } as const;
 
 export const DefaultServerConfig = {

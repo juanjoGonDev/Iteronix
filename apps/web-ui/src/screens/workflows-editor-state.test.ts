@@ -31,8 +31,12 @@ import {
   safeParseJsonContractValue,
   serializeJsonContractForProvider,
   serializeWorkflowExpression,
+  allowsWorkflowNodePaletteDrop,
+  autoLayoutWorkflowDefinition,
   moveWorkflowNode,
   readNodeAssetKind,
+  readWorkflowNodeKindDropValue,
+  WorkflowNodePaletteDragMimeType,
   readWorkflowConnectedUpstreamNodeIds,
   readWorkflowNodeSelectableOutputPaths,
   removeWorkflowEdge,
@@ -1152,3 +1156,156 @@ const createSequentialIdFactory = (prefix: string): (() => string) => {
     return `${prefix}-${index}`;
   };
 };
+
+const layoutDefinition = (
+  nodeIds: ReadonlyArray<string>,
+  edges: ReadonlyArray<readonly [string, string]>,
+) =>
+  ({
+    nodes: nodeIds.map((id, index) => ({
+      id,
+      position: { x: 4000 + index * 7, y: 123 },
+    })),
+    edges: edges.map(([sourceNodeId, targetNodeId]) => ({
+      sourceNodeId,
+      targetNodeId,
+    })),
+  }) as unknown as Parameters<typeof autoLayoutWorkflowDefinition>[0];
+
+const positionOf = (
+  definition: Awaited<ReturnType<typeof autoLayoutWorkflowDefinition>>,
+  id: string,
+): { x: number; y: number } => {
+  const node = definition.nodes.find((entry) => entry.id === id);
+  if (!node) {
+    throw new Error(`missing node ${id}`);
+  }
+  return node.position;
+};
+
+describe("workflow canvas drag & tidy-up layout", () => {
+  it("accepts palette drags during dragover, when payloads stay unreadable", () => {
+    // Chromium only exposes the types list until the drop lands.
+    expect(
+      allowsWorkflowNodePaletteDrop({
+        types: [WorkflowNodePaletteDragMimeType],
+        getData: () => "",
+      }),
+    ).toBe(true);
+    // Text or file drags over the canvas must stay rejected.
+    expect(
+      allowsWorkflowNodePaletteDrop({
+        types: ["text/plain"],
+        getData: () => "",
+      }),
+    ).toBe(false);
+    expect(
+      allowsWorkflowNodePaletteDrop({ types: ["Files"], getData: () => "" }),
+    ).toBe(false);
+    // Fallback for environments that do expose the payload on dragover.
+    expect(
+      allowsWorkflowNodePaletteDrop({
+        types: [],
+        getData: (kind: string) =>
+          kind === WorkflowNodePaletteDragMimeType
+            ? WorkflowNodeKind.AiAgent
+            : "",
+      }),
+    ).toBe(true);
+  });
+
+  it("maps dropped payloads onto palette node kinds only", () => {
+    expect(readWorkflowNodeKindDropValue(WorkflowNodeKind.TriggerManual)).toBe(
+      WorkflowNodeKind.TriggerManual,
+    );
+    expect(readWorkflowNodeKindDropValue("not.a.node.kind")).toBeNull();
+    expect(readWorkflowNodeKindDropValue("")).toBeNull();
+  });
+
+  it("layers the graph left to right along its edges", () => {
+    const laidOut = autoLayoutWorkflowDefinition(
+      layoutDefinition(
+        ["a", "b", "c"],
+        [
+          ["a", "b"],
+          ["b", "c"],
+        ],
+      ),
+    );
+
+    const a = positionOf(laidOut, "a");
+    const b = positionOf(laidOut, "b");
+    const c = positionOf(laidOut, "c");
+    expect(b.x - a.x).toBe(312);
+    expect(c.x - b.x).toBe(312);
+    // Single node per layer: the column is vertically centered, so one row
+    // means every node shares the same y.
+    expect(new Set([a.y, b.y, c.y]).size).toBe(1);
+  });
+
+  it("stacks same-layer nodes vertically and converges joiners downstream", () => {
+    const laidOut = autoLayoutWorkflowDefinition(
+      layoutDefinition(
+        ["root", "left", "right", "join"],
+        [
+          ["root", "left"],
+          ["root", "right"],
+          ["left", "join"],
+          ["right", "join"],
+        ],
+      ),
+    );
+
+    const root = positionOf(laidOut, "root");
+    const left = positionOf(laidOut, "left");
+    const right = positionOf(laidOut, "right");
+    const join = positionOf(laidOut, "join");
+
+    expect(left.x - root.x).toBe(312);
+    expect(right.x - root.x).toBe(312);
+    expect(left.x).toBe(right.x);
+    expect(Math.abs(left.y - right.y)).toBe(168);
+    expect(join.x).toBeGreaterThan(left.x);
+    // The single-node layers sit on the middle line of the two-row column.
+    expect(root.y).toBe((left.y + right.y) / 2);
+    expect(join.y).toBe((left.y + right.y) / 2);
+  });
+
+  it("converges on cycles and still places every node", () => {
+    const laidOut = autoLayoutWorkflowDefinition(
+      layoutDefinition(
+        ["a", "b", "orphan"],
+        [
+          ["a", "b"],
+          ["b", "a"],
+        ],
+      ),
+    );
+
+    const ids = ["a", "b", "orphan"];
+    for (const id of ids) {
+      const position = positionOf(laidOut, id);
+      expect(Number.isInteger(position.x)).toBe(true);
+      expect(Number.isInteger(position.y)).toBe(true);
+    }
+    const positions = ids.map((id) => positionOf(laidOut, id));
+    expect(new Set(positions.map((p) => `${p.x}:${p.y}`)).size).toBe(
+      positions.length,
+    );
+  });
+
+  it("is idempotent and deterministic", () => {
+    const definition = layoutDefinition(
+      ["a", "b", "c"],
+      [
+        ["a", "c"],
+        ["b", "c"],
+      ],
+    );
+    const once = autoLayoutWorkflowDefinition(definition);
+    const twice = autoLayoutWorkflowDefinition(once);
+    expect(twice.nodes.map((node) => node.position)).toEqual(
+      once.nodes.map((node) => node.position),
+    );
+  });
+});

@@ -16,7 +16,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 
   server-api:
     build:
@@ -30,6 +30,8 @@ services:
       ITERONIX_ADMIN_EMAIL: ${ITERONIX_ADMIN_EMAIL:-admin@admin}
       ITERONIX_ADMIN_PASSWORD: ${ITERONIX_ADMIN_PASSWORD:-admin}
       IDE_UI_ORIGINS: ${IDE_UI_ORIGINS:-http://localhost:${ITERONIX_HTTP_PORT:-4000},http://127.0.0.1:${ITERONIX_HTTP_PORT:-4000}}
+      # Extend the server-owned plugin allowlist (reference.echo is always trusted).
+      ITERONIX_TRUSTED_PLUGIN_IDS: ${ITERONIX_TRUSTED_PLUGIN_IDS:-}
       # Optional: only needed by programmatic callers. The web UI signs in.
       AUTH_TOKEN: ${AUTH_TOKEN:-}
     restart: unless-stopped

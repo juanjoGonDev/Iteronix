@@ -17,11 +17,6 @@ interface InputVariants {
   search: string;
 }
 
-interface NavItemVariants {
-  default: string;
-  active: string;
-}
-
 interface StatusVariants {
   success: string;
   warning: string;
@@ -43,7 +38,6 @@ interface CSSClasses {
   button: ButtonVariants;
   card: CardVariants;
   input: InputVariants;
-  navItem: NavItemVariants;
   status: StatusVariants;
   layout: LayoutVariants;
 }
@@ -78,14 +72,6 @@ export const css: CSSClasses = {
       "w-full bg-surface-dark border border-border-dark text-white rounded-lg focus:ring-1 focus:ring-primary focus:border-primary px-3 py-2 placeholder-text-secondary",
     search:
       "bg-surface-dark border border-border-dark text-white text-sm rounded-lg focus:ring-primary focus:border-primary block pl-10 pr-3 py-2 placeholder-text-secondary",
-  },
-
-  // Navigation
-  navItem: {
-    default:
-      "flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark-hover hover:text-white transition-colors group",
-    active:
-      "flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20",
   },
 
   // Status badges

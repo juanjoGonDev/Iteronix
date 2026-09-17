@@ -1,6 +1,22 @@
 import { Button } from "../components/Button.js";
 import { EmptyStatePanel } from "../components/EmptyStatePanel.js";
 import {
+  AssetConfirmDialog,
+  AssetEditorDialog,
+  AssetRow,
+  AssetRowList,
+} from "../components/AssetWorkbench.js";
+import {
+  PageFrame,
+  PageIntro,
+  PageNoticeStack,
+} from "../components/PageScaffold.js";
+import {
+  SettingsNumberField,
+  SettingsTextField,
+  SettingsToggleField,
+} from "../components/SettingsFields.js";
+import {
   Component,
   createElement,
   type ComponentProps,
@@ -8,6 +24,7 @@ import {
 import {
   createMemoryAssetRecord,
   createMemoryAssetsClient,
+  selectEnabledMemoryAssets,
   type MemoryAssetScope,
   type MemoryAssetSummary,
 } from "../shared/memory-assets-client.js";
@@ -22,6 +39,7 @@ import {
 const Selector = {
   Root: "memory-assets-root",
   Create: "memory-assets-create",
+  List: "memory-assets-list",
   Editor: "memory-assets-editor",
   Name: "memory-assets-name",
   Workflow: "memory-assets-workflow",
@@ -30,12 +48,20 @@ const Selector = {
   Redaction: "memory-assets-redaction",
   Documents: "memory-assets-documents",
   Save: "memory-assets-save",
+  Error: "memory-assets-error",
+  Retry: "memory-assets-retry",
+  DeletePrefix: "memory-assets-delete-",
+  DeleteDialog: "memory-assets-delete-dialog",
+  DeleteConfirm: "memory-assets-delete-confirm",
+  DeleteCancel: "memory-assets-delete-cancel",
   RowPrefix: "memory-assets-row-",
 } as const;
+
 type MemoryAssetsState = {
   assets: ReadonlyArray<MemoryAssetSummary>;
   loading: boolean;
   errorMessage: string | null;
+  noticeMessage: string | null;
   url: MemoryAssetsUrlState;
   name: string;
   scope: MemoryAssetScope;
@@ -43,6 +69,8 @@ type MemoryAssetsState = {
   indexingEnabled: boolean;
   retentionDays: string;
   redactionEnabled: boolean;
+  pendingDeleteId: string | null;
+  busy: boolean;
 };
 
 export class MemoryAssetsScreen extends Component<
@@ -50,12 +78,14 @@ export class MemoryAssetsScreen extends Component<
   MemoryAssetsState
 > {
   private readonly client = createMemoryAssetsClient();
+
   constructor(props: ComponentProps = {}) {
     const url = readMemoryAssetsUrlState(window.location.href);
     super(props, {
       assets: [],
       loading: true,
       errorMessage: null,
+      noticeMessage: null,
       url,
       name: "",
       scope: "workflow",
@@ -63,55 +93,112 @@ export class MemoryAssetsScreen extends Component<
       indexingEnabled: false,
       retentionDays: "30",
       redactionEnabled: true,
+      pendingDeleteId: null,
+      busy: false,
     });
   }
+
   override onMount(): void {
     window.addEventListener("popstate", this.handleBrowserNavigation);
     void this.loadAssets();
   }
+
   override onUnmount(): void {
     window.removeEventListener("popstate", this.handleBrowserNavigation);
   }
+
   override render(): HTMLElement {
     return createElement(
       "main",
-      {
-        className:
-          "min-h-full bg-[#11161d] px-4 py-5 text-white sm:px-6 lg:px-8",
-        "data-testid": Selector.Root,
-      },
+      { className: "min-h-full text-white", "data-testid": Selector.Root },
       [
         createElement(
-          "div",
-          { className: "mx-auto flex max-w-6xl flex-col gap-5" },
-          [this.renderToolbar(), this.renderContent(), this.renderEditor()],
+          PageFrame,
+          { className: "max-w-[1380px] gap-7 pb-28 md:pb-10" },
+          [
+            createElement(PageNoticeStack, {
+              errorMessage: this.state.errorMessage,
+              noticeMessage: this.state.noticeMessage,
+            }),
+            this.renderIntro(),
+            this.renderContent(),
+            this.renderEditor(),
+            this.renderDeleteConfirmation(),
+          ],
         ),
       ],
     );
   }
-  private renderToolbar(): HTMLElement {
-    return createElement(
-      "section",
-      {
-        className:
-          "flex flex-col gap-4 border-b border-border-dark pb-5 sm:flex-row sm:items-end sm:justify-between",
-      },
-      [
-        createElement("div", {}, [
-          createElement(
-            "h1",
-            { className: "text-xl font-semibold tracking-tight text-white" },
-            ["Memory & RAG sources"],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            [
-              "Bounded retrieval sources with opt-in indexing and retained provenance.",
-            ],
-          ),
-        ]),
-        createElement(Button, {
+
+  private renderIntro(): HTMLElement {
+    const enabled = selectEnabledMemoryAssets(this.state.assets).length;
+    return createElement(PageIntro, {
+      title: "Memory & RAG sources",
+      description: `Bounded retrieval sources with opt-in indexing and retained provenance. ${this.state.assets.length} configured · ${enabled} enabled.`,
+      actions: createElement(Button, {
+        variant: "primary",
+        size: "sm",
+        icon: "add",
+        children: "Create source",
+        onClick: () =>
+          this.openEditor({
+            mode: MemoryAssetsUrlMode.Create,
+            memoryId: null,
+            panel: "config",
+          }),
+        dataset: { testid: Selector.Create },
+      }),
+    });
+  }
+
+  private renderContent(): HTMLElement {
+    if (this.state.loading)
+      return createElement(
+        "section",
+        {
+          className:
+            "rounded-2xl border border-[#202832] bg-[#171c22] px-6 py-10 text-sm text-text-secondary",
+          "aria-busy": "true",
+        },
+        ["Loading memory sources…"],
+      );
+    if (this.state.errorMessage)
+      return createElement(
+        "section",
+        {
+          className:
+            "flex flex-col items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between",
+          role: "alert",
+          "data-testid": Selector.Error,
+        },
+        [
+          createElement("div", { className: "flex min-w-0 flex-col gap-1" }, [
+            createElement(
+              "p",
+              { className: "text-sm font-semibold text-rose-100" },
+              ["Could not load memory sources"],
+            ),
+            createElement("p", { className: "text-sm text-rose-100/80" }, [
+              this.state.errorMessage,
+            ]),
+          ]),
+          createElement(Button, {
+            variant: "secondary",
+            size: "sm",
+            icon: "refresh",
+            children: "Retry",
+            onClick: () => void this.loadAssets(),
+            dataset: { testid: Selector.Retry },
+          }),
+        ],
+      );
+    if (this.state.assets.length === 0)
+      return createElement(EmptyStatePanel, {
+        icon: "database",
+        title: "No memory sources yet",
+        description:
+          "Create an opt-in source before enabling retrieval. Ingestion and indexing stay server-governed.",
+        action: createElement(Button, {
           variant: "primary",
           size: "sm",
           icon: "add",
@@ -122,154 +209,103 @@ export class MemoryAssetsScreen extends Component<
               memoryId: null,
               panel: "config",
             }),
-          dataset: { testid: Selector.Create },
         }),
-      ],
-    );
-  }
-  private renderContent(): HTMLElement {
-    if (this.state.loading)
-      return createElement(
-        "p",
-        {
-          className:
-            "border border-border-dark bg-[#151b22] px-4 py-8 text-sm text-text-secondary",
-        },
-        ["Loading memory sources…"],
-      );
-    if (this.state.errorMessage)
-      return createElement(
-        "p",
-        {
-          className:
-            "border border-rose-500/40 bg-rose-500/10 px-4 py-4 text-sm text-rose-100",
-        },
-        [this.state.errorMessage],
-      );
-    if (this.state.assets.length === 0)
-      return createElement(EmptyStatePanel, {
-        icon: "database",
-        title: "No memory sources yet",
-        description: "Create an opt-in source before enabling retrieval.",
       });
-    return createElement(
-      "section",
-      { className: "divide-y divide-border-dark border border-border-dark" },
-      this.state.assets.map((asset) => this.renderRow(asset)),
-    );
+    return createElement(AssetRowList, {
+      testId: Selector.List,
+      rows: this.state.assets.map((asset) => this.renderRow(asset)),
+    });
   }
+
   private renderRow(asset: MemoryAssetSummary): HTMLElement {
-    return createElement(
-      "article",
-      {
-        className:
-          "flex flex-col gap-3 bg-[#11161d] px-4 py-4 sm:flex-row sm:items-center sm:justify-between",
-        "data-testid": `${Selector.RowPrefix}${asset.id}`,
-      },
-      [
-        createElement("div", { className: "min-w-0" }, [
-          createElement(
-            "p",
-            { className: "truncate text-sm font-semibold text-white" },
-            [asset.name],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-sm text-text-secondary" },
-            [
-              `${asset.scope} · ${asset.status} · ${asset.indexingEnabled ? "indexing on" : "indexing off"}`,
-            ],
-          ),
-          createElement(
-            "p",
-            { className: "mt-1 text-xs text-text-secondary" },
-            [
-              `${asset.documents.length} indexed document${asset.documents.length === 1 ? "" : "s"} · ${asset.retentionDays} day retention · ${asset.redactionEnabled ? "redacted" : "unredacted"}`,
-            ],
-          ),
-        ]),
-        createElement(Button, {
-          variant: "secondary",
-          size: "sm",
+    return createElement(AssetRow, {
+      testId: `${Selector.RowPrefix}${asset.id}`,
+      icon: "database",
+      title: asset.name,
+      subtitle: asset.id,
+      status: asset.status,
+      meta: [
+        `scope ${asset.scope} · workflow ${asset.workflowId || "unbound"}`,
+        `${asset.documents.length} indexed document${asset.documents.length === 1 ? "" : "s"} · ${asset.retentionDays} day retention`,
+      ],
+      chips: [
+        asset.indexingEnabled ? "indexing:on" : "indexing:off",
+        asset.redactionEnabled ? "redaction:on" : "redaction:off",
+      ],
+      actions: [
+        {
+          label: "Open editor",
           icon: "edit",
-          children: "Open editor",
+          variant: "secondary",
           onClick: () =>
             this.openEditor({
               mode: MemoryAssetsUrlMode.Edit,
               memoryId: asset.id,
               panel: "config",
             }),
-        }),
+        },
+        {
+          label: "Documents",
+          icon: "folder_managed",
+          onClick: () =>
+            this.openEditor({
+              mode: MemoryAssetsUrlMode.Edit,
+              memoryId: asset.id,
+              panel: "documents",
+            }),
+        },
+        {
+          label: "Delete",
+          icon: "delete",
+          variant: "danger",
+          testId: `${Selector.DeletePrefix}${asset.id}`,
+          onClick: () => this.setState({ pendingDeleteId: asset.id }),
+        },
       ],
-    );
+    });
   }
+
   private renderEditor(): HTMLElement | string {
     if (this.state.url.mode === MemoryAssetsUrlMode.Catalog) return "";
-    return createElement(
-      "section",
-      {
-        className:
-          "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4",
-        role: "dialog",
-        "aria-modal": "true",
-        "data-testid": Selector.Editor,
+    const isCreate = this.state.url.mode === MemoryAssetsUrlMode.Create;
+    const retention = Number.parseInt(this.state.retentionDays, 10);
+    const retentionValid = Number.isInteger(retention) && retention >= 1;
+    const saveDisabled =
+      this.state.busy ||
+      this.state.name.trim().length === 0 ||
+      this.state.workflowId.trim().length === 0 ||
+      !retentionValid;
+    return createElement(AssetEditorDialog, {
+      testId: Selector.Editor,
+      title: isCreate ? "Create memory source" : "Edit memory source",
+      description:
+        "Sources are scoped to one workflow tenant. Retrieval provenance is retained and traces are redacted according to these settings.",
+      onClose: () =>
+        this.openEditor({
+          mode: MemoryAssetsUrlMode.Catalog,
+          memoryId: null,
+          panel: "config",
+        }),
+      save: {
+        label: isCreate ? "Save source" : "Save changes",
+        testId: Selector.Save,
+        disabled: saveDisabled,
+        disabledReason:
+          "Name, workflow ID, and a retention of at least 1 day are required.",
+        onClick: () => void this.saveAsset(),
       },
-      [
-        createElement(
-          "div",
-          {
-            className:
-              "max-h-full w-full max-w-2xl overflow-y-auto border border-border-dark bg-[#151b22] p-5 shadow-2xl",
-          },
-          [
-            createElement(
-              "div",
-              { className: "flex items-center justify-between" },
-              [
-                createElement(
-                  "h2",
-                  { className: "text-base font-semibold text-white" },
-                  [
-                    this.state.url.mode === MemoryAssetsUrlMode.Create
-                      ? "Create memory source"
-                      : "Edit memory source",
-                  ],
-                ),
-                this.renderPanelButton("Configuration", "config"),
-                this.renderPanelButton("Documents", "documents"),
-              ],
-            ),
-            this.state.url.panel === "documents"
-              ? this.renderDocuments()
-              : this.renderConfiguration(),
-            createElement("div", { className: "mt-5 flex justify-end gap-2" }, [
-              createElement(Button, {
-                variant: "ghost",
-                size: "sm",
-                children: "Close",
-                onClick: () =>
-                  this.openEditor({
-                    mode: MemoryAssetsUrlMode.Catalog,
-                    memoryId: null,
-                    panel: "config",
-                  }),
-              }),
-              createElement(Button, {
-                variant: "primary",
-                size: "sm",
-                children: "Save source",
-                disabled:
-                  this.state.name.trim().length === 0 ||
-                  this.state.workflowId.trim().length === 0,
-                onClick: () => void this.saveAsset(),
-                dataset: { testid: Selector.Save },
-              }),
-            ]),
-          ],
-        ),
-      ],
-    );
+      children: createElement("div", { className: "grid gap-5" }, [
+        createElement("div", { className: "flex gap-2" }, [
+          this.renderPanelButton("Configuration", "config"),
+          this.renderPanelButton("Documents", "documents"),
+        ]),
+        this.state.url.panel === "documents"
+          ? this.renderDocuments()
+          : this.renderConfiguration(),
+      ]),
+    });
   }
+
   private renderPanelButton(
     label: string,
     panel: MemoryAssetsUrlPanel,
@@ -281,119 +317,120 @@ export class MemoryAssetsScreen extends Component<
       onClick: () => this.openEditor({ ...this.state.url, panel }),
     });
   }
+
   private renderConfiguration(): HTMLElement {
-    return createElement("div", {}, [
-      this.renderInput("Name", this.state.name, Selector.Name, (name) =>
-        this.setState({ name }),
-      ),
-      this.renderInput(
-        "Workflow ID",
-        this.state.workflowId,
-        Selector.Workflow,
-        (workflowId) => this.setState({ workflowId }),
-      ),
-      this.renderCheckbox(
-        "Opt in to indexing",
-        this.state.indexingEnabled,
-        Selector.Indexing,
-        (indexingEnabled) => this.setState({ indexingEnabled }),
-      ),
-      this.renderInput(
-        "Retention days",
-        this.state.retentionDays,
-        Selector.Retention,
-        (retentionDays) => this.setState({ retentionDays }),
-        "number",
-      ),
-      this.renderCheckbox(
-        "Redact retrieved content in traces",
-        this.state.redactionEnabled,
-        Selector.Redaction,
-        (redactionEnabled) => this.setState({ redactionEnabled }),
-      ),
+    const retention = Number.parseInt(this.state.retentionDays, 10);
+    return createElement("div", { className: "grid gap-4" }, [
+      createElement(SettingsTextField, {
+        label: "Name",
+        value: this.state.name,
+        placeholder: "Product knowledge base",
+        testId: Selector.Name,
+        onChange: (name: string) => this.setState({ name }),
+      }),
+      createElement(SettingsTextField, {
+        label: "Workflow ID",
+        value: this.state.workflowId,
+        placeholder: "workflow-support-triage",
+        testId: Selector.Workflow,
+        hint: "Retrieval is bounded to this workflow and tenant; other flows cannot read this source.",
+        onChange: (workflowId: string) => this.setState({ workflowId }),
+      }),
+      createElement(SettingsNumberField, {
+        label: "Retention days",
+        value: Number.isInteger(retention) && retention >= 1 ? retention : 30,
+        testId: Selector.Retention,
+        onChange: (retentionDays: string) => this.setState({ retentionDays }),
+      }),
+      createElement(SettingsToggleField, {
+        label: "Opt in to indexing",
+        description:
+          "Without indexing, documents remain available but retrieval queries will not match them.",
+        checked: this.state.indexingEnabled,
+        testId: Selector.Indexing,
+        onChange: (indexingEnabled: boolean) =>
+          this.setState({ indexingEnabled }),
+      }),
+      createElement(SettingsToggleField, {
+        label: "Redact retrieved content in traces",
+        description:
+          "Keeps retrieved passages out of run traces and provenance payloads.",
+        checked: this.state.redactionEnabled,
+        testId: Selector.Redaction,
+        onChange: (redactionEnabled: boolean) =>
+          this.setState({ redactionEnabled }),
+      }),
     ]);
   }
+
   private renderDocuments(): HTMLElement {
     const selected = this.state.url.memoryId
       ? this.state.assets.find((asset) => asset.id === this.state.url.memoryId)
       : undefined;
     return createElement(
       "section",
-      { className: "mt-5", "data-testid": Selector.Documents },
+      { className: "grid gap-2", "data-testid": Selector.Documents },
       [
         createElement("p", { className: "text-sm text-text-secondary" }, [
-          "Indexed documents are listed for inspection. Document ingestion remains server-governed and requires opt-in indexing.",
+          "Indexed documents are listed for inspection. Ingestion remains server-governed and requires opt-in indexing.",
         ]),
         ...(selected?.documents.length
           ? selected.documents.map((document) =>
               createElement(
-                "p",
+                "div",
                 {
+                  key: document.id,
                   className:
-                    "mt-3 border border-border-dark px-3 py-2 text-sm text-white",
+                    "flex items-center justify-between gap-3 rounded-xl border border-[#202832] bg-[#1a2129] px-4 py-3",
                 },
-                [`${document.name} · ${document.status}`],
+                [
+                  createElement(
+                    "p",
+                    { className: "min-w-0 truncate text-sm text-white" },
+                    [document.name],
+                  ),
+                  createElement(
+                    "p",
+                    {
+                      className:
+                        "shrink-0 font-mono text-xs text-text-secondary",
+                    },
+                    [document.status],
+                  ),
+                ],
               ),
             )
           : [
               createElement(
                 "p",
-                { className: "mt-4 text-sm text-text-secondary" },
+                { className: "mt-2 text-sm text-text-secondary" },
                 ["No indexed documents."],
               ),
             ]),
       ],
     );
   }
-  private renderInput(
-    label: string,
-    value: string,
-    testid: string,
-    onValue: (value: string) => void,
-    type = "text",
-  ): HTMLElement {
-    return createElement(
-      "label",
-      { className: "mt-4 block text-sm text-text-secondary" },
-      [
-        label,
-        createElement("input", {
-          type,
-          value,
-          className:
-            "mt-1 h-10 w-full border border-border-dark bg-[#0f151c] px-3 text-sm text-white outline-none focus:border-primary",
-          "data-testid": testid,
-          onInput: (event: Event) => {
-            if (event.target instanceof HTMLInputElement)
-              onValue(event.target.value);
-          },
-        }),
-      ],
+
+  private renderDeleteConfirmation(): HTMLElement | string {
+    const pendingId = this.state.pendingDeleteId;
+    if (!pendingId) return "";
+    const asset = this.state.assets.find(
+      (candidate) => candidate.id === pendingId,
     );
+    return createElement(AssetConfirmDialog, {
+      testId: Selector.DeleteDialog,
+      title: "Delete memory source",
+      message: `This removes "${asset?.name ?? pendingId}" and unbinds its indexed documents. Retrieval nodes pointing at it will fail fast until a replacement source exists.`,
+      confirmLabel: this.state.busy ? "Deleting…" : "Delete source",
+      confirmTestId: Selector.DeleteConfirm,
+      confirmDisabled: this.state.busy,
+      onConfirm: () => void this.deleteAsset(pendingId),
+      cancelLabel: "Cancel",
+      cancelTestId: Selector.DeleteCancel,
+      onCancel: () => this.setState({ pendingDeleteId: null }),
+    });
   }
-  private renderCheckbox(
-    label: string,
-    value: boolean,
-    testid: string,
-    onValue: (value: boolean) => void,
-  ): HTMLElement {
-    return createElement(
-      "label",
-      { className: "mt-4 flex items-center gap-2 text-sm text-text-secondary" },
-      [
-        createElement("input", {
-          type: "checkbox",
-          checked: value,
-          "data-testid": testid,
-          onChange: (event: Event) => {
-            if (event.target instanceof HTMLInputElement)
-              onValue(event.target.checked);
-          },
-        }),
-        label,
-      ],
-    );
-  }
+
   private async loadAssets(): Promise<void> {
     this.setState({ loading: true, errorMessage: null });
     try {
@@ -403,6 +440,7 @@ export class MemoryAssetsScreen extends Component<
       this.setState({ loading: false, errorMessage: readErrorMessage(error) });
     }
   }
+
   private openEditor(url: MemoryAssetsUrlState): void {
     window.history.pushState(
       {},
@@ -412,10 +450,12 @@ export class MemoryAssetsScreen extends Component<
     this.setState({ url });
     this.restoreEditorFromUrl();
   }
+
   private readonly handleBrowserNavigation = (): void => {
     this.setState({ url: readMemoryAssetsUrlState(window.location.href) });
     this.restoreEditorFromUrl();
   };
+
   private restoreEditorFromUrl(): void {
     const selected = this.state.url.memoryId
       ? this.state.assets.find((asset) => asset.id === this.state.url.memoryId)
@@ -429,6 +469,7 @@ export class MemoryAssetsScreen extends Component<
       redactionEnabled: selected?.redactionEnabled ?? true,
     });
   }
+
   private async saveAsset(): Promise<void> {
     const retentionDays = Number(this.state.retentionDays);
     if (
@@ -437,6 +478,7 @@ export class MemoryAssetsScreen extends Component<
       !this.state.name.trim()
     )
       return;
+    this.setState({ busy: true });
     try {
       const asset = await this.client.upsert(
         createMemoryAssetRecord({
@@ -455,6 +497,8 @@ export class MemoryAssetsScreen extends Component<
           ...this.state.assets.filter((item) => item.id !== asset.id),
           asset,
         ],
+        busy: false,
+        noticeMessage: `Memory source "${asset.name}" saved.`,
       });
       this.openEditor({
         mode: MemoryAssetsUrlMode.Edit,
@@ -462,10 +506,37 @@ export class MemoryAssetsScreen extends Component<
         panel: "config",
       });
     } catch (error) {
-      this.setState({ errorMessage: readErrorMessage(error) });
+      this.setState({ busy: false, errorMessage: readErrorMessage(error) });
+    }
+  }
+
+  private async deleteAsset(assetId: string): Promise<void> {
+    this.setState({ busy: true });
+    try {
+      await this.client.delete(assetId);
+      this.setState({
+        assets: this.state.assets.filter((asset) => asset.id !== assetId),
+        pendingDeleteId: null,
+        busy: false,
+        noticeMessage: `Memory source "${assetId}" deleted.`,
+      });
+      if (this.state.url.memoryId === assetId) {
+        this.openEditor({
+          mode: MemoryAssetsUrlMode.Catalog,
+          memoryId: null,
+          panel: "config",
+        });
+      }
+    } catch (error) {
+      this.setState({
+        busy: false,
+        pendingDeleteId: null,
+        errorMessage: readErrorMessage(error),
+      });
     }
   }
 }
+
 const readErrorMessage = (error: unknown): string =>
   error instanceof Error && error.message.trim().length > 0
     ? error.message

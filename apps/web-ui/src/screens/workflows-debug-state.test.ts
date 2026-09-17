@@ -35,6 +35,7 @@ import {
   connectWorkflowNodes,
   createEmptyWorkflowDefinition,
   WorkflowNodeKind,
+  readWorkflowNodeEditorTab,
 } from "./workflows-editor-state.js";
 
 describe("workflows debug state", () => {
@@ -800,5 +801,19 @@ describe("workflows debug state", () => {
       schema.map((entry) => `${entry.path}:${entry.type}:${entry.items}`),
     ).toContain("$:array:2");
     expect(schema.map((entry) => entry.path)).toContain("$[].nested.ok");
+  });
+});
+
+describe("workflow node editor modal tabs", () => {
+  it("keeps the known debug tabs", () => {
+    expect(readWorkflowNodeEditorTab("input")).toBe("input");
+    expect(readWorkflowNodeEditorTab("output")).toBe("output");
+    expect(readWorkflowNodeEditorTab("configure")).toBe("configure");
+  });
+
+  it("falls back to the configuration tab for anything else", () => {
+    expect(readWorkflowNodeEditorTab(undefined)).toBe("configure");
+    expect(readWorkflowNodeEditorTab("settings")).toBe("configure");
+    expect(readWorkflowNodeEditorTab(null)).toBe("configure");
   });
 });
