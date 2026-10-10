@@ -33,7 +33,7 @@ jobs:
       - run: pnpm -C apps/web-ui validate:git-workspace
       - run: pnpm eval:min
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-ui-browser-validation-screenshots
           path: apps/web-ui/screenshots/
